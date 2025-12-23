@@ -1,6 +1,7 @@
 import type { GitWorktree, WorkspaceRecord, WorktreeCreateOptions } from '@shared/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActionPanel } from './components/layout/ActionPanel';
 import { MainContent } from './components/layout/MainContent';
 import { WorkspaceSidebar } from './components/layout/WorkspaceSidebar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
@@ -62,6 +63,9 @@ export default function App() {
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Action panel state
+  const [actionPanelOpen, setActionPanelOpen] = useState(false);
+
   // Resize state
   const [resizing, setResizing] = useState<'workspace' | 'worktree' | null>(null);
   const startXRef = useRef(0);
@@ -79,15 +83,33 @@ export default function App() {
         case 'open-settings':
           setSettingsOpen(true);
           break;
+        case 'open-action-panel':
+          setActionPanelOpen(true);
+          break;
         case 'close-window':
-          setSettingsOpen((prev) => {
+          // Close any open dialog (check actionPanel first, then settings)
+          setActionPanelOpen((prev) => {
             if (prev) return false;
+            // If actionPanel wasn't open, try closing settings
+            setSettingsOpen((sPrev) => (sPrev ? false : sPrev));
             return prev;
           });
           break;
       }
     });
     return cleanup;
+  }, []);
+
+  // Listen for Action Panel keyboard shortcut (Shift+Cmd+P)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'p' && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setActionPanelOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Save panel sizes to localStorage
@@ -394,6 +416,17 @@ export default function App() {
 
       {/* Global Settings Dialog */}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      {/* Action Panel */}
+      <ActionPanel
+        open={actionPanelOpen}
+        onOpenChange={setActionPanelOpen}
+        workspaceCollapsed={workspaceCollapsed}
+        worktreeCollapsed={worktreeCollapsed}
+        onToggleWorkspace={() => setWorkspaceCollapsed((prev) => !prev)}
+        onToggleWorktree={() => setWorktreeCollapsed((prev) => !prev)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
     </div>
   );
 }

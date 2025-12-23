@@ -63,6 +63,8 @@ export function AgentTerminal({
   const hasBeenActivatedRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const hasReceivedDataRef = useRef(false);
+  // Buffer for detecting error messages (e.g., session not found)
+  const outputBufferRef = useRef('');
   // Track when terminal was started for auto-close logic
   const startTimeRef = useRef<number | null>(null);
   const MIN_RUNTIME_FOR_AUTO_CLOSE = 10000; // 10 seconds
@@ -133,6 +135,12 @@ export function AgentTerminal({
             setIsLoading(false);
           }
           terminal.write(event.data);
+
+          // Accumulate output for error detection (limit buffer size)
+          outputBufferRef.current += event.data;
+          if (outputBufferRef.current.length > 1000) {
+            outputBufferRef.current = outputBufferRef.current.slice(-500);
+          }
         }
       });
       cleanupRef.current = cleanup;
@@ -141,8 +149,11 @@ export function AgentTerminal({
       const exitCleanup = window.electronAPI.terminal.onExit((event) => {
         if (event.id === ptyId) {
           const runtime = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
-          if (runtime >= MIN_RUNTIME_FOR_AUTO_CLOSE) {
-            // Normal exit after running for a while - auto close
+          const isSessionNotFound = outputBufferRef.current.includes(
+            'No conversation found with session ID'
+          );
+          if (runtime >= MIN_RUNTIME_FOR_AUTO_CLOSE || isSessionNotFound) {
+            // Normal exit or session not found - auto close
             onExitRef.current?.();
           } else {
             // Quick exit - likely an error, keep tab open for debugging
@@ -262,7 +273,7 @@ export function AgentTerminal({
 
   return (
     <div className="relative h-full w-full" style={{ backgroundColor: settings.theme.background }}>
-      <div ref={containerRef} className="h-full w-full px-[10px] py-[2px]" />
+      <div ref={containerRef} className="h-full w-full px-[5px] py-[2px]" />
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">

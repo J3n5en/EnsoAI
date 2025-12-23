@@ -1,6 +1,6 @@
 import { type BrowserWindow, Menu, app, shell } from 'electron';
 
-export type MenuAction = 'open-settings' | 'close-window' | 'toggle-devtools';
+export type MenuAction = 'open-settings' | 'close-window' | 'toggle-devtools' | 'open-action-panel';
 
 export function buildAppMenu(mainWindow: BrowserWindow): Menu {
   const isMac = process.platform === 'darwin';
@@ -77,6 +77,12 @@ export function buildAppMenu(mainWindow: BrowserWindow): Menu {
     {
       label: '视图',
       submenu: [
+        {
+          label: 'Action Panel',
+          accelerator: 'CommandOrControl+Shift+P',
+          click: () => sendAction('open-action-panel'),
+        },
+        { type: 'separator' as const },
         { role: 'reload' as const },
         { role: 'forceReload' as const },
         {
