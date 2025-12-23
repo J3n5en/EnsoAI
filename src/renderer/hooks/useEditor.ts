@@ -1,6 +1,5 @@
-import { useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEditorStore } from '@/stores/editor';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 export function useEditor() {
   const {

@@ -1,5 +1,5 @@
+import type { AgentMessage, AgentMetadata } from '@shared/types';
 import { create } from 'zustand';
-import type { AgentMetadata, AgentMessage } from '@shared/types';
 
 interface AgentState {
   agents: AgentMetadata[];
@@ -29,8 +29,7 @@ export const useAgentStore = create<AgentState>((set) => ({
   setAgents: (agents) => set({ agents }),
   setCurrentAgent: (agentId) => set({ currentAgentId: agentId }),
   setSessionId: (sessionId) => set({ sessionId }),
-  addMessage: (message) =>
-    set((state) => ({ messages: [...state.messages, message] })),
+  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   clearMessages: () => set({ messages: [] }),
   setConnected: (isConnected) => set({ isConnected }),
   setLoading: (isLoading) => set({ isLoading }),

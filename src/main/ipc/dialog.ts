@@ -1,5 +1,5 @@
-import { ipcMain, dialog, BrowserWindow, Menu, MenuItem } from 'electron';
 import { IPC_CHANNELS } from '@shared/types';
+import { BrowserWindow, Menu, MenuItem, dialog, ipcMain } from 'electron';
 
 interface ContextMenuItem {
   label: string;
@@ -42,31 +42,28 @@ export function registerDialogHandlers(): void {
   );
 
   // Context Menu
-  ipcMain.handle(
-    IPC_CHANNELS.CONTEXT_MENU_SHOW,
-    async (event, items: ContextMenuItem[]) => {
-      return new Promise<string | null>((resolve) => {
-        const menu = new Menu();
+  ipcMain.handle(IPC_CHANNELS.CONTEXT_MENU_SHOW, async (event, items: ContextMenuItem[]) => {
+    return new Promise<string | null>((resolve) => {
+      const menu = new Menu();
 
-        items.forEach((item) => {
-          if (item.type === 'separator') {
-            menu.append(new MenuItem({ type: 'separator' }));
-          } else {
-            menu.append(
-              new MenuItem({
-                label: item.label,
-                enabled: !item.disabled,
-                click: () => resolve(item.id),
-              })
-            );
-          }
-        });
+      for (const item of items) {
+        if (item.type === 'separator') {
+          menu.append(new MenuItem({ type: 'separator' }));
+        } else {
+          menu.append(
+            new MenuItem({
+              label: item.label,
+              enabled: !item.disabled,
+              click: () => resolve(item.id),
+            })
+          );
+        }
+      }
 
-        menu.popup({
-          window: BrowserWindow.fromWebContents(event.sender) ?? undefined,
-          callback: () => resolve(null),
-        });
+      menu.popup({
+        window: BrowserWindow.fromWebContents(event.sender) ?? undefined,
+        callback: () => resolve(null),
       });
-    }
-  );
+    });
+  });
 }

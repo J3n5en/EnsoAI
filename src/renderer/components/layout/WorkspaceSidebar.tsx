@@ -1,15 +1,15 @@
-import { useState } from 'react';
-import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Plus, FolderOpen, Settings, PanelLeftClose } from 'lucide-react';
-import { SettingsDialog } from '@/components/settings/SettingsDialog';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { FolderOpen, PanelLeftClose, Plus, Search, Settings } from 'lucide-react';
+import { useState } from 'react';
 
 interface WorkspaceSidebarProps {
   repositories: Array<{ name: string; path: string }>;
   selectedRepo: string | null;
   onSelectRepo: (repoPath: string) => void;
   onAddRepository: () => void;
+  onOpenSettings?: () => void;
   collapsed?: boolean;
   onCollapse?: () => void;
 }
@@ -19,7 +19,8 @@ export function WorkspaceSidebar({
   selectedRepo,
   onSelectRepo,
   onAddRepository,
-  collapsed = false,
+  onOpenSettings,
+  collapsed: _collapsed = false,
   onCollapse,
 }: WorkspaceSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,9 +30,7 @@ export function WorkspaceSidebar({
   );
 
   return (
-    <aside
-      className="flex h-full w-full flex-col border-r bg-muted/30"
-    >
+    <aside className="flex h-full w-full flex-col border-r bg-muted/30">
       {/* Top bar with collapse button - h-12 to align with WorktreePanel header */}
       <div className="flex h-12 shrink-0 items-center justify-end px-2 drag-region">
         {onCollapse && (
@@ -65,6 +64,7 @@ export function WorkspaceSidebar({
         <div className="space-y-1">
           {filteredRepos.map((repo) => (
             <button
+              type="button"
               key={repo.path}
               onClick={() => onSelectRepo(repo.path)}
               className={cn(
@@ -84,9 +84,7 @@ export function WorkspaceSidebar({
         </div>
 
         {filteredRepos.length === 0 && searchQuery && (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            没有找到匹配的仓库
-          </div>
+          <div className="py-8 text-center text-sm text-muted-foreground">没有找到匹配的仓库</div>
         )}
 
         {repositories.length === 0 && !searchQuery && (
@@ -107,13 +105,9 @@ export function WorkspaceSidebar({
             <Plus className="h-4 w-4" />
             Add Repository
           </Button>
-          <SettingsDialog
-            trigger={
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Settings className="h-4 w-4" />
-              </Button>
-            }
-          />
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onOpenSettings}>
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </aside>

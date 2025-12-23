@@ -1,5 +1,5 @@
+import type { GitBranch, GitLogEntry, GitStatus } from '@shared/types';
 import { create } from 'zustand';
-import type { GitStatus, GitBranch, GitLogEntry } from '@shared/types';
 
 interface RepositoryState {
   status: GitStatus | null;

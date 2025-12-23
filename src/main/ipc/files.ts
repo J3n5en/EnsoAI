@@ -1,7 +1,7 @@
-import { ipcMain, BrowserWindow } from 'electron';
-import { readFile, writeFile, readdir, stat } from 'fs/promises';
-import { join } from 'path';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { IPC_CHANNELS } from '@shared/types';
+import { BrowserWindow, ipcMain } from 'electron';
 import { FileWatcher } from '../services/files/FileWatcher';
 
 const watchers = new Map<string, FileWatcher>();

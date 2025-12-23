@@ -1,15 +1,8 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
-import {
-  MessageSquare,
-  FileCode,
-  Terminal,
-  GitBranch,
-  Plus,
-  FolderOpen,
-} from 'lucide-react';
 import { OpenInMenu } from '@/components/app/OpenInMenu';
 import { ChatPanel } from '@/components/chat/ChatPanel';
+import { cn } from '@/lib/utils';
+import { AnimatePresence, motion } from 'framer-motion';
+import { FileCode, FolderOpen, GitBranch, MessageSquare, Plus, Terminal } from 'lucide-react';
 
 const buttonVariants = {
   initial: { scale: 0, opacity: 0 },
@@ -41,7 +34,7 @@ const tabs: Array<{ id: TabId; icon: React.ElementType; label: string }> = [
 export function MainContent({
   activeTab,
   onTabChange,
-  workspaceName,
+  workspaceName: _workspaceName,
   repoPath,
   worktreePath,
   workspaceCollapsed = false,
@@ -55,10 +48,12 @@ export function MainContent({
   return (
     <main className="flex flex-1 flex-col overflow-hidden bg-background">
       {/* Header with tabs */}
-      <header className={cn(
-        "flex h-12 shrink-0 items-center justify-between border-b px-4 drag-region",
-        needsTrafficLightPadding && "pl-[70px]"
-      )}>
+      <header
+        className={cn(
+          'flex h-12 shrink-0 items-center justify-between border-b px-4 drag-region',
+          needsTrafficLightPadding && 'pl-[70px]'
+        )}
+      >
         {/* Left: Expand buttons + Tabs */}
         <div className="flex items-center gap-1 no-drag">
           {/* Expand buttons when panels are collapsed */}
@@ -120,6 +115,7 @@ export function MainContent({
           </AnimatePresence>
           {tabs.map((tab) => (
             <button
+              type="button"
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={cn(
@@ -133,7 +129,10 @@ export function MainContent({
               {tab.label}
             </button>
           ))}
-          <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground">
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+          >
             <Plus className="h-4 w-4" />
           </button>
         </div>
@@ -154,7 +153,7 @@ export function MainContent({
       {/* Content */}
       <div className="relative flex-1 overflow-hidden">
         {/* Chat tab - keep mounted to preserve terminal session */}
-        <div className={cn("absolute inset-0", activeTab !== 'chat' && "invisible")}>
+        <div className={cn('absolute inset-0', activeTab !== 'chat' && 'invisible')}>
           {repoPath && worktreePath ? (
             <ChatPanel repoPath={repoPath} cwd={worktreePath} />
           ) : (

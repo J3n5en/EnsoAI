@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { DatabaseQueryResult } from '@shared/types';
+import Database from 'better-sqlite3';
 
 export class DatabaseService {
   private db: Database.Database;

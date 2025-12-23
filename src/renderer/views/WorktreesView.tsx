@@ -1,20 +1,20 @@
-import * as React from 'react';
-import { useWorktreeList, useWorktreeCreate, useWorktreeRemove } from '@/hooks/useWorktree';
-import { useGitBranches } from '@/hooks/useGit';
-import { useWorkspaceStore } from '@/stores/workspace';
-import { useWorktreeStore } from '@/stores/worktree';
-import { WorktreeList, CreateWorktreeDialog } from '@/components/worktree';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Select,
+  SelectItem,
+  SelectPopup,
   SelectTrigger,
   SelectValue,
-  SelectPopup,
-  SelectItem,
 } from '@/components/ui/select';
-import { Search, Filter, RefreshCw } from 'lucide-react';
+import { CreateWorktreeDialog, WorktreeList } from '@/components/worktree';
+import { useGitBranches } from '@/hooks/useGit';
+import { useWorktreeCreate, useWorktreeList, useWorktreeRemove } from '@/hooks/useWorktree';
+import { useWorkspaceStore } from '@/stores/workspace';
+import { useWorktreeStore } from '@/stores/worktree';
 import type { GitWorktree, WorktreeCreateOptions } from '@shared/types';
+import { Filter, RefreshCw, Search } from 'lucide-react';
+import * as React from 'react';
 
 type FilterType = 'all' | 'active' | 'stale';
 
@@ -38,9 +38,7 @@ export function WorktreesView() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
-        (w) =>
-          w.branch?.toLowerCase().includes(query) ||
-          w.path.toLowerCase().includes(query)
+        (w) => w.branch?.toLowerCase().includes(query) || w.path.toLowerCase().includes(query)
       );
     }
 

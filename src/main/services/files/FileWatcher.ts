@@ -1,4 +1,4 @@
-import { subscribe, type AsyncSubscription, type Event } from '@parcel/watcher';
+import { type AsyncSubscription, type Event, subscribe } from '@parcel/watcher';
 
 export type FileChangeCallback = (type: 'create' | 'update' | 'delete', path: string) => void;
 

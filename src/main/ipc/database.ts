@@ -1,6 +1,6 @@
-import { ipcMain, app } from 'electron';
-import { join } from 'path';
+import { join } from 'node:path';
 import { IPC_CHANNELS } from '@shared/types';
+import { app, ipcMain } from 'electron';
 import { DatabaseService } from '../services/database/DatabaseService';
 
 let db: DatabaseService | null = null;

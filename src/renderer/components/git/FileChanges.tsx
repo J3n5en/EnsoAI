@@ -1,15 +1,10 @@
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Minus, FileEdit, FileX, FilePlus, FileQuestion } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { FileEdit, FilePlus, FileQuestion, FileX, Minus, Plus } from 'lucide-react';
 
 type FileStatus = 'M' | 'A' | 'D' | 'R' | 'C' | 'U' | '?';
-
-interface FileChange {
-  path: string;
-  status: FileStatus;
-}
 
 interface FileChangesProps {
   title: string;
@@ -56,7 +51,7 @@ export function FileChanges({
   onStageFile,
   onUnstageFile,
 }: FileChangesProps) {
-  const getFileStatus = (path: string): FileStatus => {
+  const getFileStatus = (_path: string): FileStatus => {
     if (type === 'untracked') return '?';
     // In a real implementation, this would come from the git status
     return 'M';
@@ -86,7 +81,7 @@ export function FileChanges({
         <div className="space-y-1">
           {files.map((file) => {
             const status = getFileStatus(file);
-            const Icon = statusIcons[status];
+            const _Icon = statusIcons[status];
             const isSelected = selectedFiles?.has(file);
 
             return (
@@ -110,6 +105,7 @@ export function FileChanges({
                 </span>
 
                 <button
+                  type="button"
                   className="min-w-0 flex-1 truncate text-left hover:underline"
                   onClick={() => onFileClick?.(file)}
                 >

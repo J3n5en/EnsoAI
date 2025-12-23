@@ -1,31 +1,46 @@
-import * as React from 'react';
-import {
-  Dialog,
-  DialogTrigger,
-  DialogPopup,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { Palette, Settings, Monitor, Sun, Moon, Terminal, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useSettingsStore, type Theme, type FontWeight } from '@/stores/settings';
-import { Input } from '@/components/ui/input';
-import { Select, SelectTrigger, SelectValue, SelectPopup, SelectItem } from '@/components/ui/select';
 import {
   Combobox,
   ComboboxInput,
-  ComboboxPopup,
   ComboboxItem,
   ComboboxList,
+  ComboboxPopup,
 } from '@/components/ui/combobox';
 import {
-  getThemeNames,
-  getXtermTheme,
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   type XtermTheme,
   defaultDarkTheme,
+  getThemeNames,
+  getXtermTheme,
 } from '@/lib/ghosttyTheme';
+import { cn } from '@/lib/utils';
+import { type FontWeight, type Theme, useSettingsStore } from '@/stores/settings';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Monitor,
+  Moon,
+  Palette,
+  Settings,
+  Sun,
+  Terminal,
+} from 'lucide-react';
+import * as React from 'react';
 
 type SettingsCategory = 'appearance' | 'terminal';
 
@@ -45,20 +60,6 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
 
   // Controlled mode (open prop provided) doesn't need trigger
   const isControlled = open !== undefined;
-
-  // Cmd+W to close settings when open
-  React.useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
-        e.preventDefault();
-        onOpenChange?.(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -84,6 +85,7 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
           <nav className="w-48 shrink-0 space-y-1 border-r p-2">
             {categories.map((category) => (
               <button
+                type="button"
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
                 className={cn(
@@ -113,7 +115,12 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
 function AppearanceSettings() {
   const { theme, setTheme } = useSettingsStore();
 
-  const themeOptions: Array<{ value: Theme; icon: React.ElementType; label: string; description: string }> = [
+  const themeOptions: Array<{
+    value: Theme;
+    icon: React.ElementType;
+    label: string;
+    description: string;
+  }> = [
     { value: 'light', icon: Sun, label: '浅色', description: '明亮的界面主题' },
     { value: 'dark', icon: Moon, label: '深色', description: '护眼的暗色主题' },
     { value: 'system', icon: Monitor, label: '跟随系统', description: '自动适配系统主题' },
@@ -129,6 +136,7 @@ function AppearanceSettings() {
       <div className="grid grid-cols-3 gap-3">
         {themeOptions.map((option) => (
           <button
+            type="button"
             key={option.value}
             onClick={() => setTheme(option.value)}
             className={cn(
@@ -256,7 +264,7 @@ function TerminalSettings() {
       <div className="grid gap-4">
         {/* Font Family */}
         <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-          <label className="text-sm font-medium">字体</label>
+          <span className="text-sm font-medium">字体</span>
           <Input
             value={terminalFontFamily}
             onChange={(e) => setTerminalFontFamily(e.target.value)}
@@ -266,7 +274,7 @@ function TerminalSettings() {
 
         {/* Font Size */}
         <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-          <label className="text-sm font-medium">字号</label>
+          <span className="text-sm font-medium">字号</span>
           <div className="flex items-center gap-2">
             <Input
               type="number"
@@ -282,8 +290,11 @@ function TerminalSettings() {
 
         {/* Font Weight */}
         <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-          <label className="text-sm font-medium">字重</label>
-          <Select value={terminalFontWeight} onValueChange={(v) => setTerminalFontWeight(v as FontWeight)}>
+          <span className="text-sm font-medium">字重</span>
+          <Select
+            value={terminalFontWeight}
+            onValueChange={(v) => setTerminalFontWeight(v as FontWeight)}
+          >
             <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
@@ -299,8 +310,11 @@ function TerminalSettings() {
 
         {/* Font Weight Bold */}
         <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-          <label className="text-sm font-medium">粗体字重</label>
-          <Select value={terminalFontWeightBold} onValueChange={(v) => setTerminalFontWeightBold(v as FontWeight)}>
+          <span className="text-sm font-medium">粗体字重</span>
+          <Select
+            value={terminalFontWeightBold}
+            onValueChange={(v) => setTerminalFontWeightBold(v as FontWeight)}
+          >
             <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
@@ -330,42 +344,47 @@ function TerminalPreview({
   fontWeight: string;
 }) {
   const sampleLines = [
-    { text: '$ ', color: theme.green },
-    { text: 'ls -la', color: theme.foreground },
-    { text: '\n' },
-    { text: 'drwxr-xr-x  ', color: theme.blue },
-    { text: '5 user staff  160 Dec 23 ', color: theme.foreground },
-    { text: 'Documents', color: theme.cyan },
-    { text: '\n' },
-    { text: '-rw-r--r--  ', color: theme.foreground },
-    { text: '1 user staff 2048 Dec 22 ', color: theme.foreground },
-    { text: 'config.json', color: theme.yellow },
-    { text: '\n' },
-    { text: '-rwxr-xr-x  ', color: theme.foreground },
-    { text: '1 user staff  512 Dec 21 ', color: theme.foreground },
-    { text: 'script.sh', color: theme.green },
-    { text: '\n\n' },
-    { text: '$ ', color: theme.green },
-    { text: 'echo "Hello, World!"', color: theme.foreground },
-    { text: '\n' },
-    { text: 'Hello, World!', color: theme.magenta },
+    { id: 'prompt1', text: '$ ', color: theme.green },
+    { id: 'cmd1', text: 'ls -la', color: theme.foreground },
+    { id: 'nl1', text: '\n' },
+    { id: 'perm1', text: 'drwxr-xr-x  ', color: theme.blue },
+    { id: 'meta1', text: '5 user staff  160 Dec 23 ', color: theme.foreground },
+    { id: 'dir1', text: 'Documents', color: theme.cyan },
+    { id: 'nl2', text: '\n' },
+    { id: 'perm2', text: '-rw-r--r--  ', color: theme.foreground },
+    { id: 'meta2', text: '1 user staff 2048 Dec 22 ', color: theme.foreground },
+    { id: 'file1', text: 'config.json', color: theme.yellow },
+    { id: 'nl3', text: '\n' },
+    { id: 'perm3', text: '-rwxr-xr-x  ', color: theme.foreground },
+    { id: 'meta3', text: '1 user staff  512 Dec 21 ', color: theme.foreground },
+    { id: 'file2', text: 'script.sh', color: theme.green },
+    { id: 'nl4', text: '\n\n' },
+    { id: 'prompt2', text: '$ ', color: theme.green },
+    { id: 'cmd2', text: 'echo "Hello, World!"', color: theme.foreground },
+    { id: 'nl5', text: '\n' },
+    { id: 'output1', text: 'Hello, World!', color: theme.magenta },
   ];
 
   return (
     <div
       className="rounded-lg border p-4 h-40 overflow-auto"
-      style={{ backgroundColor: theme.background, fontSize: `${fontSize}px`, fontFamily, fontWeight }}
+      style={{
+        backgroundColor: theme.background,
+        fontSize: `${fontSize}px`,
+        fontFamily,
+        fontWeight,
+      }}
     >
-      {sampleLines.map((segment, i) =>
+      {sampleLines.map((segment) =>
         segment.text === '\n' ? (
-          <br key={i} />
+          <br key={segment.id} />
         ) : segment.text === '\n\n' ? (
-          <React.Fragment key={i}>
+          <React.Fragment key={segment.id}>
             <br />
             <br />
           </React.Fragment>
         ) : (
-          <span key={i} style={{ color: segment.color }}>
+          <span key={segment.id} style={{ color: segment.color }}>
             {segment.text}
           </span>
         )
@@ -423,9 +442,7 @@ function ThemeCombobox({
       <ComboboxPopup>
         <ComboboxList>
           {filteredThemes.length === 0 && (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              未找到主题
-            </div>
+            <div className="py-6 text-center text-sm text-muted-foreground">未找到主题</div>
           )}
           {filteredThemes.map((name) => (
             <ComboboxItem key={name} value={name}>

@@ -2,7 +2,7 @@ import { exec } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import type { DetectedApp, AppCategory } from '@shared/types';
+import type { AppCategory, DetectedApp } from '@shared/types';
 
 const execAsync = promisify(exec);
 

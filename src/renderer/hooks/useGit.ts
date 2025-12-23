@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRepositoryStore } from '@/stores/repository';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export function useGitStatus(workdir: string | null) {
   const setStatus = useRepositoryStore((s) => s.setStatus);

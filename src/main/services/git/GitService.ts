@@ -1,5 +1,5 @@
-import simpleGit, { SimpleGit, StatusResult } from 'simple-git';
-import type { GitStatus, GitBranch, GitLogEntry } from '@shared/types';
+import type { GitBranch, GitLogEntry, GitStatus } from '@shared/types';
+import simpleGit, { type SimpleGit, type StatusResult } from 'simple-git';
 
 export class GitService {
   private git: SimpleGit;

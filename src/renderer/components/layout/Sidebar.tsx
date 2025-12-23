@@ -1,15 +1,9 @@
+import { Separator } from '@/components/ui/separator';
+import { WorkspaceSelector } from '@/components/workspace';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { WorkspaceSelector } from '@/components/workspace';
-import {
-  GitBranchIcon,
-  MessageSquareIcon,
-  FolderIcon,
-  GitCommitIcon,
-  SettingsIcon,
-} from './Icons';
-import { Separator } from '@/components/ui/separator';
 import type { WorkspaceRecord } from '@shared/types';
+import { FolderIcon, GitBranchIcon, GitCommitIcon, MessageSquareIcon, SettingsIcon } from './Icons';
 
 type TabId = 'worktrees' | 'chat' | 'files' | 'git' | 'settings';
 
@@ -65,6 +59,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       <nav className="flex flex-1 flex-col gap-1 px-2">
         {tabs.map((tab) => (
           <button
+            type="button"
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
             className={cn(

@@ -1,27 +1,27 @@
-import * as React from 'react';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogTrigger,
-  DialogPopup,
-  DialogHeader,
-  DialogFooter,
-  DialogTitle,
-  DialogDescription,
   DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogPanel,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';
 import {
   Select,
+  SelectItem,
+  SelectPopup,
   SelectTrigger,
   SelectValue,
-  SelectPopup,
-  SelectItem,
 } from '@/components/ui/select';
-import { Plus, GitBranch } from 'lucide-react';
 import type { GitBranch as GitBranchType, WorktreeCreateOptions } from '@shared/types';
+import { GitBranch, Plus } from 'lucide-react';
+import * as React from 'react';
 
 interface CreateWorktreeDialogProps {
   branches: GitBranchType[];
@@ -93,7 +93,10 @@ export function CreateWorktreeDialog({
       const message = err instanceof Error ? err.message : '创建失败';
       if (message.includes('already exists')) {
         setError('目录已存在，请选择其他路径或分支名');
-      } else if (message.includes('is already used by worktree') || message.includes('already checked out')) {
+      } else if (
+        message.includes('is already used by worktree') ||
+        message.includes('already checked out')
+      ) {
         setError('该分支已存在，请使用其他分支名');
       } else {
         setError(message);
@@ -123,9 +126,7 @@ export function CreateWorktreeDialog({
         <form onSubmit={handleSubmit} className="flex flex-col">
           <DialogHeader>
             <DialogTitle>新建 Worktree</DialogTitle>
-            <DialogDescription>
-              创建新分支并在独立目录中工作，可同时处理多个功能
-            </DialogDescription>
+            <DialogDescription>创建新分支并在独立目录中工作，可同时处理多个功能</DialogDescription>
           </DialogHeader>
 
           <DialogPanel className="space-y-4">
@@ -190,9 +191,7 @@ export function CreateWorktreeDialog({
               </div>
             )}
 
-            {error && (
-              <div className="text-sm text-destructive">{error}</div>
-            )}
+            {error && <div className="text-sm text-destructive">{error}</div>}
           </DialogPanel>
 
           <DialogFooter variant="bare">

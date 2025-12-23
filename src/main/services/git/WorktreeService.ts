@@ -1,5 +1,5 @@
-import simpleGit, { SimpleGit } from 'simple-git';
 import type { GitWorktree, WorktreeCreateOptions, WorktreeRemoveOptions } from '@shared/types';
+import simpleGit, { type SimpleGit } from 'simple-git';
 
 export class WorktreeService {
   private git: SimpleGit;

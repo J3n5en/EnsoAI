@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import type { TerminalSession } from '@shared/types';
+import { create } from 'zustand';
 
 interface TerminalState {
   sessions: TerminalSession[];

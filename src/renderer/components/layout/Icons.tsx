@@ -5,6 +5,7 @@ type IconProps = SVGProps<SVGSVGElement>;
 export function GitBranchIcon(props: IconProps) {
   return (
     <svg
+      aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -25,6 +26,7 @@ export function GitBranchIcon(props: IconProps) {
 export function MessageSquareIcon(props: IconProps) {
   return (
     <svg
+      aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -42,6 +44,7 @@ export function MessageSquareIcon(props: IconProps) {
 export function FolderIcon(props: IconProps) {
   return (
     <svg
+      aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -59,6 +62,7 @@ export function FolderIcon(props: IconProps) {
 export function GitCommitIcon(props: IconProps) {
   return (
     <svg
+      aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -78,6 +82,7 @@ export function GitCommitIcon(props: IconProps) {
 export function SettingsIcon(props: IconProps) {
   return (
     <svg
+      aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"

@@ -1,8 +1,7 @@
-import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { GitCommit, ChevronRight } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GitLogEntry } from '@shared/types';
+import { ChevronRight, GitCommit } from 'lucide-react';
 
 interface CommitHistoryProps {
   commits: GitLogEntry[];
@@ -55,6 +54,7 @@ export function CommitHistory({
         <div className="space-y-1">
           {commits.map((commit) => (
             <button
+              type="button"
               key={commit.hash}
               className="group flex w-full items-start gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
               onClick={() => onCommitClick?.(commit)}

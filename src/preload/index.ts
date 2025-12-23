@@ -1,17 +1,17 @@
-import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '@shared/types';
 import type {
-  GitStatus,
+  AgentMetadata,
+  DatabaseQueryResult,
   GitBranch,
   GitLogEntry,
+  GitStatus,
   GitWorktree,
-  WorktreeCreateOptions,
-  WorktreeRemoveOptions,
-  AgentMetadata,
   TerminalCreateOptions,
   TerminalResizeOptions,
-  DatabaseQueryResult,
+  WorktreeCreateOptions,
+  WorktreeRemoveOptions,
 } from '@shared/types';
+import { contextBridge, ipcRenderer } from 'electron';
 
 const electronAPI = {
   // Git
@@ -52,7 +52,9 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_READ, filePath),
     write: (filePath: string, content: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_WRITE, filePath, content),
-    list: (dirPath: string): Promise<
+    list: (
+      dirPath: string
+    ): Promise<
       Array<{ name: string; path: string; isDirectory: boolean; size: number; modifiedAt: number }>
     > => ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, dirPath),
     watchStart: (dirPath: string): Promise<void> =>
@@ -77,15 +79,17 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_WRITE, id, data),
     resize: (id: string, size: TerminalResizeOptions): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_RESIZE, id, size),
-    destroy: (id: string): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DESTROY, id),
+    destroy: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DESTROY, id),
     onData: (callback: (event: { id: string; data: string }) => void): (() => void) => {
       const handler = (_: unknown, event: { id: string; data: string }) => callback(event);
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_DATA, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.TERMINAL_DATA, handler);
     },
-    onExit: (callback: (event: { id: string; exitCode: number; signal?: number }) => void): (() => void) => {
-      const handler = (_: unknown, event: { id: string; exitCode: number; signal?: number }) => callback(event);
+    onExit: (
+      callback: (event: { id: string; exitCode: number; signal?: number }) => void
+    ): (() => void) => {
+      const handler = (_: unknown, event: { id: string; exitCode: number; signal?: number }) =>
+        callback(event);
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_EXIT, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.TERMINAL_EXIT, handler);
     },
@@ -117,8 +121,7 @@ const electronAPI = {
 
   // App
   app: {
-    getPath: (name: string): Promise<string> =>
-      ipcRenderer.invoke(IPC_CHANNELS.APP_GET_PATH, name),
+    getPath: (name: string): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_PATH, name),
     onUpdateAvailable: (callback: (info: unknown) => void): (() => void) => {
       const handler = (_: unknown, info: unknown) => callback(info);
       ipcRenderer.on(IPC_CHANNELS.APP_UPDATE_AVAILABLE, handler);
@@ -132,8 +135,7 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_DIRECTORY),
     openFile: (options?: {
       filters?: Array<{ name: string; extensions: string[] }>;
-    }): Promise<string | null> =>
-      ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FILE, options),
+    }): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FILE, options),
   },
 
   // Context Menu
@@ -145,14 +147,12 @@ const electronAPI = {
         type?: 'normal' | 'separator';
         disabled?: boolean;
       }>
-    ): Promise<string | null> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_MENU_SHOW, items),
+    ): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.CONTEXT_MENU_SHOW, items),
   },
 
   // App Detector
   appDetector: {
-    detectApps: (): Promise<DetectedApp[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.APP_DETECT),
+    detectApps: (): Promise<DetectedApp[]> => ipcRenderer.invoke(IPC_CHANNELS.APP_DETECT),
     openWith: (path: string, bundleId: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_WITH, path, bundleId),
     getIcon: (bundleId: string): Promise<string | undefined> =>
@@ -162,6 +162,15 @@ const electronAPI = {
   // Environment
   env: {
     HOME: process.env.HOME || process.env.USERPROFILE || '',
+  },
+
+  // Menu actions from main process
+  menu: {
+    onAction: (callback: (action: string) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
+      ipcRenderer.on('menu-action', handler);
+      return () => ipcRenderer.removeListener('menu-action', handler);
+    },
   },
 };
 

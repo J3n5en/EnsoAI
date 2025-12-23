@@ -1,5 +1,5 @@
-import { spawn, ChildProcess } from 'child_process';
-import type { AgentMetadata, AgentMessage } from '@shared/types';
+import { type ChildProcess, spawn } from 'node:child_process';
+import type { AgentMessage, AgentMetadata } from '@shared/types';
 
 interface Session {
   id: string;
@@ -97,7 +97,7 @@ export class AgentSessionManager {
       },
     };
 
-    session.process.stdin?.write(JSON.stringify(request) + '\n');
+    session.process.stdin?.write(`${JSON.stringify(request)}\n`);
   }
 
   async stop(sessionId: string): Promise<void> {

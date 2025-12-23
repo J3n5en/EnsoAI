@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/types';
+import { ipcMain } from 'electron';
 import { GitService } from '../services/git/GitService';
 
 const gitServices = new Map<string, GitService>();

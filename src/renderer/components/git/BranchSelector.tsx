@@ -1,15 +1,15 @@
-import * as React from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Select,
+  SelectItem,
+  SelectPopup,
   SelectTrigger,
   SelectValue,
-  SelectPopup,
-  SelectItem,
 } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { GitBranch, Plus, Search, RefreshCw } from 'lucide-react';
 import type { GitBranch as GitBranchType } from '@shared/types';
+import { GitBranch, Plus, RefreshCw, Search } from 'lucide-react';
+import * as React from 'react';
 
 interface BranchSelectorProps {
   branches: GitBranchType[];
@@ -31,7 +31,8 @@ export function BranchSelector({
   const [searchQuery, setSearchQuery] = React.useState('');
 
   const localBranches = branches.filter(
-    (b) => !b.name.startsWith('remotes/') && b.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (b) =>
+      !b.name.startsWith('remotes/') && b.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const remoteBranches = branches.filter(
@@ -68,15 +69,11 @@ export function BranchSelector({
           {/* Local branches */}
           {localBranches.length > 0 && (
             <>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                本地分支
-              </div>
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">本地分支</div>
               {localBranches.map((branch) => (
                 <SelectItem key={branch.name} value={branch.name}>
                   <div className="flex items-center gap-2">
-                    {branch.current && (
-                      <span className="h-2 w-2 rounded-full bg-green-500" />
-                    )}
+                    {branch.current && <span className="h-2 w-2 rounded-full bg-green-500" />}
                     <span className="truncate">{branch.name}</span>
                   </div>
                 </SelectItem>
@@ -87,9 +84,7 @@ export function BranchSelector({
           {/* Remote branches */}
           {remoteBranches.length > 0 && (
             <>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                远程分支
-              </div>
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">远程分支</div>
               {remoteBranches.map((branch) => (
                 <SelectItem key={branch.name} value={branch.name}>
                   <span className="truncate">{branch.name.replace('remotes/', '')}</span>
@@ -103,6 +98,7 @@ export function BranchSelector({
             <>
               <div className="my-1 border-t" />
               <button
+                type="button"
                 className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent"
                 onClick={() => {
                   const name = prompt('输入新分支名:');

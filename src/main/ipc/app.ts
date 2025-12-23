@@ -1,5 +1,5 @@
-import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/types';
+import { ipcMain } from 'electron';
 import { appDetector } from '../services/app/AppDetector';
 
 export function registerAppHandlers() {

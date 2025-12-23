@@ -1,20 +1,8 @@
-import * as React from 'react';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectPopup,
-  SelectItem,
-} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import {
-  ChevronDown,
-  Search,
-  Plus,
-  FolderOpen,
-  Folder,
-} from 'lucide-react';
+import { Select, SelectItem, SelectPopup, SelectTrigger } from '@/components/ui/select';
 import type { WorkspaceRecord } from '@shared/types';
+import { ChevronDown, Folder, FolderOpen, Plus, Search } from 'lucide-react';
+import * as React from 'react';
 
 interface WorkspaceSelectorProps {
   workspaces: WorkspaceRecord[];
@@ -69,9 +57,7 @@ export function WorkspaceSelector({
       <SelectTrigger className="h-12 w-full justify-between border-0 bg-transparent px-3 hover:bg-accent">
         <div className="flex items-center gap-2">
           <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate font-medium">
-            {currentWorkspace?.name || '选择工作区'}
-          </span>
+          <span className="truncate font-medium">{currentWorkspace?.name || '选择工作区'}</span>
           {currentWorkspace && getStatusIndicator(currentWorkspace)}
         </div>
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -122,6 +108,7 @@ export function WorkspaceSelector({
         <div className="border-t p-1">
           {onCreateNew && (
             <button
+              type="button"
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               onClick={() => {
                 setOpen(false);
@@ -134,6 +121,7 @@ export function WorkspaceSelector({
           )}
           {onOpenFolder && (
             <button
+              type="button"
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               onClick={() => {
                 setOpen(false);

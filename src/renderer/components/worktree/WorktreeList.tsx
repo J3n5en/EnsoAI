@@ -1,8 +1,14 @@
-import { WorktreeCard } from './WorktreeCard';
-import type { GitWorktree, GitStatus } from '@shared/types';
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Empty, EmptyMedia, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
+import type { GitStatus, GitWorktree } from '@shared/types';
 import { GitBranch } from 'lucide-react';
+import { WorktreeCard } from './WorktreeCard';
 
 interface WorktreeListProps {
   worktrees: GitWorktree[];
@@ -30,8 +36,8 @@ export function WorktreeList({
   if (isLoading) {
     return (
       <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <WorktreeCardSkeleton key={i} />
+        {[0, 1, 2].map((i) => (
+          <WorktreeCardSkeleton key={`skeleton-${i}`} />
         ))}
       </div>
     );

@@ -1,6 +1,6 @@
-import { BrowserWindow, shell } from 'electron';
-import { join } from 'path';
+import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
+import { BrowserWindow, shell } from 'electron';
 
 export function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -35,8 +35,8 @@ export function createMainWindow(): BrowserWindow {
   });
 
   // Load renderer
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL']);
+  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    win.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'));
   }

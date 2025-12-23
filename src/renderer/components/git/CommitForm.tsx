@@ -1,7 +1,7 @@
-import * as React from 'react';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Send } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Send, Sparkles } from 'lucide-react';
+import type * as React from 'react';
 
 interface CommitFormProps {
   message: string;

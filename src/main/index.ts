@@ -1,8 +1,9 @@
-import { app, BrowserWindow, globalShortcut } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
-import { createMainWindow } from './windows/MainWindow';
+import { BrowserWindow, Menu, app } from 'electron';
 import { registerIpcHandlers } from './ipc';
+import { buildAppMenu } from './services/MenuBuilder';
 import { checkGitInstalled } from './services/git/checkGit';
+import { createMainWindow } from './windows/MainWindow';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -30,10 +31,9 @@ app.whenReady().then(async () => {
 
   mainWindow = createMainWindow();
 
-  // Register Cmd+Option+I to open DevTools (works in production too)
-  globalShortcut.register('CommandOrControl+Option+I', () => {
-    mainWindow?.webContents.toggleDevTools();
-  });
+  // Build and set application menu
+  const menu = buildAppMenu(mainWindow);
+  Menu.setApplicationMenu(menu);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -46,10 +46,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
-});
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
 });
 
 // Handle uncaught errors

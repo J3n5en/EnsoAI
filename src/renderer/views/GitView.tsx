@@ -1,26 +1,26 @@
-import * as React from 'react';
 import {
-  useGitStatus,
+  BranchSelector,
+  CommitForm,
+  CommitHistory,
+  FileChanges,
+  SyncStatus,
+} from '@/components/git';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import {
   useGitBranches,
-  useGitLog,
-  useGitCommit,
-  useGitPush,
-  useGitPull,
   useGitCheckout,
+  useGitCommit,
   useGitCreateBranch,
+  useGitLog,
+  useGitPull,
+  useGitPush,
+  useGitStatus,
 } from '@/hooks/useGit';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useWorktreeStore } from '@/stores/worktree';
-import {
-  FileChanges,
-  CommitForm,
-  BranchSelector,
-  CommitHistory,
-  SyncStatus,
-} from '@/components/git';
-import { Separator } from '@/components/ui/separator';
-import { RefreshCw, GitBranch } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { GitBranch, RefreshCw } from 'lucide-react';
+import * as React from 'react';
 
 export function GitView() {
   const { currentWorkspace } = useWorkspaceStore();
@@ -29,11 +29,7 @@ export function GitView() {
   // Use worktree path if available, otherwise workspace path
   const workdir = currentWorktree?.path || currentWorkspace?.path || null;
 
-  const {
-    data: status,
-    isLoading: statusLoading,
-    refetch: refetchStatus,
-  } = useGitStatus(workdir);
+  const { data: status, isLoading: statusLoading, refetch: refetchStatus } = useGitStatus(workdir);
   const {
     data: branches = [],
     isLoading: branchesLoading,

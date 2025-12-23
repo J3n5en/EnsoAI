@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
-import { ArrowUp, ArrowDown, RefreshCw, CloudOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ArrowDown, ArrowUp, CloudOff, RefreshCw } from 'lucide-react';
 
 interface SyncStatusProps {
   ahead: number;
@@ -49,31 +49,19 @@ export function SyncStatus({
             {behind}
           </span>
         )}
-        {ahead === 0 && behind === 0 && (
-          <span className="text-muted-foreground">已同步</span>
-        )}
+        {ahead === 0 && behind === 0 && <span className="text-muted-foreground">已同步</span>}
       </div>
 
       <div className="flex items-center gap-1">
         {behind > 0 && onPull && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onPull}
-            disabled={isLoading}
-          >
+          <Button variant="outline" size="sm" onClick={onPull} disabled={isLoading}>
             <ArrowDown className={cn('mr-1.5 h-4 w-4', isPulling && 'animate-pulse')} />
             Pull
           </Button>
         )}
 
         {ahead > 0 && onPush && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onPush}
-            disabled={isLoading}
-          >
+          <Button variant="outline" size="sm" onClick={onPush} disabled={isLoading}>
             <ArrowUp className={cn('mr-1.5 h-4 w-4', isPushing && 'animate-pulse')} />
             Push
           </Button>

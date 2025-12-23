@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import type { GitWorktree, WorkspaceRecord, WorktreeCreateOptions } from '@shared/types';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MainContent } from './components/layout/MainContent';
 import { WorkspaceSidebar } from './components/layout/WorkspaceSidebar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
-import { MainContent } from './components/layout/MainContent';
 import { SettingsDialog } from './components/settings/SettingsDialog';
-import { useWorkspaceStore } from './stores/workspace';
-import { useSettingsStore } from './stores/settings';
-import { useWorktreeList, useWorktreeCreate, useWorktreeRemove } from './hooks/useWorktree';
 import { useGitBranches } from './hooks/useGit';
-import type { GitWorktree, WorkspaceRecord, WorktreeCreateOptions } from '@shared/types';
+import { useWorktreeCreate, useWorktreeList, useWorktreeRemove } from './hooks/useWorktree';
+import { useSettingsStore } from './stores/settings';
+import { useWorkspaceStore } from './stores/workspace';
 
 // Animation config
 const panelTransition = { type: 'spring', stiffness: 400, damping: 30 };
@@ -46,10 +46,18 @@ export default function App() {
   const [activeWorktree, setActiveWorktree] = useState<GitWorktree | null>(null);
 
   // Panel sizes and collapsed states - initialize from localStorage
-  const [workspaceWidth, setWorkspaceWidth] = useState(() => getStoredNumber('enso-workspace-width', WORKSPACE_DEFAULT));
-  const [worktreeWidth, setWorktreeWidth] = useState(() => getStoredNumber('enso-worktree-width', WORKTREE_DEFAULT));
-  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(() => getStoredBoolean('enso-workspace-collapsed', false));
-  const [worktreeCollapsed, setWorktreeCollapsed] = useState(() => getStoredBoolean('enso-worktree-collapsed', false));
+  const [workspaceWidth, setWorkspaceWidth] = useState(() =>
+    getStoredNumber('enso-workspace-width', WORKSPACE_DEFAULT)
+  );
+  const [worktreeWidth, setWorktreeWidth] = useState(() =>
+    getStoredNumber('enso-worktree-width', WORKTREE_DEFAULT)
+  );
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(() =>
+    getStoredBoolean('enso-workspace-collapsed', false)
+  );
+  const [worktreeCollapsed, setWorktreeCollapsed] = useState(() =>
+    getStoredBoolean('enso-worktree-collapsed', false)
+  );
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -64,17 +72,23 @@ export default function App() {
   // Initialize settings store (for theme hydration)
   useSettingsStore();
 
-  // Global keyboard shortcut: Cmd+, to open settings
+  // Listen for menu actions from main process
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault();
-        setSettingsOpen(true);
+    const cleanup = window.electronAPI.menu.onAction((action) => {
+      switch (action) {
+        case 'open-settings':
+          setSettingsOpen(true);
+          break;
+        case 'close-window':
+          // If settings is open, close it; otherwise let default behavior handle
+          if (settingsOpen) {
+            setSettingsOpen(false);
+          }
+          break;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    });
+    return cleanup;
+  }, [settingsOpen]);
 
   // Save panel sizes to localStorage
   useEffect(() => {
@@ -132,9 +146,11 @@ export default function App() {
   }, [resizing]);
 
   // Get worktrees for selected repo
-  const { data: worktrees = [], isLoading: worktreesLoading, refetch } = useWorktreeList(
-    selectedRepo
-  );
+  const {
+    data: worktrees = [],
+    isLoading: worktreesLoading,
+    refetch,
+  } = useWorktreeList(selectedRepo);
 
   // Get branches for selected repo
   const { data: branches = [], refetch: refetchBranches } = useGitBranches(selectedRepo);
@@ -218,7 +234,7 @@ export default function App() {
     }
   }, [worktrees, activeWorktree]);
 
-  const handleSelectWorkspace = (workspace: WorkspaceRecord) => {
+  const _handleSelectWorkspace = (workspace: WorkspaceRecord) => {
     setCurrentWorkspace(workspace);
     setSelectedRepo(null);
     setActiveWorktree(null);
@@ -310,6 +326,7 @@ export default function App() {
               selectedRepo={selectedRepo}
               onSelectRepo={handleSelectRepo}
               onAddRepository={handleAddRepository}
+              onOpenSettings={() => setSettingsOpen(true)}
               collapsed={false}
               onCollapse={() => setWorkspaceCollapsed(true)}
             />

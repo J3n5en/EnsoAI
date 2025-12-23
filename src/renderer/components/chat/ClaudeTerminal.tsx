@@ -1,12 +1,8 @@
+import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { useSettingsStore } from '@/stores/settings';
-import {
-  getXtermTheme,
-  defaultDarkTheme,
-  type XtermTheme,
-} from '@/lib/ghosttyTheme';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { type ITheme, Terminal } from '@xterm/xterm';
+import { Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 
@@ -66,6 +62,7 @@ export function ClaudeTerminal({
   const [isLoading, setIsLoading] = useState(false);
   const hasReceivedDataRef = useRef(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: settings is intentionally excluded - terminal is initialized once with initial settings, then updated dynamically via a separate effect
   const initTerminal = useCallback(async () => {
     if (!containerRef.current || terminalRef.current) return;
 
@@ -248,10 +245,7 @@ export function ClaudeTerminal({
 
   return (
     <div className="relative h-full w-full" style={{ backgroundColor: settings.theme.background }}>
-      <div
-        ref={containerRef}
-        className="h-full w-full px-[10px] py-[2px]"
-      />
+      <div ref={containerRef} className="h-full w-full px-[10px] py-[2px]" />
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">

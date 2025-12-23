@@ -1,6 +1,6 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { X, Sparkles, Plus, GripVertical } from 'lucide-react';
+import { GripVertical, Plus, Sparkles, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'enso-session-bar';
 const EDGE_THRESHOLD = 20; // pixels from edge
@@ -58,17 +58,20 @@ export function SessionBar({
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (state.collapsed) return;
-    e.preventDefault();
-    setDragging(true);
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      startX: state.x,
-      startY: state.y,
-    };
-  }, [state.collapsed, state.x, state.y]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (state.collapsed) return;
+      e.preventDefault();
+      setDragging(true);
+      dragStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        startX: state.x,
+        startY: state.y,
+      };
+    },
+    [state.collapsed, state.x, state.y]
+  );
 
   useEffect(() => {
     if (!dragging) return;
@@ -82,7 +85,7 @@ export function SessionBar({
       const newX = Math.max(0, Math.min(100, dragStart.current.startX + (dx / rect.width) * 100));
       const newY = Math.max(8, Math.min(rect.height - 48, dragStart.current.startY + dy));
 
-      setState(s => ({ ...s, x: newX, y: newY }));
+      setState((s) => ({ ...s, x: newX, y: newY }));
     };
 
     const handleMouseUp = () => {
@@ -97,10 +100,11 @@ export function SessionBar({
       // Check bar's right edge distance from container's right edge
       const rightEdgeDist = containerRect.right - barRect.right;
 
-      setState(s => {
+      setState((s) => {
         if (leftEdgeDist < EDGE_THRESHOLD) {
           return { ...s, x: 0, collapsed: true, edge: 'left' };
-        } else if (rightEdgeDist < EDGE_THRESHOLD) {
+        }
+        if (rightEdgeDist < EDGE_THRESHOLD) {
           return { ...s, x: 100, collapsed: true, edge: 'right' };
         }
         return s;
@@ -117,7 +121,7 @@ export function SessionBar({
 
   const handleExpand = useCallback(() => {
     if (!state.collapsed) return;
-    setState(s => ({ ...s, x: 50, collapsed: false, edge: null }));
+    setState((s) => ({ ...s, x: 50, collapsed: false, edge: null }));
   }, [state.collapsed]);
 
   const handleStartEdit = useCallback((session: Session) => {
@@ -134,30 +138,35 @@ export function SessionBar({
     setEditingName('');
   }, [editingId, editingName, onRenameSession]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleFinishEdit();
-    } else if (e.key === 'Escape') {
-      setEditingId(null);
-      setEditingName('');
-    }
-  }, [handleFinishEdit]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        handleFinishEdit();
+      } else if (e.key === 'Escape') {
+        setEditingId(null);
+        setEditingName('');
+      }
+    },
+    [handleFinishEdit]
+  );
 
   return (
     <div ref={containerRef} className="absolute inset-0 pointer-events-none z-10">
       <div
         ref={barRef}
         onClick={state.collapsed ? handleExpand : undefined}
+        onKeyDown={state.collapsed ? (e) => e.key === 'Enter' && handleExpand() : undefined}
+        role={state.collapsed ? 'button' : undefined}
+        tabIndex={state.collapsed ? 0 : undefined}
         className={cn(
-          "absolute pointer-events-auto",
-          !dragging && "transition-all duration-300",
-          state.collapsed ? "cursor-pointer" : dragging ? "cursor-grabbing" : ""
+          'absolute pointer-events-auto',
+          !dragging && 'transition-all duration-300',
+          state.collapsed ? 'cursor-pointer' : dragging ? 'cursor-grabbing' : ''
         )}
         style={{
           ...(state.collapsed && state.edge === 'right'
             ? { right: 0, left: 'auto' }
-            : { left: state.collapsed && state.edge === 'left' ? 0 : `${state.x}%` }
-          ),
+            : { left: state.collapsed && state.edge === 'left' ? 0 : `${state.x}%` }),
           top: state.y,
           transform: state.collapsed ? 'none' : 'translateX(-50%)',
         }}
@@ -165,9 +174,9 @@ export function SessionBar({
         {state.collapsed ? (
           <div
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full border bg-background/90 shadow-lg backdrop-blur-sm",
-              state.edge === 'left' && "rounded-l-md",
-              state.edge === 'right' && "rounded-r-md"
+              'flex h-10 w-10 items-center justify-center rounded-full border bg-background/90 shadow-lg backdrop-blur-sm',
+              state.edge === 'left' && 'rounded-l-md',
+              state.edge === 'right' && 'rounded-r-md'
             )}
           >
             <Sparkles className="h-4 w-4 text-muted-foreground" />
@@ -182,7 +191,8 @@ export function SessionBar({
             </div>
 
             {sessions.map((session) => (
-              <div
+              <button
+                type="button"
                 key={session.id}
                 onClick={() => onSelectSession(session.id)}
                 onDoubleClick={(e) => {
@@ -196,8 +206,8 @@ export function SessionBar({
                     : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                 )}
               >
-                <span
-                  role="button"
+                <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onCloseSession(session.id);
@@ -209,7 +219,7 @@ export function SessionBar({
                   )}
                 >
                   <X className="h-3 w-3" />
-                </span>
+                </button>
                 <Sparkles className="h-3.5 w-3.5" />
                 {editingId === session.id ? (
                   <input
@@ -221,17 +231,17 @@ export function SessionBar({
                     onKeyDown={handleKeyDown}
                     onClick={(e) => e.stopPropagation()}
                     className="w-20 bg-transparent outline-none border-b border-current"
-                    autoFocus
                   />
                 ) : (
                   <span>{session.name}</span>
                 )}
-              </div>
+              </button>
             ))}
 
             <div className="mx-1 h-4 w-px bg-border" />
 
             <button
+              type="button"
               onClick={onNewSession}
               className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >

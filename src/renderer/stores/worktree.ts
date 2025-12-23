@@ -1,5 +1,5 @@
-import { create } from 'zustand';
 import type { GitWorktree } from '@shared/types';
+import { create } from 'zustand';
 
 interface WorktreeState {
   worktrees: GitWorktree[];

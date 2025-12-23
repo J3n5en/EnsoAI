@@ -1,28 +1,28 @@
-import { useState } from 'react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
-  AlertDialogPopup,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
   AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
 import { cn } from '@/lib/utils';
+import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
 import {
-  Search,
-  Plus,
+  FolderOpen,
   GitBranch,
+  PanelLeftClose,
+  Plus,
   RefreshCw,
+  Search,
   Sparkles,
   Trash2,
-  PanelLeftClose,
-  FolderOpen,
 } from 'lucide-react';
-import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
-import type { GitWorktree, GitBranch as GitBranchType, WorktreeCreateOptions } from '@shared/types';
+import { useState } from 'react';
 
 interface WorktreePanelProps {
   worktrees: GitWorktree[];
@@ -53,8 +53,8 @@ export function WorktreePanel({
   onCreateWorktree,
   onRemoveWorktree,
   onRefresh,
-  width = 280,
-  collapsed = false,
+  width: _width = 280,
+  collapsed: _collapsed = false,
   onCollapse,
   workspaceCollapsed = false,
   onExpandWorkspace,
@@ -62,20 +62,21 @@ export function WorktreePanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(null);
 
-  const filteredWorktrees = worktrees.filter((wt) =>
-    wt.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    wt.path.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredWorktrees = worktrees.filter(
+    (wt) =>
+      wt.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      wt.path.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <aside
-      className="flex h-full w-full flex-col border-r bg-background"
-    >
+    <aside className="flex h-full w-full flex-col border-r bg-background">
       {/* Header with buttons */}
-      <div className={cn(
-        "flex h-12 items-center justify-end gap-1 border-b px-3 drag-region",
-        workspaceCollapsed && "pl-[70px]"
-      )}>
+      <div
+        className={cn(
+          'flex h-12 items-center justify-end gap-1 border-b px-3 drag-region',
+          workspaceCollapsed && 'pl-[70px]'
+        )}
+      >
         {/* Expand workspace button when collapsed */}
         {workspaceCollapsed && onExpandWorkspace && (
           <Button
@@ -95,12 +96,7 @@ export function WorktreePanel({
           isLoading={isCreating}
           onSubmit={onCreateWorktree}
           trigger={
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 no-drag"
-              title="新建 Worktree"
-            >
+            <Button variant="ghost" size="icon" className="h-8 w-8 no-drag" title="新建 Worktree">
               <Plus className="h-4 w-4" />
             </Button>
           }
@@ -146,8 +142,8 @@ export function WorktreePanel({
       <div className="flex-1 overflow-auto p-2">
         {isLoading ? (
           <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <WorktreeItemSkeleton key={i} />
+            {[0, 1, 2].map((i) => (
+              <WorktreeItemSkeleton key={`skeleton-${i}`} />
             ))}
           </div>
         ) : filteredWorktrees.length === 0 ? (
@@ -170,16 +166,23 @@ export function WorktreePanel({
       </div>
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={!!worktreeToDelete} onOpenChange={(open) => !open && setWorktreeToDelete(null)}>
+      <AlertDialog
+        open={!!worktreeToDelete}
+        onOpenChange={(open) => !open && setWorktreeToDelete(null)}
+      >
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>删除 Worktree</AlertDialogTitle>
             <AlertDialogDescription>
               确定要删除 worktree <strong>{worktreeToDelete?.branch}</strong> 吗？
               {worktreeToDelete?.prunable ? (
-                <span className="block mt-2 text-muted-foreground">该目录已被删除，将清理 git 记录。</span>
+                <span className="block mt-2 text-muted-foreground">
+                  该目录已被删除，将清理 git 记录。
+                </span>
               ) : (
-                <span className="block mt-2 text-destructive">这将删除目录及其中所有文件，此操作不可撤销！</span>
+                <span className="block mt-2 text-destructive">
+                  这将删除目录及其中所有文件，此操作不可撤销！
+                </span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -213,7 +216,8 @@ interface WorktreeItemProps {
 function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const isMain = worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
+  const isMain =
+    worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
   const branchDisplay = worktree.branch || 'detached';
   const isPrunable = worktree.prunable;
 
@@ -230,20 +234,26 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
   return (
     <>
       <button
+        type="button"
         onClick={onClick}
         onContextMenu={handleContextMenu}
         className={cn(
           'flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
           isPrunable && 'opacity-50',
-          isActive
-            ? 'bg-accent text-accent-foreground'
-            : 'hover:bg-accent/50'
+          isActive ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
         )}
       >
         {/* Branch name */}
         <div className="flex w-full items-center gap-2">
-          <GitBranch className={cn('h-4 w-4 shrink-0', isPrunable ? 'text-destructive' : 'text-muted-foreground')} />
-          <span className={cn('truncate font-medium', isPrunable && 'line-through')}>{branchDisplay}</span>
+          <GitBranch
+            className={cn(
+              'h-4 w-4 shrink-0',
+              isPrunable ? 'text-destructive' : 'text-muted-foreground'
+            )}
+          />
+          <span className={cn('truncate font-medium', isPrunable && 'line-through')}>
+            {branchDisplay}
+          </span>
           {isPrunable ? (
             <span className="shrink-0 rounded bg-destructive/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-destructive">
               已删除
@@ -256,7 +266,12 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
         </div>
 
         {/* Path */}
-        <div className={cn('w-full truncate pl-6 text-xs text-muted-foreground', isPrunable && 'line-through')}>
+        <div
+          className={cn(
+            'w-full truncate pl-6 text-xs text-muted-foreground',
+            isPrunable && 'line-through'
+          )}
+        >
           {worktree.path}
         </div>
 
@@ -278,16 +293,19 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
           <div
             className="fixed inset-0 z-50"
             onClick={() => setMenuOpen(false)}
+            onKeyDown={(e) => e.key === 'Escape' && setMenuOpen(false)}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenuOpen(false);
             }}
+            role="presentation"
           />
           <div
             className="fixed z-50 min-w-32 rounded-lg border bg-popover p-1 shadow-lg"
             style={{ left: menuPosition.x, top: menuPosition.y }}
           >
             <button
+              type="button"
               className={cn(
                 'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-accent',
                 isMain && 'pointer-events-none opacity-50'

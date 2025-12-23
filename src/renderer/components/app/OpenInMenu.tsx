@@ -1,16 +1,14 @@
-import { useState, useEffect } from 'react';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectPopup,
-  SelectItem,
-} from '@/components/ui/select';
-import { FolderOpen, Terminal, FileCode, ChevronDown } from 'lucide-react';
+import { Select, SelectItem, SelectPopup, SelectTrigger } from '@/components/ui/select';
 import { useDetectedApps, useOpenWith } from '@/hooks/useAppDetector';
-import type { DetectedApp, AppCategory } from '@shared/types';
+import type { AppCategory, DetectedApp } from '@shared/types';
+import { ChevronDown, FileCode, FolderOpen, Terminal } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-function AppIcon({ bundleId, name, fallback: Fallback }: { bundleId: string; name: string; fallback: React.ElementType }) {
+function AppIcon({
+  bundleId,
+  name,
+  fallback: Fallback,
+}: { bundleId: string; name: string; fallback: React.ElementType }) {
   const [icon, setIcon] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,6 +85,7 @@ export function OpenInMenu({ path }: OpenInMenuProps) {
     <div className="flex items-center rounded-full bg-muted">
       {/* Left: Quick open button */}
       <button
+        type="button"
         onClick={handleQuickOpen}
         className="flex items-center gap-1.5 px-3 py-1 text-sm hover:bg-accent/50 rounded-l-full transition-colors"
       >
@@ -109,7 +108,7 @@ export function OpenInMenu({ path }: OpenInMenuProps) {
               </div>
             </SelectItem>
           ))}
-          
+
           {/* Terminals */}
           {groupedApps.terminal.length > 0 && (
             <>
@@ -126,13 +125,11 @@ export function OpenInMenu({ path }: OpenInMenuProps) {
               ))}
             </>
           )}
-          
+
           {/* Editors */}
           {groupedApps.editor.length > 0 && (
             <>
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                Editors
-              </div>
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Editors</div>
               {groupedApps.editor.map((app) => (
                 <SelectItem key={app.bundleId} value={app.bundleId}>
                   <div className="flex items-center gap-2">
@@ -161,15 +158,4 @@ function groupAppsByCategory(apps: DetectedApp[]): Record<AppCategory, DetectedA
   }
 
   return grouped;
-}
-
-function getCategoryLabel(category: AppCategory): string {
-  switch (category) {
-    case 'terminal':
-      return 'Terminals';
-    case 'editor':
-      return 'Editors';
-    case 'finder':
-      return 'System';
-  }
 }

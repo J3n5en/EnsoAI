@@ -1,24 +1,18 @@
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { cn } from '@/lib/utils';
-import type { GitWorktree, GitStatus } from '@shared/types';
+import type { GitStatus, GitWorktree } from '@shared/types';
 import {
-  GitBranch,
-  Terminal,
-  MoreVertical,
-  Lock,
-  Folder,
-  Trash2,
   Copy,
   ExternalLink,
+  Folder,
+  GitBranch,
+  Lock,
+  MoreVertical,
+  Terminal,
+  Trash2,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Menu,
-  MenuTrigger,
-  MenuPopup,
-  MenuItem,
-  MenuSeparator,
-} from '@/components/ui/menu';
 
 interface WorktreeCardProps {
   worktree: GitWorktree;
@@ -48,18 +42,17 @@ export function WorktreeCard({
     : 0;
 
   return (
-    <div
+    <button
+      type="button"
       className={cn(
-        'group relative rounded-lg border bg-card p-4 transition-all hover:shadow-md',
+        'group relative w-full text-left rounded-lg border bg-card p-4 transition-all hover:shadow-md',
         isActive && 'border-primary ring-1 ring-primary/20',
         worktree.isLocked && 'opacity-75'
       )}
       onClick={() => onSelect?.(worktree)}
     >
       {/* Active indicator */}
-      {isActive && (
-        <div className="absolute left-0 top-0 h-full w-1 rounded-l-lg bg-primary" />
-      )}
+      {isActive && <div className="absolute left-0 top-0 h-full w-1 rounded-l-lg bg-primary" />}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
@@ -71,9 +64,7 @@ export function WorktreeCard({
               primary
             </Badge>
           )}
-          {worktree.isLocked && (
-            <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          )}
+          {worktree.isLocked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         </div>
 
         {/* Actions */}
@@ -119,8 +110,7 @@ export function WorktreeCard({
                   onOpenInFinder?.(worktree);
                 }}
               >
-                <Folder className="mr-2 h-4 w-4" />
-                在 Finder 中显示
+                <Folder className="mr-2 h-4 w-4" />在 Finder 中显示
               </MenuItem>
               <MenuSeparator />
               <MenuItem
@@ -138,8 +128,7 @@ export function WorktreeCard({
                   // Open in external editor
                 }}
               >
-                <ExternalLink className="mr-2 h-4 w-4" />
-                在 IDE 中打开
+                <ExternalLink className="mr-2 h-4 w-4" />在 IDE 中打开
               </MenuItem>
               <MenuSeparator />
               <MenuItem
@@ -181,6 +170,6 @@ export function WorktreeCard({
           <span className="text-orange-500">{status.behind} commits behind</span>
         )}
       </div>
-    </div>
+    </button>
   );
 }

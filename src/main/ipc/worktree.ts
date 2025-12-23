@@ -1,5 +1,9 @@
+import {
+  IPC_CHANNELS,
+  type WorktreeCreateOptions,
+  type WorktreeRemoveOptions,
+} from '@shared/types';
 import { ipcMain } from 'electron';
-import { IPC_CHANNELS, WorktreeCreateOptions, WorktreeRemoveOptions } from '@shared/types';
 import { WorktreeService } from '../services/git/WorktreeService';
 
 const worktreeServices = new Map<string, WorktreeService>();

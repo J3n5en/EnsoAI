@@ -53,8 +53,6 @@ export const useEditorStore = create<EditorState>((set) => ({
     })),
   markFileSaved: (path) =>
     set((state) => ({
-      openFiles: state.openFiles.map((f) =>
-        f.path === path ? { ...f, isDirty: false } : f
-      ),
+      openFiles: state.openFiles.map((f) => (f.path === path ? { ...f, isDirty: false } : f)),
     })),
 }));
