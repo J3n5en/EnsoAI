@@ -8,7 +8,7 @@ import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import { useCallback, useEffect, useRef } from 'react';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
-import type { EditorTab } from '@/stores/editor';
+import type { EditorTab, PendingCursor } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
 import { EditorTabs } from './EditorTabs';
 
@@ -113,24 +113,28 @@ interface EditorAreaProps {
   tabs: EditorTab[];
   activeTab: EditorTab | null;
   activeTabPath: string | null;
+  pendingCursor: PendingCursor | null;
   onTabClick: (path: string) => void;
   onTabClose: (path: string) => void;
   onTabReorder: (fromIndex: number, toIndex: number) => void;
   onContentChange: (path: string, content: string) => void;
   onViewStateChange: (path: string, viewState: unknown) => void;
   onSave: (path: string) => void;
+  onClearPendingCursor: () => void;
 }
 
 export function EditorArea({
   tabs,
   activeTab,
   activeTabPath,
+  pendingCursor,
   onTabClick,
   onTabClose,
   onTabReorder,
   onContentChange,
   onViewStateChange,
   onSave,
+  onClearPendingCursor,
 }: EditorAreaProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -142,6 +146,24 @@ export function EditorArea({
     defineMonacoTheme(terminalTheme);
     themeDefinedRef.current = true;
   }, [terminalTheme]);
+
+  // Handle pending cursor navigation (jump to line)
+  useEffect(() => {
+    if (!pendingCursor || !editorRef.current || pendingCursor.path !== activeTabPath) {
+      return;
+    }
+
+    const editor = editorRef.current;
+    const { line, column } = pendingCursor;
+
+    // Set cursor position and reveal the line
+    editor.setPosition({ lineNumber: line, column: column ?? 1 });
+    editor.revealLineInCenter(line);
+    editor.focus();
+
+    // Clear the pending cursor
+    onClearPendingCursor();
+  }, [pendingCursor, activeTabPath, onClearPendingCursor]);
 
   const handleEditorMount: OnMount = useCallback(
     (editor, monaco) => {

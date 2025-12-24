@@ -8,9 +8,16 @@ export interface EditorTab {
   viewState?: unknown; // Monaco editor view state
 }
 
+export interface PendingCursor {
+  path: string;
+  line: number;
+  column?: number;
+}
+
 interface EditorState {
   tabs: EditorTab[];
   activeTabPath: string | null;
+  pendingCursor: PendingCursor | null;
 
   openFile: (file: Omit<EditorTab, 'title' | 'viewState'> & { title?: string }) => void;
   closeFile: (path: string) => void;
@@ -19,6 +26,7 @@ interface EditorState {
   markFileSaved: (path: string) => void;
   setTabViewState: (path: string, viewState: unknown) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
+  setPendingCursor: (cursor: PendingCursor | null) => void;
 }
 
 const getTabTitle = (path: string) => path.split(/[/\\]/).pop() || path;
@@ -26,6 +34,7 @@ const getTabTitle = (path: string) => path.split(/[/\\]/).pop() || path;
 export const useEditorStore = create<EditorState>((set) => ({
   tabs: [],
   activeTabPath: null,
+  pendingCursor: null,
 
   openFile: (file) =>
     set((state) => {
@@ -88,4 +97,6 @@ export const useEditorStore = create<EditorState>((set) => ({
       tabs.splice(toIndex, 0, moved);
       return { tabs };
     }),
+
+  setPendingCursor: (cursor) => set({ pendingCursor: cursor }),
 }));

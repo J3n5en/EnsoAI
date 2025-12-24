@@ -7,8 +7,15 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
+import { useNavigationStore } from '@/stores/navigation';
 import { useSettingsStore } from '@/stores/settings';
 import '@xterm/xterm/css/xterm.css';
+
+// Regex to match file paths with optional line:column
+// Matches: path/to/file.ts:42 or path/to/file.ts:42:10 or ./file.ts:10
+// Note: longer extensions must come before shorter ones (tsx before ts, jsx before js, etc.)
+const FILE_PATH_REGEX =
+  /(?:^|[\s'"({[])((?:\.{1,2}\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:tsx|ts|jsx|js|mjs|cjs|json|scss|css|less|html|vue|svelte|md|yaml|yml|toml|py|go|rs|java|cpp|hpp|c|h|rb|php|bash|zsh|sh))(?::(\d+))?(?::(\d+))?/g;
 
 export interface UseXtermOptions {
   cwd?: string;
@@ -84,6 +91,9 @@ export function useXterm({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const settings = useTerminalSettings();
+  const navigateToFile = useNavigationStore((s) => s.navigateToFile);
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const ptyIdRef = useRef<string | null>(null);
@@ -173,6 +183,70 @@ export function useXterm({
     // These addons must be loaded after open()
     terminal.loadAddon(new WebglAddon());
     terminal.loadAddon(new LigaturesAddon());
+
+    // Register file path link provider for click-to-open-in-editor
+    terminal.registerLinkProvider({
+      provideLinks: (bufferLineNumber, callback) => {
+        const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
+        if (!line) {
+          callback(undefined);
+          return;
+        }
+
+        const lineText = line.translateToString();
+        const links: Array<{
+          range: { start: { x: number; y: number }; end: { x: number; y: number } };
+          text: string;
+          activate: () => void;
+        }> = [];
+
+        // Reset regex state
+        FILE_PATH_REGEX.lastIndex = 0;
+
+        let match: RegExpExecArray | null = null;
+        // biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop
+        while ((match = FILE_PATH_REGEX.exec(lineText)) !== null) {
+          const fullMatch = match[0];
+          const filePath = match[1];
+          const lineNum = match[2] ? Number.parseInt(match[2], 10) : undefined;
+          const colNum = match[3] ? Number.parseInt(match[3], 10) : undefined;
+
+          // Calculate start position (skip leading whitespace/delimiter)
+          const startIndex =
+            match.index +
+            (fullMatch.length -
+              filePath.length -
+              (match[2] ? `:${match[2]}`.length : 0) -
+              (match[3] ? `:${match[3]}`.length : 0));
+
+          // Calculate end position
+          const endIndex = match.index + fullMatch.length;
+
+          links.push({
+            range: {
+              start: { x: startIndex + 1, y: bufferLineNumber },
+              end: { x: endIndex + 1, y: bufferLineNumber },
+            },
+            text: fullMatch.trim(),
+            activate: () => {
+              // Resolve relative path to absolute
+              const basePath = cwdRef.current || '';
+              const absolutePath = filePath.startsWith('/')
+                ? filePath
+                : `${basePath}/${filePath}`.replace(/\/\.\//g, '/');
+
+              navigateToFile({
+                path: absolutePath,
+                line: lineNum,
+                column: colNum,
+              });
+            },
+          });
+        }
+
+        callback(links.length > 0 ? links : undefined);
+      },
+    });
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;

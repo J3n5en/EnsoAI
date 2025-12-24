@@ -6,8 +6,10 @@ import { MainContent } from './components/layout/MainContent';
 import { WorkspaceSidebar } from './components/layout/WorkspaceSidebar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
 import { SettingsDialog } from './components/settings/SettingsDialog';
+import { useEditor } from './hooks/useEditor';
 import { useGitBranches } from './hooks/useGit';
 import { useWorktreeCreate, useWorktreeList, useWorktreeRemove } from './hooks/useWorktree';
+import { useNavigationStore } from './stores/navigation';
 import { useSettingsStore } from './stores/settings';
 import { useWorkspaceStore } from './stores/workspace';
 
@@ -75,6 +77,26 @@ export default function App() {
 
   // Initialize settings store (for theme hydration)
   useSettingsStore();
+
+  // Navigation store for terminal -> editor file navigation
+  const { pendingNavigation, clearNavigation } = useNavigationStore();
+  const { navigateToFile } = useEditor();
+
+  // Handle terminal file link navigation
+  useEffect(() => {
+    if (!pendingNavigation) return;
+
+    const { path, line, column } = pendingNavigation;
+
+    // Open the file and set cursor position
+    navigateToFile(path, line, column);
+
+    // Switch to file tab
+    setActiveTab('file');
+
+    // Clear the navigation request
+    clearNavigation();
+  }, [pendingNavigation, navigateToFile, clearNavigation]);
 
   // Listen for menu actions from main process
   useEffect(() => {

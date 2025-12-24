@@ -1,10 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { useEditorStore } from '@/stores/editor';
 
 export function useEditor() {
   const {
     tabs,
     activeTabPath,
+    pendingCursor,
     openFile,
     closeFile,
     setActiveFile,
@@ -12,6 +14,7 @@ export function useEditor() {
     markFileSaved,
     setTabViewState,
     reorderTabs,
+    setPendingCursor,
   } = useEditorStore();
 
   const queryClient = useQueryClient();
@@ -36,11 +39,37 @@ export function useEditor() {
     },
   });
 
+  // Load file and navigate to specific line/column
+  const navigateToFile = useCallback(
+    async (path: string, line?: number, column?: number) => {
+      const existingTab = tabs.find((t) => t.path === path);
+
+      if (existingTab) {
+        setActiveFile(path);
+      } else {
+        try {
+          const content = await window.electronAPI.file.read(path);
+          openFile({ path, content, isDirty: false });
+        } catch {
+          // File doesn't exist or can't be read
+          return;
+        }
+      }
+
+      // Set pending cursor position if line is specified
+      if (line !== undefined) {
+        setPendingCursor({ path, line, column });
+      }
+    },
+    [tabs, setActiveFile, openFile, setPendingCursor]
+  );
+
   const activeTab = tabs.find((f) => f.path === activeTabPath) || null;
 
   return {
     tabs,
     activeTab,
+    pendingCursor,
     loadFile,
     saveFile,
     closeFile,
@@ -48,5 +77,7 @@ export function useEditor() {
     updateFileContent,
     setTabViewState,
     reorderTabs,
+    setPendingCursor,
+    navigateToFile,
   };
 }

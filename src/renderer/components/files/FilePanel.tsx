@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useEditor } from '@/hooks/useEditor';
 import { useFileTree } from '@/hooks/useFileTree';
 import { EditorArea } from './EditorArea';
@@ -27,6 +27,7 @@ export function FilePanel({ rootPath }: FilePanelProps) {
   const {
     tabs,
     activeTab,
+    pendingCursor,
     loadFile,
     saveFile,
     closeFile,
@@ -34,10 +35,32 @@ export function FilePanel({ rootPath }: FilePanelProps) {
     updateFileContent,
     setTabViewState,
     reorderTabs,
+    setPendingCursor,
   } = useEditor();
 
   const [newItemType, setNewItemType] = useState<NewItemType>(null);
   const [newItemParentPath, setNewItemParentPath] = useState<string>('');
+
+  // Cmd+W: close tab, Cmd+1-9: switch tab
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        if (activeTab) {
+          closeFile(activeTab.path);
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const index = Number.parseInt(e.key, 10) - 1;
+        if (index < tabs.length) {
+          setActiveFile(tabs[index].path);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tabs, activeTab, closeFile, setActiveFile]);
 
   // Handle file click (single click = open in editor)
   const handleFileClick = useCallback(
@@ -128,6 +151,11 @@ export function FilePanel({ rootPath }: FilePanelProps) {
     [deleteItem, closeFile]
   );
 
+  // Clear pending cursor
+  const handleClearPendingCursor = useCallback(() => {
+    setPendingCursor(null);
+  }, [setPendingCursor]);
+
   if (!rootPath) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -161,12 +189,14 @@ export function FilePanel({ rootPath }: FilePanelProps) {
           tabs={tabs}
           activeTab={activeTab}
           activeTabPath={activeTab?.path ?? null}
+          pendingCursor={pendingCursor}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
           onTabReorder={reorderTabs}
           onContentChange={updateFileContent}
           onViewStateChange={setTabViewState}
           onSave={handleSave}
+          onClearPendingCursor={handleClearPendingCursor}
         />
       </div>
 
