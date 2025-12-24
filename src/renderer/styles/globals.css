@@ -114,8 +114,7 @@
   }
 
   body {
-    @apply text-foreground;
-    background: transparent;
+    @apply bg-background text-foreground;
   }
 
   button:not(:disabled),

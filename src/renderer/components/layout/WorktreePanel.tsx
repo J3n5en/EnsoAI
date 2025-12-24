@@ -69,7 +69,7 @@ export function WorktreePanel({
   );
 
   return (
-    <aside className="flex h-full w-full flex-col border-r bg-background/80">
+    <aside className="flex h-full w-full flex-col border-r bg-background">
       {/* Header with buttons */}
       <div
         className={cn(

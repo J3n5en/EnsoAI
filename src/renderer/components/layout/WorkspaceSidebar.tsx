@@ -28,7 +28,7 @@ export function WorkspaceSidebar({
   );
 
   return (
-    <aside className="flex h-full w-full flex-col border-r bg-background/80">
+    <aside className="flex h-full w-full flex-col border-r bg-background">
       {/* Header */}
       <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
         {onCollapse && (
