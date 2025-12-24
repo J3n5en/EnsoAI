@@ -82,6 +82,16 @@ Full-featured terminal emulator:
 
 ![Terminal Panel](docs/assets/screenshot-terminal.png)
 
+#### Command Palette (Action Panel)
+
+Quick access to all actions via `Cmd+Shift+P`:
+
+- **Panel Control** - Toggle Workspace/Worktree sidebar visibility
+- **Settings** - Open settings dialog (Cmd+,)
+- **Open In** - Open current project in Cursor, Ghostty, VS Code, etc.
+
+![Action Panel](docs/assets/screenshot-action-panel.png)
+
 #### Additional Features
 
 - **Multi-Window Support** - Open multiple workspaces simultaneously
@@ -185,6 +195,16 @@ EnsoAI 是一款将 **Git Worktree 管理**与 **AI 编程助手**相结合的�
 - Shift+Enter 输入换行
 
 ![终端面板](docs/assets/screenshot-terminal.png)
+
+#### 命令面板 (Action Panel)
+
+通过 `Cmd+Shift+P` 快速访问所有操作：
+
+- **面板控制** - 切换 Workspace/Worktree 侧边栏显示
+- **设置** - 打开设置对话框 (Cmd+,)
+- **打开方式** - 在 Cursor、Ghostty、VS Code 等中打开当前项目
+
+![Action Panel](docs/assets/screenshot-action-panel.png)
 
 #### 其他特性
 
