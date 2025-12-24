@@ -128,15 +128,50 @@ function AppearanceSettings() {
     setTheme,
     terminalTheme,
     setTerminalTheme,
-    terminalFontSize,
+    terminalFontSize: globalFontSize,
     setTerminalFontSize,
-    terminalFontFamily,
+    terminalFontFamily: globalFontFamily,
     setTerminalFontFamily,
     terminalFontWeight,
     setTerminalFontWeight,
     terminalFontWeightBold,
     setTerminalFontWeightBold,
   } = useSettingsStore();
+
+  // Local state for inputs
+  const [localFontSize, setLocalFontSize] = React.useState(globalFontSize);
+  const [localFontFamily, setLocalFontFamily] = React.useState(globalFontFamily);
+
+  // Sync local state with global when global changes externally
+  React.useEffect(() => {
+    setLocalFontSize(globalFontSize);
+  }, [globalFontSize]);
+
+  React.useEffect(() => {
+    setLocalFontFamily(globalFontFamily);
+  }, [globalFontFamily]);
+
+  // Apply font size change (with validation)
+  const applyFontSizeChange = React.useCallback(() => {
+    const validFontSize = Math.max(8, Math.min(32, localFontSize || 8));
+    if (validFontSize !== localFontSize) {
+      setLocalFontSize(validFontSize);
+    }
+    if (validFontSize !== globalFontSize) {
+      setTerminalFontSize(validFontSize);
+    }
+  }, [localFontSize, globalFontSize, setTerminalFontSize]);
+
+  // Apply font family change (with validation)
+  const applyFontFamilyChange = React.useCallback(() => {
+    const validFontFamily = localFontFamily.trim() || globalFontFamily;
+    if (validFontFamily !== localFontFamily) {
+      setLocalFontFamily(validFontFamily);
+    }
+    if (validFontFamily !== globalFontFamily) {
+      setTerminalFontFamily(validFontFamily);
+    }
+  }, [localFontFamily, globalFontFamily, setTerminalFontFamily]);
 
   // Get theme names synchronously from embedded data
   const themeNames = React.useMemo(() => getThemeNames(), []);
@@ -214,8 +249,8 @@ function AppearanceSettings() {
         <p className="text-sm font-medium">预览</p>
         <TerminalPreview
           theme={previewTheme}
-          fontSize={terminalFontSize}
-          fontFamily={terminalFontFamily}
+          fontSize={localFontSize}
+          fontFamily={localFontFamily}
           fontWeight={terminalFontWeight}
         />
       </div>
@@ -244,8 +279,15 @@ function AppearanceSettings() {
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
         <span className="text-sm font-medium">字体</span>
         <Input
-          value={terminalFontFamily}
-          onChange={(e) => setTerminalFontFamily(e.target.value)}
+          value={localFontFamily}
+          onChange={(e) => setLocalFontFamily(e.target.value)}
+          onBlur={applyFontFamilyChange}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              applyFontFamilyChange();
+              e.currentTarget.blur();
+            }
+          }}
           placeholder="JetBrains Mono, monospace"
         />
       </div>
@@ -256,8 +298,15 @@ function AppearanceSettings() {
         <div className="flex items-center gap-2">
           <Input
             type="number"
-            value={terminalFontSize}
-            onChange={(e) => setTerminalFontSize(Number(e.target.value))}
+            value={localFontSize}
+            onChange={(e) => setLocalFontSize(Number(e.target.value))}
+            onBlur={applyFontSizeChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                applyFontSizeChange();
+                e.currentTarget.blur();
+              }
+            }}
             min={8}
             max={32}
             className="w-20"

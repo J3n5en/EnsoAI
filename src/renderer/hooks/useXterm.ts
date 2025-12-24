@@ -111,6 +111,7 @@ export function useXterm({
   // rAF write buffer for smooth rendering
   const writeBufferRef = useRef('');
   const isFlushPendingRef = useRef(false);
+  const webglAddonRef = useRef<WebglAddon | null>(null);
 
   const write = useCallback((data: string) => {
     if (ptyIdRef.current) {
@@ -181,7 +182,19 @@ export function useXterm({
     fitAddon.fit();
 
     // These addons must be loaded after open()
-    terminal.loadAddon(new WebglAddon());
+    // Try to use WebGL renderer, fallback to canvas if it fails
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => {
+        // WebGL context lost, dispose and fallback to canvas
+        webglAddon.dispose();
+        webglAddonRef.current = null;
+      });
+      terminal.loadAddon(webglAddon);
+      webglAddonRef.current = webglAddon;
+    } catch (error) {
+      console.warn('WebGL addon failed to load, using canvas renderer:', error);
+    }
     terminal.loadAddon(new LigaturesAddon());
 
     // Register file path link provider for click-to-open-in-editor
@@ -417,6 +430,37 @@ export function useXterm({
     if (isActive) {
       requestAnimationFrame(() => fit());
     }
+  }, [isActive, fit]);
+
+  // Handle window visibility change to refresh terminal rendering
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && terminalRef.current && isActive) {
+        // Window became visible again, refresh terminal
+        requestAnimationFrame(() => {
+          terminalRef.current?.refresh(0, terminalRef.current.rows - 1);
+          fit();
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isActive, fit]);
+
+  // Handle app focus/blur events (macOS app switching)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (terminalRef.current && isActive) {
+        requestAnimationFrame(() => {
+          terminalRef.current?.refresh(0, terminalRef.current.rows - 1);
+          fit();
+        });
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, [isActive, fit]);
 
   return {
