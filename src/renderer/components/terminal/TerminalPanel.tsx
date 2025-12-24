@@ -409,6 +409,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
       </div>
 
       {/* Terminal Content - render all worktrees' terminals to keep them mounted */}
+      {/* Use opacity-0 instead of invisible to avoid WebGL rendering artifacts */}
       <div className="relative flex-1">
         {terminalIds.map((id) => {
           const tab = tabs.find((t) => t.id === id);
@@ -418,7 +419,11 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
           return (
             <div
               key={id}
-              className={isTerminalActive ? 'h-full w-full' : 'invisible absolute inset-0'}
+              className={
+                isTerminalActive
+                  ? 'h-full w-full'
+                  : 'absolute inset-0 opacity-0 pointer-events-none'
+              }
             >
               <ShellTerminal
                 cwd={tab.cwd}

@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import {
   type FontWeight,
   type TerminalKeybinding,
+  type TerminalRenderer,
   type Theme,
   useSettingsStore,
 } from '@/stores/settings';
@@ -145,6 +146,8 @@ function AppearanceSettings() {
     setTerminalFontWeight,
     terminalFontWeightBold,
     setTerminalFontWeightBold,
+    terminalRenderer,
+    setTerminalRenderer,
   } = useSettingsStore();
 
   // Local state for inputs
@@ -363,9 +366,42 @@ function AppearanceSettings() {
           </SelectPopup>
         </Select>
       </div>
+
+      {/* Renderer */}
+      <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+        <span className="text-sm font-medium mt-2">渲染器</span>
+        <div className="space-y-1.5">
+          <Select
+            value={terminalRenderer}
+            onValueChange={(v) => setTerminalRenderer(v as TerminalRenderer)}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue>
+                {rendererOptions.find((o) => o.value === terminalRenderer)?.label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup>
+              {rendererOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {terminalRenderer === 'canvas' ? '兼容性好，推荐' : '性能更高，可能有花屏问题'}
+          </p>
+          <p className="text-xs text-muted-foreground">更改后需新建终端或重启应用才能生效</p>
+        </div>
+      </div>
     </div>
   );
 }
+
+const rendererOptions: { value: TerminalRenderer; label: string }[] = [
+  { value: 'canvas', label: 'Canvas' },
+  { value: 'webgl', label: 'WebGL' },
+];
 
 const fontWeightOptions: { value: FontWeight; label: string }[] = [
   { value: 'normal', label: 'Normal' },

@@ -339,12 +339,15 @@ export function AgentPanel({ repoPath, cwd, isActive = false }: AgentPanelProps)
   return (
     <div className="relative h-full w-full">
       {/* Render all terminals across all worktrees, keep them mounted */}
+      {/* Use opacity-0 instead of invisible to avoid WebGL rendering artifacts */}
       {allSessions.map((session) => {
         const isSessionActive = session.cwd === cwd && activeSessionId === session.id;
         return (
           <div
             key={session.id}
-            className={isSessionActive ? 'h-full w-full' : 'invisible absolute inset-0'}
+            className={
+              isSessionActive ? 'h-full w-full' : 'absolute inset-0 opacity-0 pointer-events-none'
+            }
           >
             <AgentTerminal
               cwd={session.cwd}
