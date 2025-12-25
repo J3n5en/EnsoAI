@@ -1,6 +1,7 @@
 import type { WorkspaceRecord } from '@shared/types';
 import { Separator } from '@/components/ui/separator';
 import { WorkspaceSelector } from '@/components/workspace';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { FolderIcon, GitBranchIcon, GitCommitIcon, MessageSquareIcon, SettingsIcon } from './Icons';
@@ -12,16 +13,16 @@ interface SidebarProps {
   onTabChange: (tab: TabId) => void;
 }
 
-const tabs: Array<{ id: TabId; label: string; icon: React.ElementType; shortcut: string }> = [
-  { id: 'worktrees', label: 'Worktrees', icon: GitBranchIcon, shortcut: '⌘1' },
-  { id: 'chat', label: 'Chat', icon: MessageSquareIcon, shortcut: '⌘2' },
-  { id: 'files', label: 'Files', icon: FolderIcon, shortcut: '⌘3' },
-  { id: 'git', label: 'Git', icon: GitCommitIcon, shortcut: '⌘4' },
-  { id: 'settings', label: 'Settings', icon: SettingsIcon, shortcut: '⌘,' },
-];
-
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+  const { t } = useI18n();
   const { workspaces, currentWorkspace, setCurrentWorkspace } = useWorkspaceStore();
+  const tabs: Array<{ id: TabId; label: string; icon: React.ElementType; shortcut: string }> = [
+    { id: 'worktrees', label: t('Worktrees'), icon: GitBranchIcon, shortcut: '⌘1' },
+    { id: 'chat', label: t('Chat'), icon: MessageSquareIcon, shortcut: '⌘2' },
+    { id: 'files', label: t('Files'), icon: FolderIcon, shortcut: '⌘3' },
+    { id: 'git', label: t('Git'), icon: GitCommitIcon, shortcut: '⌘4' },
+    { id: 'settings', label: t('Settings'), icon: SettingsIcon, shortcut: '⌘,' },
+  ];
 
   const handleSelectWorkspace = (workspace: WorkspaceRecord) => {
     setCurrentWorkspace(workspace);
@@ -79,7 +80,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       <div className="shrink-0 border-t p-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-green-500" />
-          <span>Claude • Ready</span>
+          <span>{t('Claude • Ready')}</span>
         </div>
       </div>
     </aside>

@@ -11,6 +11,7 @@ import {
   TreeDeciduous,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useSourceControlStore } from '@/stores/sourceControl';
 import { ChangesTree } from './ChangesTree';
@@ -64,6 +65,7 @@ function FileItem({
   actionTitle: string;
   onDiscard?: () => void;
 }) {
+  const { t } = useI18n();
   const Icon = statusIcons[file.status];
 
   return (
@@ -97,7 +99,7 @@ function FileItem({
               e.stopPropagation();
               onDiscard();
             }}
-            title="放弃更改"
+            title={t('Discard changes')}
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
@@ -128,6 +130,7 @@ export function ChangesList({
   onDiscard,
   onDeleteUntracked,
 }: ChangesListProps) {
+  const { t } = useI18n();
   const { viewMode, setViewMode } = useSourceControlStore();
 
   // Separate tracked and untracked changes
@@ -164,10 +167,10 @@ export function ChangesList({
             type="button"
             className="flex h-7 items-center gap-1.5 rounded-md border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={() => setViewMode('list')}
-            title="切换到列表视图"
+            title={t('Switch to list view')}
           >
             <List className="h-3.5 w-3.5" />
-            <span>列表视图</span>
+            <span>{t('List view')}</span>
           </button>
         </div>
         {/* Tree View */}
@@ -196,17 +199,17 @@ export function ChangesList({
           type="button"
           className="flex h-7 items-center gap-1.5 rounded-md border bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={() => setViewMode(viewMode === 'list' ? 'tree' : 'list')}
-          title={viewMode === 'list' ? '切换到树形视图' : '切换到列表视图'}
+          title={viewMode === 'list' ? t('Switch to tree view') : t('Switch to list view')}
         >
           {viewMode === 'list' ? (
             <>
               <TreeDeciduous className="h-3.5 w-3.5" />
-              <span>树形视图</span>
+              <span>{t('Tree view')}</span>
             </>
           ) : (
             <>
               <List className="h-3.5 w-3.5" />
-              <span>列表视图</span>
+              <span>{t('List view')}</span>
             </>
           )}
         </button>
@@ -219,14 +222,14 @@ export function ChangesList({
             <div className="space-y-1">
               <div className="flex items-center justify-between px-2">
                 <h3 className="text-xs font-medium text-muted-foreground">
-                  暂存的更改 ({staged.length})
+                  {t('Staged changes ({count})', { count: staged.length })}
                 </h3>
                 <button
                   type="button"
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   onClick={handleUnstageAll}
                 >
-                  全部取消暂存
+                  {t('Unstage all')}
                 </button>
               </div>
               <div className="space-y-0.5">
@@ -238,7 +241,7 @@ export function ChangesList({
                     onFileClick={() => onFileClick({ path: file.path, staged: true })}
                     onAction={() => onUnstage([file.path])}
                     actionIcon={Minus}
-                    actionTitle="取消暂存"
+                    actionTitle={t('Unstage')}
                   />
                 ))}
               </div>
@@ -250,14 +253,14 @@ export function ChangesList({
             <div className="space-y-1">
               <div className="flex items-center justify-between px-2">
                 <h3 className="text-xs font-medium text-muted-foreground">
-                  更改 ({trackedChanges.length})
+                  {t('Changes ({count})', { count: trackedChanges.length })}
                 </h3>
                 <button
                   type="button"
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   onClick={handleStageTracked}
                 >
-                  全部暂存
+                  {t('Stage all')}
                 </button>
               </div>
               <div className="space-y-0.5">
@@ -269,7 +272,7 @@ export function ChangesList({
                     onFileClick={() => onFileClick({ path: file.path, staged: false })}
                     onAction={() => onStage([file.path])}
                     actionIcon={Plus}
-                    actionTitle="暂存"
+                    actionTitle={t('Stage')}
                     onDiscard={() => onDiscard(file.path)}
                   />
                 ))}
@@ -282,14 +285,14 @@ export function ChangesList({
             <div className="space-y-1">
               <div className="flex items-center justify-between px-2">
                 <h3 className="text-xs font-medium text-muted-foreground">
-                  未跟踪的更改 ({untrackedChanges.length})
+                  {t('Untracked changes ({count})', { count: untrackedChanges.length })}
                 </h3>
                 <button
                   type="button"
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   onClick={handleStageUntracked}
                 >
-                  全部暂存
+                  {t('Stage all')}
                 </button>
               </div>
               <div className="space-y-0.5">
@@ -301,7 +304,7 @@ export function ChangesList({
                     onFileClick={() => onFileClick({ path: file.path, staged: false })}
                     onAction={() => onStage([file.path])}
                     actionIcon={Plus}
-                    actionTitle="暂存"
+                    actionTitle={t('Stage')}
                     onDiscard={onDeleteUntracked ? () => onDeleteUntracked(file.path) : undefined}
                   />
                 ))}
@@ -312,7 +315,7 @@ export function ChangesList({
           {/* Empty State */}
           {staged.length === 0 && trackedChanges.length === 0 && untrackedChanges.length === 0 && (
             <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-              <p className="text-sm">没有更改</p>
+              <p className="text-sm">{t('No changes')}</p>
             </div>
           )}
         </div>

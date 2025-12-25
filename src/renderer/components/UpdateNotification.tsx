@@ -1,5 +1,6 @@
 import { Download, ExternalLink, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { Button } from './ui/button';
 import {
   Dialog,
@@ -27,6 +28,7 @@ interface UpdateStatus {
 }
 
 export function UpdateNotification() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -76,7 +78,7 @@ export function UpdateNotification() {
       <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border bg-background/95 px-3 py-2 shadow-lg backdrop-blur">
         <Download className="h-4 w-4 animate-pulse text-primary" />
         <div className="flex flex-col">
-          <span className="text-xs text-muted-foreground">正在下载更新</span>
+          <span className="text-xs text-muted-foreground">{t('Downloading update')}</span>
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
               <div
@@ -109,27 +111,35 @@ export function UpdateNotification() {
             ) : (
               <RefreshCw className="h-5 w-5 text-primary" />
             )}
-            {isMacOSManual ? '发现新版本' : '更新已就绪'}
+            {isMacOSManual ? t('New version available') : t('Update ready')}
           </DialogTitle>
           <DialogDescription>
             {isMacOSManual ? (
-              <>新版本 {status?.info?.version || ''} 已发布，请前往下载页面手动更新。</>
+              <>
+                {t('Version {{version}} is available. Please download it manually.', {
+                  version: status?.info?.version || '',
+                })}
+              </>
             ) : (
-              <>新版本 {status?.info?.version || ''} 已下载完成，是否立即重启安装？</>
+              <>
+                {t('Version {{version}} has been downloaded. Restart now to install?', {
+                  version: status?.info?.version || '',
+                })}
+              </>
             )}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter variant="bare">
           <Button variant="outline" onClick={handleLater}>
-            稍后
+            {t('Later')}
           </Button>
           {isMacOSManual ? (
             <Button onClick={handleOpenDownload}>
               <ExternalLink className="mr-2 h-4 w-4" />
-              前往下载
+              {t('Go to download')}
             </Button>
           ) : (
-            <Button onClick={handleInstall}>立即重启</Button>
+            <Button onClick={handleInstall}>{t('Restart now')}</Button>
           )}
         </DialogFooter>
       </DialogPopup>

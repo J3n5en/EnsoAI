@@ -1,6 +1,7 @@
 import { List, Plus, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { matchesKeybinding } from '@/lib/keybinding';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ShellTerminal } from './ShellTerminal';
@@ -40,6 +41,7 @@ function getNextName(tabs: TerminalTab[], forCwd: string): string {
 }
 
 export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
+  const { t } = useI18n();
   const [state, setState] = useState<TerminalState>(createInitialState);
   const { tabs, activeIds } = state;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -398,7 +400,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
             type="button"
             onClick={handleNewTab}
             className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="新建终端"
+            title={t('New Terminal')}
           >
             <Plus className="h-4 w-4" />
           </button>

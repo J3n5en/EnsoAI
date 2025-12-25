@@ -3,6 +3,7 @@ import { ChevronDown, Folder, FolderOpen, Plus, Search } from 'lucide-react';
 import * as React from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectItem, SelectPopup, SelectTrigger } from '@/components/ui/select';
+import { useI18n } from '@/i18n';
 
 interface WorkspaceSelectorProps {
   workspaces: WorkspaceRecord[];
@@ -20,6 +21,7 @@ export function WorkspaceSelector({
   onCreateNew,
   onOpenFolder,
 }: WorkspaceSelectorProps) {
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [open, setOpen] = React.useState(false);
 
@@ -57,7 +59,9 @@ export function WorkspaceSelector({
       <SelectTrigger className="h-12 w-full justify-between border-0 bg-transparent px-3 hover:bg-accent">
         <div className="flex items-center gap-2">
           <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate font-medium">{currentWorkspace?.name || '选择工作区'}</span>
+          <span className="truncate font-medium">
+            {currentWorkspace?.name || t('Select a workspace')}
+          </span>
           {currentWorkspace && getStatusIndicator(currentWorkspace)}
         </div>
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -71,7 +75,7 @@ export function WorkspaceSelector({
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索工作区..."
+              placeholder={t('Search workspaces...')}
               className="pl-8"
             />
           </div>
@@ -99,7 +103,7 @@ export function WorkspaceSelector({
             ))
           ) : (
             <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-              {searchQuery ? '未找到匹配的工作区' : '暂无工作区'}
+              {searchQuery ? t('No matching workspaces') : t('No workspaces')}
             </div>
           )}
         </div>
@@ -116,7 +120,7 @@ export function WorkspaceSelector({
               }}
             >
               <Plus className="h-4 w-4" />
-              新建工作区
+              {t('Add Workspace')}
             </button>
           )}
           {onOpenFolder && (
@@ -129,7 +133,7 @@ export function WorkspaceSelector({
               }}
             >
               <FolderOpen className="h-4 w-4" />
-              打开文件夹
+              {t('Open folder')}
             </button>
           )}
         </div>

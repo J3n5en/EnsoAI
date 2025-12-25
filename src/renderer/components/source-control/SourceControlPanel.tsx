@@ -26,6 +26,7 @@ import {
   useGitStage,
   useGitUnstage,
 } from '@/hooks/useSourceControl';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useSourceControlStore } from '@/stores/sourceControl';
 import { ChangesList } from './ChangesList';
@@ -52,6 +53,8 @@ export function SourceControlPanel({
   onExpandWorktree,
   worktreeCollapsed,
 }: SourceControlPanelProps) {
+  const { t, tNode } = useI18n();
+
   // Accordion state - collapsible sections
   const [changesExpanded, setChangesExpanded] = useState(true);
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -206,8 +209,8 @@ export function SourceControlPanel({
       }
     } catch (error) {
       toastManager.add({
-        title: confirmAction.type === 'discard' ? '放弃更改失败' : '删除文件失败',
-        description: error instanceof Error ? error.message : '未知错误',
+        title: confirmAction.type === 'discard' ? t('Discard failed') : t('Delete failed'),
+        description: error instanceof Error ? error.message : t('Unknown error'),
         type: 'error',
         timeout: 5000,
       });
@@ -244,16 +247,16 @@ export function SourceControlPanel({
       try {
         await commitMutation.mutateAsync({ workdir: rootPath, message });
         toastManager.add({
-          title: '提交成功',
-          description: `已提交 ${staged.length} 个文件`,
+          title: t('Commit successful'),
+          description: t('Committed {count} files', { count: staged.length }),
           type: 'success',
           timeout: 3000,
         });
         setSelectedFile(null);
       } catch (error) {
         toastManager.add({
-          title: '提交失败',
-          description: error instanceof Error ? error.message : '未知错误',
+          title: t('Commit failed'),
+          description: error instanceof Error ? error.message : t('Unknown error'),
           type: 'error',
           timeout: 5000,
         });
@@ -269,13 +272,13 @@ export function SourceControlPanel({
           <GitBranch className="h-4.5 w-4.5" />
         </EmptyMedia>
         <EmptyHeader>
-          <EmptyTitle>源代码管理</EmptyTitle>
-          <EmptyDescription>选择一个 Worktree 以查看更改</EmptyDescription>
+          <EmptyTitle>{t('Source Control')}</EmptyTitle>
+          <EmptyDescription>{t('Select a Worktree to view changes')}</EmptyDescription>
         </EmptyHeader>
         {onExpandWorktree && worktreeCollapsed && (
           <Button onClick={onExpandWorktree} variant="outline" className="mt-2">
             <GitBranch className="mr-2 h-4 w-4" />
-            选择 Worktree
+            {t('Choose Worktree')}
           </Button>
         )}
       </Empty>
@@ -285,7 +288,7 @@ export function SourceControlPanel({
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p className="text-sm">加载中...</p>
+        <p className="text-sm">{t('Loading...')}</p>
       </div>
     );
   }
@@ -315,7 +318,7 @@ export function SourceControlPanel({
                 )}
               />
               <GitBranch className="h-4 w-4" />
-              <span className="text-sm font-medium">更改</span>
+              <span className="text-sm font-medium">{t('Changes')}</span>
             </button>
 
             {changesExpanded && (
@@ -356,7 +359,7 @@ export function SourceControlPanel({
                 )}
               />
               <History className="h-4 w-4" />
-              <span className="text-sm font-medium">历史记录</span>
+              <span className="text-sm font-medium">{t('History')}</span>
             </button>
 
             {historyExpanded && (
@@ -438,28 +441,24 @@ export function SourceControlPanel({
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirmAction?.type === 'discard' ? '放弃更改' : '删除文件'}
+              {confirmAction?.type === 'discard' ? t('Discard changes') : t('Delete file')}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirmAction?.type === 'discard' ? (
-                <>
-                  确定要放弃{' '}
-                  <span className="font-medium text-foreground">{confirmAction.path}</span>{' '}
-                  的更改吗？此操作不可撤销。
-                </>
+                tNode('Are you sure you want to discard changes to {{path}}? This cannot be undone.', {
+                  path: <span className="font-medium text-foreground">{confirmAction.path}</span>,
+                })
               ) : (
-                <>
-                  确定要删除未跟踪的文件{' '}
-                  <span className="font-medium text-foreground">{confirmAction?.path}</span>{' '}
-                  吗？此操作不可撤销。
-                </>
+                tNode('Are you sure you want to delete the untracked file {{path}}? This cannot be undone.', {
+                  path: <span className="font-medium text-foreground">{confirmAction?.path}</span>,
+                })
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline">取消</Button>} />
+            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
             <Button variant="destructive" onClick={handleConfirmAction}>
-              {confirmAction?.type === 'discard' ? '放弃更改' : '删除文件'}
+              {confirmAction?.type === 'discard' ? t('Discard changes') : t('Delete file')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

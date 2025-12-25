@@ -13,12 +13,14 @@ import {
 import { CreateWorktreeDialog, WorktreeList } from '@/components/worktree';
 import { useGitBranches } from '@/hooks/useGit';
 import { useWorktreeCreate, useWorktreeList, useWorktreeRemove } from '@/hooks/useWorktree';
+import { useI18n } from '@/i18n';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { useWorktreeStore } from '@/stores/worktree';
 
 type FilterType = 'all' | 'active' | 'stale';
 
 export function WorktreesView() {
+  const { t } = useI18n();
   const { currentWorkspace } = useWorkspaceStore();
   const { currentWorktree, setCurrentWorktree } = useWorktreeStore();
   const workdir = currentWorkspace?.path || null;
@@ -74,7 +76,11 @@ export function WorktreesView() {
   const handleRemove = async (worktree: GitWorktree) => {
     if (!workdir) return;
 
-    const confirmed = confirm(`确定要删除 worktree "${worktree.branch || worktree.path}" 吗？`);
+    const confirmed = confirm(
+      t('Are you sure you want to delete worktree {{name}}?', {
+        name: worktree.branch || worktree.path,
+      })
+    );
     if (confirmed) {
       await removeWorktree.mutateAsync({
         workdir,
@@ -91,7 +97,7 @@ export function WorktreesView() {
   if (!currentWorkspace) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p>请先选择一个工作区</p>
+        <p>{t('Please select a workspace first.')}</p>
       </div>
     );
   }
@@ -100,7 +106,7 @@ export function WorktreesView() {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <h2 className="text-lg font-semibold">Worktrees</h2>
+        <h2 className="text-lg font-semibold">{t('Worktrees')}</h2>
         <CreateWorktreeDialog
           branches={branches}
           projectName={currentWorkspace.name}
@@ -116,7 +122,7 @@ export function WorktreesView() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索 worktree..."
+            placeholder={t('Search worktrees...')}
             className="pl-9"
           />
         </div>
@@ -127,9 +133,9 @@ export function WorktreesView() {
             <SelectValue />
           </SelectTrigger>
           <SelectPopup>
-            <SelectItem value="all">全部</SelectItem>
-            <SelectItem value="active">活跃</SelectItem>
-            <SelectItem value="stale">过期</SelectItem>
+            <SelectItem value="all">{t('All')}</SelectItem>
+            <SelectItem value="active">{t('Active')}</SelectItem>
+            <SelectItem value="stale">{t('Stale')}</SelectItem>
           </SelectPopup>
         </Select>
 

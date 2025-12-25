@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useXterm } from '@/hooks/useXterm';
 import { matchesKeybinding } from '@/lib/keybinding';
+import { useI18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
 import { TerminalSearchBar, type TerminalSearchBarRef } from './TerminalSearchBar';
 
@@ -17,6 +18,7 @@ export function ShellTerminal({
   onExit,
   onTitleChange,
 }: ShellTerminalProps) {
+  const { t } = useI18n();
   const {
     containerRef,
     isLoading,
@@ -66,11 +68,11 @@ export function ShellTerminal({
       e.preventDefault();
 
       const selectedId = await window.electronAPI.contextMenu.show([
-        { id: 'clear', label: '清除终端' },
+        { id: 'clear', label: t('Clear terminal') },
         { id: 'separator-1', label: '', type: 'separator' },
-        { id: 'copy', label: '复制', disabled: !terminal?.hasSelection() },
-        { id: 'paste', label: '粘贴' },
-        { id: 'selectAll', label: '全选' },
+        { id: 'copy', label: t('Copy'), disabled: !terminal?.hasSelection() },
+        { id: 'paste', label: t('Paste') },
+        { id: 'selectAll', label: t('Select all') },
       ]);
 
       if (!selectedId) return;
@@ -135,7 +137,7 @@ export function ShellTerminal({
               style={{ color: settings.theme.foreground, opacity: 0.5 }}
             />
             <span style={{ color: settings.theme.foreground, opacity: 0.5 }} className="text-sm">
-              Starting shell...
+              {t('Starting shell...')}
             </span>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, CloudOff, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 interface SyncStatusProps {
@@ -23,13 +24,14 @@ export function SyncStatus({
   isPushing,
   isPulling,
 }: SyncStatusProps) {
+  const { t } = useI18n();
   const isLoading = isPushing || isPulling;
 
   if (!tracking) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <CloudOff className="h-4 w-4" />
-        <span>未关联远程分支</span>
+        <span>{t('No remote tracking branch')}</span>
       </div>
     );
   }
@@ -49,21 +51,23 @@ export function SyncStatus({
             {behind}
           </span>
         )}
-        {ahead === 0 && behind === 0 && <span className="text-muted-foreground">已同步</span>}
+        {ahead === 0 && behind === 0 && (
+          <span className="text-muted-foreground">{t('Up to date')}</span>
+        )}
       </div>
 
       <div className="flex items-center gap-1">
         {behind > 0 && onPull && (
           <Button variant="outline" size="sm" onClick={onPull} disabled={isLoading}>
             <ArrowDown className={cn('mr-1.5 h-4 w-4', isPulling && 'animate-pulse')} />
-            Pull
+            {t('Pull')}
           </Button>
         )}
 
         {ahead > 0 && onPush && (
           <Button variant="outline" size="sm" onClick={onPush} disabled={isLoading}>
             <ArrowUp className={cn('mr-1.5 h-4 w-4', isPushing && 'animate-pulse')} />
-            Push
+            {t('Push')}
           </Button>
         )}
 

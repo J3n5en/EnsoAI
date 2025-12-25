@@ -1,3 +1,4 @@
+import type { Locale } from '@shared/i18n';
 import type { AgentCliInfo, BuiltinAgentId, CustomAgent, ShellInfo } from '@shared/types';
 import {
   Bot,
@@ -51,15 +52,9 @@ import {
   type Theme,
   useSettingsStore,
 } from '@/stores/settings';
+import { useI18n } from '@/i18n';
 
 type SettingsCategory = 'general' | 'appearance' | 'keybindings' | 'agent';
-
-const categories: Array<{ id: SettingsCategory; icon: React.ElementType; label: string }> = [
-  { id: 'general', icon: Settings, label: '通用' },
-  { id: 'appearance', icon: Palette, label: '外观' },
-  { id: 'keybindings', icon: Keyboard, label: '快捷键' },
-  { id: 'agent', icon: Bot, label: 'Agent' },
-];
 
 interface SettingsDialogProps {
   trigger?: React.ReactElement;
@@ -68,8 +63,15 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogProps) {
+  const { t } = useI18n();
   const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>('general');
   const [internalOpen, setInternalOpen] = React.useState(false);
+  const categories: Array<{ id: SettingsCategory; icon: React.ElementType; label: string }> = [
+    { id: 'general', icon: Settings, label: t('General') },
+    { id: 'appearance', icon: Palette, label: t('Appearance') },
+    { id: 'keybindings', icon: Keyboard, label: t('Keybindings') },
+    { id: 'agent', icon: Bot, label: t('Agent') },
+  ];
 
   // Controlled mode (open prop provided) doesn't need trigger
   const isControlled = open !== undefined;
@@ -108,7 +110,7 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
       )}
       <DialogPopup className="sm:max-w-2xl" showCloseButton={true}>
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <DialogTitle className="text-lg font-medium">设置</DialogTitle>
+          <DialogTitle className="text-lg font-medium">{t('Settings')}</DialogTitle>
         </div>
         <div className="flex min-h-[400px]">
           {/* Left: Category List */}
@@ -144,30 +146,10 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
   );
 }
 
-const rendererOptions: { value: TerminalRenderer; label: string; description: string }[] = [
-  { value: 'webgl', label: 'WebGL', description: '性能最佳，推荐' },
-  { value: 'canvas', label: 'Canvas', description: '兼容性好' },
-  { value: 'dom', label: 'DOM', description: '最基础，性能较差' },
-];
-
-const scrollbackOptions = [
-  { value: 1000, label: '1,000 行' },
-  { value: 5000, label: '5,000 行' },
-  { value: 10000, label: '10,000 行' },
-  { value: 20000, label: '20,000 行' },
-  { value: 50000, label: '50,000 行' },
-];
-
-const notificationDelayOptions = [
-  { value: 1, label: '1 秒' },
-  { value: 2, label: '2 秒' },
-  { value: 3, label: '3 秒' },
-  { value: 5, label: '5 秒' },
-  { value: 10, label: '10 秒' },
-];
-
 function GeneralSettings() {
   const {
+    language,
+    setLanguage,
     terminalRenderer,
     setTerminalRenderer,
     terminalScrollback,
@@ -181,6 +163,39 @@ function GeneralSettings() {
     agentNotificationDelay,
     setAgentNotificationDelay,
   } = useSettingsStore();
+  const { t, locale } = useI18n();
+
+  const numberFormatter = React.useMemo(
+    () => new Intl.NumberFormat(locale === 'zh' ? 'zh-CN' : 'en-US'),
+    [locale]
+  );
+
+  const rendererOptions = React.useMemo(
+    () => [
+      { value: 'webgl', label: 'WebGL', description: t('Best performance (recommended)') },
+      { value: 'canvas', label: 'Canvas', description: t('Good compatibility') },
+      { value: 'dom', label: 'DOM', description: t('Basic, lower performance') },
+    ],
+    [t]
+  );
+
+  const scrollbackOptions = React.useMemo(
+    () =>
+      [1000, 5000, 10000, 20000, 50000].map((value) => ({
+        value,
+        label: t('{{count}} lines', { count: numberFormatter.format(value) }),
+      })),
+    [t, numberFormatter]
+  );
+
+  const notificationDelayOptions = React.useMemo(
+    () =>
+      [1, 2, 3, 5, 10].map((value) => ({
+        value,
+        label: t('{{count}} seconds', { count: value }),
+      })),
+    [t]
+  );
 
   const [shells, setShells] = React.useState<ShellInfo[]>([]);
   const [loadingShells, setLoadingShells] = React.useState(true);
@@ -199,13 +214,34 @@ function GeneralSettings() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-medium">终端</h3>
-        <p className="text-sm text-muted-foreground">终端渲染与性能设置</p>
+        <h3 className="text-lg font-medium">{t('Language')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Choose display language')}</p>
+      </div>
+
+      {/* Language */}
+      <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+        <span className="text-sm font-medium mt-2">{t('Language')}</span>
+        <div className="space-y-1.5">
+          <Select value={language} onValueChange={(v) => setLanguage(v as Locale)}>
+            <SelectTrigger className="w-48">
+              <SelectValue>{language === 'zh' ? t('Chinese') : t('English')}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup>
+              <SelectItem value="en">{t('English')}</SelectItem>
+              <SelectItem value="zh">{t('Chinese')}</SelectItem>
+            </SelectPopup>
+          </Select>
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <h3 className="text-lg font-medium">{t('Terminal')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Terminal renderer and performance settings')}</p>
       </div>
 
       {/* Shell */}
       <div className="grid grid-cols-[100px_1fr] items-start gap-4">
-        <span className="text-sm font-medium mt-2">Shell</span>
+        <span className="text-sm font-medium mt-2">{t('Shell')}</span>
         <div className="space-y-1.5">
           {loadingShells ? (
             <div className="flex h-10 items-center">
@@ -235,16 +271,16 @@ function GeneralSettings() {
               </SelectPopup>
             </Select>
           )}
-          <p className="text-xs text-muted-foreground">更改后新建终端生效</p>
+          <p className="text-xs text-muted-foreground">{t('Apply on new terminals')}</p>
         </div>
       </div>
 
       {/* WSL Settings (Windows only) */}
       {isWindows && (
         <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-          <span className="text-sm font-medium">WSL 检测</span>
+          <span className="text-sm font-medium">{t('WSL detection')}</span>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">在 WSL 中检测 Agent CLI</p>
+            <p className="text-sm text-muted-foreground">{t('Auto-detect agent CLI in WSL')}</p>
             <Switch checked={wslEnabled} onCheckedChange={setWslEnabled} />
           </div>
         </div>
@@ -252,7 +288,7 @@ function GeneralSettings() {
 
       {/* Renderer */}
       <div className="grid grid-cols-[100px_1fr] items-start gap-4">
-        <span className="text-sm font-medium mt-2">渲染器</span>
+        <span className="text-sm font-medium mt-2">{t('Renderer')}</span>
         <div className="space-y-1.5">
           <Select
             value={terminalRenderer}
@@ -274,13 +310,13 @@ function GeneralSettings() {
           <p className="text-xs text-muted-foreground">
             {rendererOptions.find((o) => o.value === terminalRenderer)?.description}
           </p>
-          <p className="text-xs text-muted-foreground">更改后需新建终端或重启应用才能生效</p>
+          <p className="text-xs text-muted-foreground">{t('Apply on new terminals or restart')}</p>
         </div>
       </div>
 
       {/* Scrollback */}
       <div className="grid grid-cols-[100px_1fr] items-start gap-4">
-        <span className="text-sm font-medium mt-2">回滚行数</span>
+        <span className="text-sm font-medium mt-2">{t('Terminal scrollback')}</span>
         <div className="space-y-1.5">
           <Select
             value={String(terminalScrollback)}
@@ -289,7 +325,7 @@ function GeneralSettings() {
             <SelectTrigger className="w-48">
               <SelectValue>
                 {scrollbackOptions.find((o) => o.value === terminalScrollback)?.label ??
-                  `${terminalScrollback.toLocaleString()} 行`}
+                  t('{{count}} lines', { count: numberFormatter.format(terminalScrollback) })}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup>
@@ -301,23 +337,23 @@ function GeneralSettings() {
             </SelectPopup>
           </Select>
           <p className="text-xs text-muted-foreground">
-            终端可向上滚动查看的历史行数，值越大内存占用越高
+            {t('History lines in the terminal. Higher values use more memory.')}
           </p>
-          <p className="text-xs text-muted-foreground">更改后需新建终端才能生效</p>
+          <p className="text-xs text-muted-foreground">{t('Apply on new terminals only')}</p>
         </div>
       </div>
 
       {/* Agent Notification Section */}
       <div className="pt-4 border-t">
-        <h3 className="text-lg font-medium">Agent 通知</h3>
-        <p className="text-sm text-muted-foreground">Agent 停止输出时发送系统通知</p>
+        <h3 className="text-lg font-medium">{t('Agent Notifications')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Stop output notification')}</p>
       </div>
 
       {/* Notification Enable */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-        <span className="text-sm font-medium">启用通知</span>
+        <span className="text-sm font-medium">{t('Enable notifications')}</span>
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Agent 空闲时发送系统通知</p>
+          <p className="text-sm text-muted-foreground">{t('Notifications when agent is idle')}</p>
           <Switch
             checked={agentNotificationEnabled}
             onCheckedChange={setAgentNotificationEnabled}
@@ -327,7 +363,7 @@ function GeneralSettings() {
 
       {/* Notification Delay */}
       <div className="grid grid-cols-[100px_1fr] items-start gap-4">
-        <span className="text-sm font-medium mt-2">空闲时间</span>
+        <span className="text-sm font-medium mt-2">{t('Idle time')}</span>
         <div className="space-y-1.5">
           <Select
             value={String(agentNotificationDelay)}
@@ -337,7 +373,7 @@ function GeneralSettings() {
             <SelectTrigger className="w-48">
               <SelectValue>
                 {notificationDelayOptions.find((o) => o.value === agentNotificationDelay)?.label ??
-                  `${agentNotificationDelay} 秒`}
+                  t('{{count}} seconds', { count: agentNotificationDelay })}
               </SelectValue>
             </SelectTrigger>
             <SelectPopup>
@@ -348,24 +384,15 @@ function GeneralSettings() {
               ))}
             </SelectPopup>
           </Select>
-          <p className="text-xs text-muted-foreground">Agent 停止输出后等待多久发送通知</p>
+          <p className="text-xs text-muted-foreground">
+            {t('How long to wait before notifying after the agent stops output.')}
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-const themeModeOptions: {
-  value: Theme;
-  icon: React.ElementType;
-  label: string;
-  description: string;
-}[] = [
-  { value: 'light', icon: Sun, label: '浅色', description: '明亮的界面主题' },
-  { value: 'dark', icon: Moon, label: '深色', description: '护眼的暗色主题' },
-  { value: 'system', icon: Monitor, label: '跟随系统', description: '自动适配系统主题' },
-  { value: 'sync-terminal', icon: Terminal, label: '同步终端', description: '跟随终端配色方案' },
-];
 
 function AppearanceSettings() {
   const {
@@ -382,6 +409,19 @@ function AppearanceSettings() {
     terminalFontWeightBold,
     setTerminalFontWeightBold,
   } = useSettingsStore();
+  const { t } = useI18n();
+
+  const themeModeOptions: {
+    value: Theme;
+    icon: React.ElementType;
+    label: string;
+    description: string;
+  }[] = [
+    { value: 'light', icon: Sun, label: t('Light'), description: t('Bright theme') },
+    { value: 'dark', icon: Moon, label: t('Dark'), description: t('Eye-friendly dark theme') },
+    { value: 'system', icon: Monitor, label: t('System'), description: t('Follow system theme') },
+    { value: 'sync-terminal', icon: Terminal, label: t('Sync terminal theme'), description: t('Match terminal color scheme') },
+  ];
 
   // Local state for inputs
   const [localFontSize, setLocalFontSize] = React.useState(globalFontSize);
@@ -451,8 +491,8 @@ function AppearanceSettings() {
     <div className="space-y-6">
       {/* Theme Mode Section */}
       <div>
-        <h3 className="text-lg font-medium">模式</h3>
-        <p className="text-sm text-muted-foreground">选择界面的深浅模式</p>
+        <h3 className="text-lg font-medium">{t('Theme mode')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Choose interface theme')}</p>
       </div>
 
       <div className="grid grid-cols-4 gap-3">
@@ -485,13 +525,13 @@ function AppearanceSettings() {
 
       {/* Terminal Section */}
       <div className="border-t pt-6">
-        <h3 className="text-lg font-medium">终端</h3>
-        <p className="text-sm text-muted-foreground">自定义终端外观</p>
+        <h3 className="text-lg font-medium">{t('Terminal')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Terminal appearance')}</p>
       </div>
 
       {/* Preview */}
       <div className="space-y-2">
-        <p className="text-sm font-medium">预览</p>
+        <p className="text-sm font-medium">{t('Preview')}</p>
         <TerminalPreview
           theme={previewTheme}
           fontSize={localFontSize}
@@ -502,7 +542,7 @@ function AppearanceSettings() {
 
       {/* Theme Selector */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-        <span className="text-sm font-medium">配色</span>
+        <span className="text-sm font-medium">{t('Color scheme')}</span>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={handlePrevTheme}>
             <ChevronLeft className="h-4 w-4" />
@@ -522,7 +562,7 @@ function AppearanceSettings() {
 
       {/* Font Family */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-        <span className="text-sm font-medium">字体</span>
+        <span className="text-sm font-medium">{t('Font')}</span>
         <Input
           value={localFontFamily}
           onChange={(e) => setLocalFontFamily(e.target.value)}
@@ -539,7 +579,7 @@ function AppearanceSettings() {
 
       {/* Font Size */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-        <span className="text-sm font-medium">字号</span>
+        <span className="text-sm font-medium">{t('Font size')}</span>
         <div className="flex items-center gap-2">
           <Input
             type="number"
@@ -562,7 +602,7 @@ function AppearanceSettings() {
 
       {/* Font Weight */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-        <span className="text-sm font-medium">字重</span>
+        <span className="text-sm font-medium">{t('Font weight')}</span>
         <Select
           value={terminalFontWeight}
           onValueChange={(v) => setTerminalFontWeight(v as FontWeight)}
@@ -582,7 +622,7 @@ function AppearanceSettings() {
 
       {/* Font Weight Bold */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-        <span className="text-sm font-medium">粗体字重</span>
+        <span className="text-sm font-medium">{t('Bold font weight')}</span>
         <Select
           value={terminalFontWeightBold}
           onValueChange={(v) => setTerminalFontWeightBold(v as FontWeight)}
@@ -691,6 +731,7 @@ function ThemeCombobox({
   onValueChange: (value: string | null) => void;
   themes: string[];
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = React.useState(value);
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -723,11 +764,13 @@ function ThemeCombobox({
       open={isOpen}
       onOpenChange={setIsOpen}
     >
-      <ComboboxInput placeholder="搜索主题..." />
+      <ComboboxInput placeholder={t('Search themes...')} />
       <ComboboxPopup>
         <ComboboxList>
           {filteredThemes.length === 0 && (
-            <div className="py-6 text-center text-sm text-muted-foreground">未找到主题</div>
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              {t('No themes found')}
+            </div>
           )}
           {filteredThemes.map((name) => (
             <ComboboxItem key={name} value={name}>
@@ -748,6 +791,7 @@ function KeybindingInput({
   value: TerminalKeybinding;
   onChange: (binding: TerminalKeybinding) => void;
 }) {
+  const { t } = useI18n();
   const [isRecording, setIsRecording] = React.useState(false);
 
   const formatKeybinding = (binding: TerminalKeybinding): string => {
@@ -804,7 +848,7 @@ function KeybindingInput({
         {isRecording ? (
           <span className="flex items-center gap-2 text-muted-foreground">
             <Keyboard className="h-4 w-4" />
-            按下快捷键...
+            {t('Press a shortcut...')}
           </span>
         ) : (
           <span className="flex items-center gap-2">
@@ -841,18 +885,19 @@ function KeybindingsSettings() {
     sourceControlKeybindings,
     setSourceControlKeybindings,
   } = useSettingsStore();
+  const { t } = useI18n();
 
   return (
     <div className="space-y-6">
       {/* Main Tab Switching */}
       <div>
-        <h3 className="text-lg font-medium">主标签切换</h3>
+        <h3 className="text-lg font-medium">{t('Main tab switching')}</h3>
         <p className="text-sm text-muted-foreground mb-4">
-          设置全局主标签切换快捷键 (macOS 上是 Cmd,Windows 上是 Win 键)
+          {t('Set global main tab shortcuts (Cmd on macOS, Win on Windows)')}
         </p>
         <div className="space-y-3">
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">切换到 Agent</span>
+            <span className="text-sm">{t('Switch to Agent')}</span>
             <KeybindingInput
               value={mainTabKeybindings.switchToAgent}
               onChange={(binding) => {
@@ -864,7 +909,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">切换到 File</span>
+            <span className="text-sm">{t('Switch to File')}</span>
             <KeybindingInput
               value={mainTabKeybindings.switchToFile}
               onChange={(binding) => {
@@ -876,7 +921,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">切换到 Terminal</span>
+            <span className="text-sm">{t('Switch to Terminal')}</span>
             <KeybindingInput
               value={mainTabKeybindings.switchToTerminal}
               onChange={(binding) => {
@@ -892,11 +937,11 @@ function KeybindingsSettings() {
 
       {/* Agent Session Management */}
       <div className="border-t pt-6">
-        <h3 className="text-lg font-medium">Agent Session</h3>
-        <p className="text-sm text-muted-foreground mb-4">设置 Agent session 管理快捷键</p>
+        <h3 className="text-lg font-medium">{t('Agent sessions')}</h3>
+        <p className="text-sm text-muted-foreground mb-4">{t('Agent session shortcuts')}</p>
         <div className="space-y-3">
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">新建 Session</span>
+            <span className="text-sm">{t('New Session')}</span>
             <KeybindingInput
               value={agentKeybindings.newSession}
               onChange={(binding) => {
@@ -908,7 +953,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">关闭 Session</span>
+            <span className="text-sm">{t('Close Session')}</span>
             <KeybindingInput
               value={agentKeybindings.closeSession}
               onChange={(binding) => {
@@ -920,7 +965,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">下一个 Session</span>
+            <span className="text-sm">{t('Next Session')}</span>
             <KeybindingInput
               value={agentKeybindings.nextSession}
               onChange={(binding) => {
@@ -932,7 +977,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">上一个 Session</span>
+            <span className="text-sm">{t('Previous Session')}</span>
             <KeybindingInput
               value={agentKeybindings.prevSession}
               onChange={(binding) => {
@@ -948,11 +993,11 @@ function KeybindingsSettings() {
 
       {/* Terminal Shortcuts */}
       <div className="border-t pt-6">
-        <h3 className="text-lg font-medium">终端</h3>
-        <p className="text-sm text-muted-foreground mb-4">设置终端快捷键</p>
+        <h3 className="text-lg font-medium">{t('Terminal')}</h3>
+        <p className="text-sm text-muted-foreground mb-4">{t('Terminal shortcuts')}</p>
         <div className="space-y-3">
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">新建标签</span>
+            <span className="text-sm">{t('New Tab')}</span>
             <KeybindingInput
               value={terminalKeybindings.newTab}
               onChange={(binding) => {
@@ -964,7 +1009,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">关闭标签</span>
+            <span className="text-sm">{t('Close Tab')}</span>
             <KeybindingInput
               value={terminalKeybindings.closeTab}
               onChange={(binding) => {
@@ -976,7 +1021,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">下一个标签</span>
+            <span className="text-sm">{t('Next Tab')}</span>
             <KeybindingInput
               value={terminalKeybindings.nextTab}
               onChange={(binding) => {
@@ -988,7 +1033,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">上一个标签</span>
+            <span className="text-sm">{t('Previous Tab')}</span>
             <KeybindingInput
               value={terminalKeybindings.prevTab}
               onChange={(binding) => {
@@ -1000,7 +1045,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">清除终端</span>
+            <span className="text-sm">{t('Clear terminal')}</span>
             <KeybindingInput
               value={terminalKeybindings.clear}
               onChange={(binding) => {
@@ -1016,11 +1061,11 @@ function KeybindingsSettings() {
 
       {/* Source Control */}
       <div className="border-t pt-6">
-        <h3 className="text-lg font-medium">源代码管理</h3>
-        <p className="text-sm text-muted-foreground mb-4">设置 Diff 导航快捷键</p>
+        <h3 className="text-lg font-medium">{t('Source Control')}</h3>
+        <p className="text-sm text-muted-foreground mb-4">{t('Diff navigation shortcuts')}</p>
         <div className="space-y-3">
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">上一处差异</span>
+            <span className="text-sm">{t('Previous change')}</span>
             <KeybindingInput
               value={sourceControlKeybindings.prevDiff}
               onChange={(binding) => {
@@ -1032,7 +1077,7 @@ function KeybindingsSettings() {
             />
           </div>
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-            <span className="text-sm">下一处差异</span>
+            <span className="text-sm">{t('Next change')}</span>
             <KeybindingInput
               value={sourceControlKeybindings.nextDiff}
               onChange={(binding) => {
@@ -1071,6 +1116,7 @@ function AgentSettings() {
     updateCustomAgent,
     removeCustomAgent,
   } = useSettingsStore();
+  const { t } = useI18n();
   const [cliStatus, setCliStatus] = React.useState<Record<string, AgentCliInfo>>({});
   const [loadingAgents, setLoadingAgents] = React.useState<Set<string>>(new Set());
   const [editingAgent, setEditingAgent] = React.useState<CustomAgent | null>(null);
@@ -1171,7 +1217,7 @@ function AgentSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium">Agent</h3>
-          <p className="text-sm text-muted-foreground">配置可用的 AI Agent CLI 工具</p>
+          <p className="text-sm text-muted-foreground">{t('Configure available AI Agent CLI tools')}</p>
         </div>
         <Button
           variant="ghost"
@@ -1185,7 +1231,7 @@ function AgentSettings() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        新建会话使用默认 Agent，长按加号可选择其他已启用的 Agent。目前仅 Claude 支持会话持久化。
+        {t('New sessions use the default agent. Long-press the plus to pick another enabled agent. Only Claude supports session persistence for now.')}
       </p>
 
       {/* Builtin Agents */}
@@ -1218,7 +1264,7 @@ function AgentSettings() {
                   )}
                   {!isLoading && !isInstalled && (
                     <span className="whitespace-nowrap rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">
-                      未安装
+                      {t('Not installed')}
                     </span>
                   )}
                 </div>
@@ -1233,7 +1279,7 @@ function AgentSettings() {
                 ) : (
                   <>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">启用</span>
+                      <span className="text-sm text-muted-foreground">{t('Enable')}</span>
                       <Switch
                         checked={config?.enabled && canEnable}
                         onCheckedChange={(checked) => handleEnabledChange(agentId, checked)}
@@ -1241,7 +1287,7 @@ function AgentSettings() {
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">默认</span>
+                      <span className="text-sm text-muted-foreground">{t('Default')}</span>
                       <Switch
                         checked={config?.isDefault ?? false}
                         onCheckedChange={() => handleDefaultChange(agentId)}
@@ -1260,12 +1306,12 @@ function AgentSettings() {
       <div className="border-t pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-medium">自定义 Agent</h3>
-            <p className="text-sm text-muted-foreground">添加自定义 CLI 工具</p>
+            <h3 className="text-lg font-medium">{t('Custom Agent')}</h3>
+            <p className="text-sm text-muted-foreground">{t('Add custom CLI tools')}</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setIsAddingAgent(true)}>
             <Plus className="mr-1 h-4 w-4" />
-            添加
+            {t('Add')}
           </Button>
         </div>
 
@@ -1298,7 +1344,7 @@ function AgentSettings() {
                       )}
                       {!isLoading && !isInstalled && (
                         <span className="whitespace-nowrap rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">
-                          未安装
+                          {t('Not installed')}
                         </span>
                       )}
                     </div>
@@ -1332,7 +1378,7 @@ function AgentSettings() {
                     ) : (
                       <>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">启用</span>
+                          <span className="text-sm text-muted-foreground">{t('Enable')}</span>
                           <Switch
                             checked={config?.enabled && canEnable}
                             onCheckedChange={(checked) => handleEnabledChange(agent.id, checked)}
@@ -1340,7 +1386,7 @@ function AgentSettings() {
                           />
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">默认</span>
+                          <span className="text-sm text-muted-foreground">{t('Default')}</span>
                           <Switch
                             checked={config?.isDefault ?? false}
                             onCheckedChange={() => handleDefaultChange(agent.id)}
@@ -1358,7 +1404,7 @@ function AgentSettings() {
 
         {customAgents.length === 0 && !isAddingAgent && (
           <div className="mt-4 rounded-lg border border-dashed p-6 text-center">
-            <p className="text-sm text-muted-foreground">暂无自定义 Agent</p>
+            <p className="text-sm text-muted-foreground">{t('No custom agents yet')}</p>
           </div>
         )}
       </div>
@@ -1367,7 +1413,7 @@ function AgentSettings() {
       <Dialog open={isAddingAgent} onOpenChange={setIsAddingAgent}>
         <DialogPopup className="sm:max-w-sm" showCloseButton={false}>
           <div className="p-4">
-            <DialogTitle className="text-base font-medium">添加自定义 Agent</DialogTitle>
+            <DialogTitle className="text-base font-medium">{t('Add custom agent')}</DialogTitle>
             <AgentForm onSubmit={handleAddAgent} onCancel={() => setIsAddingAgent(false)} />
           </div>
         </DialogPopup>
@@ -1377,7 +1423,7 @@ function AgentSettings() {
       <Dialog open={!!editingAgent} onOpenChange={(open) => !open && setEditingAgent(null)}>
         <DialogPopup className="sm:max-w-sm" showCloseButton={false}>
           <div className="p-4">
-            <DialogTitle className="text-base font-medium">编辑 Agent</DialogTitle>
+            <DialogTitle className="text-base font-medium">{t('Edit Agent')}</DialogTitle>
             {editingAgent && (
               <AgentForm
                 agent={editingAgent}
@@ -1405,6 +1451,7 @@ type AgentFormProps =
     };
 
 function AgentForm({ agent, onSubmit, onCancel }: AgentFormProps) {
+  const { t } = useI18n();
   const [name, setName] = React.useState(agent?.name ?? '');
   const [command, setCommand] = React.useState(agent?.command ?? '');
   const [description, setDescription] = React.useState(agent?.description ?? '');
@@ -1432,7 +1479,7 @@ function AgentForm({ agent, onSubmit, onCancel }: AgentFormProps) {
     <form onSubmit={handleSubmit} className="mt-3 space-y-3">
       <div className="space-y-1">
         <label htmlFor="agent-name" className="text-sm font-medium">
-          名称
+          {t('Name')}
         </label>
         <Input
           id="agent-name"
@@ -1443,7 +1490,7 @@ function AgentForm({ agent, onSubmit, onCancel }: AgentFormProps) {
       </div>
       <div className="space-y-1">
         <label htmlFor="agent-command" className="text-sm font-medium">
-          命令
+          {t('Command')}
         </label>
         <Input
           id="agent-command"
@@ -1454,21 +1501,22 @@ function AgentForm({ agent, onSubmit, onCancel }: AgentFormProps) {
       </div>
       <div className="space-y-1">
         <label htmlFor="agent-desc" className="text-sm font-medium">
-          描述 <span className="font-normal text-muted-foreground">(可选)</span>
+          {t('Description')}{' '}
+          <span className="font-normal text-muted-foreground">{t('(optional)')}</span>
         </label>
         <Input
           id="agent-desc"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="简短描述"
+          placeholder={t('Short description')}
         />
       </div>
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-          取消
+          {t('Cancel')}
         </Button>
         <Button type="submit" size="sm" disabled={!isValid}>
-          {agent ? '保存' : '添加'}
+          {agent ? t('Save') : t('Add')}
         </Button>
       </div>
     </form>

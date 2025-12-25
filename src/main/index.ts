@@ -1,8 +1,12 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { IPC_CHANNELS } from '@shared/types';
-import { app, BrowserWindow, Menu } from 'electron';
+import { type Locale, normalizeLocale } from '@shared/i18n';
+import { app, BrowserWindow, Menu, ipcMain } from 'electron';
 import { cleanupAllResources, registerIpcHandlers } from './ipc';
 import { checkGitInstalled } from './services/git/checkGit';
+import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
 import { autoUpdaterService } from './services/updater/AutoUpdater';
 import { createMainWindow } from './windows/MainWindow';
@@ -108,6 +112,23 @@ if (!gotTheLock) {
   });
 }
 
+function readStoredLanguage(): Locale {
+  try {
+    const settingsPath = join(app.getPath('userData'), 'settings.json');
+    if (!existsSync(settingsPath)) return 'en';
+    const data = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+    const persisted = data['enso-settings'];
+    if (persisted && typeof persisted === 'object') {
+      const state = (persisted as { state?: Record<string, unknown> }).state;
+      const language = state?.language;
+      return normalizeLocale(typeof language === 'string' ? language : undefined);
+    }
+  } catch {
+    // Fall back to English if settings are missing or invalid
+  }
+  return 'en';
+}
+
 async function init(): Promise<void> {
   // Check Git installation
   const gitInstalled = await checkGitInstalled();
@@ -130,6 +151,8 @@ app.whenReady().then(async () => {
 
   await init();
 
+  setCurrentLocale(readStoredLanguage());
+
   mainWindow = createMainWindow();
 
   // IMPORTANT: Set up did-finish-load handler BEFORE handling command line args
@@ -144,16 +167,25 @@ app.whenReady().then(async () => {
   // Initialize auto-updater
   autoUpdaterService.init(mainWindow);
 
+  const handleNewWindow = () => {
+    createMainWindow();
+  };
+
   // Build and set application menu
   const menu = buildAppMenu(mainWindow, {
-    onNewWindow: () => {
-      createMainWindow();
-    },
+    onNewWindow: handleNewWindow,
   });
   Menu.setApplicationMenu(menu);
 
   // Handle initial command line args (this may set pendingOpenPath)
   handleCommandLineArgs(process.argv);
+
+  ipcMain.handle(IPC_CHANNELS.APP_SET_LANGUAGE, (_event, language: Locale) => {
+    setCurrentLocale(language);
+    if (!mainWindow) return;
+    const updatedMenu = buildAppMenu(mainWindow, { onNewWindow: handleNewWindow });
+    Menu.setApplicationMenu(updatedMenu);
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

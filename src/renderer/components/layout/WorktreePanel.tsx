@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/empty';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 interface WorktreePanelProps {
@@ -72,6 +73,7 @@ export function WorktreePanel({
   workspaceCollapsed = false,
   onExpandWorkspace,
 }: WorktreePanelProps) {
+  const { t, tNode } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(null);
   const [deleteBranch, setDeleteBranch] = useState(false);
@@ -99,7 +101,7 @@ export function WorktreePanel({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onExpandWorkspace}
-            title="展开 Workspace"
+            title={t('Expand Workspace')}
           >
             <FolderOpen className="h-4 w-4" />
           </button>
@@ -114,7 +116,7 @@ export function WorktreePanel({
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              title="新建 Worktree"
+              title={t('New Worktree')}
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -125,7 +127,7 @@ export function WorktreePanel({
           type="button"
           className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
           onClick={onRefresh}
-          title="刷新"
+          title={t('Refresh')}
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -135,7 +137,7 @@ export function WorktreePanel({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onCollapse}
-            title="折叠"
+            title={t('Collapse')}
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
@@ -148,7 +150,7 @@ export function WorktreePanel({
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search worktrees"
+            placeholder={t('Search worktrees')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
@@ -164,20 +166,20 @@ export function WorktreePanel({
               <GitBranch className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">不是 Git 仓库</EmptyTitle>
+              <EmptyTitle className="text-base">{t('Not a Git repository')}</EmptyTitle>
               <EmptyDescription>
-                当前目录还不是 Git 仓库，初始化后即可使用 Git 功能
+                {t('This directory is not a Git repository. Initialize it to enable Git features.')}
               </EmptyDescription>
             </EmptyHeader>
             <div className="mt-2 flex gap-2">
               <Button onClick={onRefresh} variant="outline" size="sm">
                 <RefreshCw className="mr-2 h-4 w-4" />
-                刷新
+                {t('Refresh')}
               </Button>
               {onInitGit && (
                 <Button onClick={onInitGit} size="sm">
                   <GitBranch className="mr-2 h-4 w-4" />
-                  初始化仓库
+                  {t('Initialize repository')}
                 </Button>
               )}
             </div>
@@ -195,10 +197,12 @@ export function WorktreePanel({
             </EmptyMedia>
             <EmptyHeader>
               <EmptyTitle className="text-base">
-                {searchQuery ? '未找到匹配' : '暂无 Worktree'}
+                {searchQuery ? t('No matching worktrees') : t('No worktrees')}
               </EmptyTitle>
               <EmptyDescription>
-                {searchQuery ? '尝试使用不同的关键词搜索' : '创建第一个 Worktree 开始工作'}
+                {searchQuery
+                  ? t('Try a different search term')
+                  : t('Create your first worktree to get started')}
               </EmptyDescription>
             </EmptyHeader>
             {!searchQuery && (
@@ -210,7 +214,7 @@ export function WorktreePanel({
                 trigger={
                   <Button variant="outline" className="mt-2">
                     <Plus className="mr-2 h-4 w-4" />
-                    创建 Worktree
+                    {t('Create Worktree')}
                   </Button>
                 }
               />
@@ -243,16 +247,18 @@ export function WorktreePanel({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除 Worktree</AlertDialogTitle>
+            <AlertDialogTitle>{t('Delete Worktree')}</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要删除 worktree <strong>{worktreeToDelete?.branch}</strong> 吗？
+              {tNode('Are you sure you want to delete worktree {{name}}?', {
+                name: <strong>{worktreeToDelete?.branch}</strong>,
+              })}
               {worktreeToDelete?.prunable ? (
                 <span className="block mt-2 text-muted-foreground">
-                  该目录已被删除，将清理 git 记录。
+                  {t('This directory has already been removed; Git records will be cleaned up.')}
                 </span>
               ) : (
                 <span className="block mt-2 text-destructive">
-                  这将删除目录及其中所有文件，此操作不可撤销！
+                  {t('This will delete the directory and all files inside. This action cannot be undone!')}
                 </span>
               )}
             </AlertDialogDescription>
@@ -267,7 +273,9 @@ export function WorktreePanel({
                   className="h-4 w-4 rounded border-input"
                 />
                 <span>
-                  同时删除分支 <strong>{worktreeToDelete.branch}</strong>
+                  {tNode('Also delete branch {{name}}', {
+                    name: <strong>{worktreeToDelete.branch}</strong>,
+                  })}
                 </span>
               </label>
             )}
@@ -279,7 +287,9 @@ export function WorktreePanel({
                   onChange={(e) => setForceDelete(e.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                <span className="text-muted-foreground">强制删除（忽略未提交的修改）</span>
+                <span className="text-muted-foreground">
+                  {t('Force delete (ignore uncommitted changes)')}
+                </span>
               </label>
             )}
           </div>
@@ -287,7 +297,7 @@ export function WorktreePanel({
             <AlertDialogClose
               render={
                 <Button variant="outline" disabled={isDeleting}>
-                  取消
+                  {t('Cancel')}
                 </Button>
               }
             />
@@ -307,9 +317,9 @@ export function WorktreePanel({
                     const hasUncommitted = message.includes('modified or untracked');
                     toastManager.add({
                       type: 'error',
-                      title: '删除失败',
+                      title: t('Delete failed'),
                       description: hasUncommitted
-                        ? '目录包含未提交的修改，请勾选「强制删除」'
+                        ? t('This directory contains uncommitted changes. Please check "Force delete".')
                         : message,
                     });
                   } finally {
@@ -318,7 +328,7 @@ export function WorktreePanel({
                 }
               }}
             >
-              {isDeleting ? '删除中...' : '删除'}
+              {isDeleting ? t('Deleting...') : t('Delete')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -335,11 +345,12 @@ interface WorktreeItemProps {
 }
 
 function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemProps) {
+  const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const isMain =
     worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
-  const branchDisplay = worktree.branch || 'detached';
+  const branchDisplay = worktree.branch || t('Detached');
   const isPrunable = worktree.prunable;
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -377,11 +388,11 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
           </span>
           {isPrunable ? (
             <span className="shrink-0 rounded bg-destructive/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-destructive">
-              已删除
+              {t('Deleted')}
             </span>
           ) : isMain ? (
             <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-              Main
+              {t('Main')}
             </span>
           ) : null}
         </div>
@@ -428,7 +439,7 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
               disabled={isMain}
             >
               <Trash2 className="h-4 w-4" />
-              {isPrunable ? '清理记录' : '删除'}
+              {isPrunable ? t('Clean up records') : t('Delete')}
             </button>
           </div>
         </>

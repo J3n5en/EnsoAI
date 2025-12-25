@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 interface WorktreeCardProps {
@@ -35,7 +36,8 @@ export function WorktreeCard({
   onCopyPath,
   onRemove,
 }: WorktreeCardProps) {
-  const branchName = worktree.branch || 'detached HEAD';
+  const { t } = useI18n();
+  const branchName = worktree.branch || t('Detached HEAD');
   const hasChanges = status && !status.isClean;
   const changedFilesCount = status
     ? status.staged.length + status.modified.length + status.untracked.length
@@ -61,7 +63,7 @@ export function WorktreeCard({
           <span className="truncate font-medium">{branchName}</span>
           {worktree.isMainWorktree && (
             <Badge variant="secondary" className="shrink-0 text-xs">
-              primary
+              {t('Primary')}
             </Badge>
           )}
           {worktree.isLocked && <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
@@ -102,7 +104,7 @@ export function WorktreeCard({
                 }}
               >
                 <Terminal className="mr-2 h-4 w-4" />
-                在终端中打开
+                {t('Open in Terminal')}
               </MenuItem>
               <MenuItem
                 onClick={(e) => {
@@ -110,7 +112,8 @@ export function WorktreeCard({
                   onOpenInFinder?.(worktree);
                 }}
               >
-                <Folder className="mr-2 h-4 w-4" />在 Finder 中显示
+                <Folder className="mr-2 h-4 w-4" />
+                {t('Show in Finder')}
               </MenuItem>
               <MenuSeparator />
               <MenuItem
@@ -120,7 +123,7 @@ export function WorktreeCard({
                 }}
               >
                 <Copy className="mr-2 h-4 w-4" />
-                复制路径
+                {t('Copy Path')}
               </MenuItem>
               <MenuItem
                 onClick={(e) => {
@@ -128,7 +131,8 @@ export function WorktreeCard({
                   // Open in external editor
                 }}
               >
-                <ExternalLink className="mr-2 h-4 w-4" />在 IDE 中打开
+                <ExternalLink className="mr-2 h-4 w-4" />
+                {t('Open in IDE')}
               </MenuItem>
               <MenuSeparator />
               <MenuItem
@@ -140,7 +144,7 @@ export function WorktreeCard({
                 }}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
-                删除 Worktree
+                {t('Delete Worktree')}
               </MenuItem>
             </MenuPopup>
           </Menu>
@@ -155,19 +159,23 @@ export function WorktreeCard({
         {hasChanges ? (
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-green-500" />
-            {changedFilesCount} 个文件已更改
+            {t('You have {{count}} changed files', { count: changedFilesCount })}
           </span>
         ) : (
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full bg-muted" />
-            工作区干净
+            {t('Workspace clean')}
           </span>
         )}
         {status?.ahead && status.ahead > 0 && (
-          <span className="text-blue-500">{status.ahead} commits ahead</span>
+          <span className="text-blue-500">
+            {t('{{count}} commits ahead', { count: status.ahead })}
+          </span>
         )}
         {status?.behind && status.behind > 0 && (
-          <span className="text-orange-500">{status.behind} commits behind</span>
+          <span className="text-orange-500">
+            {t('{{count}} commits behind', { count: status.behind })}
+          </span>
         )}
       </div>
     </button>
