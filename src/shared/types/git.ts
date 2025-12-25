@@ -52,3 +52,20 @@ export interface FileDiff {
   original: string; // HEAD version (empty for new files)
   modified: string; // working tree version (empty for deleted files)
 }
+
+// Commit history detail types
+export interface CommitFileChange {
+  path: string;
+  status: FileChangeStatus;
+}
+
+export interface CommitDetail {
+  hash: string;
+  date: string;
+  message: string;
+  author_name: string;
+  author_email: string;
+  refs?: string;
+  files: CommitFileChange[];
+  fullDiff: string;
+}

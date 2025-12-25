@@ -92,6 +92,9 @@ interface DiffViewerProps {
   onNextFile?: () => void;
   hasPrevFile?: boolean;
   hasNextFile?: boolean;
+  diff?: { path: string; original: string; modified: string };
+  skipFetch?: boolean;
+  isCommitView?: boolean; // Add flag to indicate commit history view
 }
 
 export function DiffViewer({
@@ -101,16 +104,33 @@ export function DiffViewer({
   onNextFile,
   hasPrevFile = false,
   hasNextFile = false,
+  diff: externalDiff,
+  skipFetch = false,
+  isCommitView = false,
 }: DiffViewerProps) {
   const { terminalTheme, sourceControlKeybindings } = useSettingsStore();
   const { navigationDirection, setNavigationDirection } = useSourceControlStore();
-  const { data: diff, isLoading } = useFileDiff(
+
+  // In commit view, we don't fetch diff - we use the provided externalDiff
+  const shouldFetch = !skipFetch && !isCommitView;
+
+  const { data: fetchedDiff, isLoading } = useFileDiff(
     rootPath,
     file?.path ?? null,
-    file?.staged ?? false
+    file?.staged ?? false,
+    shouldFetch ? undefined : { enabled: false }
   );
 
+  const diff = externalDiff ?? fetchedDiff;
+
   const editorRef = useRef<DiffEditorInstance | null>(null);
+  const modelsRef = useRef<{
+    original: monaco.editor.ITextModel | null;
+    modified: monaco.editor.ITextModel | null;
+  }>({
+    original: null,
+    modified: null,
+  });
   const [currentDiffIndex, setCurrentDiffIndex] = useState(-1);
   const [lineChanges, setLineChanges] = useState<monaco.editor.ILineChange[]>([]);
   const [boundaryHint, setBoundaryHint] = useState<'top' | 'bottom' | null>(null);
@@ -119,6 +139,46 @@ export function DiffViewer({
 
   // Define theme
   defineMonacoDiffTheme(terminalTheme);
+
+  // Function to safely dispose models and editor
+  const cleanupEditor = useCallback(() => {
+    // First, clear the model reference to prevent DiffEditor from accessing disposed models
+    if (editorRef.current) {
+      try {
+        editorRef.current.setModel(null);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+
+    // Then dispose the tracked models
+    if (modelsRef.current.original) {
+      try {
+        modelsRef.current.original.dispose();
+      } catch {
+        // Ignore errors during cleanup
+      }
+      modelsRef.current.original = null;
+    }
+    if (modelsRef.current.modified) {
+      try {
+        modelsRef.current.modified.dispose();
+      } catch {
+        // Ignore errors during cleanup
+      }
+      modelsRef.current.modified = null;
+    }
+
+    // Clear decorations ref
+    decorationsRef.current = [];
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupEditor();
+    };
+  }, [cleanupEditor]);
 
   // Highlight current diff range
   const highlightCurrentDiff = useCallback(
@@ -180,6 +240,13 @@ export function DiffViewer({
     (editor: DiffEditorInstance) => {
       editorRef.current = editor;
       hasAutoNavigatedRef.current = false;
+
+      // Track the current models for cleanup
+      const currentModel = editor.getModel();
+      if (currentModel) {
+        modelsRef.current.original = currentModel.original;
+        modelsRef.current.modified = currentModel.modified;
+      }
 
       // Use onDidUpdateDiff to ensure diff is fully computed
       editor.onDidUpdateDiff(() => {
@@ -302,12 +369,14 @@ export function DiffViewer({
   // Reset state when file changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally trigger on file change
   useEffect(() => {
+    // Clean up previous editor state before switching to new file
+    cleanupEditor();
     setCurrentDiffIndex(-1);
     setLineChanges([]);
     setBoundaryHint(null);
     decorationsRef.current = [];
     hasAutoNavigatedRef.current = false;
-  }, [file?.path, file?.staged]);
+  }, [file?.path, file?.staged, cleanupEditor]);
 
   if (!file) {
     return (
@@ -355,9 +424,13 @@ export function DiffViewer({
       <div className="flex h-10 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center">
           <span className="text-sm font-medium">{file.path}</span>
-          <span className="ml-2 text-xs text-muted-foreground">
-            {file.staged ? '(已暂存)' : '(未暂存)'}
-          </span>
+          {isCommitView ? (
+            <span className="ml-2 text-xs text-muted-foreground">(历史提交)</span>
+          ) : (
+            <span className="ml-2 text-xs text-muted-foreground">
+              {file.staged ? '(已暂存)' : '(未暂存)'}
+            </span>
+          )}
         </div>
 
         {/* Navigation buttons */}
@@ -404,33 +477,38 @@ export function DiffViewer({
 
       {/* Diff Editor */}
       <div className="flex-1">
-        <DiffEditor
-          original={diff.original}
-          modified={diff.modified}
-          language={getLanguageFromPath(file.path)}
-          theme={CUSTOM_THEME_NAME}
-          onMount={handleEditorMount}
-          options={{
-            readOnly: true,
-            renderSideBySide: true,
-            fontSize: 13,
-            lineHeight: 20,
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-            fontLigatures: true,
-            renderOverviewRuler: true,
-            diffWordWrap: 'on',
-            // Minimap for both editors
-            minimap: {
-              enabled: true,
-              side: 'right',
-              showSlider: 'mouseover',
-              renderCharacters: false,
-              maxColumn: 80,
-            },
-          }}
-        />
+        {diff && diff.original != null && diff.modified != null && (
+          <DiffEditor
+            key={`${file.path}-${file.staged}`}
+            original={diff.original}
+            modified={diff.modified}
+            language={getLanguageFromPath(file.path)}
+            theme={CUSTOM_THEME_NAME}
+            onMount={handleEditorMount}
+            options={{
+              readOnly: true,
+              renderSideBySide: true,
+              renderSideBySideInlineBreakpoint: 0, // Always use side-by-side
+              ignoreTrimWhitespace: false,
+              fontSize: 13,
+              lineHeight: 20,
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+              fontLigatures: true,
+              renderOverviewRuler: true,
+              diffWordWrap: 'on',
+              // Minimap for both editors
+              minimap: {
+                enabled: true,
+                side: 'right',
+                showSlider: 'mouseover',
+                renderCharacters: false,
+                maxColumn: 80,
+              },
+            }}
+          />
+        )}
       </div>
     </div>
   );

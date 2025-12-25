@@ -2,6 +2,7 @@ import type {
   AgentCliInfo,
   AgentCliStatus,
   AgentMetadata,
+  CommitFileChange,
   CustomAgent,
   DetectedApp,
   FileChange,
@@ -26,8 +27,8 @@ const electronAPI = {
   git: {
     getStatus: (workdir: string): Promise<GitStatus> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, workdir),
-    getLog: (workdir: string, maxCount?: number): Promise<GitLogEntry[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, workdir, maxCount),
+    getLog: (workdir: string, maxCount?: number, skip?: number): Promise<GitLogEntry[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, workdir, maxCount, skip),
     getBranches: (workdir: string): Promise<GitBranch[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_LIST, workdir),
     createBranch: (workdir: string, name: string, startPoint?: string): Promise<void> =>
@@ -53,6 +54,17 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, workdir, paths),
     discard: (workdir: string, filePath: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, workdir, filePath),
+    showCommit: (workdir: string, hash: string): Promise<string> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_SHOW, workdir, hash),
+    getCommitFiles: (workdir: string, hash: string): Promise<CommitFileChange[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_FILES, workdir, hash),
+    getCommitDiff: (
+      workdir: string,
+      hash: string,
+      filePath: string,
+      status?: import('@shared/types').FileChangeStatus
+    ): Promise<FileDiff> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_DIFF, workdir, hash, filePath, status),
   },
 
   // Worktree

@@ -14,14 +14,19 @@ export function useFileChanges(workdir: string | null, isActive = true) {
   });
 }
 
-export function useFileDiff(workdir: string | null, path: string | null, staged: boolean) {
+export function useFileDiff(
+  workdir: string | null,
+  path: string | null,
+  staged: boolean,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: ['git', 'file-diff', workdir, path, staged],
     queryFn: async () => {
       if (!workdir || !path) return null;
       return window.electronAPI.git.getFileDiff(workdir, path, staged);
     },
-    enabled: !!workdir && !!path,
+    enabled: (options?.enabled ?? true) && !!workdir && !!path,
   });
 }
 

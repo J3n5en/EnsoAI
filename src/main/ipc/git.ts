@@ -1,6 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { IPC_CHANNELS } from '@shared/types';
+import { type FileChangeStatus, IPC_CHANNELS } from '@shared/types';
 import { ipcMain } from 'electron';
 import { GitService } from '../services/git/GitService';
 
@@ -57,10 +57,13 @@ export function registerGitHandlers(): void {
     return git.getStatus();
   });
 
-  ipcMain.handle(IPC_CHANNELS.GIT_LOG, async (_, workdir: string, maxCount?: number) => {
-    const git = getGitService(workdir);
-    return git.getLog(maxCount);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_LOG,
+    async (_, workdir: string, maxCount?: number, skip?: number) => {
+      const git = getGitService(workdir);
+      return git.getLog(maxCount, skip);
+    }
+  );
 
   ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (_, workdir: string) => {
     const git = getGitService(workdir);
@@ -147,4 +150,22 @@ export function registerGitHandlers(): void {
     const git = getGitService(workdir);
     await git.discard(filePath);
   });
+
+  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT_SHOW, async (_, workdir: string, hash: string) => {
+    const git = getGitService(workdir);
+    return git.showCommit(hash);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT_FILES, async (_, workdir: string, hash: string) => {
+    const git = getGitService(workdir);
+    return git.getCommitFiles(hash);
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_COMMIT_DIFF,
+    async (_, workdir: string, hash: string, filePath: string, status?: FileChangeStatus) => {
+      const git = getGitService(workdir);
+      return git.getCommitDiff(hash, filePath, status);
+    }
+  );
 }

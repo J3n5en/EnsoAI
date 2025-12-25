@@ -59,11 +59,6 @@ export function CommitHistory({
               className="group flex w-full items-start gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
               onClick={() => onCommitClick?.(commit)}
             >
-              {/* Hash */}
-              <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                {commit.hash.substring(0, 7)}
-              </code>
-
               {/* Message */}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm">{commit.message}</p>
