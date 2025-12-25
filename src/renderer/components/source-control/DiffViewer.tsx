@@ -110,7 +110,7 @@ export function DiffViewer({
   isCommitView = false,
 }: DiffViewerProps) {
   const { t } = useI18n();
-  const { terminalTheme, sourceControlKeybindings } = useSettingsStore();
+  const { terminalTheme, sourceControlKeybindings, editorSettings } = useSettingsStore();
   const { navigationDirection, setNavigationDirection } = useSourceControlStore();
 
   // In commit view, we don't fetch diff - we use the provided externalDiff
@@ -459,22 +459,37 @@ export function DiffViewer({
               renderSideBySide: true,
               renderSideBySideInlineBreakpoint: 0, // Always use side-by-side
               ignoreTrimWhitespace: false,
-              fontSize: 13,
-              lineHeight: 20,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-              fontLigatures: true,
               renderOverviewRuler: true,
-              diffWordWrap: 'on',
-              // Minimap for both editors
+              diffWordWrap: editorSettings.wordWrap === 'on' ? 'on' : 'off',
+              // Display
               minimap: {
-                enabled: true,
+                enabled: editorSettings.minimapEnabled,
                 side: 'right',
                 showSlider: 'mouseover',
                 renderCharacters: false,
                 maxColumn: 80,
               },
+              lineNumbers: editorSettings.lineNumbers,
+              renderWhitespace: editorSettings.renderWhitespace,
+              renderLineHighlight: editorSettings.renderLineHighlight,
+              folding: editorSettings.folding,
+              links: editorSettings.links,
+              smoothScrolling: editorSettings.smoothScrolling,
+              // Font
+              fontSize: editorSettings.fontSize,
+              fontFamily: editorSettings.fontFamily,
+              fontLigatures: true,
+              lineHeight: 20,
+              // Brackets
+              bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
+              matchBrackets: editorSettings.matchBrackets,
+              guides: {
+                bracketPairs: editorSettings.bracketPairGuides,
+                indentation: editorSettings.indentationGuides,
+              },
+              // Fixed options
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
             }}
             // Prevent library from disposing models before DiffEditorWidget resets
             keepCurrentOriginalModel

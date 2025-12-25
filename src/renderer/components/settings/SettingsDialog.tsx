@@ -4,6 +4,7 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
+  FileCode,
   Keyboard,
   Monitor,
   Moon,
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useKeybindingInterceptor } from '@/hooks/useKeybindingInterceptor';
+import { useI18n } from '@/i18n';
 import {
   defaultDarkTheme,
   getThemeNames,
@@ -46,15 +48,22 @@ import {
 import { codeToKey } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
 import {
+  type EditorAutoClosingBrackets,
+  type EditorAutoClosingQuotes,
+  type EditorCursorBlinking,
+  type EditorCursorStyle,
+  type EditorLineNumbers,
+  type EditorRenderLineHighlight,
+  type EditorRenderWhitespace,
+  type EditorWordWrap,
   type FontWeight,
   type TerminalKeybinding,
   type TerminalRenderer,
   type Theme,
   useSettingsStore,
 } from '@/stores/settings';
-import { useI18n } from '@/i18n';
 
-type SettingsCategory = 'general' | 'appearance' | 'keybindings' | 'agent';
+type SettingsCategory = 'general' | 'appearance' | 'editor' | 'keybindings' | 'agent';
 
 interface SettingsDialogProps {
   trigger?: React.ReactElement;
@@ -69,6 +78,7 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
   const categories: Array<{ id: SettingsCategory; icon: React.ElementType; label: string }> = [
     { id: 'general', icon: Settings, label: t('General') },
     { id: 'appearance', icon: Palette, label: t('Appearance') },
+    { id: 'editor', icon: FileCode, label: t('Editor') },
     { id: 'keybindings', icon: Keyboard, label: t('Keybindings') },
     { id: 'agent', icon: Bot, label: t('Agent') },
   ];
@@ -137,6 +147,7 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
           <div className="flex-1 overflow-y-auto p-6">
             {activeCategory === 'general' && <GeneralSettings />}
             {activeCategory === 'appearance' && <AppearanceSettings />}
+            {activeCategory === 'editor' && <EditorSettingsPanel />}
             {activeCategory === 'keybindings' && <KeybindingsSettings />}
             {activeCategory === 'agent' && <AgentSettings />}
           </div>
@@ -236,7 +247,9 @@ function GeneralSettings() {
 
       <div className="border-t pt-4">
         <h3 className="text-lg font-medium">{t('Terminal')}</h3>
-        <p className="text-sm text-muted-foreground">{t('Terminal renderer and performance settings')}</p>
+        <p className="text-sm text-muted-foreground">
+          {t('Terminal renderer and performance settings')}
+        </p>
       </div>
 
       {/* Shell */}
@@ -393,7 +406,6 @@ function GeneralSettings() {
   );
 }
 
-
 function AppearanceSettings() {
   const {
     theme,
@@ -420,7 +432,12 @@ function AppearanceSettings() {
     { value: 'light', icon: Sun, label: t('Light'), description: t('Bright theme') },
     { value: 'dark', icon: Moon, label: t('Dark'), description: t('Eye-friendly dark theme') },
     { value: 'system', icon: Monitor, label: t('System'), description: t('Follow system theme') },
-    { value: 'sync-terminal', icon: Terminal, label: t('Sync terminal theme'), description: t('Match terminal color scheme') },
+    {
+      value: 'sync-terminal',
+      icon: Terminal,
+      label: t('Sync terminal theme'),
+      description: t('Match terminal color scheme'),
+    },
   ];
 
   // Local state for inputs
@@ -656,6 +673,510 @@ const fontWeightOptions: { value: FontWeight; label: string }[] = [
   { value: '900', label: '900 (Black)' },
   { value: 'bold', label: 'Bold' },
 ];
+
+function EditorSettingsPanel() {
+  const { editorSettings, setEditorSettings } = useSettingsStore();
+  const { t } = useI18n();
+
+  // Local state for font inputs
+  const [localFontSize, setLocalFontSize] = React.useState(editorSettings.fontSize);
+  const [localFontFamily, setLocalFontFamily] = React.useState(editorSettings.fontFamily);
+
+  React.useEffect(() => {
+    setLocalFontSize(editorSettings.fontSize);
+  }, [editorSettings.fontSize]);
+
+  React.useEffect(() => {
+    setLocalFontFamily(editorSettings.fontFamily);
+  }, [editorSettings.fontFamily]);
+
+  const applyFontSizeChange = React.useCallback(() => {
+    const validFontSize = Math.max(8, Math.min(32, localFontSize || 13));
+    if (validFontSize !== localFontSize) setLocalFontSize(validFontSize);
+    if (validFontSize !== editorSettings.fontSize) setEditorSettings({ fontSize: validFontSize });
+  }, [localFontSize, editorSettings.fontSize, setEditorSettings]);
+
+  const applyFontFamilyChange = React.useCallback(() => {
+    const validFontFamily = localFontFamily.trim() || editorSettings.fontFamily;
+    if (validFontFamily !== localFontFamily) setLocalFontFamily(validFontFamily);
+    if (validFontFamily !== editorSettings.fontFamily)
+      setEditorSettings({ fontFamily: validFontFamily });
+  }, [localFontFamily, editorSettings.fontFamily, setEditorSettings]);
+
+  const lineNumbersOptions: { value: EditorLineNumbers; label: string }[] = [
+    { value: 'on', label: t('On') },
+    { value: 'off', label: t('Off') },
+    { value: 'relative', label: t('Relative') },
+  ];
+
+  const wordWrapOptions: { value: EditorWordWrap; label: string }[] = [
+    { value: 'on', label: t('On') },
+    { value: 'off', label: t('Off') },
+    { value: 'wordWrapColumn', label: t('Word wrap column') },
+    { value: 'bounded', label: t('Bounded') },
+  ];
+
+  const renderWhitespaceOptions: { value: EditorRenderWhitespace; label: string }[] = [
+    { value: 'none', label: t('None') },
+    { value: 'boundary', label: t('Boundary') },
+    { value: 'selection', label: t('Selection') },
+    { value: 'trailing', label: t('Trailing') },
+    { value: 'all', label: t('All') },
+  ];
+
+  const renderLineHighlightOptions: { value: EditorRenderLineHighlight; label: string }[] = [
+    { value: 'none', label: t('None') },
+    { value: 'gutter', label: t('Gutter') },
+    { value: 'line', label: t('Line') },
+    { value: 'all', label: t('All') },
+  ];
+
+  const cursorStyleOptions: { value: EditorCursorStyle; label: string }[] = [
+    { value: 'line', label: t('Line') },
+    { value: 'line-thin', label: t('Line thin') },
+    { value: 'block', label: t('Block') },
+    { value: 'block-outline', label: t('Block outline') },
+    { value: 'underline', label: t('Underline') },
+    { value: 'underline-thin', label: t('Underline thin') },
+  ];
+
+  const cursorBlinkingOptions: { value: EditorCursorBlinking; label: string }[] = [
+    { value: 'blink', label: t('Blink') },
+    { value: 'smooth', label: t('Smooth') },
+    { value: 'phase', label: t('Phase') },
+    { value: 'expand', label: t('Expand') },
+    { value: 'solid', label: t('Solid') },
+  ];
+
+  const matchBracketsOptions: { value: 'always' | 'near' | 'never'; label: string }[] = [
+    { value: 'always', label: t('Always') },
+    { value: 'near', label: t('Near') },
+    { value: 'never', label: t('Never') },
+  ];
+
+  const autoClosingOptions: { value: EditorAutoClosingBrackets; label: string }[] = [
+    { value: 'always', label: t('Always') },
+    { value: 'languageDefined', label: t('Language defined') },
+    { value: 'beforeWhitespace', label: t('Before whitespace') },
+    { value: 'never', label: t('Never') },
+  ];
+
+  const tabSizeOptions = [2, 4, 8];
+
+  return (
+    <div className="space-y-6">
+      {/* Font Section */}
+      <div>
+        <h3 className="text-lg font-medium">{t('Font')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Editor font settings')}</p>
+      </div>
+
+      {/* Font Family */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Font family')}</span>
+        <Input
+          value={localFontFamily}
+          onChange={(e) => setLocalFontFamily(e.target.value)}
+          onBlur={applyFontFamilyChange}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              applyFontFamilyChange();
+              e.currentTarget.blur();
+            }
+          }}
+          placeholder="JetBrains Mono, monospace"
+        />
+      </div>
+
+      {/* Font Size */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Font size')}</span>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            value={localFontSize}
+            onChange={(e) => setLocalFontSize(Number(e.target.value))}
+            onBlur={applyFontSizeChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                applyFontSizeChange();
+                e.currentTarget.blur();
+              }
+            }}
+            min={8}
+            max={32}
+            className="w-20"
+          />
+          <span className="text-sm text-muted-foreground">px</span>
+        </div>
+      </div>
+
+      {/* Indentation Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Indentation')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Tab and space settings')}</p>
+      </div>
+
+      {/* Tab Size */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Tab size')}</span>
+        <Select
+          value={String(editorSettings.tabSize)}
+          onValueChange={(v) => setEditorSettings({ tabSize: Number(v) })}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>{editorSettings.tabSize}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {tabSizeOptions.map((size) => (
+              <SelectItem key={size} value={String(size)}>
+                {size}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Insert Spaces */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Insert spaces')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Use spaces instead of tabs')}</p>
+          <Switch
+            checked={editorSettings.insertSpaces}
+            onCheckedChange={(checked) => setEditorSettings({ insertSpaces: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Display Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Display')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Editor display settings')}</p>
+      </div>
+
+      {/* Minimap */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Minimap')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Show minimap in editor')}</p>
+          <Switch
+            checked={editorSettings.minimapEnabled}
+            onCheckedChange={(checked) => setEditorSettings({ minimapEnabled: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Line Numbers */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Line numbers')}</span>
+        <Select
+          value={editorSettings.lineNumbers}
+          onValueChange={(v) => setEditorSettings({ lineNumbers: v as EditorLineNumbers })}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {lineNumbersOptions.find((o) => o.value === editorSettings.lineNumbers)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {lineNumbersOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Word Wrap */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Word wrap')}</span>
+        <Select
+          value={editorSettings.wordWrap}
+          onValueChange={(v) => setEditorSettings({ wordWrap: v as EditorWordWrap })}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {wordWrapOptions.find((o) => o.value === editorSettings.wordWrap)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {wordWrapOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Render Whitespace */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Whitespace')}</span>
+        <Select
+          value={editorSettings.renderWhitespace}
+          onValueChange={(v) =>
+            setEditorSettings({ renderWhitespace: v as EditorRenderWhitespace })
+          }
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {
+                renderWhitespaceOptions.find((o) => o.value === editorSettings.renderWhitespace)
+                  ?.label
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {renderWhitespaceOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Render Line Highlight */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Line highlight')}</span>
+        <Select
+          value={editorSettings.renderLineHighlight}
+          onValueChange={(v) =>
+            setEditorSettings({ renderLineHighlight: v as EditorRenderLineHighlight })
+          }
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {
+                renderLineHighlightOptions.find(
+                  (o) => o.value === editorSettings.renderLineHighlight
+                )?.label
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {renderLineHighlightOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Folding */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Code folding')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Enable code folding')}</p>
+          <Switch
+            checked={editorSettings.folding}
+            onCheckedChange={(checked) => setEditorSettings({ folding: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Links */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Clickable links')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Make links clickable')}</p>
+          <Switch
+            checked={editorSettings.links}
+            onCheckedChange={(checked) => setEditorSettings({ links: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Smooth Scrolling */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Smooth scrolling')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Enable smooth scrolling')}</p>
+          <Switch
+            checked={editorSettings.smoothScrolling}
+            onCheckedChange={(checked) => setEditorSettings({ smoothScrolling: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Cursor Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Cursor')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Cursor appearance settings')}</p>
+      </div>
+
+      {/* Cursor Style */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Cursor style')}</span>
+        <Select
+          value={editorSettings.cursorStyle}
+          onValueChange={(v) => setEditorSettings({ cursorStyle: v as EditorCursorStyle })}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {cursorStyleOptions.find((o) => o.value === editorSettings.cursorStyle)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {cursorStyleOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Cursor Blinking */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Cursor blinking')}</span>
+        <Select
+          value={editorSettings.cursorBlinking}
+          onValueChange={(v) => setEditorSettings({ cursorBlinking: v as EditorCursorBlinking })}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {cursorBlinkingOptions.find((o) => o.value === editorSettings.cursorBlinking)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {cursorBlinkingOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Brackets Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Brackets')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Bracket matching and guides')}</p>
+      </div>
+
+      {/* Bracket Pair Colorization */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Rainbow brackets')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Colorize matching bracket pairs')}</p>
+          <Switch
+            checked={editorSettings.bracketPairColorization}
+            onCheckedChange={(checked) => setEditorSettings({ bracketPairColorization: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Match Brackets */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Match brackets')}</span>
+        <Select
+          value={editorSettings.matchBrackets}
+          onValueChange={(v) =>
+            setEditorSettings({ matchBrackets: v as 'always' | 'near' | 'never' })
+          }
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {matchBracketsOptions.find((o) => o.value === editorSettings.matchBrackets)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {matchBracketsOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Bracket Pair Guides */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Bracket guides')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Show bracket pair guides')}</p>
+          <Switch
+            checked={editorSettings.bracketPairGuides}
+            onCheckedChange={(checked) => setEditorSettings({ bracketPairGuides: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Indentation Guides */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Indent guides')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Show indentation guides')}</p>
+          <Switch
+            checked={editorSettings.indentationGuides}
+            onCheckedChange={(checked) => setEditorSettings({ indentationGuides: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Editing Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Editing')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Auto-completion settings')}</p>
+      </div>
+
+      {/* Auto Closing Brackets */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Auto brackets')}</span>
+        <Select
+          value={editorSettings.autoClosingBrackets}
+          onValueChange={(v) =>
+            setEditorSettings({ autoClosingBrackets: v as EditorAutoClosingBrackets })
+          }
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {
+                autoClosingOptions.find((o) => o.value === editorSettings.autoClosingBrackets)
+                  ?.label
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {autoClosingOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Auto Closing Quotes */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Auto quotes')}</span>
+        <Select
+          value={editorSettings.autoClosingQuotes}
+          onValueChange={(v) =>
+            setEditorSettings({ autoClosingQuotes: v as EditorAutoClosingQuotes })
+          }
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {autoClosingOptions.find((o) => o.value === editorSettings.autoClosingQuotes)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {autoClosingOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+    </div>
+  );
+}
 
 function TerminalPreview({
   theme,
@@ -1217,7 +1738,9 @@ function AgentSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-medium">Agent</h3>
-          <p className="text-sm text-muted-foreground">{t('Configure available AI Agent CLI tools')}</p>
+          <p className="text-sm text-muted-foreground">
+            {t('Configure available AI Agent CLI tools')}
+          </p>
         </div>
         <Button
           variant="ghost"
@@ -1231,7 +1754,9 @@ function AgentSettings() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {t('New sessions use the default agent. Long-press the plus to pick another enabled agent. Only Claude supports session persistence for now.')}
+        {t(
+          'New sessions use the default agent. Long-press the plus to pick another enabled agent. Only Claude supports session persistence for now.'
+        )}
       </p>
 
       {/* Builtin Agents */}

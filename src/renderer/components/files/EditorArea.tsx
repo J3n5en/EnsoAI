@@ -147,7 +147,7 @@ export function EditorArea({
   const { t } = useI18n();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
-  const { terminalTheme } = useSettingsStore();
+  const { terminalTheme, editorSettings } = useSettingsStore();
   const themeDefinedRef = useRef(false);
 
   // Define custom theme on mount and when terminal theme changes
@@ -261,26 +261,47 @@ export function EditorArea({
             onChange={handleEditorChange}
             onMount={handleEditorMount}
             options={{
+              // Display
               minimap: {
-                enabled: true,
+                enabled: editorSettings.minimapEnabled,
                 side: 'right',
                 showSlider: 'mouseover',
                 renderCharacters: false,
                 maxColumn: 80,
               },
-              fontSize: 13,
+              lineNumbers: editorSettings.lineNumbers,
+              wordWrap: editorSettings.wordWrap,
+              renderWhitespace: editorSettings.renderWhitespace,
+              renderLineHighlight: editorSettings.renderLineHighlight,
+              folding: editorSettings.folding,
+              links: editorSettings.links,
+              smoothScrolling: editorSettings.smoothScrolling,
+              // Font
+              fontSize: editorSettings.fontSize,
+              fontFamily: editorSettings.fontFamily,
+              fontLigatures: true,
               lineHeight: 20,
+              // Indentation
+              tabSize: editorSettings.tabSize,
+              insertSpaces: editorSettings.insertSpaces,
+              // Cursor
+              cursorStyle: editorSettings.cursorStyle,
+              cursorBlinking: editorSettings.cursorBlinking,
+              // Brackets
+              bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
+              matchBrackets: editorSettings.matchBrackets,
+              guides: {
+                bracketPairs: editorSettings.bracketPairGuides,
+                indentation: editorSettings.indentationGuides,
+              },
+              // Editing
+              autoClosingBrackets: editorSettings.autoClosingBrackets,
+              autoClosingQuotes: editorSettings.autoClosingQuotes,
+              // Fixed options
               padding: { top: 12, bottom: 12 },
               scrollBeyondLastLine: false,
               automaticLayout: true,
               fixedOverflowWidgets: true,
-              tabSize: 2,
-              wordWrap: 'on',
-              renderLineHighlight: 'line',
-              cursorBlinking: 'smooth',
-              smoothScrolling: true,
-              fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-              fontLigatures: true,
             }}
           />
         ) : (
@@ -290,7 +311,9 @@ export function EditorArea({
             </EmptyMedia>
             <EmptyHeader>
               <EmptyTitle>{t('Start editing')}</EmptyTitle>
-              <EmptyDescription>{t('Select a file from the file tree to begin editing')}</EmptyDescription>
+              <EmptyDescription>
+                {t('Select a file from the file tree to begin editing')}
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}
