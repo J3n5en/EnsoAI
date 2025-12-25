@@ -1,10 +1,11 @@
 import type { FileEntry } from '@shared/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UseFileTreeOptions {
   rootPath: string | undefined;
   enabled?: boolean;
+  isActive?: boolean;
 }
 
 interface FileTreeNode extends FileEntry {
@@ -12,7 +13,7 @@ interface FileTreeNode extends FileEntry {
   isLoading?: boolean;
 }
 
-export function useFileTree({ rootPath, enabled = true }: UseFileTreeOptions) {
+export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFileTreeOptions) {
   const queryClient = useQueryClient();
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
@@ -92,9 +93,13 @@ export function useFileTree({ rootPath, enabled = true }: UseFileTreeOptions) {
     [expandedPaths, loadChildren]
   );
 
-  // File watch effect
+  // Use ref to access expandedPaths in effect without causing re-runs
+  const expandedPathsRef = useRef(expandedPaths);
+  expandedPathsRef.current = expandedPaths;
+
+  // File watch effect - only watch when active
   useEffect(() => {
-    if (!rootPath || !enabled) return;
+    if (!rootPath || !enabled || !isActive) return;
 
     // Start watching
     window.electronAPI.file.watchStart(rootPath);
@@ -106,7 +111,7 @@ export function useFileTree({ rootPath, enabled = true }: UseFileTreeOptions) {
       queryClient.invalidateQueries({ queryKey: ['file', 'list', parentPath] });
 
       // If it's a directory that was expanded, refresh its children
-      if (expandedPaths.has(event.path)) {
+      if (expandedPathsRef.current.has(event.path)) {
         queryClient.invalidateQueries({ queryKey: ['file', 'list', event.path] });
       }
     });
@@ -115,7 +120,7 @@ export function useFileTree({ rootPath, enabled = true }: UseFileTreeOptions) {
       unsubscribe();
       window.electronAPI.file.watchStop(rootPath);
     };
-  }, [rootPath, enabled, queryClient, expandedPaths]);
+  }, [rootPath, enabled, isActive, queryClient]);
 
   // File operations
   const createFile = useCallback(

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRepositoryStore } from '@/stores/repository';
 
-export function useGitStatus(workdir: string | null) {
+export function useGitStatus(workdir: string | null, isActive = true) {
   const setStatus = useRepositoryStore((s) => s.setStatus);
 
   return useQuery({
@@ -13,7 +13,8 @@ export function useGitStatus(workdir: string | null) {
       return status;
     },
     enabled: !!workdir,
-    refetchInterval: 5000,
+    refetchInterval: isActive ? 5000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 

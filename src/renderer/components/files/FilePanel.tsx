@@ -23,7 +23,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
     renameItem,
     deleteItem,
     refresh,
-  } = useFileTree({ rootPath, enabled: !!rootPath });
+  } = useFileTree({ rootPath, enabled: !!rootPath, isActive });
 
   const {
     tabs,
