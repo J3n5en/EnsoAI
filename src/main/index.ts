@@ -1,4 +1,4 @@
-import { electronApp, is, optimizer } from '@electron-toolkit/utils';
+import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, Menu } from 'electron';
 import { cleanupAllResources, registerIpcHandlers } from './ipc';
 import { checkGitInstalled } from './services/git/checkGit';
@@ -7,6 +7,12 @@ import { autoUpdaterService } from './services/updater/AutoUpdater';
 import { createMainWindow } from './windows/MainWindow';
 
 let mainWindow: BrowserWindow | null = null;
+
+// Linux: avoid GTK3/GTK4 mixed symbols crash by forcing GTK3 unless explicitly overridden.
+if (process.platform === 'linux') {
+  const gtkVersion = process.env.ENSOAI_GTK_VERSION || '3';
+  app.commandLine.appendSwitch('gtk-version', gtkVersion);
+}
 
 async function init(): Promise<void> {
   // Check Git installation
