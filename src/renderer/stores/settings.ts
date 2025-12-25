@@ -1,6 +1,8 @@
+import type { Locale } from '@shared/i18n';
 import type { BuiltinAgentId, CustomAgent, ShellConfig } from '@shared/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { normalizeLocale } from '@shared/i18n';
 import {
   applyTerminalThemeToApp,
   clearTerminalThemeFromApp,
@@ -39,6 +41,13 @@ function applyTerminalFont(fontFamily: string, fontSize: number) {
   const root = document.documentElement;
   root.style.setProperty('--font-family-mono', fontFamily);
   root.style.setProperty('--font-size-base', `${fontSize}px`);
+}
+
+function getDefaultLocale(): Locale {
+  if (typeof navigator !== 'undefined') {
+    return normalizeLocale(navigator.language);
+  }
+  return 'en';
 }
 
 export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
@@ -163,6 +172,7 @@ export const defaultSourceControlKeybindings: SourceControlKeybindings = {
 
 interface SettingsState {
   theme: Theme;
+  language: Locale;
   fontSize: number;
   fontFamily: string;
   terminalFontSize: number;
@@ -184,6 +194,7 @@ interface SettingsState {
   agentNotificationDelay: number; // in seconds
 
   setTheme: (theme: Theme) => void;
+  setLanguage: (language: Locale) => void;
   setFontSize: (size: number) => void;
   setFontFamily: (family: string) => void;
   setTerminalFontSize: (size: number) => void;
@@ -221,6 +232,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       theme: 'system',
+      language: getDefaultLocale(),
       fontSize: 14,
       fontFamily: 'Inter',
       terminalFontSize: 18,
@@ -252,6 +264,11 @@ export const useSettingsStore = create<SettingsState>()(
           applyAppTheme(theme, terminalTheme);
         }
         set({ theme });
+      },
+      setLanguage: (language) => {
+        document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+        window.electronAPI.app.setLanguage(language);
+        set({ language });
       },
       setFontSize: (fontSize) => set({ fontSize }),
       setFontFamily: (fontFamily) => set({ fontFamily }),
@@ -345,6 +362,9 @@ export const useSettingsStore = create<SettingsState>()(
             applyAppTheme(state.theme, state.terminalTheme);
           }
           applyTerminalFont(state.terminalFontFamily, state.terminalFontSize);
+          const resolvedLanguage = normalizeLocale(state.language);
+          document.documentElement.lang = resolvedLanguage === 'zh' ? 'zh-CN' : 'en';
+          window.electronAPI.app.setLanguage(resolvedLanguage);
         }
       },
     }

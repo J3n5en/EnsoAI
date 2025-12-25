@@ -10,6 +10,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { useFileDiff } from '@/hooks/useSourceControl';
+import { useI18n } from '@/i18n';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
@@ -108,6 +109,7 @@ export function DiffViewer({
   skipFetch = false,
   isCommitView = false,
 }: DiffViewerProps) {
+  const { t } = useI18n();
   const { terminalTheme, sourceControlKeybindings } = useSettingsStore();
   const { navigationDirection, setNavigationDirection } = useSourceControlStore();
 
@@ -385,8 +387,8 @@ export function DiffViewer({
           <FileCode className="h-4.5 w-4.5" />
         </EmptyMedia>
         <EmptyHeader>
-          <EmptyTitle>查看差异</EmptyTitle>
-          <EmptyDescription>从左侧选择文件以查看更改</EmptyDescription>
+          <EmptyTitle>{t('View diff')}</EmptyTitle>
+          <EmptyDescription>{t('Select file to view diff')}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -395,7 +397,7 @@ export function DiffViewer({
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p className="text-sm">加载中...</p>
+        <p className="text-sm">{t('Loading...')}</p>
       </div>
     );
   }
@@ -403,17 +405,17 @@ export function DiffViewer({
   if (!diff) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p className="text-sm">无法加载差异</p>
+        <p className="text-sm">{t('Failed to load diff')}</p>
       </div>
     );
   }
 
   const getBoundaryTooltip = () => {
     if (boundaryHint === 'top') {
-      return hasPrevFile ? '再按一次切换到上一个文件' : '已经是第一处差异';
+      return hasPrevFile ? t('Switch to previous file') : t('Already at the first change');
     }
     if (boundaryHint === 'bottom') {
-      return hasNextFile ? '再按一次切换到下一个文件' : '已经是最后一处差异';
+      return hasNextFile ? t('Switch to next file') : t('Already at the last change');
     }
     return null;
   };
@@ -425,10 +427,10 @@ export function DiffViewer({
         <div className="flex items-center">
           <span className="text-sm font-medium">{file.path}</span>
           {isCommitView ? (
-            <span className="ml-2 text-xs text-muted-foreground">(历史提交)</span>
+            <span className="ml-2 text-xs text-muted-foreground">{t('(commit history)')}</span>
           ) : (
             <span className="ml-2 text-xs text-muted-foreground">
-              {file.staged ? '(已暂存)' : '(未暂存)'}
+              {file.staged ? t('(staged)') : t('(unstaged)')}
             </span>
           )}
         </div>
@@ -455,7 +457,7 @@ export function DiffViewer({
               'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
             )}
             onClick={() => navigateToDiff('prev')}
-            title="上一处差异 (F7, 再按切换文件)"
+            title={t('Previous change (F7, press again to switch file)')}
           >
             <ChevronUp className="h-4 w-4" />
           </button>
@@ -468,7 +470,7 @@ export function DiffViewer({
               'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
             )}
             onClick={() => navigateToDiff('next')}
-            title="下一处差异 (F8, 再按切换文件)"
+            title={t('Next change (F8, press again to switch file)')}
           >
             <ChevronDown className="h-4 w-4" />
           </button>

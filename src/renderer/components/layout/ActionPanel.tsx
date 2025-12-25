@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/command';
 import { toastManager } from '@/components/ui/toast';
 import { useDetectedApps, useOpenWith } from '@/hooks/useAppDetector';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 function useCliInstallStatus() {
@@ -175,6 +176,7 @@ export function ActionPanel({
   onSwitchRepo,
   onSwitchWorktree,
 }: ActionPanelProps) {
+  const { t } = useI18n();
   const [search, setSearch] = React.useState('');
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -193,28 +195,28 @@ export function ActionPanel({
   const actionGroups: ActionGroup[] = React.useMemo(() => {
     const groups: ActionGroup[] = [
       {
-        label: '面板',
+        label: t('Panel'),
         items: [
           {
             id: 'toggle-repository',
-            label: repositoryCollapsed ? '展开 Repository' : '折叠 Repository',
+            label: repositoryCollapsed ? t('Expand Repository') : t('Collapse Repository'),
             icon: repositoryCollapsed ? FolderOpen : PanelLeftClose,
             action: onToggleRepository,
           },
           {
             id: 'toggle-worktree',
-            label: worktreeCollapsed ? '展开 Worktree' : '折叠 Worktree',
+            label: worktreeCollapsed ? t('Expand Worktree') : t('Collapse Worktree'),
             icon: worktreeCollapsed ? GitBranch : PanelLeftOpen,
             action: onToggleWorktree,
           },
         ],
       },
       {
-        label: '通用',
+        label: t('General'),
         items: [
           {
             id: 'open-settings',
-            label: '打开设置',
+            label: t('Open settings'),
             icon: Settings,
             shortcut: '⌘,',
             action: onOpenSettings,
@@ -287,10 +289,10 @@ export function ActionPanel({
     // Add "Open in XXX" group for detected apps
     if (projectPath && detectedApps.length > 0) {
       groups.push({
-        label: '打开方式',
+        label: t('Open with'),
         items: detectedApps.map((app) => ({
           id: `open-in-${app.bundleId}`,
-          label: `在 ${app.name} 打开`,
+          label: t('Open in {{app}}', { app: app.name }),
           icon: ExternalLink,
           action: () => {
             openWith.mutate({ path: projectPath, bundleId: app.bundleId });
@@ -321,6 +323,7 @@ export function ActionPanel({
 
     return groups;
   }, [
+    t,
     repositoryCollapsed,
     worktreeCollapsed,
     projectPath,
@@ -424,7 +427,7 @@ export function ActionPanel({
               ref={inputRef}
               type="text"
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              placeholder="搜索操作..."
+              placeholder={t('Filter actions...')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -433,7 +436,7 @@ export function ActionPanel({
           <div className="max-h-72 overflow-y-auto p-2">
             {flatFilteredItems.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">
-                没有找到匹配的操作
+                {t('No matching actions found')}
               </div>
             ) : (
               filteredGroups.map((group, groupIdx) => (

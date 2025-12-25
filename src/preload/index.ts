@@ -1,3 +1,5 @@
+import type { Locale } from '@shared/i18n';
+import { Buffer } from 'node:buffer';
 import type {
   AgentCliInfo,
   AgentCliStatus,
@@ -170,6 +172,8 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.APP_OPEN_PATH, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_OPEN_PATH, handler);
     },
+    setLanguage: (language: Locale): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.APP_SET_LANGUAGE, language),
   },
 
   // Dialog
@@ -302,5 +306,6 @@ const electronAPI = {
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+contextBridge.exposeInMainWorld('Buffer', Buffer);
 
 export type ElectronAPI = typeof electronAPI;

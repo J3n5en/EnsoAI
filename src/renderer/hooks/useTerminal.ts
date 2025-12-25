@@ -26,7 +26,7 @@ export function useTerminal() {
       addSession({
         id,
         title: 'Terminal',
-        cwd: options?.cwd || process.env.HOME || '/',
+        cwd: options?.cwd || window.electronAPI.env.HOME || '/',
         shell: options?.shell || shellConfig.shellType,
         cols: options?.cols || 80,
         rows: options?.rows || 24,

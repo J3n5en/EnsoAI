@@ -4,6 +4,7 @@ import {
   type TerminalSearchBarRef,
 } from '@/components/terminal/TerminalSearchBar';
 import { useXterm } from '@/hooks/useXterm';
+import { useI18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
 
 interface AgentTerminalProps {
@@ -33,14 +34,15 @@ export function AgentTerminal({
   onActivated,
   onExit,
 }: AgentTerminalProps) {
+  const { t } = useI18n();
   const { agentNotificationEnabled, agentNotificationDelay } = useSettingsStore();
   const outputBufferRef = useRef('');
   const startTimeRef = useRef<number | null>(null);
   const hasInitializedRef = useRef(false);
   const hasActivatedRef = useRef(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isWaitingForIdleRef = useRef(false); // 等待空闲通知状态，Enter后开启，通知后关闭
-  const currentTitleRef = useRef<string>(''); // 当前终端标题（来自 OSC 转义序列）
+  const isWaitingForIdleRef = useRef(false); // Wait for idle notification; enabled after Enter.
+  const currentTitleRef = useRef<string>(''); // Terminal title from OSC escape sequence.
 
   // Build command with session args
   const command = useMemo(() => {
@@ -124,13 +126,13 @@ export function AgentTerminal({
       // Set new idle timer - notify when agent stops outputting
       idleTimerRef.current = setTimeout(() => {
         if (isWaitingForIdleRef.current) {
-          // 发送通知后关闭等待状态，等待下一次 Enter
+          // Stop waiting after sending the notification, wait for next Enter.
           isWaitingForIdleRef.current = false;
-          // 使用终端标题作为通知正文，fallback 到项目名
+          // Use terminal title as body, fall back to project name.
           const projectName = cwd?.split('/').pop() || 'Unknown';
           const notificationBody = currentTitleRef.current || projectName;
           window.electronAPI.notification.show({
-            title: `${agentCommand} 已完成`,
+            title: t('{{command}} completed', { command: agentCommand }),
             body: notificationBody,
             sessionId,
           });
@@ -169,12 +171,12 @@ export function AgentTerminal({
         !event.altKey &&
         !event.isComposing
       ) {
-        // 首次 Enter 激活 session
+        // First Enter activates the session.
         if (!hasActivatedRef.current && !activated) {
           hasActivatedRef.current = true;
           onActivated?.();
         }
-        // 每次 Enter 开启空闲监听，等待下一次通知
+        // Each Enter enables idle monitoring for the next notification.
         isWaitingForIdleRef.current = true;
         return true; // Let Enter through normally
       }
@@ -241,11 +243,11 @@ export function AgentTerminal({
       e.preventDefault();
 
       const selectedId = await window.electronAPI.contextMenu.show([
-        { id: 'clear', label: '清除终端' },
+        { id: 'clear', label: t('Clear terminal') },
         { id: 'separator-1', label: '', type: 'separator' },
-        { id: 'copy', label: '复制', disabled: !terminal?.hasSelection() },
-        { id: 'paste', label: '粘贴' },
-        { id: 'selectAll', label: '全选' },
+        { id: 'copy', label: t('Copy'), disabled: !terminal?.hasSelection() },
+        { id: 'paste', label: t('Paste') },
+        { id: 'selectAll', label: t('Select all') },
       ]);
 
       if (!selectedId) return;
@@ -319,7 +321,7 @@ export function AgentTerminal({
               style={{ color: settings.theme.foreground, opacity: 0.5 }}
             />
             <span style={{ color: settings.theme.foreground, opacity: 0.5 }} className="text-sm">
-              Loading {agentCommand}...
+              {t('Loading {{agent}}...', { agent: agentCommand })}
             </span>
           </div>
         </div>

@@ -23,6 +23,7 @@ import { matchesKeybinding } from './lib/keybinding';
 import { useNavigationStore } from './stores/navigation';
 import { useSettingsStore } from './stores/settings';
 import { useWorktreeStore } from './stores/worktree';
+import { useI18n } from './i18n';
 
 // Animation config
 const panelTransition = { type: 'spring' as const, stiffness: 400, damping: 30 };
@@ -82,6 +83,7 @@ const pathsEqual = (path1: string, path2: string): boolean => {
 };
 
 export default function App() {
+  const { t } = useI18n();
   // Per-worktree tab state: { [worktreePath]: TabId }
   const [worktreeTabMap, setWorktreeTabMap] = useState<Record<string, TabId>>(getStoredTabMap);
   const [activeTab, setActiveTab] = useState<TabId>('chat');
@@ -316,7 +318,7 @@ export default function App() {
 
     const savedWorktreePath = localStorage.getItem('enso-active-worktree');
     if (savedWorktreePath) {
-      // 需要等 worktrees 加载后再设置
+      // Wait for worktrees to load before setting active worktree.
       setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
     }
   }, []);
@@ -479,7 +481,7 @@ export default function App() {
         options,
       });
     } finally {
-      // 无论成功失败都刷新分支列表（因为 git worktree add -b 会先创建分支）
+      // Refresh branches on success/failure (git worktree add -b creates branches first).
       refetchBranches();
     }
   };
@@ -493,12 +495,12 @@ export default function App() {
       workdir: selectedRepo,
       options: {
         path: worktree.path,
-        force: worktree.prunable || options?.force, // prunable 或用户选择强制删除
+        force: worktree.prunable || options?.force, // prunable or user-selected force delete
         deleteBranch: options?.deleteBranch,
         branch: worktree.branch || undefined,
       },
     });
-    // 如果删除的是当前选中的，清空选择
+    // Clear selection if the active worktree was removed.
     if (activeWorktree?.path === worktree.path) {
       setActiveWorktree(null);
     }
@@ -640,8 +642,8 @@ export default function App() {
       >
         <DialogPopup className="sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>确认退出</DialogTitle>
-            <DialogDescription>确定要退出应用吗？</DialogDescription>
+            <DialogTitle>{t('Confirm exit')}</DialogTitle>
+            <DialogDescription>{t('Are you sure you want to exit the app?')}</DialogDescription>
           </DialogHeader>
           <DialogFooter variant="bare">
             <Button
@@ -651,7 +653,7 @@ export default function App() {
                 window.electronAPI.app.confirmClose(false);
               }}
             >
-              取消
+              {t('Cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -660,7 +662,7 @@ export default function App() {
                 window.electronAPI.app.confirmClose(true);
               }}
             >
-              退出
+              {t('Exit')}
             </Button>
           </DialogFooter>
         </DialogPopup>

@@ -14,6 +14,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { useI18n } from '@/i18n';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
 import type { EditorTab, PendingCursor } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
@@ -143,6 +144,7 @@ export function EditorArea({
   onSave,
   onClearPendingCursor,
 }: EditorAreaProps) {
+  const { t } = useI18n();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const { terminalTheme } = useSettingsStore();
@@ -287,8 +289,8 @@ export function EditorArea({
               <FileCode className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle>开始编辑</EmptyTitle>
-              <EmptyDescription>从左侧文件树中选择文件以开始编辑</EmptyDescription>
+              <EmptyTitle>{t('Start editing')}</EmptyTitle>
+              <EmptyDescription>{t('Select a file from the file tree to begin editing')}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}

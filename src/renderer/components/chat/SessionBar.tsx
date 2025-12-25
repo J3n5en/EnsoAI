@@ -1,5 +1,6 @@
 import { GripVertical, Plus, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
 
@@ -62,6 +63,7 @@ export function SessionBar({
   onNewSessionWithAgent,
   onRenameSession,
 }: SessionBarProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -364,7 +366,9 @@ export function SessionBar({
                     onKeyDown={(e) => e.key === 'Escape' && setShowAgentMenu(false)}
                   />
                   <div className="absolute top-full right-0 mt-1 z-50 min-w-32 rounded-lg border bg-popover p-1 shadow-lg">
-                    <div className="px-2 py-1 text-xs text-muted-foreground">选择 Agent</div>
+                    <div className="px-2 py-1 text-xs text-muted-foreground">
+                      {t('Select Agent')}
+                    </div>
                     {enabledAgents.map((agentId) => {
                       const isWsl = agentId.endsWith('-wsl');
                       const baseId = isWsl ? agentId.slice(0, -4) : agentId;
@@ -381,7 +385,9 @@ export function SessionBar({
                         >
                           <span>{name}</span>
                           {isDefault && (
-                            <span className="text-xs text-muted-foreground">(默认)</span>
+                            <span className="text-xs text-muted-foreground">
+                              {t('(default)')}
+                            </span>
                           )}
                         </button>
                       );

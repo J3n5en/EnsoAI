@@ -8,6 +8,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useI18n } from '@/i18n';
 import { WorktreeCard } from './WorktreeCard';
 
 interface WorktreeListProps {
@@ -33,6 +34,7 @@ export function WorktreeList({
   onCopyPath,
   onRemove,
 }: WorktreeListProps) {
+  const { t } = useI18n();
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -50,8 +52,8 @@ export function WorktreeList({
           <GitBranch className="h-12 w-12 text-muted-foreground/50" />
         </EmptyMedia>
         <EmptyHeader>
-          <EmptyTitle>暂无 Worktree</EmptyTitle>
-          <EmptyDescription>点击右上角按钮创建第一个 Worktree</EmptyDescription>
+          <EmptyTitle>{t('No worktrees')}</EmptyTitle>
+          <EmptyDescription>{t('Click the button in the top right to create your first worktree')}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );

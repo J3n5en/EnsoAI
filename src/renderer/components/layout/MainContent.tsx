@@ -12,6 +12,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { TerminalPanel } from '../terminal';
 
@@ -29,13 +30,6 @@ interface MainContentProps {
   onSwitchWorktree?: (worktreePath: string) => void;
 }
 
-const tabs: Array<{ id: TabId; icon: React.ElementType; label: string }> = [
-  { id: 'chat', icon: Sparkles, label: 'Agent' },
-  { id: 'file', icon: FileCode, label: 'File' },
-  { id: 'terminal', icon: Terminal, label: 'Terminal' },
-  { id: 'source-control', icon: GitBranch, label: 'VSC' },
-];
-
 export function MainContent({
   activeTab,
   onTabChange,
@@ -47,6 +41,13 @@ export function MainContent({
   onExpandWorktree,
   onSwitchWorktree,
 }: MainContentProps) {
+  const { t } = useI18n();
+  const tabs = [
+    { id: 'chat', icon: Sparkles, label: t('Agent') },
+    { id: 'file', icon: FileCode, label: t('File') },
+    { id: 'terminal', icon: Terminal, label: t('Terminal') },
+    { id: 'source-control', icon: GitBranch, label: t('Source Control') },
+  ] satisfies Array<{ id: TabId; icon: React.ElementType; label: string }>;
   // Need extra padding for traffic lights when both panels are collapsed (macOS only)
   const isMac = window.electronAPI.env.platform === 'darwin';
   const needsTrafficLightPadding = isMac && repositoryCollapsed && worktreeCollapsed;
@@ -81,7 +82,7 @@ export function MainContent({
                     type="button"
                     onClick={onExpandRepository}
                     className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                    title="展开 Repository"
+                    title={t('Expand Repository')}
                   >
                     <FolderOpen className="h-4 w-4" />
                   </button>
@@ -92,7 +93,7 @@ export function MainContent({
                     type="button"
                     onClick={onExpandWorktree}
                     className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                    title="展开 Worktree"
+                    title={t('Expand Worktree')}
                   >
                     <GitBranch className="h-4 w-4" />
                   </button>
@@ -148,13 +149,15 @@ export function MainContent({
                 <Sparkles className="h-4.5 w-4.5" />
               </EmptyMedia>
               <EmptyHeader>
-                <EmptyTitle>开始使用 AI Agent</EmptyTitle>
-                <EmptyDescription>选择一个 Worktree 以开始使用 AI 编码助手</EmptyDescription>
+                <EmptyTitle>{t('Start using AI Agent')}</EmptyTitle>
+                <EmptyDescription>
+                  {t('Select a Worktree to start using AI coding assistant')}
+                </EmptyDescription>
               </EmptyHeader>
               {onExpandWorktree && worktreeCollapsed && (
                 <Button onClick={onExpandWorktree} variant="outline" className="mt-2">
                   <GitBranch className="mr-2 h-4 w-4" />
-                  选择 Worktree
+                  {t('Choose Worktree')}
                 </Button>
               )}
             </Empty>

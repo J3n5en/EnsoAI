@@ -58,6 +58,7 @@ export const IPC_CHANNELS = {
   APP_CLOSE_REQUEST: 'app:closeRequest',
   APP_CLOSE_CONFIRM: 'app:closeConfirm',
   APP_OPEN_PATH: 'app:openPath',
+  APP_SET_LANGUAGE: 'app:setLanguage',
 
   // Dialog
   DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
