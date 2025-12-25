@@ -67,3 +67,18 @@ export function useGitDiscard() {
     },
   });
 }
+
+export function useGitCommit() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ workdir, message }: { workdir: string; message: string }) => {
+      return window.electronAPI.git.commit(workdir, message);
+    },
+    onSuccess: (_, { workdir }) => {
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
+    },
+  });
+}
