@@ -12,7 +12,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-rebuild",
+    "rebuild": "electron-rebuild",
     "build:mac": "pnpm build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
     "build:win": "pnpm build && electron-builder --win",
     "build:linux": "pnpm build && electron-builder --linux",
@@ -54,6 +55,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.3.10",
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron/rebuild": "^4.0.2",
     "@types/node": "^22.19.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
