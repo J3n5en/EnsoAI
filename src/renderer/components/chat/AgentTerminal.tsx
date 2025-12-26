@@ -84,9 +84,11 @@ export function AgentTerminal({
       };
     }
 
-    // Native Unix
+    // Native Unix: try zsh first, fallback to bash, then sh
+    const shells = ['/bin/zsh', '/bin/bash', '/bin/sh'];
+    const shell = shells[0]; // Will be validated by node-pty
     return {
-      shell: '/bin/zsh',
+      shell,
       args: ['-i', '-l', '-c', fullCommand],
     };
   }, [agentCommand, sessionId, initialized, environment]);

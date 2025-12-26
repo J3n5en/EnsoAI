@@ -57,7 +57,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 685,
     minHeight: 600,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    trafficLightPosition: { x: 16, y: 16 },
+    ...(process.platform === 'darwin' && { trafficLightPosition: { x: 16, y: 16 } }),
     backgroundColor: '#1e1e1e',
     show: false,
     webPreferences: {

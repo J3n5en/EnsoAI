@@ -107,9 +107,12 @@ class CliDetector {
     const paths = [
       currentPath,
       '/usr/local/bin',
-      '/opt/homebrew/bin',
+      '/usr/bin',
+      '/bin',
+      '/opt/homebrew/bin', // macOS Homebrew
       join(home, '.local', 'bin'),
       join(home, '.volta', 'bin'),
+      join(home, '.cargo', 'bin'), // Rust
       ...this.getNvmNodeBins(home),
     ];
     return paths.filter(Boolean).join(delimiter);

@@ -7,16 +7,26 @@ import { app } from 'electron';
 
 const execAsync = promisify(exec);
 
-// Run osascript with admin privileges
+// Run command with admin privileges (macOS: osascript, Linux: pkexec)
 function runWithAdminPrivileges(shellCommand: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const appleScript = `do shell script "${shellCommand}" with administrator privileges`;
-    const proc = spawn('osascript', ['-e', appleScript], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    let proc: ReturnType<typeof spawn>;
+
+    if (process.platform === 'darwin') {
+      // macOS: use osascript
+      const appleScript = `do shell script "${shellCommand}" with administrator privileges`;
+      proc = spawn('osascript', ['-e', appleScript], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } else {
+      // Linux: use pkexec (polkit)
+      proc = spawn('pkexec', ['sh', '-c', shellCommand], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    }
 
     let stderr = '';
-    proc.stderr.on('data', (data) => {
+    proc.stderr?.on('data', (data) => {
       stderr += data.toString();
     });
 
@@ -24,7 +34,8 @@ function runWithAdminPrivileges(shellCommand: string): Promise<void> {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(stderr || `osascript exited with code ${code}`));
+        const tool = process.platform === 'darwin' ? 'osascript' : 'pkexec';
+        reject(new Error(stderr || `${tool} exited with code ${code}`));
       }
     });
 
@@ -40,6 +51,7 @@ function runWithAdminPrivileges(shellCommand: string): Promise<void> {
 
 const isWindows = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
+const isLinux = process.platform === 'linux';
 
 export interface CliInstallStatus {
   installed: boolean;
@@ -149,6 +161,45 @@ if %ERRORLEVEL%==0 (
 `;
   }
 
+  private generateLinuxScript(): string {
+    const exePath = this.getAppPath();
+    return `#!/bin/bash
+# EnsoAI CLI - Open directories in EnsoAI
+
+# Get the target path
+if [ -z "$1" ]; then
+  TARGET_PATH="$(pwd)"
+else
+  # Resolve to absolute path
+  if [[ "$1" = /* ]]; then
+    TARGET_PATH="$1"
+  else
+    TARGET_PATH="$(cd "$(dirname "$1")" 2>/dev/null && pwd)/$(basename "$1")"
+    # Handle the case where $1 is just a directory name
+    if [ -d "$1" ]; then
+      TARGET_PATH="$(cd "$1" && pwd)"
+    fi
+  fi
+fi
+
+# Check if EnsoAI is running
+if pgrep -x "ensoai" > /dev/null 2>&1 || pgrep -f "EnsoAI" > /dev/null 2>&1; then
+  # App is running, use xdg-open with URL scheme
+  ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$TARGET_PATH', safe=''))")
+  xdg-open "enso://open?path=$ENCODED_PATH" 2>/dev/null || \\
+    gio open "enso://open?path=$ENCODED_PATH" 2>/dev/null
+else
+  # App not running, launch it with the path
+  if [ -x "${exePath}" ]; then
+    "${exePath}" --open-path="$TARGET_PATH" &
+  else
+    echo "EnsoAI not found at ${exePath}"
+    exit 1
+  fi
+fi
+`;
+  }
+
   async checkInstalled(): Promise<CliInstallStatus> {
     const cliPath = this.getCliPath();
 
@@ -185,8 +236,8 @@ if %ERRORLEVEL%==0 (
           // PATH modification failed, but script is installed
         }
       } else {
-        // macOS/Linux: need sudo to write to /usr/local/bin
-        const script = this.generateMacScript();
+        // macOS/Linux: need admin privileges to write to /usr/local/bin
+        const script = isLinux ? this.generateLinuxScript() : this.generateMacScript();
         const tempPath = join(app.getPath('temp'), 'enso-cli-script');
         writeFileSync(tempPath, script, { mode: 0o755 });
 
