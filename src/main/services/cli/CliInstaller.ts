@@ -46,25 +46,33 @@ async function runWithAdminPrivileges(shellCommand: string): Promise<void> {
     });
   }
 
-  // Linux: try multiple methods using terminal emulators
+  // Linux: use terminal emulator to run sudo
   // This is more reliable than zenity/kdialog which may have compatibility issues
 
-  // Find available terminal emulator
-  const terminals = [
-    { cmd: 'xfce4-terminal', args: ['-e'] },
-    { cmd: 'gnome-terminal', args: ['--'] },
-    { cmd: 'konsole', args: ['-e'] },
-    { cmd: 'xterm', args: ['-e'] },
+  const successMarker = `/tmp/enso-cli-install-success-${Date.now()}`;
+  const escapedCmd = shellCommand.replace(/'/g, "'\\''");
+  const sudoScript = `sudo sh -c '${escapedCmd}' && touch "${successMarker}"; echo ""; read -p "安装完成，按 Enter 关闭此窗口..."`;
+
+  // Try different terminal emulators with their specific argument formats
+  const terminalCommands = [
+    // xfce4-terminal: -e takes a single command string
+    {
+      check: 'xfce4-terminal',
+      cmd: 'xfce4-terminal',
+      args: ['-e', `sh -c '${sudoScript.replace(/'/g, "'\\''")}'`],
+    },
+    // gnome-terminal: -- followed by command and args
+    { check: 'gnome-terminal', cmd: 'gnome-terminal', args: ['--', 'sh', '-c', sudoScript] },
+    // konsole: -e followed by command and args
+    { check: 'konsole', cmd: 'konsole', args: ['-e', 'sh', '-c', sudoScript] },
+    // xterm: -e followed by command and args
+    { check: 'xterm', cmd: 'xterm', args: ['-e', 'sh', '-c', sudoScript] },
   ];
 
-  for (const term of terminals) {
-    if (await commandExists(term.cmd)) {
+  for (const term of terminalCommands) {
+    if (await commandExists(term.check)) {
       return new Promise((resolve, reject) => {
-        // Create a script that runs sudo and signals completion
-        const successMarker = `/tmp/enso-cli-install-success-${Date.now()}`;
-        const sudoScript = `sudo sh -c '${shellCommand.replace(/'/g, "'\\''")}' && touch "${successMarker}"; read -p "按 Enter 关闭此窗口..."`;
-
-        const proc = spawn(term.cmd, [...term.args, 'sh', '-c', sudoScript], {
+        const proc = spawn(term.cmd, term.args, {
           stdio: 'ignore',
           detached: true,
         });
@@ -78,7 +86,9 @@ async function runWithAdminPrivileges(shellCommand: string): Promise<void> {
           attempts++;
           if (existsSync(successMarker)) {
             clearInterval(checkInterval);
-            unlinkSync(successMarker);
+            try {
+              unlinkSync(successMarker);
+            } catch {}
             resolve();
           } else if (attempts >= maxAttempts) {
             clearInterval(checkInterval);
