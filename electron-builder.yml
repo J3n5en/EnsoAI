@@ -94,6 +94,11 @@ linux:
   maintainer: EnsoAI Team <crolin-zhang@users.noreply.github.com>
   category: Development
   icon: build/icons
+  # Register enso:// URL scheme
+  mimeTypes:
+    - x-scheme-handler/enso
+  desktop:
+    MimeType: x-scheme-handler/enso;
 
 appImage:
   # Enable differential download for AppImage (generates .blockmap file)
