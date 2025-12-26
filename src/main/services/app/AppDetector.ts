@@ -449,10 +449,11 @@ export class AppDetector {
       desktopFile: 'org.kde.kate.desktop',
     },
     {
-      name: 'Vim',
-      id: 'vim',
+      name: 'GVim',
+      id: 'org.vim.gvim',
       category: AppCategory.Editor,
-      commands: ['gvim', 'vim'],
+      commands: ['gvim'],
+      desktopFile: 'gvim.desktop',
     },
     {
       name: 'Emacs',
