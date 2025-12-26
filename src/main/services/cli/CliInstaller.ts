@@ -7,23 +7,117 @@ import { app } from 'electron';
 
 const execAsync = promisify(exec);
 
-// Run command with admin privileges (macOS: osascript, Linux: pkexec)
-function runWithAdminPrivileges(shellCommand: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let proc: ReturnType<typeof spawn>;
+// Check if a command exists
+async function commandExists(cmd: string): Promise<boolean> {
+  try {
+    await execAsync(`which ${cmd}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-    if (process.platform === 'darwin') {
-      // macOS: use osascript
+// Run command with admin privileges (macOS: osascript, Linux: multiple fallbacks)
+async function runWithAdminPrivileges(shellCommand: string): Promise<void> {
+  if (process.platform === 'darwin') {
+    // macOS: use osascript
+    return new Promise((resolve, reject) => {
       const appleScript = `do shell script "${shellCommand}" with administrator privileges`;
-      proc = spawn('osascript', ['-e', appleScript], {
+      const proc = spawn('osascript', ['-e', appleScript], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-    } else {
-      // Linux: use pkexec (polkit)
-      proc = spawn('pkexec', ['sh', '-c', shellCommand], {
+
+      let stderr = '';
+      proc.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(stderr || `osascript exited with code ${code}`));
+      });
+
+      proc.on('error', reject);
+
+      setTimeout(() => {
+        proc.kill();
+        reject(new Error('Timeout waiting for admin privileges'));
+      }, 60000);
+    });
+  }
+
+  // Linux: try multiple methods
+  // 1. Try zenity (GTK dialog, works on most DEs including XFCE)
+  if (await commandExists('zenity')) {
+    return new Promise((resolve, reject) => {
+      const script = `
+        PASSWORD=$(zenity --password --title="EnsoAI CLI 安装" 2>/dev/null)
+        if [ -z "$PASSWORD" ]; then
+          exit 1
+        fi
+        echo "$PASSWORD" | sudo -S sh -c '${shellCommand.replace(/'/g, "'\\''")}'
+      `;
+      const proc = spawn('sh', ['-c', script], {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-    }
+
+      let stderr = '';
+      proc.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(stderr || 'Authentication failed or cancelled'));
+      });
+
+      proc.on('error', reject);
+
+      setTimeout(() => {
+        proc.kill();
+        reject(new Error('Timeout waiting for admin privileges'));
+      }, 60000);
+    });
+  }
+
+  // 2. Try kdialog (KDE)
+  if (await commandExists('kdialog')) {
+    return new Promise((resolve, reject) => {
+      const script = `
+        PASSWORD=$(kdialog --password "EnsoAI CLI 安装需要管理员权限" 2>/dev/null)
+        if [ -z "$PASSWORD" ]; then
+          exit 1
+        fi
+        echo "$PASSWORD" | sudo -S sh -c '${shellCommand.replace(/'/g, "'\\''")}'
+      `;
+      const proc = spawn('sh', ['-c', script], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stderr = '';
+      proc.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(stderr || 'Authentication failed or cancelled'));
+      });
+
+      proc.on('error', reject);
+
+      setTimeout(() => {
+        proc.kill();
+        reject(new Error('Timeout waiting for admin privileges'));
+      }, 60000);
+    });
+  }
+
+  // 3. Fallback to pkexec (requires polkit agent running)
+  return new Promise((resolve, reject) => {
+    const proc = spawn('pkexec', ['sh', '-c', shellCommand], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     let stderr = '';
     proc.stderr?.on('data', (data) => {
@@ -31,17 +125,12 @@ function runWithAdminPrivileges(shellCommand: string): Promise<void> {
     });
 
     proc.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        const tool = process.platform === 'darwin' ? 'osascript' : 'pkexec';
-        reject(new Error(stderr || `${tool} exited with code ${code}`));
-      }
+      if (code === 0) resolve();
+      else reject(new Error(stderr || `pkexec exited with code ${code}`));
     });
 
     proc.on('error', reject);
 
-    // Timeout after 60 seconds
     setTimeout(() => {
       proc.kill();
       reject(new Error('Timeout waiting for admin privileges'));
