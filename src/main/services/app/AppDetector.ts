@@ -9,6 +9,7 @@ import { AppCategory, type DetectedApp } from '@shared/types';
 const execAsync = promisify(exec);
 const isWindows = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
+const isLinux = process.platform === 'linux';
 
 interface KnownApp {
   name: string;
@@ -22,6 +23,15 @@ interface WindowsApp {
   id: string; // Used as bundleId equivalent
   category: AppCategory;
   exePaths: string[]; // Possible executable paths
+}
+
+// Linux app detection info
+interface LinuxApp {
+  name: string;
+  id: string; // Used as bundleId equivalent
+  category: AppCategory;
+  commands: string[]; // Possible command names (checked via 'which')
+  desktopFile?: string; // Optional .desktop file name for icon
 }
 
 export class AppDetector {
@@ -315,6 +325,225 @@ export class AppDetector {
     ];
   })();
 
+  // Linux known apps
+  private static linuxApps: LinuxApp[] = [
+    // Terminals
+    {
+      name: 'GNOME Terminal',
+      id: 'org.gnome.Terminal',
+      category: AppCategory.Terminal,
+      commands: ['gnome-terminal'],
+      desktopFile: 'org.gnome.Terminal.desktop',
+    },
+    {
+      name: 'Konsole',
+      id: 'org.kde.konsole',
+      category: AppCategory.Terminal,
+      commands: ['konsole'],
+      desktopFile: 'org.kde.konsole.desktop',
+    },
+    {
+      name: 'Alacritty',
+      id: 'org.alacritty',
+      category: AppCategory.Terminal,
+      commands: ['alacritty'],
+      desktopFile: 'Alacritty.desktop',
+    },
+    {
+      name: 'Kitty',
+      id: 'net.kovidgoyal.kitty',
+      category: AppCategory.Terminal,
+      commands: ['kitty'],
+      desktopFile: 'kitty.desktop',
+    },
+    {
+      name: 'Warp',
+      id: 'dev.warp.Warp',
+      category: AppCategory.Terminal,
+      commands: ['warp-terminal', 'warp'],
+      desktopFile: 'dev.warp.Warp.desktop',
+    },
+    {
+      name: 'Ghostty',
+      id: 'com.mitchellh.ghostty',
+      category: AppCategory.Terminal,
+      commands: ['ghostty'],
+      desktopFile: 'com.mitchellh.ghostty.desktop',
+    },
+    {
+      name: 'Tilix',
+      id: 'com.gexperts.Tilix',
+      category: AppCategory.Terminal,
+      commands: ['tilix'],
+      desktopFile: 'com.gexperts.Tilix.desktop',
+    },
+    {
+      name: 'Terminator',
+      id: 'terminator',
+      category: AppCategory.Terminal,
+      commands: ['terminator'],
+      desktopFile: 'terminator.desktop',
+    },
+    {
+      name: 'xterm',
+      id: 'xterm',
+      category: AppCategory.Terminal,
+      commands: ['xterm'],
+    },
+
+    // Editors
+    {
+      name: 'VS Code',
+      id: 'com.microsoft.VSCode',
+      category: AppCategory.Editor,
+      commands: ['code'],
+      desktopFile: 'code.desktop',
+    },
+    {
+      name: 'VSCodium',
+      id: 'com.vscodium.codium',
+      category: AppCategory.Editor,
+      commands: ['codium'],
+      desktopFile: 'codium.desktop',
+    },
+    {
+      name: 'Cursor',
+      id: 'com.todesktop.230313mzl4w4u92',
+      category: AppCategory.Editor,
+      commands: ['cursor'],
+      desktopFile: 'cursor.desktop',
+    },
+    {
+      name: 'Zed',
+      id: 'dev.zed.Zed',
+      category: AppCategory.Editor,
+      commands: ['zed', 'zedit'],
+      desktopFile: 'dev.zed.Zed.desktop',
+    },
+    {
+      name: 'Sublime Text',
+      id: 'com.sublimetext.4',
+      category: AppCategory.Editor,
+      commands: ['subl', 'sublime_text'],
+      desktopFile: 'sublime_text.desktop',
+    },
+    {
+      name: 'Atom',
+      id: 'io.atom.Atom',
+      category: AppCategory.Editor,
+      commands: ['atom'],
+      desktopFile: 'atom.desktop',
+    },
+    {
+      name: 'Gedit',
+      id: 'org.gnome.gedit',
+      category: AppCategory.Editor,
+      commands: ['gedit'],
+      desktopFile: 'org.gnome.gedit.desktop',
+    },
+    {
+      name: 'Kate',
+      id: 'org.kde.kate',
+      category: AppCategory.Editor,
+      commands: ['kate'],
+      desktopFile: 'org.kde.kate.desktop',
+    },
+    {
+      name: 'Vim',
+      id: 'vim',
+      category: AppCategory.Editor,
+      commands: ['gvim', 'vim'],
+    },
+    {
+      name: 'Emacs',
+      id: 'org.gnu.emacs',
+      category: AppCategory.Editor,
+      commands: ['emacs'],
+      desktopFile: 'emacs.desktop',
+    },
+
+    // JetBrains IDEs
+    {
+      name: 'IntelliJ IDEA',
+      id: 'com.jetbrains.intellij',
+      category: AppCategory.Editor,
+      commands: ['idea', 'intellij-idea-ultimate', 'intellij-idea-community'],
+      desktopFile: 'jetbrains-idea.desktop',
+    },
+    {
+      name: 'WebStorm',
+      id: 'com.jetbrains.WebStorm',
+      category: AppCategory.Editor,
+      commands: ['webstorm'],
+      desktopFile: 'jetbrains-webstorm.desktop',
+    },
+    {
+      name: 'PyCharm',
+      id: 'com.jetbrains.pycharm',
+      category: AppCategory.Editor,
+      commands: ['pycharm', 'pycharm-professional', 'pycharm-community'],
+      desktopFile: 'jetbrains-pycharm.desktop',
+    },
+    {
+      name: 'CLion',
+      id: 'com.jetbrains.CLion',
+      category: AppCategory.Editor,
+      commands: ['clion'],
+      desktopFile: 'jetbrains-clion.desktop',
+    },
+    {
+      name: 'GoLand',
+      id: 'com.jetbrains.goland',
+      category: AppCategory.Editor,
+      commands: ['goland'],
+      desktopFile: 'jetbrains-goland.desktop',
+    },
+    {
+      name: 'RustRover',
+      id: 'com.jetbrains.rustrover',
+      category: AppCategory.Editor,
+      commands: ['rustrover'],
+      desktopFile: 'jetbrains-rustrover.desktop',
+    },
+
+    // System - File Managers
+    {
+      name: 'Files',
+      id: 'org.gnome.Nautilus',
+      category: AppCategory.Finder,
+      commands: ['nautilus'],
+      desktopFile: 'org.gnome.Nautilus.desktop',
+    },
+    {
+      name: 'Dolphin',
+      id: 'org.kde.dolphin',
+      category: AppCategory.Finder,
+      commands: ['dolphin'],
+      desktopFile: 'org.kde.dolphin.desktop',
+    },
+    {
+      name: 'Thunar',
+      id: 'thunar',
+      category: AppCategory.Finder,
+      commands: ['thunar'],
+      desktopFile: 'thunar.desktop',
+    },
+    {
+      name: 'Nemo',
+      id: 'nemo',
+      category: AppCategory.Finder,
+      commands: ['nemo'],
+      desktopFile: 'nemo.desktop',
+    },
+    {
+      name: 'PCManFM',
+      id: 'pcmanfm',
+      category: AppCategory.Finder,
+      commands: ['pcmanfm'],
+      desktopFile: 'pcmanfm.desktop',
+    },
+  ];
+
   private detectedApps: DetectedApp[] = [];
   private initialized = false;
 
@@ -331,7 +560,11 @@ export class AppDetector {
       return this.detectMacApps();
     }
 
-    // Linux: return empty for now
+    if (isLinux) {
+      return this.detectLinuxApps();
+    }
+
+    // Unknown platform
     this.initialized = true;
     return [];
   }
@@ -435,6 +668,34 @@ export class AppDetector {
     return detected;
   }
 
+  private async detectLinuxApps(): Promise<DetectedApp[]> {
+    const detected: DetectedApp[] = [];
+
+    for (const app of AppDetector.linuxApps) {
+      for (const command of app.commands) {
+        try {
+          const { stdout } = await execAsync(`which ${command}`, { timeout: 3000 });
+          const resolvedPath = stdout.trim();
+          if (resolvedPath) {
+            detected.push({
+              name: app.name,
+              bundleId: app.id,
+              category: app.category,
+              path: resolvedPath,
+            });
+            break; // Found this app, move to next
+          }
+        } catch {
+          // Command not found, try next
+        }
+      }
+    }
+
+    this.detectedApps = detected;
+    this.initialized = true;
+    return detected;
+  }
+
   async openPath(
     path: string,
     bundleId: string,
@@ -467,6 +728,37 @@ export class AppDetector {
         await execAsync(
           `powershell -Command "Start-Process -FilePath '${escapedExe}' -ArgumentList '${pathArg}'"`
         );
+      }
+    } else if (isLinux) {
+      // Linux: execute command directly with path as argument
+      const escapedPath = path.replace(/"/g, '\\"');
+
+      if (detectedApp.category === AppCategory.Terminal) {
+        // Terminal apps: open in the specified directory
+        // Different terminals have different ways to set working directory
+        const command = detectedApp.path;
+        if (command.includes('gnome-terminal')) {
+          await execAsync(`"${command}" --working-directory="${escapedPath}"`);
+        } else if (command.includes('konsole')) {
+          await execAsync(`"${command}" --workdir "${escapedPath}"`);
+        } else if (command.includes('alacritty')) {
+          await execAsync(`"${command}" --working-directory "${escapedPath}"`);
+        } else if (command.includes('kitty')) {
+          await execAsync(`"${command}" --directory "${escapedPath}"`);
+        } else if (command.includes('tilix')) {
+          await execAsync(`"${command}" --working-directory="${escapedPath}"`);
+        } else if (command.includes('terminator')) {
+          await execAsync(`"${command}" --working-directory="${escapedPath}"`);
+        } else {
+          // Generic fallback: try to cd and open
+          await execAsync(`cd "${escapedPath}" && "${command}"`);
+        }
+      } else if (detectedApp.category === AppCategory.Finder) {
+        // File managers: open directory
+        await execAsync(`"${detectedApp.path}" "${escapedPath}"`);
+      } else {
+        // Editors and other apps: pass path as argument
+        await execAsync(`"${detectedApp.path}" "${escapedPath}"`);
       }
     } else {
       // macOS: use open command or direct CLI
