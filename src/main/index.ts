@@ -8,7 +8,6 @@ import { cleanupAllResources, registerIpcHandlers } from './ipc';
 import { checkGitInstalled } from './services/git/checkGit';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
-import { autoUpdaterService } from './services/updater/AutoUpdater';
 import { createMainWindow } from './windows/MainWindow';
 
 let mainWindow: BrowserWindow | null = null;
@@ -138,6 +137,17 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('gtk-version', gtkVersion);
 }
 
+async function initAutoUpdater(window: BrowserWindow): Promise<void> {
+  // Linux deb/rpm: avoid loading electron-updater (it can trigger GTK crashes on some systems).
+  // AppImage uses APPIMAGE env var, where auto-update is expected to work.
+  if (process.platform === 'linux' && !process.env.APPIMAGE) {
+    return;
+  }
+
+  const { autoUpdaterService } = await import('./services/updater/AutoUpdater');
+  autoUpdaterService.init(window);
+}
+
 async function init(): Promise<void> {
   // Check Git installation
   const gitInstalled = await checkGitInstalled();
@@ -174,7 +184,7 @@ app.whenReady().then(async () => {
   });
 
   // Initialize auto-updater
-  autoUpdaterService.init(mainWindow);
+  await initAutoUpdater(mainWindow);
 
   const handleNewWindow = () => {
     createMainWindow();
