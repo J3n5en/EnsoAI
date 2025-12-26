@@ -46,75 +46,50 @@ async function runWithAdminPrivileges(shellCommand: string): Promise<void> {
     });
   }
 
-  // Linux: try multiple methods
-  // 1. Try zenity (GTK dialog, works on most DEs including XFCE)
-  // Note: Use --entry --hide-text instead of --password for better compatibility with zenity 4.x
-  if (await commandExists('zenity')) {
-    return new Promise((resolve, reject) => {
-      const script = `
-        PASSWORD=$(zenity --entry --hide-text --title="EnsoAI CLI" --text="请输入密码以安装 CLI:" 2>/dev/null)
-        if [ -z "$PASSWORD" ]; then
-          exit 1
-        fi
-        echo "$PASSWORD" | sudo -S sh -c '${shellCommand.replace(/'/g, "'\\''")}'
-      `;
-      const proc = spawn('sh', ['-c', script], {
-        stdio: ['ignore', 'pipe', 'pipe'],
+  // Linux: try multiple methods using terminal emulators
+  // This is more reliable than zenity/kdialog which may have compatibility issues
+
+  // Find available terminal emulator
+  const terminals = [
+    { cmd: 'xfce4-terminal', args: ['-e'] },
+    { cmd: 'gnome-terminal', args: ['--'] },
+    { cmd: 'konsole', args: ['-e'] },
+    { cmd: 'xterm', args: ['-e'] },
+  ];
+
+  for (const term of terminals) {
+    if (await commandExists(term.cmd)) {
+      return new Promise((resolve, reject) => {
+        // Create a script that runs sudo and signals completion
+        const successMarker = `/tmp/enso-cli-install-success-${Date.now()}`;
+        const sudoScript = `sudo sh -c '${shellCommand.replace(/'/g, "'\\''")}' && touch "${successMarker}"; read -p "按 Enter 关闭此窗口..."`;
+
+        const proc = spawn(term.cmd, [...term.args, 'sh', '-c', sudoScript], {
+          stdio: 'ignore',
+          detached: true,
+        });
+
+        proc.unref();
+
+        // Poll for success marker
+        let attempts = 0;
+        const maxAttempts = 120; // 60 seconds
+        const checkInterval = setInterval(() => {
+          attempts++;
+          if (existsSync(successMarker)) {
+            clearInterval(checkInterval);
+            unlinkSync(successMarker);
+            resolve();
+          } else if (attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            reject(new Error('安装超时或已取消'));
+          }
+        }, 500);
       });
-
-      let stderr = '';
-      proc.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(stderr || 'Authentication failed or cancelled'));
-      });
-
-      proc.on('error', reject);
-
-      setTimeout(() => {
-        proc.kill();
-        reject(new Error('Timeout waiting for admin privileges'));
-      }, 60000);
-    });
+    }
   }
 
-  // 2. Try kdialog (KDE)
-  if (await commandExists('kdialog')) {
-    return new Promise((resolve, reject) => {
-      const script = `
-        PASSWORD=$(kdialog --password "EnsoAI CLI 安装需要管理员权限" 2>/dev/null)
-        if [ -z "$PASSWORD" ]; then
-          exit 1
-        fi
-        echo "$PASSWORD" | sudo -S sh -c '${shellCommand.replace(/'/g, "'\\''")}'
-      `;
-      const proc = spawn('sh', ['-c', script], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let stderr = '';
-      proc.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(stderr || 'Authentication failed or cancelled'));
-      });
-
-      proc.on('error', reject);
-
-      setTimeout(() => {
-        proc.kill();
-        reject(new Error('Timeout waiting for admin privileges'));
-      }, 60000);
-    });
-  }
-
-  // 3. Fallback to pkexec (requires polkit agent running)
+  // Fallback to pkexec (requires polkit agent running)
   return new Promise((resolve, reject) => {
     const proc = spawn('pkexec', ['sh', '-c', shellCommand], {
       stdio: ['ignore', 'pipe', 'pipe'],
