@@ -160,6 +160,8 @@ export type EditorRenderLineHighlight = 'none' | 'gutter' | 'line' | 'all';
 export type EditorAutoClosingBrackets = 'always' | 'languageDefined' | 'beforeWhitespace' | 'never';
 export type EditorAutoClosingQuotes = 'always' | 'languageDefined' | 'beforeWhitespace' | 'never';
 
+export type EditorAutoSave = 'off' | 'afterDelay' | 'onFocusChange' | 'onWindowChange';
+
 export interface EditorSettings {
   // Display
   minimapEnabled: boolean;
@@ -187,6 +189,9 @@ export interface EditorSettings {
   // Editing
   autoClosingBrackets: EditorAutoClosingBrackets;
   autoClosingQuotes: EditorAutoClosingQuotes;
+  // Auto Save
+  autoSave: EditorAutoSave;
+  autoSaveDelay: number;
 }
 
 export const defaultEditorSettings: EditorSettings = {
@@ -216,6 +221,9 @@ export const defaultEditorSettings: EditorSettings = {
   // Editing
   autoClosingBrackets: 'languageDefined',
   autoClosingQuotes: 'languageDefined',
+  // Auto Save
+  autoSave: 'off',
+  autoSaveDelay: 1000,
 };
 
 export const defaultTerminalKeybindings: TerminalKeybindings = {

@@ -75,6 +75,47 @@ monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
 
 type Monaco = typeof monaco;
 
+// Ref-based debounced save to avoid closure issues
+// Returns: trigger function, cancel function, and pending check function
+function useDebouncedSave(delay: number) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pathRef = useRef<string | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const trigger = useCallback(
+    (path: string, callback: (path: string) => void) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      pathRef.current = path;
+      timeoutRef.current = setTimeout(() => {
+        if (pathRef.current) {
+          callback(pathRef.current);
+        }
+      }, delay);
+    },
+    [delay]
+  );
+
+  const cancel = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    pathRef.current = null;
+  }, []);
+
+  return { trigger, cancel };
+}
+
 const CUSTOM_THEME_NAME = 'enso-theme';
 
 // Define Monaco theme from terminal theme
@@ -125,7 +166,7 @@ interface EditorAreaProps {
   onTabClick: (path: string) => void;
   onTabClose: (path: string) => void;
   onTabReorder: (fromIndex: number, toIndex: number) => void;
-  onContentChange: (path: string, content: string) => void;
+  onContentChange: (path: string, content: string, isDirty?: boolean) => void;
   onViewStateChange: (path: string, viewState: unknown) => void;
   onSave: (path: string) => void;
   onClearPendingCursor: () => void;
@@ -149,6 +190,52 @@ export function EditorArea({
   const monacoRef = useRef<Monaco | null>(null);
   const { terminalTheme, editorSettings } = useSettingsStore();
   const themeDefinedRef = useRef(false);
+  const hasPendingAutoSaveRef = useRef(false);
+
+  // Auto save: Debounced save for 'afterDelay' mode
+  // Use ref-based debounce to avoid closure issues with activeTabPath
+  const { trigger: triggerDebouncedSave } = useDebouncedSave(editorSettings.autoSaveDelay);
+
+  // Auto save: Save on focus change (when editor loses focus)
+  useEffect(() => {
+    const handleBlur = () => {
+      if (
+        activeTabPath &&
+        editorSettings.autoSave === 'onFocusChange' &&
+        hasPendingAutoSaveRef.current
+      ) {
+        onSave(activeTabPath);
+        hasPendingAutoSaveRef.current = false;
+      }
+    };
+
+    const editor = editorRef.current;
+    let disposable: monaco.IDisposable | undefined;
+    if (editor) {
+      disposable = editor.onDidBlurEditorText(handleBlur);
+    }
+
+    return () => {
+      disposable?.dispose();
+    };
+  }, [activeTabPath, editorSettings.autoSave, onSave]);
+
+  // Auto save: Save on window focus change
+  useEffect(() => {
+    const handleWindowBlur = () => {
+      if (
+        activeTabPath &&
+        editorSettings.autoSave === 'onWindowChange' &&
+        hasPendingAutoSaveRef.current
+      ) {
+        onSave(activeTabPath);
+        hasPendingAutoSaveRef.current = false;
+      }
+    };
+
+    window.addEventListener('blur', handleWindowBlur);
+    return () => window.removeEventListener('blur', handleWindowBlur);
+  }, [activeTabPath, editorSettings.autoSave, onSave]);
 
   // Define custom theme on mount and when terminal theme changes
   useEffect(() => {
@@ -197,10 +284,29 @@ export function EditorArea({
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
       if (activeTabPath && value !== undefined) {
-        onContentChange(activeTabPath, value);
+        const autoSaveEnabled = editorSettings.autoSave !== 'off';
+        // Show dirty indicator when auto save is off or when it triggers on focus/window change
+        const shouldShowDirty =
+          !autoSaveEnabled ||
+          editorSettings.autoSave === 'onFocusChange' ||
+          editorSettings.autoSave === 'onWindowChange';
+        onContentChange(activeTabPath, value, shouldShowDirty);
+
+        // Mark as pending for focus/window change modes
+        if (autoSaveEnabled) {
+          hasPendingAutoSaveRef.current = true;
+        }
+
+        // Trigger auto save based on mode
+        if (editorSettings.autoSave === 'afterDelay') {
+          triggerDebouncedSave(activeTabPath, (path) => {
+            onSave(path);
+            hasPendingAutoSaveRef.current = false;
+          });
+        }
       }
     },
-    [activeTabPath, onContentChange]
+    [activeTabPath, onContentChange, editorSettings.autoSave, triggerDebouncedSave, onSave]
   );
 
   const handleTabClose = useCallback(
