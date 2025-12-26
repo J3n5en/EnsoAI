@@ -460,6 +460,7 @@ export const zhTranslations: Record<string, string> = {
   'Mention Shortcut': '提及快捷键',
   'Send selected code range to Claude Code': '将选中的代码范围发送到 Claude Code',
   'Sent to Claude Code': '已发送到 Claude Code',
+  'Send to Claude': '发送到 Claude',
   lines: '行',
 };
 
