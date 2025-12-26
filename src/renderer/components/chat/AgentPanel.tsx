@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
+import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentTerminal } from './AgentTerminal';
 import { type Session, SessionBar } from './SessionBar';
 
@@ -8,6 +9,7 @@ interface AgentPanelProps {
   repoPath: string; // repository path (workspace identifier)
   cwd: string; // current worktree path
   isActive?: boolean;
+  onSwitchWorktree?: (worktreePath: string) => void;
 }
 
 const SESSIONS_STORAGE_PREFIX = 'enso-chat-sessions:';
@@ -109,9 +111,10 @@ function saveSessions(
   );
 }
 
-export function AgentPanel({ repoPath, cwd, isActive = false }: AgentPanelProps) {
+export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }: AgentPanelProps) {
   const { agentSettings, customAgents, agentKeybindings } = useSettingsStore();
   const defaultAgentId = useMemo(() => getDefaultAgentId(agentSettings), [agentSettings]);
+  const { setAgentCount, registerAgentCloseHandler } = useWorktreeActivityStore();
 
   const [state, setState] = useState(() => {
     const loaded = loadSessions(repoPath);
@@ -157,6 +160,58 @@ export function AgentPanel({ repoPath, cwd, isActive = false }: AgentPanelProps)
   useEffect(() => {
     saveSessions(repoPath, allSessions, activeIds);
   }, [repoPath, allSessions, activeIds]);
+
+  // Sync initialized agent session counts to worktree activity store
+  useEffect(() => {
+    // Group initialized sessions by worktree path and update counts
+    const countsByWorktree = new Map<string, number>();
+    for (const session of allSessions) {
+      if (session.initialized) {
+        countsByWorktree.set(session.cwd, (countsByWorktree.get(session.cwd) || 0) + 1);
+      }
+    }
+    for (const [worktreePath, count] of countsByWorktree) {
+      setAgentCount(worktreePath, count);
+    }
+  }, [allSessions, setAgentCount]);
+
+  // Register close handler for external close requests
+  useEffect(() => {
+    const handleCloseAll = (worktreePath: string) => {
+      setState((prev) => {
+        // Close all initialized sessions for this worktree
+        const initializedSessions = prev.sessions.filter(
+          (s) => s.cwd === worktreePath && s.initialized
+        );
+        if (initializedSessions.length === 0) return prev;
+
+        // Keep uninitialized sessions, remove initialized ones
+        const newSessions = prev.sessions.filter((s) => s.cwd !== worktreePath || !s.initialized);
+        const newActiveIds = { ...prev.activeIds };
+
+        // Update active id if needed
+        const remainingForWorktree = newSessions.filter((s) => s.cwd === worktreePath);
+        if (remainingForWorktree.length > 0) {
+          newActiveIds[worktreePath] = remainingForWorktree[0].id;
+        } else {
+          // Create a new empty session only if no sessions remain
+          const newSession = createSession(worktreePath, defaultAgentId, customAgents);
+          // Explicitly set count to 0 since new session is not initialized
+          setAgentCount(worktreePath, 0);
+          return {
+            sessions: [...newSessions, newSession],
+            activeIds: { ...newActiveIds, [worktreePath]: newSession.id },
+          };
+        }
+
+        // Explicitly set count to 0 since we removed all initialized sessions
+        setAgentCount(worktreePath, 0);
+        return { sessions: newSessions, activeIds: newActiveIds };
+      });
+    };
+
+    return registerAgentCloseHandler(handleCloseAll);
+  }, [registerAgentCloseHandler, defaultAgentId, customAgents, setAgentCount]);
 
   const handleNewSession = useCallback(() => {
     const newSession = createSession(cwd, defaultAgentId, customAgents);
@@ -209,6 +264,18 @@ export function AgentPanel({ repoPath, cwd, isActive = false }: AgentPanelProps)
       return { ...prev, activeIds: { ...prev.activeIds, [session.cwd]: id } };
     });
   }, []);
+
+  // 监听通知点击，激活对应 session 并切换 worktree
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.notification.onClick((sessionId) => {
+      const session = state.sessions.find((s) => s.id === sessionId);
+      if (session && session.cwd !== cwd && onSwitchWorktree) {
+        onSwitchWorktree(session.cwd);
+      }
+      handleSelectSession(sessionId);
+    });
+    return unsubscribe;
+  }, [handleSelectSession, state.sessions, cwd, onSwitchWorktree]);
 
   const handleNextSession = useCallback(() => {
     setState((prev) => {

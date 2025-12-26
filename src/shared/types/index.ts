@@ -6,5 +6,4 @@ export * from './git';
 export * from './ipc';
 export * from './shell';
 export * from './terminal';
-export * from './workspace';
 export * from './worktree';

@@ -1,8 +1,8 @@
 name: Code Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, edited]
+  pull_request_target:
+    types: [opened, synchronize, ready_for_review, reopened]
 
 jobs:
   code-review:
@@ -18,6 +18,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
 
       - name: Hide Previous Review Comments
         uses: int128/hide-comment-action@v1
@@ -29,7 +33,9 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+          allowed_non_write_users: '*'
           track_progress: true
           use_sticky_comment: false
           settings: |
@@ -37,6 +43,7 @@ jobs:
               "env": {
                 "ANTHROPIC_BASE_URL": "${{ secrets.ANTHROPIC_BASE_URL }}",
                 "ANTHROPIC_AUTH_TOKEN": "${{ secrets.ANTHROPIC_AUTH_TOKEN }}",
+                "ANTHROPIC_MODEL": "claude-opus-4-5-20251101",
                 "API_TIMEOUT_MS": "3000000",
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
               }

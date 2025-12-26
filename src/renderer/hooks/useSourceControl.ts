@@ -14,14 +14,19 @@ export function useFileChanges(workdir: string | null, isActive = true) {
   });
 }
 
-export function useFileDiff(workdir: string | null, path: string | null, staged: boolean) {
+export function useFileDiff(
+  workdir: string | null,
+  path: string | null,
+  staged: boolean,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: ['git', 'file-diff', workdir, path, staged],
     queryFn: async () => {
       if (!workdir || !path) return null;
       return window.electronAPI.git.getFileDiff(workdir, path, staged);
     },
-    enabled: !!workdir && !!path,
+    enabled: (options?.enabled ?? true) && !!workdir && !!path,
   });
 }
 
@@ -64,6 +69,21 @@ export function useGitDiscard() {
       queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', workdir] });
       queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
       queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', workdir] });
+    },
+  });
+}
+
+export function useGitCommit() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ workdir, message }: { workdir: string; message: string }) => {
+      return window.electronAPI.git.commit(workdir, message);
+    },
+    onSuccess: (_, { workdir }) => {
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
     },
   });
 }

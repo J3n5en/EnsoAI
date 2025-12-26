@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
+  CommitFileChange,
   FileChange,
   FileChangeStatus,
   FileDiff,
@@ -45,8 +46,12 @@ export class GitService {
     }));
   }
 
-  async getLog(maxCount = 50): Promise<GitLogEntry[]> {
-    const log = await this.git.log({ maxCount });
+  async getLog(maxCount = 50, skip = 0): Promise<GitLogEntry[]> {
+    const options: string[] = [`--max-count=${maxCount}`];
+    if (skip > 0) {
+      options.push(`--skip=${skip}`);
+    }
+    const log = await this.git.log(options);
     return log.all.map((entry) => ({
       hash: entry.hash,
       date: entry.date,
@@ -219,6 +224,123 @@ export class GitService {
     } else {
       // Restore tracked file
       await this.git.checkout(['--', filePath]);
+    }
+  }
+
+  async showCommit(hash: string): Promise<string> {
+    return this.git.show([hash, '--pretty=format:%H%n%an%n%ae%n%ad%n%s%n%b', '--stat']);
+  }
+
+  async getCommitFiles(hash: string): Promise<CommitFileChange[]> {
+    // Use cat-file to reliably detect merge commits (check parent count)
+    const commitInfo = await this.git.catFile(['-p', hash]);
+    const isMergeCommit = (commitInfo.match(/^parent /gm) ?? []).length >= 2;
+
+    const files: CommitFileChange[] = [];
+
+    if (isMergeCommit) {
+      // Merge commit: use git diff to compare with first parent
+      const mergeDiff = await this.git.diff([`${hash}^1`, hash, '--name-status']);
+      const diffLines = mergeDiff.split('\n').filter((line) => line.trim());
+
+      for (const line of diffLines) {
+        // Match: status (with optional percentage for R/C) and file path(s)
+        // Format: R100\told\tnew or M\tfile or A\tfile
+        const match = line.match(/^([MADRCUX])(\d+)?\t(.+)$/);
+        if (match) {
+          const [, status, , filePath] = match;
+          // For rename/copy with two paths, take the new path
+          const finalPath = filePath.includes('\t') ? filePath.split('\t')[1] : filePath;
+          files.push({
+            path: finalPath,
+            status: status as FileChangeStatus,
+          });
+        }
+      }
+    } else {
+      // Regular commit: use show --name-status
+      const commitShow = await this.git.show([hash, '--name-status', '--pretty=format:%P']);
+      const lines = commitShow.split('\n').filter((line) => line.trim());
+
+      for (const line of lines) {
+        // Match: status (with optional percentage for R/C) and file path(s)
+        const match = line.match(/^([MADRCUX])(\d+)?\t(.+)$/);
+        if (match) {
+          const [, status, , filePath] = match;
+          // For rename/copy with two paths, take the new path
+          const finalPath = filePath.includes('\t') ? filePath.split('\t')[1] : filePath;
+          files.push({
+            path: finalPath,
+            status: status as FileChangeStatus,
+          });
+        }
+      }
+    }
+
+    return files;
+  }
+
+  async checkIgnored(paths: string[]): Promise<Set<string>> {
+    if (paths.length === 0) return new Set();
+    try {
+      // git check-ignore 返回被忽略的文件列表
+      const result = await this.git.checkIgnore(paths);
+      return new Set(result);
+    } catch {
+      // 没有被忽略的文件时会抛出错误（exit code 1）
+      return new Set();
+    }
+  }
+
+  async getCommitDiff(
+    hash: string,
+    filePath: string,
+    status?: FileChangeStatus
+  ): Promise<FileDiff> {
+    let originalContent = '';
+    let modifiedContent = '';
+
+    // Handle different file statuses
+    if (status === 'A') {
+      // Added file: original is empty, get from current commit
+      modifiedContent = await this.git.show([`${hash}:${filePath}`]).catch(() => '');
+      originalContent = '';
+    } else if (status === 'D') {
+      // Deleted file: modified is empty, get from parent commit
+      originalContent = await this.git.show([`${hash}^:${filePath}`]).catch(() => '');
+      modifiedContent = '';
+    } else {
+      // Modified or other: get from both parent and current commit
+      const parentHash = `${hash}^`;
+      originalContent = await this.git.show([`${parentHash}:${filePath}`]).catch(() => '');
+      modifiedContent = await this.git.show([`${hash}:${filePath}`]).catch(() => '');
+    }
+
+    return {
+      path: filePath,
+      original: originalContent,
+      modified: modifiedContent,
+    };
+  }
+
+  async getDiffStats(): Promise<{ insertions: number; deletions: number }> {
+    try {
+      // Get stats for both staged and unstaged changes
+      const output = await this.git.diff(['--shortstat', 'HEAD']);
+      // Output format: " 3 files changed, 10 insertions(+), 5 deletions(-)"
+      // or empty if no changes
+      if (!output.trim()) {
+        return { insertions: 0, deletions: 0 };
+      }
+      const insertionsMatch = output.match(/(\d+)\s+insertion/);
+      const deletionsMatch = output.match(/(\d+)\s+deletion/);
+      return {
+        insertions: insertionsMatch ? Number.parseInt(insertionsMatch[1], 10) : 0,
+        deletions: deletionsMatch ? Number.parseInt(deletionsMatch[1], 10) : 0,
+      };
+    } catch {
+      // Repository might not have HEAD (empty repo) or other issues
+      return { insertions: 0, deletions: 0 };
     }
   }
 }

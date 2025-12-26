@@ -2,6 +2,7 @@ import { Send, Sparkles } from 'lucide-react';
 import type * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useI18n } from '@/i18n';
 
 interface CommitFormProps {
   message: string;
@@ -22,6 +23,7 @@ export function CommitForm({
   isGenerating,
   hasStagedChanges,
 }: CommitFormProps) {
+  const { t } = useI18n();
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -34,14 +36,14 @@ export function CommitForm({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">提交信息</h3>
+        <h3 className="text-sm font-medium">{t('Commit message')}</h3>
       </div>
 
       <Textarea
         value={message}
         onChange={(e) => onMessageChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="描述你的更改..."
+        placeholder={t('Describe your changes...')}
         rows={4}
         className="resize-none"
       />
@@ -55,7 +57,7 @@ export function CommitForm({
             disabled={isGenerating || !hasStagedChanges}
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            {isGenerating ? '生成中...' : 'AI 生成'}
+            {isGenerating ? t('Generating...') : t('Generate with AI')}
           </Button>
         )}
 
@@ -66,7 +68,8 @@ export function CommitForm({
           className="ml-auto"
         >
           <Send className="mr-2 h-4 w-4" />
-          {isCommitting ? '提交中...' : '提交'} <kbd className="ml-2 text-xs opacity-60">⌘⏎</kbd>
+          {isCommitting ? t('Committing...') : t('Commit')}{' '}
+          <kbd className="ml-2 text-xs opacity-60">⌘⏎</kbd>
         </Button>
       </div>
     </div>

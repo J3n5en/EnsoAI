@@ -1,9 +1,9 @@
-import type { GitWorktree, WorkspaceRecord, WorktreeCreateOptions } from '@shared/types';
+import type { GitWorktree, WorktreeCreateOptions } from '@shared/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActionPanel } from './components/layout/ActionPanel';
 import { MainContent } from './components/layout/MainContent';
-import { WorkspaceSidebar } from './components/layout/WorkspaceSidebar';
+import { RepositorySidebar } from './components/layout/RepositorySidebar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
 import { SettingsDialog } from './components/settings/SettingsDialog';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -22,8 +22,8 @@ import { useWorktreeCreate, useWorktreeList, useWorktreeRemove } from './hooks/u
 import { matchesKeybinding } from './lib/keybinding';
 import { useNavigationStore } from './stores/navigation';
 import { useSettingsStore } from './stores/settings';
-import { useWorkspaceStore } from './stores/workspace';
 import { useWorktreeStore } from './stores/worktree';
+import { useI18n } from './i18n';
 
 // Animation config
 const panelTransition = { type: 'spring' as const, stiffness: 400, damping: 30 };
@@ -36,9 +36,9 @@ interface Repository {
 }
 
 // Panel size constraints
-const WORKSPACE_MIN = 200;
-const WORKSPACE_MAX = 400;
-const WORKSPACE_DEFAULT = 240;
+const REPOSITORY_MIN = 200;
+const REPOSITORY_MAX = 400;
+const REPOSITORY_DEFAULT = 240;
 const WORKTREE_MIN = 200;
 const WORKTREE_MAX = 400;
 const WORKTREE_DEFAULT = 280;
@@ -66,7 +66,24 @@ const getStoredTabMap = (): Record<string, TabId> => {
   return {};
 };
 
+// Normalize path for comparison (handles Windows case-insensitivity and trailing slashes)
+const normalizePath = (path: string): string => {
+  // Remove trailing slashes/backslashes
+  let normalized = path.replace(/[\\/]+$/, '');
+  // On Windows, normalize to lowercase for case-insensitive comparison
+  if (navigator.platform.startsWith('Win')) {
+    normalized = normalized.toLowerCase();
+  }
+  return normalized;
+};
+
+// Check if two paths are equal (considering OS-specific rules)
+const pathsEqual = (path1: string, path2: string): boolean => {
+  return normalizePath(path1) === normalizePath(path2);
+};
+
 export default function App() {
+  const { t } = useI18n();
   // Per-worktree tab state: { [worktreePath]: TabId }
   const [worktreeTabMap, setWorktreeTabMap] = useState<Record<string, TabId>>(getStoredTabMap);
   const [activeTab, setActiveTab] = useState<TabId>('chat');
@@ -75,14 +92,14 @@ export default function App() {
   const [activeWorktree, setActiveWorktree] = useState<GitWorktree | null>(null);
 
   // Panel sizes and collapsed states - initialize from localStorage
-  const [workspaceWidth, setWorkspaceWidth] = useState(() =>
-    getStoredNumber('enso-workspace-width', WORKSPACE_DEFAULT)
+  const [repositoryWidth, setRepositoryWidth] = useState(() =>
+    getStoredNumber('enso-repository-width', REPOSITORY_DEFAULT)
   );
   const [worktreeWidth, setWorktreeWidth] = useState(() =>
     getStoredNumber('enso-worktree-width', WORKTREE_DEFAULT)
   );
-  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(() =>
-    getStoredBoolean('enso-workspace-collapsed', false)
+  const [repositoryCollapsed, setRepositoryCollapsed] = useState(() =>
+    getStoredBoolean('enso-repository-collapsed', false)
   );
   const [worktreeCollapsed, setWorktreeCollapsed] = useState(() =>
     getStoredBoolean('enso-worktree-collapsed', false)
@@ -98,11 +115,10 @@ export default function App() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   // Resize state
-  const [resizing, setResizing] = useState<'workspace' | 'worktree' | null>(null);
+  const [resizing, setResizing] = useState<'repository' | 'worktree' | null>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
 
-  const { workspaces, currentWorkspace, setCurrentWorkspace, setWorkspaces } = useWorkspaceStore();
   const worktreeError = useWorktreeStore((s) => s.error);
 
   // Initialize settings store (for theme hydration)
@@ -210,16 +226,16 @@ export default function App() {
 
   // Save panel sizes to localStorage
   useEffect(() => {
-    localStorage.setItem('enso-workspace-width', String(workspaceWidth));
-  }, [workspaceWidth]);
+    localStorage.setItem('enso-repository-width', String(repositoryWidth));
+  }, [repositoryWidth]);
 
   useEffect(() => {
     localStorage.setItem('enso-worktree-width', String(worktreeWidth));
   }, [worktreeWidth]);
 
   useEffect(() => {
-    localStorage.setItem('enso-workspace-collapsed', String(workspaceCollapsed));
-  }, [workspaceCollapsed]);
+    localStorage.setItem('enso-repository-collapsed', String(repositoryCollapsed));
+  }, [repositoryCollapsed]);
 
   useEffect(() => {
     localStorage.setItem('enso-worktree-collapsed', String(worktreeCollapsed));
@@ -232,13 +248,13 @@ export default function App() {
 
   // Resize handlers
   const handleResizeStart = useCallback(
-    (panel: 'workspace' | 'worktree') => (e: React.MouseEvent) => {
+    (panel: 'repository' | 'worktree') => (e: React.MouseEvent) => {
       e.preventDefault();
       setResizing(panel);
       startXRef.current = e.clientX;
-      startWidthRef.current = panel === 'workspace' ? workspaceWidth : worktreeWidth;
+      startWidthRef.current = panel === 'repository' ? repositoryWidth : worktreeWidth;
     },
-    [workspaceWidth, worktreeWidth]
+    [repositoryWidth, worktreeWidth]
   );
 
   useEffect(() => {
@@ -248,8 +264,8 @@ export default function App() {
       const delta = e.clientX - startXRef.current;
       const newWidth = startWidthRef.current + delta;
 
-      if (resizing === 'workspace') {
-        setWorkspaceWidth(Math.max(WORKSPACE_MIN, Math.min(WORKSPACE_MAX, newWidth)));
+      if (resizing === 'repository') {
+        setRepositoryWidth(Math.max(REPOSITORY_MIN, Math.min(REPOSITORY_MAX, newWidth)));
       } else {
         setWorktreeWidth(Math.max(WORKTREE_MIN, Math.min(WORKTREE_MAX, newWidth)));
       }
@@ -283,21 +299,6 @@ export default function App() {
   const removeWorktreeMutation = useWorktreeRemove();
   const gitInitMutation = useGitInit();
 
-  // Initialize default workspace if none exists
-  useEffect(() => {
-    if (workspaces.length === 0) {
-      const defaultWorkspace: WorkspaceRecord = {
-        id: 1,
-        name: 'Personal',
-        path: '',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      setWorkspaces([defaultWorkspace]);
-      setCurrentWorkspace(defaultWorkspace);
-    }
-  }, [workspaces.length, setWorkspaces, setCurrentWorkspace]);
-
   // Load saved repositories and selection from localStorage
   useEffect(() => {
     const savedRepos = localStorage.getItem('enso-repositories');
@@ -317,7 +318,7 @@ export default function App() {
 
     const savedWorktreePath = localStorage.getItem('enso-active-worktree');
     if (savedWorktreePath) {
-      // 需要等 worktrees 加载后再设置
+      // Wait for worktrees to load before setting active worktree.
       setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
     }
   }, []);
@@ -327,6 +328,27 @@ export default function App() {
     localStorage.setItem('enso-repositories', JSON.stringify(repos));
     setRepositories(repos);
   }, []);
+
+  // Listen for open path event from CLI (enso command)
+  useEffect(() => {
+    const cleanup = window.electronAPI.app.onOpenPath((rawPath) => {
+      // Normalize the path: remove trailing slashes and any stray quotes (Windows CMD issue)
+      const path = rawPath.replace(/[\\/]+$/, '').replace(/^["']|["']$/g, '');
+      // Check if repo already exists (using path comparison that handles Windows case-insensitivity)
+      const existingRepo = repositories.find((r) => pathsEqual(r.path, path));
+      if (existingRepo) {
+        setSelectedRepo(existingRepo.path);
+      } else {
+        // Handle both forward and back slashes for name extraction
+        const name = path.split(/[\\/]/).pop() || path;
+        const newRepo: Repository = { name, path };
+        const updated = [...repositories, newRepo];
+        saveRepositories(updated);
+        setSelectedRepo(path);
+      }
+    });
+    return cleanup;
+  }, [repositories, saveRepositories]);
 
   // Remove repository from workspace
   const handleRemoveRepository = useCallback(
@@ -372,12 +394,6 @@ export default function App() {
     }
   }, [worktrees, activeWorktree]);
 
-  const _handleSelectWorkspace = (workspace: WorkspaceRecord) => {
-    setCurrentWorkspace(workspace);
-    setSelectedRepo(null);
-    setActiveWorktree(null);
-  };
-
   const handleSelectRepo = (repoPath: string) => {
     setSelectedRepo(repoPath);
     setActiveWorktree(null);
@@ -418,6 +434,17 @@ export default function App() {
     [activeWorktree, activeTab, worktreeTabMap]
   );
 
+  // Handle switching worktree by path (used by notification click)
+  const handleSwitchWorktreePath = useCallback(
+    (worktreePath: string) => {
+      const worktree = worktrees.find((wt) => wt.path === worktreePath);
+      if (worktree) {
+        handleSelectWorktree(worktree);
+      }
+    },
+    [worktrees, handleSelectWorktree]
+  );
+
   const handleAddRepository = async () => {
     try {
       const selectedPath = await window.electronAPI.dialog.openDirectory();
@@ -454,7 +481,7 @@ export default function App() {
         options,
       });
     } finally {
-      // 无论成功失败都刷新分支列表（因为 git worktree add -b 会先创建分支）
+      // Refresh branches on success/failure (git worktree add -b creates branches first).
       refetchBranches();
     }
   };
@@ -468,12 +495,12 @@ export default function App() {
       workdir: selectedRepo,
       options: {
         path: worktree.path,
-        force: worktree.prunable || options?.force, // prunable 或用户选择强制删除
+        force: worktree.prunable || options?.force, // prunable or user-selected force delete
         deleteBranch: options?.deleteBranch,
         branch: worktree.branch || undefined,
       },
     });
-    // 如果删除的是当前选中的，清空选择
+    // Clear selection if the active worktree was removed.
     if (activeWorktree?.path === worktree.path) {
       setActiveWorktree(null);
     }
@@ -494,18 +521,18 @@ export default function App() {
 
   return (
     <div className={`flex h-screen overflow-hidden ${resizing ? 'select-none' : ''}`}>
-      {/* Column 1: Workspace Sidebar */}
+      {/* Column 1: Repository Sidebar */}
       <AnimatePresence initial={false}>
-        {!workspaceCollapsed && (
+        {!repositoryCollapsed && (
           <motion.div
-            key="workspace"
+            key="repository"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: workspaceWidth, opacity: 1 }}
+            animate={{ width: repositoryWidth, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={panelTransition}
             className="relative h-full shrink-0 overflow-hidden"
           >
-            <WorkspaceSidebar
+            <RepositorySidebar
               repositories={repositories}
               selectedRepo={selectedRepo}
               onSelectRepo={handleSelectRepo}
@@ -513,12 +540,12 @@ export default function App() {
               onRemoveRepository={handleRemoveRepository}
               onOpenSettings={() => setSettingsOpen(true)}
               collapsed={false}
-              onCollapse={() => setWorkspaceCollapsed(true)}
+              onCollapse={() => setRepositoryCollapsed(true)}
             />
             {/* Resize handle */}
             <div
               className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
-              onMouseDown={handleResizeStart('workspace')}
+              onMouseDown={handleResizeStart('repository')}
             />
           </motion.div>
         )}
@@ -554,8 +581,8 @@ export default function App() {
               width={worktreeWidth}
               collapsed={false}
               onCollapse={() => setWorktreeCollapsed(true)}
-              workspaceCollapsed={workspaceCollapsed}
-              onExpandWorkspace={() => setWorkspaceCollapsed(false)}
+              repositoryCollapsed={repositoryCollapsed}
+              onExpandRepository={() => setRepositoryCollapsed(false)}
             />
             {/* Resize handle */}
             <div
@@ -570,13 +597,13 @@ export default function App() {
       <MainContent
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        workspaceName={currentWorkspace?.name}
         repoPath={selectedRepo || undefined}
         worktreePath={activeWorktree?.path}
-        workspaceCollapsed={workspaceCollapsed}
+        repositoryCollapsed={repositoryCollapsed}
         worktreeCollapsed={worktreeCollapsed}
-        onExpandWorkspace={() => setWorkspaceCollapsed(false)}
+        onExpandRepository={() => setRepositoryCollapsed(false)}
         onExpandWorktree={() => setWorktreeCollapsed(false)}
+        onSwitchWorktree={handleSwitchWorktreePath}
       />
 
       {/* Global Settings Dialog */}
@@ -586,12 +613,18 @@ export default function App() {
       <ActionPanel
         open={actionPanelOpen}
         onOpenChange={setActionPanelOpen}
-        workspaceCollapsed={workspaceCollapsed}
+        repositoryCollapsed={repositoryCollapsed}
         worktreeCollapsed={worktreeCollapsed}
         projectPath={activeWorktree?.path || selectedRepo || undefined}
-        onToggleWorkspace={() => setWorkspaceCollapsed((prev) => !prev)}
+        repositories={repositories}
+        selectedRepoPath={selectedRepo ?? undefined}
+        worktrees={worktrees}
+        activeWorktreePath={activeWorktree?.path}
+        onToggleRepository={() => setRepositoryCollapsed((prev) => !prev)}
         onToggleWorktree={() => setWorktreeCollapsed((prev) => !prev)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onSwitchRepo={handleSelectRepo}
+        onSwitchWorktree={handleSelectWorktree}
       />
 
       {/* Update Notification */}
@@ -609,8 +642,8 @@ export default function App() {
       >
         <DialogPopup className="sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>确认退出</DialogTitle>
-            <DialogDescription>确定要退出应用吗？</DialogDescription>
+            <DialogTitle>{t('Confirm exit')}</DialogTitle>
+            <DialogDescription>{t('Are you sure you want to exit the app?')}</DialogDescription>
           </DialogHeader>
           <DialogFooter variant="bare">
             <Button
@@ -620,7 +653,7 @@ export default function App() {
                 window.electronAPI.app.confirmClose(false);
               }}
             >
-              取消
+              {t('Cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -629,7 +662,7 @@ export default function App() {
                 window.electronAPI.app.confirmClose(true);
               }}
             >
-              退出
+              {t('Exit')}
             </Button>
           </DialogFooter>
         </DialogPopup>

@@ -1,8 +1,10 @@
 import { List, Plus, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '@/i18n';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
+import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { ShellTerminal } from './ShellTerminal';
 
 interface TerminalTab {
@@ -40,6 +42,7 @@ function getNextName(tabs: TerminalTab[], forCwd: string): string {
 }
 
 export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
+  const { t } = useI18n();
   const [state, setState] = useState<TerminalState>(createInitialState);
   const { tabs, activeIds } = state;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,14 +52,15 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const initializedCwdsRef = useRef<Set<string>>(new Set());
   const terminalKeybindings = useSettingsStore((state) => state.terminalKeybindings);
+  const { setTerminalCount, registerTerminalCloseHandler } = useWorktreeActivityStore();
 
   // Get tabs for current worktree
   const currentTabs = useMemo(() => tabs.filter((t) => t.cwd === cwd), [tabs, cwd]);
   const activeId = cwd ? activeIds[cwd] || null : null;
 
-  // Create initial tab when a new cwd becomes available
+  // Create initial tab only when terminal panel becomes active for this worktree (lazy loading)
   useEffect(() => {
-    if (cwd && !initializedCwdsRef.current.has(cwd)) {
+    if (cwd && isActive && !initializedCwdsRef.current.has(cwd)) {
       initializedCwdsRef.current.add(cwd);
       const defaultTab: TerminalTab = { id: crypto.randomUUID(), name: 'Untitled-1', cwd };
       setState((prev) => ({
@@ -64,7 +68,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
         activeIds: { ...prev.activeIds, [cwd]: defaultTab.id },
       }));
     }
-  }, [cwd]);
+  }, [cwd, isActive]);
 
   // Stable terminal IDs - only append, never reorder (prevents DOM reordering issues with xterm)
   const [terminalIds, setTerminalIds] = useState<string[]>(() => tabs.map((t) => t.id));
@@ -81,6 +85,44 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
       return newIds.length > 0 ? [...filtered, ...newIds] : filtered;
     });
   }, [tabs]);
+
+  // Sync terminal tab counts to worktree activity store
+  useEffect(() => {
+    // Group tabs by worktree path and update counts
+    const countsByWorktree = new Map<string, number>();
+    for (const tab of tabs) {
+      countsByWorktree.set(tab.cwd, (countsByWorktree.get(tab.cwd) || 0) + 1);
+    }
+    for (const [worktreePath, count] of countsByWorktree) {
+      setTerminalCount(worktreePath, count);
+    }
+  }, [tabs, setTerminalCount]);
+
+  // Register close handler for external close requests
+  useEffect(() => {
+    const handleCloseAll = (worktreePath: string) => {
+      setState((prev) => {
+        // Close all tabs for this worktree
+        const tabsToClose = prev.tabs.filter((t) => t.cwd === worktreePath);
+        if (tabsToClose.length === 0) return prev;
+
+        const newTabs = prev.tabs.filter((t) => t.cwd !== worktreePath);
+        const newActiveIds = { ...prev.activeIds };
+        delete newActiveIds[worktreePath];
+
+        // Don't create new tab - let user create manually
+        // Remove from initialized set so next visit will create fresh tab
+        initializedCwdsRef.current.delete(worktreePath);
+
+        // Explicitly set count to 0
+        setTerminalCount(worktreePath, 0);
+
+        return { tabs: newTabs, activeIds: newActiveIds };
+      });
+    };
+
+    return registerTerminalCloseHandler(handleCloseAll);
+  }, [registerTerminalCloseHandler, setTerminalCount]);
 
   const handleNewTab = useCallback(() => {
     if (!cwd) return;
@@ -398,7 +440,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
             type="button"
             onClick={handleNewTab}
             className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            title="新建终端"
+            title={t('New Terminal')}
           >
             <Plus className="h-4 w-4" />
           </button>

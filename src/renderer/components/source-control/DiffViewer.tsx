@@ -10,6 +10,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { useFileDiff } from '@/hooks/useSourceControl';
+import { useI18n } from '@/i18n';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
@@ -92,6 +93,9 @@ interface DiffViewerProps {
   onNextFile?: () => void;
   hasPrevFile?: boolean;
   hasNextFile?: boolean;
+  diff?: { path: string; original: string; modified: string };
+  skipFetch?: boolean;
+  isCommitView?: boolean; // Add flag to indicate commit history view
 }
 
 export function DiffViewer({
@@ -101,16 +105,34 @@ export function DiffViewer({
   onNextFile,
   hasPrevFile = false,
   hasNextFile = false,
+  diff: externalDiff,
+  skipFetch = false,
+  isCommitView = false,
 }: DiffViewerProps) {
-  const { terminalTheme, sourceControlKeybindings } = useSettingsStore();
+  const { t } = useI18n();
+  const { terminalTheme, sourceControlKeybindings, editorSettings } = useSettingsStore();
   const { navigationDirection, setNavigationDirection } = useSourceControlStore();
-  const { data: diff, isLoading } = useFileDiff(
+
+  // In commit view, we don't fetch diff - we use the provided externalDiff
+  const shouldFetch = !skipFetch && !isCommitView;
+
+  const { data: fetchedDiff, isLoading } = useFileDiff(
     rootPath,
     file?.path ?? null,
-    file?.staged ?? false
+    file?.staged ?? false,
+    shouldFetch ? undefined : { enabled: false }
   );
 
+  const diff = externalDiff ?? fetchedDiff;
+
   const editorRef = useRef<DiffEditorInstance | null>(null);
+  const modelsRef = useRef<{
+    original: monaco.editor.ITextModel | null;
+    modified: monaco.editor.ITextModel | null;
+  }>({
+    original: null,
+    modified: null,
+  });
   const [currentDiffIndex, setCurrentDiffIndex] = useState(-1);
   const [lineChanges, setLineChanges] = useState<monaco.editor.ILineChange[]>([]);
   const [boundaryHint, setBoundaryHint] = useState<'top' | 'bottom' | null>(null);
@@ -119,6 +141,14 @@ export function DiffViewer({
 
   // Define theme
   defineMonacoDiffTheme(terminalTheme);
+
+  // Reset internal state (don't dispose models - let @monaco-editor/react handle that)
+  const resetEditorState = useCallback(() => {
+    editorRef.current = null;
+    modelsRef.current.original = null;
+    modelsRef.current.modified = null;
+    decorationsRef.current = [];
+  }, []);
 
   // Highlight current diff range
   const highlightCurrentDiff = useCallback(
@@ -180,6 +210,13 @@ export function DiffViewer({
     (editor: DiffEditorInstance) => {
       editorRef.current = editor;
       hasAutoNavigatedRef.current = false;
+
+      // Track the current models for cleanup
+      const currentModel = editor.getModel();
+      if (currentModel) {
+        modelsRef.current.original = currentModel.original;
+        modelsRef.current.modified = currentModel.modified;
+      }
 
       // Use onDidUpdateDiff to ensure diff is fully computed
       editor.onDidUpdateDiff(() => {
@@ -302,22 +339,23 @@ export function DiffViewer({
   // Reset state when file changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally trigger on file change
   useEffect(() => {
+    // Reset state for new file (don't dispose models - key change will unmount/remount)
     setCurrentDiffIndex(-1);
     setLineChanges([]);
     setBoundaryHint(null);
-    decorationsRef.current = [];
     hasAutoNavigatedRef.current = false;
-  }, [file?.path, file?.staged]);
+    resetEditorState();
+  }, [file?.path, file?.staged, resetEditorState]);
 
   if (!file) {
     return (
-      <Empty>
+      <Empty className="h-full">
         <EmptyMedia variant="icon">
           <FileCode className="h-4.5 w-4.5" />
         </EmptyMedia>
         <EmptyHeader>
-          <EmptyTitle>查看差异</EmptyTitle>
-          <EmptyDescription>从左侧选择文件以查看更改</EmptyDescription>
+          <EmptyTitle>{t('View diff')}</EmptyTitle>
+          <EmptyDescription>{t('Select file to view diff')}</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -326,7 +364,7 @@ export function DiffViewer({
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p className="text-sm">加载中...</p>
+        <p className="text-sm">{t('Loading...')}</p>
       </div>
     );
   }
@@ -334,17 +372,17 @@ export function DiffViewer({
   if (!diff) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p className="text-sm">无法加载差异</p>
+        <p className="text-sm">{t('Failed to load diff')}</p>
       </div>
     );
   }
 
   const getBoundaryTooltip = () => {
     if (boundaryHint === 'top') {
-      return hasPrevFile ? '再按一次切换到上一个文件' : '已经是第一处差异';
+      return hasPrevFile ? t('Switch to previous file') : t('Already at the first change');
     }
     if (boundaryHint === 'bottom') {
-      return hasNextFile ? '再按一次切换到下一个文件' : '已经是最后一处差异';
+      return hasNextFile ? t('Switch to next file') : t('Already at the last change');
     }
     return null;
   };
@@ -355,9 +393,13 @@ export function DiffViewer({
       <div className="flex h-10 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center">
           <span className="text-sm font-medium">{file.path}</span>
-          <span className="ml-2 text-xs text-muted-foreground">
-            {file.staged ? '(已暂存)' : '(未暂存)'}
-          </span>
+          {isCommitView ? (
+            <span className="ml-2 text-xs text-muted-foreground">{t('(commit history)')}</span>
+          ) : (
+            <span className="ml-2 text-xs text-muted-foreground">
+              {file.staged ? t('(staged)') : t('(unstaged)')}
+            </span>
+          )}
         </div>
 
         {/* Navigation buttons */}
@@ -382,7 +424,7 @@ export function DiffViewer({
               'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
             )}
             onClick={() => navigateToDiff('prev')}
-            title="上一处差异 (F7, 再按切换文件)"
+            title={t('Previous change (F7, press again to switch file)')}
           >
             <ChevronUp className="h-4 w-4" />
           </button>
@@ -395,7 +437,7 @@ export function DiffViewer({
               'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
             )}
             onClick={() => navigateToDiff('next')}
-            title="下一处差异 (F8, 再按切换文件)"
+            title={t('Next change (F8, press again to switch file)')}
           >
             <ChevronDown className="h-4 w-4" />
           </button>
@@ -404,33 +446,56 @@ export function DiffViewer({
 
       {/* Diff Editor */}
       <div className="flex-1">
-        <DiffEditor
-          original={diff.original}
-          modified={diff.modified}
-          language={getLanguageFromPath(file.path)}
-          theme={CUSTOM_THEME_NAME}
-          onMount={handleEditorMount}
-          options={{
-            readOnly: true,
-            renderSideBySide: true,
-            fontSize: 13,
-            lineHeight: 20,
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-            fontLigatures: true,
-            renderOverviewRuler: true,
-            diffWordWrap: 'on',
-            // Minimap for both editors
-            minimap: {
-              enabled: true,
-              side: 'right',
-              showSlider: 'mouseover',
-              renderCharacters: false,
-              maxColumn: 80,
-            },
-          }}
-        />
+        {diff && diff.original != null && diff.modified != null && (
+          <DiffEditor
+            key={`${file.path}-${file.staged}`}
+            original={diff.original}
+            modified={diff.modified}
+            language={getLanguageFromPath(file.path)}
+            theme={CUSTOM_THEME_NAME}
+            onMount={handleEditorMount}
+            options={{
+              readOnly: true,
+              renderSideBySide: true,
+              renderSideBySideInlineBreakpoint: 0, // Always use side-by-side
+              ignoreTrimWhitespace: false,
+              renderOverviewRuler: true,
+              diffWordWrap: editorSettings.wordWrap === 'on' ? 'on' : 'off',
+              // Display
+              minimap: {
+                enabled: editorSettings.minimapEnabled,
+                side: 'right',
+                showSlider: 'mouseover',
+                renderCharacters: false,
+                maxColumn: 80,
+              },
+              lineNumbers: editorSettings.lineNumbers,
+              renderWhitespace: editorSettings.renderWhitespace,
+              renderLineHighlight: editorSettings.renderLineHighlight,
+              folding: editorSettings.folding,
+              links: editorSettings.links,
+              smoothScrolling: editorSettings.smoothScrolling,
+              // Font
+              fontSize: editorSettings.fontSize,
+              fontFamily: editorSettings.fontFamily,
+              fontLigatures: true,
+              lineHeight: 20,
+              // Brackets
+              bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
+              matchBrackets: editorSettings.matchBrackets,
+              guides: {
+                bracketPairs: editorSettings.bracketPairGuides,
+                indentation: editorSettings.indentationGuides,
+              },
+              // Fixed options
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+            }}
+            // Prevent library from disposing models before DiffEditorWidget resets
+            keepCurrentOriginalModel
+            keepCurrentModifiedModel
+          />
+        )}
       </div>
     </div>
   );

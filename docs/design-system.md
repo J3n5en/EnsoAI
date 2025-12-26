@@ -4,9 +4,18 @@
 
 - **Framework**: Electron + React 19 + TypeScript
 - **Styling**: Tailwind CSS 4
-- **UI Components**: Base UI + Tailwind (copy-paste pattern)
+- **UI Components**: [coss ui](https://coss.com/ui) (基于 Base UI，copy-paste 模式)
 - **Icons**: Lucide React
 - **Editor**: Monaco Editor (local workers, no CDN)
+
+## 组件使用原则
+
+**优先使用 @coss/ui 组件**，避免手动实现：
+
+1. 新增 UI 需求时，先查看 [coss.com/ui](https://coss.com/ui) 是否有现成组件
+2. 使用 CLI 添加组件：`npx shadcn@latest add @coss/<component>`
+3. 组件存放于 `src/renderer/components/ui/`
+4. 仅在 @coss/ui 无法满足时才手动实现
 
 ## Color System
 

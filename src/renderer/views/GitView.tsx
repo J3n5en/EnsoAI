@@ -19,7 +19,7 @@ import {
   useGitPush,
   useGitStatus,
 } from '@/hooks/useGit';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useI18n } from '@/i18n';
 import { useWorktreeStore } from '@/stores/worktree';
 
 interface GitViewProps {
@@ -27,17 +27,16 @@ interface GitViewProps {
 }
 
 export function GitView({ isActive = false }: GitViewProps) {
-  const { currentWorkspace } = useWorkspaceStore();
+  const { t } = useI18n();
   const { currentWorktree } = useWorktreeStore();
 
-  // Use worktree path if available, otherwise workspace path
-  const workdir = currentWorktree?.path || currentWorkspace?.path || null;
+  const workdir = currentWorktree?.path || null;
 
   const {
     data: status,
     isLoading: statusLoading,
     refetch: refetchStatus,
-  } = useGitStatus(workdir, isActive);
+  } = useGitStatus(workdir, true);
   const {
     data: branches = [],
     isLoading: branchesLoading,
@@ -109,10 +108,10 @@ export function GitView({ isActive = false }: GitViewProps) {
     // TODO: Open file in editor/diff view
   };
 
-  if (!currentWorkspace) {
+  if (!currentWorktree) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
-        <p>请先选择一个工作区</p>
+        <p>{t('Please select a worktree first')}</p>
       </div>
     );
   }
@@ -127,7 +126,7 @@ export function GitView({ isActive = false }: GitViewProps) {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
-        <h2 className="text-lg font-semibold">版本控制</h2>
+        <h2 className="text-lg font-semibold">{t('Version Control')}</h2>
         <Button
           variant="ghost"
           size="sm"
@@ -168,7 +167,7 @@ export function GitView({ isActive = false }: GitViewProps) {
       <div className="flex-1 space-y-4 overflow-auto p-4">
         {/* Staged Changes */}
         <FileChanges
-          title="暂存的更改"
+          title={t('Staged changes')}
           files={stagedFiles}
           type="staged"
           onUnstageAll={handleUnstageAll}
@@ -178,7 +177,7 @@ export function GitView({ isActive = false }: GitViewProps) {
 
         {/* Unstaged Changes */}
         <FileChanges
-          title="未暂存的更改"
+          title={t('Unstaged changes')}
           files={unstagedFiles}
           type="unstaged"
           onStageAll={handleStageAll}
@@ -188,7 +187,7 @@ export function GitView({ isActive = false }: GitViewProps) {
 
         {/* Untracked Files */}
         <FileChanges
-          title="未跟踪的文件"
+          title={t('Untracked files')}
           files={untrackedFiles}
           type="untracked"
           onStageAll={handleStageAll}

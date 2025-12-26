@@ -14,6 +14,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { useI18n } from '@/i18n';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
 import type { EditorTab, PendingCursor } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
@@ -143,9 +144,10 @@ export function EditorArea({
   onSave,
   onClearPendingCursor,
 }: EditorAreaProps) {
+  const { t } = useI18n();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
-  const { terminalTheme } = useSettingsStore();
+  const { terminalTheme, editorSettings } = useSettingsStore();
   const themeDefinedRef = useRef(false);
 
   // Define custom theme on mount and when terminal theme changes
@@ -259,26 +261,47 @@ export function EditorArea({
             onChange={handleEditorChange}
             onMount={handleEditorMount}
             options={{
+              // Display
               minimap: {
-                enabled: true,
+                enabled: editorSettings.minimapEnabled,
                 side: 'right',
                 showSlider: 'mouseover',
                 renderCharacters: false,
                 maxColumn: 80,
               },
-              fontSize: 13,
+              lineNumbers: editorSettings.lineNumbers,
+              wordWrap: editorSettings.wordWrap,
+              renderWhitespace: editorSettings.renderWhitespace,
+              renderLineHighlight: editorSettings.renderLineHighlight,
+              folding: editorSettings.folding,
+              links: editorSettings.links,
+              smoothScrolling: editorSettings.smoothScrolling,
+              // Font
+              fontSize: editorSettings.fontSize,
+              fontFamily: editorSettings.fontFamily,
+              fontLigatures: true,
               lineHeight: 20,
+              // Indentation
+              tabSize: editorSettings.tabSize,
+              insertSpaces: editorSettings.insertSpaces,
+              // Cursor
+              cursorStyle: editorSettings.cursorStyle,
+              cursorBlinking: editorSettings.cursorBlinking,
+              // Brackets
+              bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
+              matchBrackets: editorSettings.matchBrackets,
+              guides: {
+                bracketPairs: editorSettings.bracketPairGuides,
+                indentation: editorSettings.indentationGuides,
+              },
+              // Editing
+              autoClosingBrackets: editorSettings.autoClosingBrackets,
+              autoClosingQuotes: editorSettings.autoClosingQuotes,
+              // Fixed options
               padding: { top: 12, bottom: 12 },
               scrollBeyondLastLine: false,
               automaticLayout: true,
               fixedOverflowWidgets: true,
-              tabSize: 2,
-              wordWrap: 'on',
-              renderLineHighlight: 'line',
-              cursorBlinking: 'smooth',
-              smoothScrolling: true,
-              fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-              fontLigatures: true,
             }}
           />
         ) : (
@@ -287,8 +310,10 @@ export function EditorArea({
               <FileCode className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle>开始编辑</EmptyTitle>
-              <EmptyDescription>从左侧文件树中选择文件以开始编辑</EmptyDescription>
+              <EmptyTitle>{t('Start editing')}</EmptyTitle>
+              <EmptyDescription>
+                {t('Select a file from the file tree to begin editing')}
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}

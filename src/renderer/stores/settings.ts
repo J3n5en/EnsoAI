@@ -1,3 +1,5 @@
+import type { Locale } from '@shared/i18n';
+import { normalizeLocale } from '@shared/i18n';
 import type { BuiltinAgentId, CustomAgent, ShellConfig } from '@shared/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -39,6 +41,13 @@ function applyTerminalFont(fontFamily: string, fontSize: number) {
   const root = document.documentElement;
   root.style.setProperty('--font-family-mono', fontFamily);
   root.style.setProperty('--font-size-base', `${fontSize}px`);
+}
+
+function getDefaultLocale(): Locale {
+  if (typeof navigator !== 'undefined') {
+    return normalizeLocale(navigator.language);
+  }
+  return 'en';
 }
 
 export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
@@ -135,6 +144,80 @@ export interface SourceControlKeybindings {
   nextDiff: TerminalKeybinding;
 }
 
+// Editor settings
+export type EditorLineNumbers = 'on' | 'off' | 'relative';
+export type EditorWordWrap = 'on' | 'off' | 'wordWrapColumn' | 'bounded';
+export type EditorRenderWhitespace = 'none' | 'boundary' | 'selection' | 'trailing' | 'all';
+export type EditorCursorBlinking = 'blink' | 'smooth' | 'phase' | 'expand' | 'solid';
+export type EditorCursorStyle =
+  | 'line'
+  | 'block'
+  | 'underline'
+  | 'line-thin'
+  | 'block-outline'
+  | 'underline-thin';
+export type EditorRenderLineHighlight = 'none' | 'gutter' | 'line' | 'all';
+export type EditorAutoClosingBrackets = 'always' | 'languageDefined' | 'beforeWhitespace' | 'never';
+export type EditorAutoClosingQuotes = 'always' | 'languageDefined' | 'beforeWhitespace' | 'never';
+
+export interface EditorSettings {
+  // Display
+  minimapEnabled: boolean;
+  lineNumbers: EditorLineNumbers;
+  wordWrap: EditorWordWrap;
+  renderWhitespace: EditorRenderWhitespace;
+  renderLineHighlight: EditorRenderLineHighlight;
+  folding: boolean;
+  links: boolean;
+  smoothScrolling: boolean;
+  // Font
+  fontSize: number;
+  fontFamily: string;
+  // Indentation
+  tabSize: number;
+  insertSpaces: boolean;
+  // Cursor
+  cursorStyle: EditorCursorStyle;
+  cursorBlinking: EditorCursorBlinking;
+  // Brackets
+  bracketPairColorization: boolean;
+  matchBrackets: 'always' | 'near' | 'never';
+  bracketPairGuides: boolean;
+  indentationGuides: boolean;
+  // Editing
+  autoClosingBrackets: EditorAutoClosingBrackets;
+  autoClosingQuotes: EditorAutoClosingQuotes;
+}
+
+export const defaultEditorSettings: EditorSettings = {
+  // Display
+  minimapEnabled: false,
+  lineNumbers: 'on',
+  wordWrap: 'on',
+  renderWhitespace: 'selection',
+  renderLineHighlight: 'line',
+  folding: true,
+  links: true,
+  smoothScrolling: true,
+  // Font
+  fontSize: 13,
+  fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+  // Indentation
+  tabSize: 2,
+  insertSpaces: true,
+  // Cursor
+  cursorStyle: 'line',
+  cursorBlinking: 'smooth',
+  // Brackets
+  bracketPairColorization: true,
+  matchBrackets: 'always',
+  bracketPairGuides: true,
+  indentationGuides: true,
+  // Editing
+  autoClosingBrackets: 'languageDefined',
+  autoClosingQuotes: 'languageDefined',
+};
+
 export const defaultTerminalKeybindings: TerminalKeybindings = {
   clear: { key: 'r', meta: true }, // Cmd/Win+R
   newTab: { key: 't', ctrl: true },
@@ -163,6 +246,7 @@ export const defaultSourceControlKeybindings: SourceControlKeybindings = {
 
 interface SettingsState {
   theme: Theme;
+  language: Locale;
   fontSize: number;
   fontFamily: string;
   terminalFontSize: number;
@@ -176,6 +260,7 @@ interface SettingsState {
   mainTabKeybindings: MainTabKeybindings;
   agentKeybindings: AgentKeybindings;
   sourceControlKeybindings: SourceControlKeybindings;
+  editorSettings: EditorSettings;
   agentSettings: AgentSettings;
   customAgents: CustomAgent[];
   shellConfig: ShellConfig;
@@ -184,6 +269,7 @@ interface SettingsState {
   agentNotificationDelay: number; // in seconds
 
   setTheme: (theme: Theme) => void;
+  setLanguage: (language: Locale) => void;
   setFontSize: (size: number) => void;
   setFontFamily: (family: string) => void;
   setTerminalFontSize: (size: number) => void;
@@ -197,6 +283,7 @@ interface SettingsState {
   setMainTabKeybindings: (keybindings: MainTabKeybindings) => void;
   setAgentKeybindings: (keybindings: AgentKeybindings) => void;
   setSourceControlKeybindings: (keybindings: SourceControlKeybindings) => void;
+  setEditorSettings: (settings: Partial<EditorSettings>) => void;
   setAgentEnabled: (agentId: string, enabled: boolean) => void;
   setAgentDefault: (agentId: string) => void;
   addCustomAgent: (agent: CustomAgent) => void;
@@ -221,6 +308,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
       theme: 'system',
+      language: getDefaultLocale(),
       fontSize: 14,
       fontFamily: 'Inter',
       terminalFontSize: 18,
@@ -234,6 +322,7 @@ export const useSettingsStore = create<SettingsState>()(
       mainTabKeybindings: defaultMainTabKeybindings,
       agentKeybindings: defaultAgentKeybindings,
       sourceControlKeybindings: defaultSourceControlKeybindings,
+      editorSettings: defaultEditorSettings,
       agentSettings: defaultAgentSettings,
       customAgents: [],
       shellConfig: {
@@ -252,6 +341,11 @@ export const useSettingsStore = create<SettingsState>()(
           applyAppTheme(theme, terminalTheme);
         }
         set({ theme });
+      },
+      setLanguage: (language) => {
+        document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+        window.electronAPI.app.setLanguage(language);
+        set({ language });
       },
       setFontSize: (fontSize) => set({ fontSize }),
       setFontFamily: (fontFamily) => set({ fontFamily }),
@@ -278,6 +372,10 @@ export const useSettingsStore = create<SettingsState>()(
       setMainTabKeybindings: (mainTabKeybindings) => set({ mainTabKeybindings }),
       setAgentKeybindings: (agentKeybindings) => set({ agentKeybindings }),
       setSourceControlKeybindings: (sourceControlKeybindings) => set({ sourceControlKeybindings }),
+      setEditorSettings: (settings) =>
+        set((state) => ({
+          editorSettings: { ...state.editorSettings, ...settings },
+        })),
       setAgentEnabled: (agentId, enabled) => {
         const current = get().agentSettings;
         set({
@@ -345,6 +443,9 @@ export const useSettingsStore = create<SettingsState>()(
             applyAppTheme(state.theme, state.terminalTheme);
           }
           applyTerminalFont(state.terminalFontFamily, state.terminalFontSize);
+          const resolvedLanguage = normalizeLocale(state.language);
+          document.documentElement.lang = resolvedLanguage === 'zh' ? 'zh-CN' : 'en';
+          window.electronAPI.app.setLanguage(resolvedLanguage);
         }
       },
     }

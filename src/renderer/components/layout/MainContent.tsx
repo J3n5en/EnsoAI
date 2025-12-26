@@ -12,6 +12,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { TerminalPanel } from '../terminal';
 
@@ -20,35 +21,36 @@ type TabId = 'chat' | 'file' | 'terminal' | 'source-control';
 interface MainContentProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
-  workspaceName?: string;
   repoPath?: string; // repository path for session storage
   worktreePath?: string;
-  workspaceCollapsed?: boolean;
+  repositoryCollapsed?: boolean;
   worktreeCollapsed?: boolean;
-  onExpandWorkspace?: () => void;
+  onExpandRepository?: () => void;
   onExpandWorktree?: () => void;
+  onSwitchWorktree?: (worktreePath: string) => void;
 }
-
-const tabs: Array<{ id: TabId; icon: React.ElementType; label: string }> = [
-  { id: 'chat', icon: Sparkles, label: 'Agent' },
-  { id: 'file', icon: FileCode, label: 'File' },
-  { id: 'terminal', icon: Terminal, label: 'Terminal' },
-  { id: 'source-control', icon: GitBranch, label: 'VSC' },
-];
 
 export function MainContent({
   activeTab,
   onTabChange,
-  workspaceName: _workspaceName,
   repoPath,
   worktreePath,
-  workspaceCollapsed = false,
+  repositoryCollapsed = false,
   worktreeCollapsed = false,
-  onExpandWorkspace,
+  onExpandRepository,
   onExpandWorktree,
+  onSwitchWorktree,
 }: MainContentProps) {
-  // Need extra padding for traffic lights when both panels are collapsed
-  const needsTrafficLightPadding = workspaceCollapsed && worktreeCollapsed;
+  const { t } = useI18n();
+  const tabs = [
+    { id: 'chat', icon: Sparkles, label: t('Agent') },
+    { id: 'file', icon: FileCode, label: t('File') },
+    { id: 'terminal', icon: Terminal, label: t('Terminal') },
+    { id: 'source-control', icon: GitBranch, label: t('Source Control') },
+  ] satisfies Array<{ id: TabId; icon: React.ElementType; label: string }>;
+  // Need extra padding for traffic lights when both panels are collapsed (macOS only)
+  const isMac = window.electronAPI.env.platform === 'darwin';
+  const needsTrafficLightPadding = isMac && repositoryCollapsed && worktreeCollapsed;
 
   return (
     <main className="flex min-w-[535px] flex-1 flex-col overflow-hidden bg-background">
@@ -74,13 +76,13 @@ export function MainContent({
               >
                 {/* Left separator */}
                 {needsTrafficLightPadding && <div className="mx-1 h-4 w-px bg-border" />}
-                {/* Workspace expand button - shown when both panels are collapsed */}
-                {workspaceCollapsed && onExpandWorkspace && (
+                {/* Repository expand button - shown when both panels are collapsed */}
+                {repositoryCollapsed && onExpandRepository && (
                   <button
                     type="button"
-                    onClick={onExpandWorkspace}
+                    onClick={onExpandRepository}
                     className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                    title="展开 Workspace"
+                    title={t('Expand Repository')}
                   >
                     <FolderOpen className="h-4 w-4" />
                   </button>
@@ -91,7 +93,7 @@ export function MainContent({
                     type="button"
                     onClick={onExpandWorktree}
                     className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                    title="展开 Worktree"
+                    title={t('Expand Worktree')}
                   >
                     <GitBranch className="h-4 w-4" />
                   </button>
@@ -130,25 +132,32 @@ export function MainContent({
         {/* Chat tab - keep mounted to preserve terminal session */}
         <div
           className={cn(
-            'absolute inset-0',
+            'absolute inset-0 bg-background',
             activeTab === 'chat' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
           {repoPath && worktreePath ? (
-            <AgentPanel repoPath={repoPath} cwd={worktreePath} isActive={activeTab === 'chat'} />
+            <AgentPanel
+              repoPath={repoPath}
+              cwd={worktreePath}
+              isActive={activeTab === 'chat'}
+              onSwitchWorktree={onSwitchWorktree}
+            />
           ) : (
             <Empty>
               <EmptyMedia variant="icon">
                 <Sparkles className="h-4.5 w-4.5" />
               </EmptyMedia>
               <EmptyHeader>
-                <EmptyTitle>开始使用 AI Agent</EmptyTitle>
-                <EmptyDescription>选择一个 Worktree 以开始使用 AI 编码助手</EmptyDescription>
+                <EmptyTitle>{t('Start using AI Agent')}</EmptyTitle>
+                <EmptyDescription>
+                  {t('Select a Worktree to start using AI coding assistant')}
+                </EmptyDescription>
               </EmptyHeader>
               {onExpandWorktree && worktreeCollapsed && (
                 <Button onClick={onExpandWorktree} variant="outline" className="mt-2">
                   <GitBranch className="mr-2 h-4 w-4" />
-                  选择 Worktree
+                  {t('Choose Worktree')}
                 </Button>
               )}
             </Empty>
@@ -157,7 +166,7 @@ export function MainContent({
         {/* Terminal tab - keep mounted to preserve shell sessions */}
         <div
           className={cn(
-            'absolute inset-0',
+            'absolute inset-0 bg-background',
             activeTab === 'terminal' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
@@ -166,7 +175,7 @@ export function MainContent({
         {/* File tab - keep mounted to preserve editor state */}
         <div
           className={cn(
-            'absolute inset-0',
+            'absolute inset-0 bg-background',
             activeTab === 'file' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
@@ -175,7 +184,7 @@ export function MainContent({
         {/* Source Control tab - keep mounted to preserve selection state */}
         <div
           className={cn(
-            'absolute inset-0',
+            'absolute inset-0 bg-background',
             activeTab === 'source-control' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >

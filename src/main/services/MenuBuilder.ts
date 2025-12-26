@@ -1,4 +1,6 @@
+import { translate } from '@shared/i18n';
 import { app, type BrowserWindow, Menu, shell } from 'electron';
+import { getCurrentLocale } from './i18n';
 
 export type MenuAction = 'open-settings' | 'toggle-devtools' | 'open-action-panel';
 
@@ -8,6 +10,8 @@ interface MenuOptions {
 
 export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {}): Menu {
   const isMac = process.platform === 'darwin';
+  const locale = getCurrentLocale();
+  const t = (key: string) => translate(locale, key);
 
   const sendAction = (action: MenuAction) => {
     mainWindow.webContents.send('menu-action', action);
@@ -23,7 +27,7 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
               { role: 'about' as const },
               { type: 'separator' as const },
               {
-                label: '设置...',
+                label: t('Settings...'),
                 accelerator: 'CommandOrControl+,',
                 click: () => sendAction('open-settings'),
               },
@@ -42,10 +46,10 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
 
     // File menu
     {
-      label: '文件',
+      label: t('File'),
       submenu: [
         {
-          label: '新建窗口',
+          label: t('New Window'),
           accelerator: 'CommandOrControl+N',
           click: () => options.onNewWindow?.(),
         },
@@ -53,7 +57,7 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
         ...(!isMac
           ? [
               {
-                label: '设置...',
+                label: t('Settings...'),
                 accelerator: 'CommandOrControl+,',
                 click: () => sendAction('open-settings'),
               },
@@ -66,7 +70,7 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
 
     // Edit menu
     {
-      label: '编辑',
+      label: t('Edit'),
       submenu: [
         { role: 'undo' as const },
         { role: 'redo' as const },
@@ -80,10 +84,10 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
 
     // View menu
     {
-      label: '视图',
+      label: t('View'),
       submenu: [
         {
-          label: 'Action Panel',
+          label: t('Action Panel'),
           accelerator: 'CommandOrControl+Shift+P',
           click: () => sendAction('open-action-panel'),
         },
@@ -91,7 +95,7 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
         { role: 'reload' as const },
         { role: 'forceReload' as const },
         {
-          label: '开发者工具',
+          label: t('Developer Tools'),
           accelerator: 'CommandOrControl+Option+I',
           click: () => mainWindow.webContents.toggleDevTools(),
         },
@@ -106,7 +110,7 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
 
     // Window menu
     {
-      label: '窗口',
+      label: t('Window'),
       submenu: [
         { role: 'minimize' as const },
         { role: 'zoom' as const },
@@ -123,11 +127,11 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
 
     // Help menu
     {
-      label: '帮助',
+      label: t('Help'),
       submenu: [
         {
-          label: '了解更多',
-          click: () => shell.openExternal('https://github.com/anthropics/claude-code'),
+          label: t('Learn More'),
+          click: () => shell.openExternal('https://github.com/J3n5en/EnsoAI'),
         },
       ],
     },

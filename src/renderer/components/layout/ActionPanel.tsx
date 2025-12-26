@@ -1,31 +1,148 @@
+import type { GitWorktree } from '@shared/types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Clock,
   ExternalLink,
   FolderOpen,
   GitBranch,
+  Loader2,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
+  Terminal,
 } from 'lucide-react';
 import * as React from 'react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CommandDialog,
   CommandDialogPopup,
   CommandPanel,
   CommandShortcut,
 } from '@/components/ui/command';
+import { toastManager } from '@/components/ui/toast';
 import { useDetectedApps, useOpenWith } from '@/hooks/useAppDetector';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+
+function useCliInstallStatus() {
+  return useQuery({
+    queryKey: ['cli', 'install-status'],
+    queryFn: async () => {
+      return await window.electronAPI.cli.getInstallStatus();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+function useCliInstall() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return await window.electronAPI.cli.install();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['cli', 'install-status'] });
+      if (result.installed) {
+        toastManager.add({
+          type: 'success',
+          title: '安装成功',
+          description: `'enso' 命令已安装到 ${result.path}`,
+        });
+      } else if (result.error) {
+        toastManager.add({
+          type: 'error',
+          title: '安装失败',
+          description: result.error,
+        });
+      }
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: 'error',
+        title: '安装失败',
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+}
+
+function useCliUninstall() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      return await window.electronAPI.cli.uninstall();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['cli', 'install-status'] });
+      if (!result.installed) {
+        toastManager.add({
+          type: 'success',
+          title: '卸载成功',
+          description: "'enso' 命令已卸载",
+        });
+      } else if (result.error) {
+        toastManager.add({
+          type: 'error',
+          title: '卸载失败',
+          description: result.error,
+        });
+      }
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: 'error',
+        title: '卸载失败',
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+}
+
+const RECENT_COMMANDS_KEY = 'enso-recent-commands';
+const MAX_RECENT_COMMANDS = 5;
+
+function useRecentCommands() {
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(RECENT_COMMANDS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const addRecentCommand = useCallback((id: string) => {
+    setRecentIds((prev) => {
+      const filtered = prev.filter((i) => i !== id);
+      const updated = [id, ...filtered].slice(0, MAX_RECENT_COMMANDS);
+      localStorage.setItem(RECENT_COMMANDS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  return { recentIds, addRecentCommand };
+}
+
+interface Repository {
+  name: string;
+  path: string;
+}
 
 interface ActionPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  workspaceCollapsed: boolean;
+  repositoryCollapsed: boolean;
   worktreeCollapsed: boolean;
   projectPath?: string;
-  onToggleWorkspace: () => void;
+  repositories?: Repository[];
+  selectedRepoPath?: string;
+  worktrees?: GitWorktree[];
+  activeWorktreePath?: string;
+  onToggleRepository: () => void;
   onToggleWorktree: () => void;
   onOpenSettings: () => void;
+  onSwitchRepo?: (repoPath: string) => void;
+  onSwitchWorktree?: (worktree: GitWorktree) => void;
 }
 
 interface ActionItem {
@@ -34,6 +151,8 @@ interface ActionItem {
   icon: React.ElementType;
   shortcut?: string;
   action: () => void;
+  disabled?: boolean;
+  loading?: boolean;
 }
 
 interface ActionGroup {
@@ -44,13 +163,20 @@ interface ActionGroup {
 export function ActionPanel({
   open,
   onOpenChange,
-  workspaceCollapsed,
+  repositoryCollapsed,
   worktreeCollapsed,
   projectPath,
-  onToggleWorkspace,
+  repositories = [],
+  selectedRepoPath,
+  worktrees = [],
+  activeWorktreePath,
+  onToggleRepository,
   onToggleWorktree,
   onOpenSettings,
+  onSwitchRepo,
+  onSwitchWorktree,
 }: ActionPanelProps) {
+  const { t } = useI18n();
   const [search, setSearch] = React.useState('');
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -58,46 +184,115 @@ export function ActionPanel({
   const { data: detectedApps = [] } = useDetectedApps();
   const openWith = useOpenWith();
 
+  // CLI install status
+  const { data: cliStatus } = useCliInstallStatus();
+  const cliInstall = useCliInstall();
+  const cliUninstall = useCliUninstall();
+
+  // Recent commands
+  const { recentIds, addRecentCommand } = useRecentCommands();
+
   const actionGroups: ActionGroup[] = React.useMemo(() => {
     const groups: ActionGroup[] = [
       {
-        label: '面板',
+        label: t('Panel'),
         items: [
           {
-            id: 'toggle-workspace',
-            label: workspaceCollapsed ? '展开 Workspace' : '折叠 Workspace',
-            icon: workspaceCollapsed ? FolderOpen : PanelLeftClose,
-            action: onToggleWorkspace,
+            id: 'toggle-repository',
+            label: repositoryCollapsed ? t('Expand Repository') : t('Collapse Repository'),
+            icon: repositoryCollapsed ? FolderOpen : PanelLeftClose,
+            action: onToggleRepository,
           },
           {
             id: 'toggle-worktree',
-            label: worktreeCollapsed ? '展开 Worktree' : '折叠 Worktree',
+            label: worktreeCollapsed ? t('Expand Worktree') : t('Collapse Worktree'),
             icon: worktreeCollapsed ? GitBranch : PanelLeftOpen,
             action: onToggleWorktree,
           },
         ],
       },
       {
-        label: '通用',
+        label: t('General'),
         items: [
           {
             id: 'open-settings',
-            label: '打开设置',
+            label: t('Open settings'),
             icon: Settings,
             shortcut: '⌘,',
             action: onOpenSettings,
+          },
+          // CLI install/uninstall action
+          {
+            id: 'cli-install',
+            label:
+              cliInstall.isPending || cliUninstall.isPending
+                ? cliStatus?.installed
+                  ? '正在卸载...'
+                  : '正在安装...'
+                : cliStatus?.installed
+                  ? "卸载 'enso' 命令"
+                  : "安装 'enso' 命令到 PATH",
+            icon: cliInstall.isPending || cliUninstall.isPending ? Loader2 : Terminal,
+            loading: cliInstall.isPending || cliUninstall.isPending,
+            disabled: cliInstall.isPending || cliUninstall.isPending,
+            action: async () => {
+              if (cliInstall.isPending || cliUninstall.isPending) return;
+              // Re-check status at execution time
+              const status = await window.electronAPI.cli.getInstallStatus();
+              if (status.installed) {
+                cliUninstall.mutate();
+              } else {
+                cliInstall.mutate();
+              }
+            },
           },
         ],
       },
     ];
 
+    // Add "Switch Repository" group
+    if (repositories.length > 1 && onSwitchRepo) {
+      const switchableRepos = repositories.filter((repo) => repo.path !== selectedRepoPath);
+      if (switchableRepos.length > 0) {
+        groups.push({
+          label: '切换仓库',
+          items: switchableRepos.map((repo) => ({
+            id: `switch-repo-${repo.path}`,
+            label: `切换到 ${repo.name}`,
+            icon: FolderOpen,
+            action: () => {
+              onSwitchRepo(repo.path);
+            },
+          })),
+        });
+      }
+    }
+
+    // Add "Switch Worktree" group
+    if (worktrees.length > 1 && onSwitchWorktree) {
+      const switchableWorktrees = worktrees.filter((wt) => wt.path !== activeWorktreePath);
+      if (switchableWorktrees.length > 0) {
+        groups.push({
+          label: '切换 Worktree',
+          items: switchableWorktrees.map((wt) => ({
+            id: `switch-worktree-${wt.path}`,
+            label: `切换到 ${wt.branch || wt.path.split('/').pop()}`,
+            icon: GitBranch,
+            action: () => {
+              onSwitchWorktree(wt);
+            },
+          })),
+        });
+      }
+    }
+
     // Add "Open in XXX" group for detected apps
     if (projectPath && detectedApps.length > 0) {
       groups.push({
-        label: '打开方式',
+        label: t('Open with'),
         items: detectedApps.map((app) => ({
           id: `open-in-${app.bundleId}`,
-          label: `在 ${app.name} 打开`,
+          label: t('Open in {{app}}', { app: app.name }),
           icon: ExternalLink,
           action: () => {
             openWith.mutate({ path: projectPath, bundleId: app.bundleId });
@@ -106,16 +301,47 @@ export function ActionPanel({
       });
     }
 
+    // Build recent commands group
+    if (recentIds.length > 0) {
+      const allItems = groups.flatMap((g) => g.items);
+      const recentItems = recentIds
+        .map((id) => allItems.find((item) => item.id === id))
+        .filter((item): item is ActionItem => item !== undefined)
+        .map((item) => ({
+          ...item,
+          id: `recent-${item.id}`,
+          icon: Clock,
+        }));
+
+      if (recentItems.length > 0) {
+        groups.unshift({
+          label: '最近',
+          items: recentItems,
+        });
+      }
+    }
+
     return groups;
   }, [
-    workspaceCollapsed,
+    t,
+    repositoryCollapsed,
     worktreeCollapsed,
     projectPath,
+    repositories,
+    selectedRepoPath,
+    worktrees,
+    activeWorktreePath,
     detectedApps,
-    onToggleWorkspace,
+    cliStatus,
+    recentIds,
+    onToggleRepository,
     onToggleWorktree,
     onOpenSettings,
+    onSwitchRepo,
+    onSwitchWorktree,
     openWith,
+    cliInstall,
+    cliUninstall,
   ]);
 
   // Flatten and filter actions for keyboard navigation
@@ -160,10 +386,14 @@ export function ActionPanel({
 
   const executeAction = React.useCallback(
     (action: ActionItem) => {
+      // Record to recent commands (strip 'recent-' prefix if present)
+      const originalId = action.id.startsWith('recent-') ? action.id.slice(7) : action.id;
+      addRecentCommand(originalId);
+
       action.action();
       onOpenChange(false);
     },
-    [onOpenChange]
+    [onOpenChange, addRecentCommand]
   );
 
   const handleKeyDown = React.useCallback(
@@ -197,7 +427,7 @@ export function ActionPanel({
               ref={inputRef}
               type="text"
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              placeholder="搜索操作..."
+              placeholder={t('Filter actions...')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -206,7 +436,7 @@ export function ActionPanel({
           <div className="max-h-72 overflow-y-auto p-2">
             {flatFilteredItems.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">
-                没有找到匹配的操作
+                {t('No matching actions found')}
               </div>
             ) : (
               filteredGroups.map((group, groupIdx) => (
@@ -222,16 +452,18 @@ export function ActionPanel({
                         key={item.id}
                         type="button"
                         data-action-index={currentIndex}
+                        disabled={item.disabled}
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none',
                           currentIndex === selectedIndex
                             ? 'bg-accent text-accent-foreground'
-                            : 'text-foreground hover:bg-accent/50'
+                            : 'text-foreground hover:bg-accent/50',
+                          item.disabled && 'cursor-not-allowed opacity-60'
                         )}
-                        onClick={() => executeAction(item)}
+                        onClick={() => !item.disabled && executeAction(item)}
                         onMouseEnter={() => setSelectedIndex(currentIndex)}
                       >
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className={cn('h-4 w-4', item.loading && 'animate-spin')} />
                         <span className="flex-1 text-left">{item.label}</span>
                         {item.shortcut && <CommandShortcut>{item.shortcut}</CommandShortcut>}
                       </button>

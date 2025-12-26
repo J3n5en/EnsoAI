@@ -17,6 +17,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 interface Repository {
@@ -24,7 +25,7 @@ interface Repository {
   path: string;
 }
 
-interface WorkspaceSidebarProps {
+interface RepositorySidebarProps {
   repositories: Repository[];
   selectedRepo: string | null;
   onSelectRepo: (repoPath: string) => void;
@@ -35,7 +36,7 @@ interface WorkspaceSidebarProps {
   onCollapse?: () => void;
 }
 
-export function WorkspaceSidebar({
+export function RepositorySidebar({
   repositories,
   selectedRepo,
   onSelectRepo,
@@ -44,7 +45,8 @@ export function WorkspaceSidebar({
   onOpenSettings,
   collapsed: _collapsed = false,
   onCollapse,
-}: WorkspaceSidebarProps) {
+}: RepositorySidebarProps) {
+  const { t, tNode } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
@@ -85,7 +87,7 @@ export function WorkspaceSidebar({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onCollapse}
-            title="折叠"
+            title={t('Collapse')}
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
@@ -98,7 +100,7 @@ export function WorkspaceSidebar({
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search repositories"
+            placeholder={t('Search repositories')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
@@ -114,8 +116,8 @@ export function WorkspaceSidebar({
               <Search className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">未找到仓库</EmptyTitle>
-              <EmptyDescription>尝试使用不同的关键词搜索</EmptyDescription>
+              <EmptyTitle className="text-base">{t('No matching repositories')}</EmptyTitle>
+              <EmptyDescription>{t('Try a different search term')}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : repositories.length === 0 ? (
@@ -124,12 +126,12 @@ export function WorkspaceSidebar({
               <FolderGit2 className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">添加仓库</EmptyTitle>
-              <EmptyDescription>从本地文件夹添加 Git 仓库开始使用</EmptyDescription>
+              <EmptyTitle className="text-base">{t('Add Repository')}</EmptyTitle>
+              <EmptyDescription>{t('Add a Git repository from a local folder to get started')}</EmptyDescription>
             </EmptyHeader>
             <Button onClick={onAddRepository} variant="outline" className="mt-2">
               <Plus className="mr-2 h-4 w-4" />
-              添加仓库
+              {t('Add Repository')}
             </Button>
           </Empty>
         ) : (
@@ -185,7 +187,7 @@ export function WorkspaceSidebar({
             onClick={onAddRepository}
           >
             <Plus className="h-4 w-4" />
-            Add Repository
+            {t('Add Repository')}
           </button>
           <button
             type="button"
@@ -216,12 +218,12 @@ export function WorkspaceSidebar({
           >
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-accent"
-              onClick={handleRemoveClick}
-            >
-              <FolderMinus className="h-4 w-4" />
-              移除仓库
-            </button>
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-accent"
+            onClick={handleRemoveClick}
+          >
+            <FolderMinus className="h-4 w-4" />
+            {t('Remove repository')}
+          </button>
           </div>
         </>
       )}
@@ -237,18 +239,20 @@ export function WorkspaceSidebar({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>移除仓库</AlertDialogTitle>
+            <AlertDialogTitle>{t('Remove repository')}</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要从工作区移除 <strong>{repoToRemove?.name}</strong> 吗？
+              {tNode('Are you sure you want to remove {{name}} from the workspace?', {
+                name: <strong>{repoToRemove?.name}</strong>,
+              })}
               <span className="block mt-2 text-muted-foreground">
-                此操作只会从应用中移除，不会删除本地文件。
+                {t('This will only remove it from the app and will not delete local files.')}
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline">取消</Button>} />
+            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
             <Button variant="destructive" onClick={handleConfirmRemove}>
-              移除
+              {t('Remove')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

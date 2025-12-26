@@ -1,7 +1,10 @@
+import { Buffer } from 'node:buffer';
+import type { Locale } from '@shared/i18n';
 import type {
   AgentCliInfo,
   AgentCliStatus,
   AgentMetadata,
+  CommitFileChange,
   CustomAgent,
   DetectedApp,
   FileChange,
@@ -26,8 +29,8 @@ const electronAPI = {
   git: {
     getStatus: (workdir: string): Promise<GitStatus> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, workdir),
-    getLog: (workdir: string, maxCount?: number): Promise<GitLogEntry[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, workdir, maxCount),
+    getLog: (workdir: string, maxCount?: number, skip?: number): Promise<GitLogEntry[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, workdir, maxCount, skip),
     getBranches: (workdir: string): Promise<GitBranch[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_LIST, workdir),
     createBranch: (workdir: string, name: string, startPoint?: string): Promise<void> =>
@@ -53,6 +56,19 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, workdir, paths),
     discard: (workdir: string, filePath: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, workdir, filePath),
+    showCommit: (workdir: string, hash: string): Promise<string> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_SHOW, workdir, hash),
+    getCommitFiles: (workdir: string, hash: string): Promise<CommitFileChange[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_FILES, workdir, hash),
+    getCommitDiff: (
+      workdir: string,
+      hash: string,
+      filePath: string,
+      status?: import('@shared/types').FileChangeStatus
+    ): Promise<FileDiff> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_DIFF, workdir, hash, filePath, status),
+    getDiffStats: (workdir: string): Promise<{ insertions: number; deletions: number }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_STATS, workdir),
   },
 
   // Worktree
@@ -84,8 +100,8 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_MOVE, fromPath, toPath),
     delete: (targetPath: string, options?: { recursive?: boolean }): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_DELETE, targetPath, options),
-    list: (dirPath: string): Promise<FileEntry[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, dirPath),
+    list: (dirPath: string, gitRoot?: string): Promise<FileEntry[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, dirPath, gitRoot),
     watchStart: (dirPath: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_WATCH_START, dirPath),
     watchStop: (dirPath: string): Promise<void> =>
@@ -153,6 +169,13 @@ const electronAPI = {
     confirmClose: (confirmed: boolean): void => {
       ipcRenderer.send(IPC_CHANNELS.APP_CLOSE_CONFIRM, confirmed);
     },
+    onOpenPath: (callback: (path: string) => void): (() => void) => {
+      const handler = (_: unknown, path: string) => callback(path);
+      ipcRenderer.on(IPC_CHANNELS.APP_OPEN_PATH, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.APP_OPEN_PATH, handler);
+    },
+    setLanguage: (language: Locale): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.APP_SET_LANGUAGE, language),
   },
 
   // Dialog
@@ -194,6 +217,13 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CLI_DETECT, customAgents, options),
     detectOne: (agentId: string, customAgent?: CustomAgent): Promise<AgentCliInfo> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLI_DETECT_ONE, agentId, customAgent),
+    // CLI Installer
+    getInstallStatus: (): Promise<{ installed: boolean; path: string | null; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLI_INSTALL_STATUS),
+    install: (): Promise<{ installed: boolean; path: string | null; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLI_INSTALL),
+    uninstall: (): Promise<{ installed: boolean; path: string | null; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLI_UNINSTALL),
   },
 
   // Settings
@@ -226,8 +256,17 @@ const electronAPI = {
 
   // Notification
   notification: {
-    show: (options: { title: string; body?: string; silent?: boolean }): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SHOW, options),
+    show: (options: {
+      title: string;
+      body?: string;
+      silent?: boolean;
+      sessionId?: string;
+    }): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SHOW, options),
+    onClick: (callback: (sessionId: string) => void): (() => void) => {
+      const handler = (_: unknown, sessionId: string) => callback(sessionId);
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_CLICK, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.NOTIFICATION_CLICK, handler);
+    },
   },
 
   // Updater
@@ -269,5 +308,6 @@ const electronAPI = {
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+contextBridge.exposeInMainWorld('Buffer', Buffer);
 
 export type ElectronAPI = typeof electronAPI;

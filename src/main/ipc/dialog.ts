@@ -1,5 +1,7 @@
+import { translate } from '@shared/i18n';
 import { IPC_CHANNELS } from '@shared/types';
 import { BrowserWindow, dialog, ipcMain, Menu, MenuItem } from 'electron';
+import { getCurrentLocale } from '../services/i18n';
 
 interface ContextMenuItem {
   label: string;
@@ -11,9 +13,10 @@ interface ContextMenuItem {
 export function registerDialogHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_DIRECTORY, async () => {
     const window = BrowserWindow.getFocusedWindow();
+    const t = (key: string) => translate(getCurrentLocale(), key);
     const result = await dialog.showOpenDialog(window!, {
       properties: ['openDirectory', 'createDirectory'],
-      title: '选择文件夹',
+      title: t('Select folder'),
     });
 
     if (result.canceled || result.filePaths.length === 0) {
@@ -27,9 +30,10 @@ export function registerDialogHandlers(): void {
     IPC_CHANNELS.DIALOG_OPEN_FILE,
     async (_, options?: { filters?: Array<{ name: string; extensions: string[] }> }) => {
       const window = BrowserWindow.getFocusedWindow();
+      const t = (key: string) => translate(getCurrentLocale(), key);
       const result = await dialog.showOpenDialog(window!, {
         properties: ['openFile'],
-        title: '选择文件',
+        title: t('Select file'),
         filters: options?.filters,
       });
 

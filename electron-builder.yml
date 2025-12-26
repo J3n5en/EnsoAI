@@ -46,6 +46,12 @@ mac:
   # Disable signing for now (requires Apple Developer account)
   identity: null
   icon: build/icon.icns
+  # Register enso:// URL scheme
+  extendInfo:
+    CFBundleURLTypes:
+      - CFBundleURLName: EnsoAI
+        CFBundleURLSchemes:
+          - enso
 
 dmg:
   sign: false
@@ -76,6 +82,8 @@ nsis:
   deleteAppDataOnUninstall: false
   # Enable differential download for NSIS
   differentialPackage: true
+  # Register enso:// URL scheme
+  include: build/installer.nsh
 
 linux:
   target:

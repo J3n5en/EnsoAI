@@ -2,6 +2,7 @@ import { FileEdit, FilePlus, FileQuestion, FileX, Minus, Plus } from 'lucide-rea
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 type FileStatus = 'M' | 'A' | 'D' | 'R' | 'C' | 'U' | '?';
@@ -51,6 +52,7 @@ export function FileChanges({
   onStageFile,
   onUnstageFile,
 }: FileChangesProps) {
+  const { t } = useI18n();
   const getFileStatus = (_path: string): FileStatus => {
     if (type === 'untracked') return '?';
     // In a real implementation, this would come from the git status
@@ -67,12 +69,12 @@ export function FileChanges({
         </h3>
         {type === 'staged' && onUnstageAll && (
           <Button variant="ghost" size="sm" onClick={onUnstageAll}>
-            全部取消暂存
+            {t('Unstage all')}
           </Button>
         )}
         {(type === 'unstaged' || type === 'untracked') && onStageAll && (
           <Button variant="ghost" size="sm" onClick={onStageAll}>
-            全部暂存
+            {t('Stage all')}
           </Button>
         )}
       </div>

@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useI18n } from '@/i18n';
 
 interface CreateWorktreeDialogProps {
   branches: GitBranchType[];
@@ -38,18 +39,19 @@ export function CreateWorktreeDialog({
   onSubmit,
   trigger,
 }: CreateWorktreeDialogProps) {
+  const { t } = useI18n();
   const [open, setOpen] = React.useState(false);
   const [baseBranch, setBaseBranch] = React.useState<string>('');
   const [newBranchName, setNewBranchName] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
 
-  // 固定路径: ~/ensoai/workspaces/{projectName}/{branchName}
+  // Fixed path: ~/ensoai/workspaces/{projectName}/{branchName}
   const home = window.electronAPI?.env?.HOME || '';
   const isWindows = window.electronAPI?.env?.platform === 'win32';
   const pathSep = isWindows ? '\\' : '/';
   const getWorktreePath = (branchName: string) => {
     if (!home) return '';
-    // 从 projectName 中提取最后一个目录名，处理传入完整路径的情况
+    // Extract last directory name from projectName when a full path is passed in.
     const normalizedName = projectName.replace(/\\/g, '/');
     const projectBaseName = normalizedName.split('/').filter(Boolean).pop() || projectName;
     return [home, 'ensoai', 'workspaces', projectBaseName, branchName].join(pathSep);
@@ -58,7 +60,7 @@ export function CreateWorktreeDialog({
   const localBranches = branches.filter((b) => !b.name.startsWith('remotes/'));
   const remoteBranches = branches.filter((b) => b.name.startsWith('remotes/'));
 
-  // 找到当前分支作为默认基准
+  // Use current branch as default base
   const currentBranch = branches.find((b) => b.current);
 
   React.useEffect(() => {
@@ -72,17 +74,17 @@ export function CreateWorktreeDialog({
     setError(null);
 
     if (!newBranchName) {
-      setError('请输入新分支名');
+      setError(t('Enter new branch name'));
       return;
     }
 
     if (!baseBranch) {
-      setError('请选择基于哪个分支创建');
+      setError(t('Select base branch'));
       return;
     }
 
     if (!home) {
-      setError('无法获取用户目录');
+      setError(t('Unable to determine your home directory'));
       return;
     }
 
@@ -95,14 +97,14 @@ export function CreateWorktreeDialog({
       setOpen(false);
       resetForm();
     } catch (err) {
-      const message = err instanceof Error ? err.message : '创建失败';
+      const message = err instanceof Error ? err.message : t('Failed to create');
       if (message.includes('already exists')) {
-        setError('目录已存在，请选择其他路径或分支名');
+        setError(t('Worktree path already exists. Choose a different path or branch name.'));
       } else if (
         message.includes('is already used by worktree') ||
         message.includes('already checked out')
       ) {
-        setError('该分支已存在，请使用其他分支名');
+        setError(t('Branch already exists. Choose a different name.'));
       } else {
         setError(message);
       }
@@ -122,7 +124,7 @@ export function CreateWorktreeDialog({
           trigger ?? (
             <Button size="sm">
               <Plus className="mr-2 h-4 w-4" />
-              新建
+              {t('New')}
             </Button>
           )
         }
@@ -130,42 +132,48 @@ export function CreateWorktreeDialog({
       <DialogPopup>
         <form onSubmit={handleSubmit} className="flex flex-col">
           <DialogHeader>
-            <DialogTitle>新建 Worktree</DialogTitle>
-            <DialogDescription>创建新分支并在独立目录中工作，可同时处理多个功能</DialogDescription>
+            <DialogTitle>{t('New Worktree')}</DialogTitle>
+            <DialogDescription>
+              {t('Create a new branch and work in a separate directory to handle multiple tasks.')}
+            </DialogDescription>
           </DialogHeader>
 
           <DialogPanel className="space-y-4">
             {/* New Branch Name */}
             <Field>
-              <FieldLabel>新分支名</FieldLabel>
+              <FieldLabel>{t('Branch name')}</FieldLabel>
               <Input
                 value={newBranchName}
                 onChange={(e) => setNewBranchName(e.target.value)}
                 placeholder="feature/my-feature"
                 autoFocus
               />
-              <FieldDescription>将创建此分支并在新 worktree 中检出</FieldDescription>
+              <FieldDescription>
+                {t('This branch will be created and checked out in the new worktree.')}
+              </FieldDescription>
             </Field>
 
             {/* Base Branch Selection */}
             <Field>
-              <FieldLabel>基于分支</FieldLabel>
+              <FieldLabel>{t('Base branch')}</FieldLabel>
               <Select value={baseBranch} onValueChange={(v) => setBaseBranch(v || '')}>
                 <SelectTrigger>
-                  <SelectValue>{baseBranch || '选择基准分支...'}</SelectValue>
+                  <SelectValue>{baseBranch || t('Choose base branch...')}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup>
                   {localBranches.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                        本地分支
+                        {t('Local branches')}
                       </div>
                       {localBranches.map((branch) => (
                         <SelectItem key={branch.name} value={branch.name}>
                           <GitBranch className="mr-2 h-4 w-4" />
                           {branch.name}
                           {branch.current && (
-                            <span className="ml-2 text-xs text-muted-foreground">(当前)</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {t('Current')}
+                            </span>
                           )}
                         </SelectItem>
                       ))}
@@ -174,7 +182,7 @@ export function CreateWorktreeDialog({
                   {remoteBranches.length > 0 && (
                     <>
                       <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                        远程分支
+                        {t('Remote branches')}
                       </div>
                       {remoteBranches.map((branch) => (
                         <SelectItem key={branch.name} value={branch.name}>
@@ -191,7 +199,7 @@ export function CreateWorktreeDialog({
             {/* Path Preview */}
             {newBranchName && home && (
               <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                <span className="font-medium">保存位置：</span>
+                <span className="font-medium">{t('Save location')}:</span>
                 <code className="ml-1 break-all">{getWorktreePath(newBranchName)}</code>
               </div>
             )}
@@ -200,9 +208,9 @@ export function CreateWorktreeDialog({
           </DialogPanel>
 
           <DialogFooter variant="bare">
-            <DialogClose render={<Button variant="outline">取消</Button>} />
+            <DialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? '创建中...' : '创建'}
+              {isLoading ? t('Creating...') : t('Create')}
             </Button>
           </DialogFooter>
         </form>

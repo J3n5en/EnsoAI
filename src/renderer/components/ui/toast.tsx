@@ -37,7 +37,7 @@ interface ToastProviderProps extends Toast.Provider.Props {
 
 function ToastProvider({ children, position = 'bottom-right', ...props }: ToastProviderProps) {
   return (
-    <Toast.Provider toastManager={toastManager} {...props}>
+    <Toast.Provider timeout={5000} toastManager={toastManager} {...props}>
       {children}
       <Toasts position={position} />
     </Toast.Provider>

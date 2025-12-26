@@ -1,7 +1,8 @@
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { type FileEntry, IPC_CHANNELS } from '@shared/types';
 import { BrowserWindow, ipcMain } from 'electron';
+import simpleGit from 'simple-git';
 import { FileWatcher } from '../services/files/FileWatcher';
 
 const watchers = new Map<string, FileWatcher>();
@@ -59,39 +60,53 @@ export function registerFileHandlers(): void {
     }
   );
 
-  ipcMain.handle(IPC_CHANNELS.FILE_LIST, async (_, dirPath: string): Promise<FileEntry[]> => {
-    const entries = await readdir(dirPath);
-    const result: FileEntry[] = [];
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_LIST,
+    async (_, dirPath: string, gitRoot?: string): Promise<FileEntry[]> => {
+      const entries = await readdir(dirPath);
+      const result: FileEntry[] = [];
 
-    for (const name of entries) {
-      // Skip hidden files and common ignore patterns
-      if (name.startsWith('.') || name === 'node_modules') {
-        continue;
+      for (const name of entries) {
+        const fullPath = join(dirPath, name);
+        try {
+          const stats = await stat(fullPath);
+          result.push({
+            name,
+            path: fullPath,
+            isDirectory: stats.isDirectory(),
+            size: stats.size,
+            modifiedAt: stats.mtimeMs,
+          });
+        } catch {
+          // Skip files we can't stat
+        }
       }
 
-      const fullPath = join(dirPath, name);
-      try {
-        const stats = await stat(fullPath);
-        result.push({
-          name,
-          path: fullPath,
-          isDirectory: stats.isDirectory(),
-          size: stats.size,
-          modifiedAt: stats.mtimeMs,
-        });
-      } catch {
-        // Skip files we can't stat
+      // 检查 gitignore
+      if (gitRoot) {
+        try {
+          const git = simpleGit(gitRoot);
+          const relativePaths = result.map((f) => relative(gitRoot, f.path));
+          const ignoredResult = await git.checkIgnore(relativePaths);
+          const ignoredSet = new Set(ignoredResult);
+          for (const file of result) {
+            const relPath = relative(gitRoot, file.path);
+            file.ignored = ignoredSet.has(relPath);
+          }
+        } catch {
+          // 忽略 git 错误
+        }
       }
+
+      return result.sort((a, b) => {
+        // Directories first
+        if (a.isDirectory !== b.isDirectory) {
+          return a.isDirectory ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
     }
-
-    return result.sort((a, b) => {
-      // Directories first
-      if (a.isDirectory !== b.isDirectory) {
-        return a.isDirectory ? -1 : 1;
-      }
-      return a.name.localeCompare(b.name);
-    });
-  });
+  );
 
   ipcMain.handle(IPC_CHANNELS.FILE_WATCH_START, async (event, dirPath: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);

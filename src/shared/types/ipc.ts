@@ -15,6 +15,10 @@ export const IPC_CHANNELS = {
   GIT_STAGE: 'git:stage',
   GIT_UNSTAGE: 'git:unstage',
   GIT_DISCARD: 'git:discard',
+  GIT_COMMIT_SHOW: 'git:commit:show',
+  GIT_COMMIT_FILES: 'git:commit:files',
+  GIT_COMMIT_DIFF: 'git:commit:diff',
+  GIT_DIFF_STATS: 'git:diff:stats',
 
   // Worktree
   WORKTREE_LIST: 'worktree:list',
@@ -54,6 +58,8 @@ export const IPC_CHANNELS = {
   APP_UPDATE_AVAILABLE: 'app:updateAvailable',
   APP_CLOSE_REQUEST: 'app:closeRequest',
   APP_CLOSE_CONFIRM: 'app:closeConfirm',
+  APP_OPEN_PATH: 'app:openPath',
+  APP_SET_LANGUAGE: 'app:setLanguage',
 
   // Dialog
   DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
@@ -71,6 +77,11 @@ export const IPC_CHANNELS = {
   CLI_DETECT: 'cli:detect',
   CLI_DETECT_ONE: 'cli:detectOne',
 
+  // CLI Installer
+  CLI_INSTALL_STATUS: 'cli:install:status',
+  CLI_INSTALL: 'cli:install',
+  CLI_UNINSTALL: 'cli:uninstall',
+
   // Shell Detector
   SHELL_DETECT: 'shell:detect',
 
@@ -80,6 +91,7 @@ export const IPC_CHANNELS = {
 
   // Notification
   NOTIFICATION_SHOW: 'notification:show',
+  NOTIFICATION_CLICK: 'notification:click',
 
   // Updater
   UPDATER_CHECK: 'updater:check',

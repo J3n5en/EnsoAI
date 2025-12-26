@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useI18n } from '@/i18n';
 
 interface BranchSelectorProps {
   branches: GitBranchType[];
@@ -28,6 +29,7 @@ export function BranchSelector({
   onRefresh,
   isLoading,
 }: BranchSelectorProps) {
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = React.useState('');
 
   const localBranches = branches.filter(
@@ -50,7 +52,7 @@ export function BranchSelector({
       <Select value={currentBranch || ''} onValueChange={handleValueChange}>
         <SelectTrigger className="w-48">
           <GitBranch className="mr-2 h-4 w-4 shrink-0" />
-          <SelectValue>{currentBranch || '选择分支...'}</SelectValue>
+          <SelectValue>{currentBranch || t('Choose branch...')}</SelectValue>
         </SelectTrigger>
         <SelectPopup className="w-64">
           {/* Search */}
@@ -60,7 +62,7 @@ export function BranchSelector({
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索分支..."
+                placeholder={t('Search branches...')}
                 className="pl-8"
               />
             </div>
@@ -69,7 +71,9 @@ export function BranchSelector({
           {/* Local branches */}
           {localBranches.length > 0 && (
             <>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">本地分支</div>
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                {t('Local branches')}
+              </div>
               {localBranches.map((branch) => (
                 <SelectItem key={branch.name} value={branch.name}>
                   <div className="flex items-center gap-2">
@@ -84,7 +88,9 @@ export function BranchSelector({
           {/* Remote branches */}
           {remoteBranches.length > 0 && (
             <>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">远程分支</div>
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                {t('Remote branches')}
+              </div>
               {remoteBranches.map((branch) => (
                 <SelectItem key={branch.name} value={branch.name}>
                   <span className="truncate">{branch.name.replace('remotes/', '')}</span>
@@ -101,12 +107,12 @@ export function BranchSelector({
                 type="button"
                 className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent"
                 onClick={() => {
-                  const name = prompt('输入新分支名:');
+                  const name = prompt(t('Enter a new branch name:'));
                   if (name) onCreateBranch(name);
                 }}
               >
                 <Plus className="h-4 w-4" />
-                创建新分支
+                {t('Create new branch')}
               </button>
             </>
           )}

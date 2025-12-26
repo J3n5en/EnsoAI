@@ -22,7 +22,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     queryKey: ['file', 'list', rootPath],
     queryFn: async () => {
       if (!rootPath) return [];
-      return window.electronAPI.file.list(rootPath);
+      return window.electronAPI.file.list(rootPath, rootPath);
     },
     enabled: enabled && !!rootPath,
   });
@@ -43,11 +43,11 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
       const cached = queryClient.getQueryData<FileEntry[]>(['file', 'list', path]);
       if (cached) return cached;
 
-      const files = await window.electronAPI.file.list(path);
+      const files = await window.electronAPI.file.list(path, rootPath);
       queryClient.setQueryData(['file', 'list', path], files);
       return files;
     },
-    [queryClient]
+    [queryClient, rootPath]
   );
 
   // Toggle directory expansion

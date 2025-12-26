@@ -4,6 +4,7 @@ export interface FileEntry {
   isDirectory: boolean;
   size: number;
   modifiedAt: number;
+  ignored?: boolean;
 }
 
 export interface FileChangeEvent {

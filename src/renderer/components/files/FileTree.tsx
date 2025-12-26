@@ -242,7 +242,8 @@ function FileTreeNodeComponent({
         tabIndex={0}
         className={cn(
           'flex h-7 cursor-pointer select-none items-center gap-1 rounded-sm px-2 text-sm hover:bg-accent/50',
-          isSelected && 'bg-accent text-accent-foreground'
+          isSelected && 'bg-accent text-accent-foreground',
+          node.ignored && 'opacity-50'
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={handleClick}

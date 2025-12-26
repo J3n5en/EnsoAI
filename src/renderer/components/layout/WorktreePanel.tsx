@@ -6,9 +6,12 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
+  Terminal,
   Trash2,
+  X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertDialog,
   AlertDialogClose,
@@ -28,7 +31,9 @@ import {
 } from '@/components/ui/empty';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 
 interface WorktreePanelProps {
   worktrees: GitWorktree[];
@@ -49,8 +54,8 @@ interface WorktreePanelProps {
   width?: number;
   collapsed?: boolean;
   onCollapse?: () => void;
-  workspaceCollapsed?: boolean;
-  onExpandWorkspace?: () => void;
+  repositoryCollapsed?: boolean;
+  onExpandRepository?: () => void;
 }
 
 export function WorktreePanel({
@@ -69,9 +74,10 @@ export function WorktreePanel({
   width: _width = 280,
   collapsed: _collapsed = false,
   onCollapse,
-  workspaceCollapsed = false,
-  onExpandWorkspace,
+  repositoryCollapsed = false,
+  onExpandRepository,
 }: WorktreePanelProps) {
+  const { t, tNode } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
   const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(null);
   const [deleteBranch, setDeleteBranch] = useState(false);
@@ -84,22 +90,47 @@ export function WorktreePanel({
       wt.path.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
+  const activities = useWorktreeActivityStore((s) => s.activities);
+
+  // Fetch diff stats only for worktrees with active sessions, periodically (every 10 seconds)
+  useEffect(() => {
+    if (worktrees.length === 0) return;
+    // Only fetch for worktrees that have active agent or terminal sessions
+    const activePaths = worktrees
+      .filter((wt) => {
+        const activity = activities[wt.path];
+        return activity && (activity.agentCount > 0 || activity.terminalCount > 0);
+      })
+      .map((wt) => wt.path);
+
+    if (activePaths.length === 0) return;
+
+    // Initial fetch
+    fetchDiffStats(activePaths);
+    // Periodic refresh
+    const interval = setInterval(() => {
+      fetchDiffStats(activePaths);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [worktrees, activities, fetchDiffStats]);
+
   return (
     <aside className="flex h-full w-full flex-col border-r bg-background">
       {/* Header with buttons */}
       <div
         className={cn(
           'flex h-12 items-center justify-end gap-1 border-b px-3 drag-region',
-          workspaceCollapsed && 'pl-[70px]'
+          repositoryCollapsed && 'pl-[70px]'
         )}
       >
-        {/* Expand workspace button when collapsed */}
-        {workspaceCollapsed && onExpandWorkspace && (
+        {/* Expand repository button when collapsed */}
+        {repositoryCollapsed && onExpandRepository && (
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-            onClick={onExpandWorkspace}
-            title="展开 Workspace"
+            onClick={onExpandRepository}
+            title={t('Expand Repository')}
           >
             <FolderOpen className="h-4 w-4" />
           </button>
@@ -114,7 +145,7 @@ export function WorktreePanel({
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              title="新建 Worktree"
+              title={t('New Worktree')}
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -125,7 +156,7 @@ export function WorktreePanel({
           type="button"
           className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
           onClick={onRefresh}
-          title="刷新"
+          title={t('Refresh')}
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -135,7 +166,7 @@ export function WorktreePanel({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onCollapse}
-            title="折叠"
+            title={t('Collapse')}
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
@@ -148,7 +179,7 @@ export function WorktreePanel({
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search worktrees"
+            placeholder={t('Search worktrees')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
@@ -164,20 +195,20 @@ export function WorktreePanel({
               <GitBranch className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">不是 Git 仓库</EmptyTitle>
+              <EmptyTitle className="text-base">{t('Not a Git repository')}</EmptyTitle>
               <EmptyDescription>
-                当前目录还不是 Git 仓库，初始化后即可使用 Git 功能
+                {t('This directory is not a Git repository. Initialize it to enable Git features.')}
               </EmptyDescription>
             </EmptyHeader>
             <div className="mt-2 flex gap-2">
               <Button onClick={onRefresh} variant="outline" size="sm">
                 <RefreshCw className="mr-2 h-4 w-4" />
-                刷新
+                {t('Refresh')}
               </Button>
               {onInitGit && (
                 <Button onClick={onInitGit} size="sm">
                   <GitBranch className="mr-2 h-4 w-4" />
-                  初始化仓库
+                  {t('Initialize repository')}
                 </Button>
               )}
             </div>
@@ -195,10 +226,12 @@ export function WorktreePanel({
             </EmptyMedia>
             <EmptyHeader>
               <EmptyTitle className="text-base">
-                {searchQuery ? '未找到匹配' : '暂无 Worktree'}
+                {searchQuery ? t('No matching worktrees') : t('No worktrees')}
               </EmptyTitle>
               <EmptyDescription>
-                {searchQuery ? '尝试使用不同的关键词搜索' : '创建第一个 Worktree 开始工作'}
+                {searchQuery
+                  ? t('Try a different search term')
+                  : t('Create your first worktree to get started')}
               </EmptyDescription>
             </EmptyHeader>
             {!searchQuery && (
@@ -210,7 +243,7 @@ export function WorktreePanel({
                 trigger={
                   <Button variant="outline" className="mt-2">
                     <Plus className="mr-2 h-4 w-4" />
-                    创建 Worktree
+                    {t('Create Worktree')}
                   </Button>
                 }
               />
@@ -243,16 +276,20 @@ export function WorktreePanel({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除 Worktree</AlertDialogTitle>
+            <AlertDialogTitle>{t('Delete Worktree')}</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要删除 worktree <strong>{worktreeToDelete?.branch}</strong> 吗？
+              {tNode('Are you sure you want to delete worktree {{name}}?', {
+                name: <strong>{worktreeToDelete?.branch}</strong>,
+              })}
               {worktreeToDelete?.prunable ? (
                 <span className="block mt-2 text-muted-foreground">
-                  该目录已被删除，将清理 git 记录。
+                  {t('This directory has already been removed; Git records will be cleaned up.')}
                 </span>
               ) : (
                 <span className="block mt-2 text-destructive">
-                  这将删除目录及其中所有文件，此操作不可撤销！
+                  {t(
+                    'This will delete the directory and all files inside. This action cannot be undone!'
+                  )}
                 </span>
               )}
             </AlertDialogDescription>
@@ -267,7 +304,9 @@ export function WorktreePanel({
                   className="h-4 w-4 rounded border-input"
                 />
                 <span>
-                  同时删除分支 <strong>{worktreeToDelete.branch}</strong>
+                  {tNode('Also delete branch {{name}}', {
+                    name: <strong>{worktreeToDelete.branch}</strong>,
+                  })}
                 </span>
               </label>
             )}
@@ -279,7 +318,9 @@ export function WorktreePanel({
                   onChange={(e) => setForceDelete(e.target.checked)}
                   className="h-4 w-4 rounded border-input"
                 />
-                <span className="text-muted-foreground">强制删除（忽略未提交的修改）</span>
+                <span className="text-muted-foreground">
+                  {t('Force delete (ignore uncommitted changes)')}
+                </span>
               </label>
             )}
           </div>
@@ -287,7 +328,7 @@ export function WorktreePanel({
             <AlertDialogClose
               render={
                 <Button variant="outline" disabled={isDeleting}>
-                  取消
+                  {t('Cancel')}
                 </Button>
               }
             />
@@ -307,9 +348,11 @@ export function WorktreePanel({
                     const hasUncommitted = message.includes('modified or untracked');
                     toastManager.add({
                       type: 'error',
-                      title: '删除失败',
+                      title: t('Delete failed'),
                       description: hasUncommitted
-                        ? '目录包含未提交的修改，请勾选「强制删除」'
+                        ? t(
+                            'This directory contains uncommitted changes. Please check "Force delete".'
+                          )
                         : message,
                     });
                   } finally {
@@ -318,7 +361,7 @@ export function WorktreePanel({
                 }
               }}
             >
-              {isDeleting ? '删除中...' : '删除'}
+              {isDeleting ? t('Deleting...') : t('Delete')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -335,12 +378,23 @@ interface WorktreeItemProps {
 }
 
 function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemProps) {
+  const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const isMain =
     worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
-  const branchDisplay = worktree.branch || 'detached';
+  const branchDisplay = worktree.branch || t('Detached');
   const isPrunable = worktree.prunable;
+
+  // Subscribe to activity store
+  const activities = useWorktreeActivityStore((s) => s.activities);
+  const diffStatsMap = useWorktreeActivityStore((s) => s.diffStats);
+  const activity = activities[worktree.path] || { agentCount: 0, terminalCount: 0 };
+  const diffStats = diffStatsMap[worktree.path] || { insertions: 0, deletions: 0 };
+  const closeAgentSessions = useWorktreeActivityStore((s) => s.closeAgentSessions);
+  const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
+  const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
+  const hasDiffStats = diffStats.insertions > 0 || diffStats.deletions > 0;
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -377,13 +431,20 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
           </span>
           {isPrunable ? (
             <span className="shrink-0 rounded bg-destructive/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-destructive">
-              已删除
+              {t('Deleted')}
             </span>
           ) : isMain ? (
             <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-              Main
+              {t('Main')}
             </span>
           ) : null}
+          {/* Activity indicator - green dot */}
+          {hasActivity && (
+            <span
+              className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse"
+              title={t('Active sessions')}
+            />
+          )}
         </div>
 
         {/* Path */}
@@ -396,6 +457,36 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
         >
           {worktree.path}
         </div>
+
+        {/* Activity counts and diff stats (only shown when has active sessions) */}
+        {hasActivity && (
+          <div className="flex items-center gap-3 pl-6 text-xs text-muted-foreground">
+            {activity.agentCount > 0 && (
+              <span className="flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                {activity.agentCount}
+              </span>
+            )}
+            {activity.terminalCount > 0 && (
+              <span className="flex items-center gap-1">
+                <Terminal className="h-3 w-3" />
+                {activity.terminalCount}
+              </span>
+            )}
+            {hasDiffStats && (
+              <span className="flex items-center gap-1.5">
+                {diffStats.insertions > 0 && (
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{diffStats.insertions}
+                  </span>
+                )}
+                {diffStats.deletions > 0 && (
+                  <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
+                )}
+              </span>
+            )}
+          </div>
+        )}
       </button>
 
       {/* Context Menu */}
@@ -412,9 +503,45 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
             role="presentation"
           />
           <div
-            className="fixed z-50 min-w-32 rounded-lg border bg-popover p-1 shadow-lg"
+            className="fixed z-50 min-w-40 rounded-lg border bg-popover p-1 shadow-lg"
             style={{ left: menuPosition.x, top: menuPosition.y }}
           >
+            {/* Close Agent Sessions */}
+            {activity.agentCount > 0 && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                onClick={() => {
+                  setMenuOpen(false);
+                  closeAgentSessions(worktree.path);
+                }}
+              >
+                <X className="h-4 w-4" />
+                <Sparkles className="h-4 w-4" />
+                {t('Close Agent Sessions')}
+              </button>
+            )}
+
+            {/* Close Terminal Sessions */}
+            {activity.terminalCount > 0 && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                onClick={() => {
+                  setMenuOpen(false);
+                  closeTerminalSessions(worktree.path);
+                }}
+              >
+                <X className="h-4 w-4" />
+                <Terminal className="h-4 w-4" />
+                {t('Close Terminal Sessions')}
+              </button>
+            )}
+
+            {/* Separator if there are activity options */}
+            {hasActivity && <div className="my-1 h-px bg-border" />}
+
+            {/* Delete Worktree */}
             <button
               type="button"
               className={cn(
@@ -428,7 +555,7 @@ function WorktreeItem({ worktree, isActive, onClick, onDelete }: WorktreeItemPro
               disabled={isMain}
             >
               <Trash2 className="h-4 w-4" />
-              {isPrunable ? '清理记录' : '删除'}
+              {isPrunable ? t('Clean up records') : t('Delete')}
             </button>
           </div>
         </>
