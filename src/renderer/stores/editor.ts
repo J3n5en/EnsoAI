@@ -22,7 +22,7 @@ interface EditorState {
   openFile: (file: Omit<EditorTab, 'title' | 'viewState'> & { title?: string }) => void;
   closeFile: (path: string) => void;
   setActiveFile: (path: string | null) => void;
-  updateFileContent: (path: string, content: string) => void;
+  updateFileContent: (path: string, content: string, isDirty?: boolean) => void;
   markFileSaved: (path: string) => void;
   setTabViewState: (path: string, viewState: unknown) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
@@ -73,9 +73,9 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   setActiveFile: (path) => set({ activeTabPath: path }),
 
-  updateFileContent: (path, content) =>
+  updateFileContent: (path, content, isDirty = true) =>
     set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.path === path ? { ...tab, content, isDirty: true } : tab)),
+      tabs: state.tabs.map((tab) => (tab.path === path ? { ...tab, content, isDirty } : tab)),
     })),
 
   markFileSaved: (path) =>

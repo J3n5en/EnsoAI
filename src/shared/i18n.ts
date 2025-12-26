@@ -462,6 +462,19 @@ export const zhTranslations: Record<string, string> = {
   'Sent to Claude Code': '已发送到 Claude Code',
   'Send to Claude': '发送到 Claude',
   lines: '行',
+  // Auto Save section
+  'Auto Save': '自动保存',
+  'Auto save settings': '自动保存设置',
+  'Auto save': '自动保存',
+  'After delay': '延迟后',
+  'On focus change': '失去焦点时',
+  'On window change': '窗口失焦时',
+  'Auto save is disabled': '关闭自动保存',
+  'Auto save after a short delay': '短暂延迟后自动保存',
+  'Auto save when editor loses focus': '编辑器失去焦点时自动保存',
+  'Auto save when window loses focus': '窗口失去焦点时自动保存',
+  Delay: '延迟',
+  ms: '毫秒',
 };
 
 export function normalizeLocale(input?: string): Locale {

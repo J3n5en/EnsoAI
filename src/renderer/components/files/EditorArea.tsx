@@ -16,6 +16,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { toastManager } from '@/components/ui/toast';
+import { useDebouncedSave } from '@/hooks/useDebouncedSave';
 import { useI18n } from '@/i18n';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
 import type { EditorTab, PendingCursor } from '@/stores/editor';
@@ -125,9 +126,9 @@ interface EditorAreaProps {
   activeTabPath: string | null;
   pendingCursor: PendingCursor | null;
   onTabClick: (path: string) => void;
-  onTabClose: (path: string) => void;
+  onTabClose: (path: string) => void | Promise<void>;
   onTabReorder: (fromIndex: number, toIndex: number) => void;
-  onContentChange: (path: string, content: string) => void;
+  onContentChange: (path: string, content: string, isDirty?: boolean) => void;
   onViewStateChange: (path: string, viewState: unknown) => void;
   onSave: (path: string) => void;
   onClearPendingCursor: () => void;
@@ -154,6 +155,110 @@ export function EditorArea({
   const selectionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionWidgetRef = useRef<monaco.editor.IContentWidget | null>(null);
   const widgetRootRef = useRef<Root | null>(null);
+  const hasPendingAutoSaveRef = useRef(false);
+  const blurDisposableRef = useRef<monaco.IDisposable | null>(null);
+  const activeTabPathRef = useRef<string | null>(null);
+
+  // Keep ref in sync with activeTabPath
+  useEffect(() => {
+    activeTabPathRef.current = activeTabPath;
+  }, [activeTabPath]);
+
+  // Auto save: Debounced save for 'afterDelay' mode
+  // Use ref-based debounce to avoid closure issues with activeTabPath
+  const {
+    trigger: triggerDebouncedSave,
+    cancel: cancelDebouncedSave,
+    flush: flushDebouncedSave,
+  } = useDebouncedSave(editorSettings.autoSaveDelay);
+
+  // Auto save: Handle blur listener for onFocusChange mode
+  // This effect ensures listener is properly registered/unregistered when autoSave mode changes
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    // Cleanup previous listener
+    if (blurDisposableRef.current) {
+      blurDisposableRef.current.dispose();
+      blurDisposableRef.current = null;
+    }
+
+    // Register new listener if onFocusChange mode
+    if (editorSettings.autoSave === 'onFocusChange') {
+      const handleBlur = () => {
+        const path = activeTabPathRef.current;
+        if (path && hasPendingAutoSaveRef.current) {
+          onSave(path);
+          hasPendingAutoSaveRef.current = false;
+        }
+      };
+      blurDisposableRef.current = editor.onDidBlurEditorText(handleBlur);
+    }
+
+    return () => {
+      if (blurDisposableRef.current) {
+        blurDisposableRef.current.dispose();
+        blurDisposableRef.current = null;
+      }
+    };
+  }, [editorSettings.autoSave, onSave]);
+
+  // Auto save: Save on window focus change
+  useEffect(() => {
+    const handleWindowBlur = () => {
+      if (
+        activeTabPath &&
+        editorSettings.autoSave === 'onWindowChange' &&
+        hasPendingAutoSaveRef.current
+      ) {
+        onSave(activeTabPath);
+        hasPendingAutoSaveRef.current = false;
+      }
+    };
+
+    window.addEventListener('blur', handleWindowBlur);
+    return () => window.removeEventListener('blur', handleWindowBlur);
+  }, [activeTabPath, editorSettings.autoSave, onSave]);
+
+  // Listen for external file changes and update open tabs
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.file.onChange(async (event) => {
+      // Only handle update events (create/delete don't need tab updates)
+      if (event.type !== 'update') return;
+
+      // Check if the changed file is open in any tab
+      const changedTab = tabs.find((tab) => tab.path === event.path);
+      if (!changedTab) return;
+
+      // Read the latest content from disk
+      try {
+        const latestContent = await window.electronAPI.file.read(event.path);
+        // Update the tab content
+        onContentChange(event.path, latestContent, changedTab.isDirty);
+
+        // If this is the active tab, update the editor content
+        if (event.path === activeTabPath && editorRef.current) {
+          const editor = editorRef.current;
+          const currentValue = editor.getValue();
+          // Only update if content is different to avoid cursor jump
+          if (currentValue !== latestContent) {
+            const position = editor.getPosition();
+            editor.setValue(latestContent);
+            if (position) {
+              editor.setPosition(position);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to reload file ${event.path}:`, error);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [tabs, activeTabPath, onContentChange]);
 
   // Define custom theme on mount and when terminal theme changes
   useEffect(() => {
@@ -401,15 +506,63 @@ export function EditorArea({
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
       if (activeTabPath && value !== undefined) {
-        onContentChange(activeTabPath, value);
+        const autoSaveEnabled = editorSettings.autoSave !== 'off';
+        // Show dirty indicator when auto save is off or when it triggers on focus/window change
+        const shouldShowDirty =
+          !autoSaveEnabled ||
+          editorSettings.autoSave === 'onFocusChange' ||
+          editorSettings.autoSave === 'onWindowChange';
+        onContentChange(activeTabPath, value, shouldShowDirty);
+
+        // Mark as pending for focus/window change modes
+        if (autoSaveEnabled) {
+          hasPendingAutoSaveRef.current = true;
+        }
+
+        // Trigger auto save based on mode
+        if (editorSettings.autoSave === 'afterDelay') {
+          triggerDebouncedSave(activeTabPath, (path) => {
+            onSave(path);
+            hasPendingAutoSaveRef.current = false;
+          });
+        }
       }
     },
-    [activeTabPath, onContentChange]
+    [activeTabPath, onContentChange, editorSettings.autoSave, triggerDebouncedSave, onSave]
   );
 
   const handleTabClose = useCallback(
-    (path: string, e: React.MouseEvent) => {
+    async (path: string, e: React.MouseEvent) => {
       e.stopPropagation();
+
+      // Auto-save before closing based on mode (VS Code behavior):
+      // - afterDelay: save (debounced save may still be pending)
+      // - onFocusChange: save (closing tab should trigger save like focus change)
+      // - onWindowChange: don't save (user needs to manually save)
+      // - off: don't save (manual save only)
+      const shouldAutoSaveOnClose =
+        editorSettings.autoSave === 'afterDelay' || editorSettings.autoSave === 'onFocusChange';
+
+      // Sync save before closing (await to ensure file is written before tab is removed)
+      // We need to save directly because saveFile.mutate reads from tabs which will be removed
+      if (
+        path === activeTabPath &&
+        editorRef.current &&
+        hasPendingAutoSaveRef.current &&
+        shouldAutoSaveOnClose
+      ) {
+        const currentContent = editorRef.current.getValue();
+        // Sync content to store and mark as not dirty (isDirty: false)
+        onContentChange(path, currentContent, false);
+        // Save to disk directly (await to ensure it completes before closing)
+        await window.electronAPI.file.write(path, currentContent);
+        // Note: We don't call onSave here because we already wrote the file directly above.
+        // Calling onSave would trigger saveFile.mutate which writes the file again.
+        hasPendingAutoSaveRef.current = false;
+      }
+
+      // Cancel pending debounced save
+      cancelDebouncedSave();
 
       // Save view state before closing
       if (editorRef.current && path === activeTabPath) {
@@ -421,12 +574,22 @@ export function EditorArea({
 
       onTabClose(path);
     },
-    [activeTabPath, onTabClose, onViewStateChange]
+    [
+      activeTabPath,
+      onTabClose,
+      onViewStateChange,
+      cancelDebouncedSave,
+      editorSettings.autoSave,
+      onContentChange,
+    ]
   );
 
   // Save view state when switching tabs
   const handleTabClick = useCallback(
     (path: string) => {
+      // Flush pending debounced save when switching tabs (save immediately)
+      flushDebouncedSave();
+
       if (editorRef.current && activeTabPath && activeTabPath !== path) {
         const viewState = editorRef.current.saveViewState();
         if (viewState) {
@@ -435,7 +598,7 @@ export function EditorArea({
       }
       onTabClick(path);
     },
-    [activeTabPath, onTabClick, onViewStateChange]
+    [activeTabPath, onTabClick, onViewStateChange, flushDebouncedSave]
   );
 
   // Determine Monaco theme - use custom theme synced with terminal

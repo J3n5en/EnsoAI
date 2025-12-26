@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import * as React from 'react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Combobox,
@@ -51,6 +52,7 @@ import { cn } from '@/lib/utils';
 import {
   type EditorAutoClosingBrackets,
   type EditorAutoClosingQuotes,
+  type EditorAutoSave,
   type EditorCursorBlinking,
   type EditorCursorStyle,
   type EditorLineNumbers,
@@ -683,6 +685,9 @@ const fontWeightOptions: { value: FontWeight; label: string }[] = [
   { value: 'bold', label: 'Bold' },
 ];
 
+// Auto save delay default (in milliseconds)
+const AUTO_SAVE_DELAY_DEFAULT = 1000;
+
 function EditorSettingsPanel() {
   const { editorSettings, setEditorSettings } = useSettingsStore();
   const { t } = useI18n();
@@ -690,6 +695,7 @@ function EditorSettingsPanel() {
   // Local state for font inputs
   const [localFontSize, setLocalFontSize] = React.useState(editorSettings.fontSize);
   const [localFontFamily, setLocalFontFamily] = React.useState(editorSettings.fontFamily);
+  const [localAutoSaveDelay, setLocalAutoSaveDelay] = React.useState(editorSettings.autoSaveDelay);
 
   React.useEffect(() => {
     setLocalFontSize(editorSettings.fontSize);
@@ -698,6 +704,10 @@ function EditorSettingsPanel() {
   React.useEffect(() => {
     setLocalFontFamily(editorSettings.fontFamily);
   }, [editorSettings.fontFamily]);
+
+  React.useEffect(() => {
+    setLocalAutoSaveDelay(editorSettings.autoSaveDelay);
+  }, [editorSettings.autoSaveDelay]);
 
   const applyFontSizeChange = React.useCallback(() => {
     const validFontSize = Math.max(8, Math.min(32, localFontSize || 13));
@@ -711,6 +721,14 @@ function EditorSettingsPanel() {
     if (validFontFamily !== editorSettings.fontFamily)
       setEditorSettings({ fontFamily: validFontFamily });
   }, [localFontFamily, editorSettings.fontFamily, setEditorSettings]);
+
+  const applyAutoSaveDelayChange = React.useCallback(() => {
+    const rawVal = Number(localAutoSaveDelay);
+    const validDelay = Number.isNaN(rawVal) || rawVal < 0 ? AUTO_SAVE_DELAY_DEFAULT : rawVal;
+    if (validDelay !== localAutoSaveDelay) setLocalAutoSaveDelay(validDelay);
+    if (validDelay !== editorSettings.autoSaveDelay)
+      setEditorSettings({ autoSaveDelay: validDelay });
+  }, [localAutoSaveDelay, editorSettings.autoSaveDelay, setEditorSettings]);
 
   const lineNumbersOptions: { value: EditorLineNumbers; label: string }[] = [
     { value: 'on', label: t('On') },
@@ -769,6 +787,34 @@ function EditorSettingsPanel() {
     { value: 'beforeWhitespace', label: t('Before whitespace') },
     { value: 'never', label: t('Never') },
   ];
+
+  const autoSaveOptions = useMemo<
+    {
+      value: EditorAutoSave;
+      label: string;
+      description: string;
+    }[]
+  >(
+    () => [
+      { value: 'off', label: t('Off'), description: t('Auto save is disabled') },
+      {
+        value: 'afterDelay',
+        label: t('After delay'),
+        description: t('Auto save after a short delay'),
+      },
+      {
+        value: 'onFocusChange',
+        label: t('On focus change'),
+        description: t('Auto save when editor loses focus'),
+      },
+      {
+        value: 'onWindowChange',
+        label: t('On window change'),
+        description: t('Auto save when window loses focus'),
+      },
+    ],
+    [t]
+  );
 
   const tabSizeOptions = [2, 4, 8];
 
@@ -1183,6 +1229,57 @@ function EditorSettingsPanel() {
           </SelectPopup>
         </Select>
       </div>
+
+      {/* Auto Save Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Auto Save')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Auto save settings')}</p>
+      </div>
+
+      {/* Auto Save Mode */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Auto save')}</span>
+        <Select
+          value={editorSettings.autoSave}
+          onValueChange={(v) => setEditorSettings({ autoSave: v as EditorAutoSave })}
+        >
+          <SelectTrigger className="w-48">
+            <SelectValue>
+              {autoSaveOptions.find((o) => o.value === editorSettings.autoSave)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup>
+            {autoSaveOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+
+      {/* Auto Save Delay */}
+      {editorSettings.autoSave === 'afterDelay' && (
+        <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+          <span className="text-sm font-medium">{t('Delay')}</span>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              value={localAutoSaveDelay}
+              onChange={(e) => setLocalAutoSaveDelay(Number(e.target.value))}
+              onBlur={applyAutoSaveDelayChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  applyAutoSaveDelayChange();
+                }
+              }}
+              className="w-20"
+            />
+            <span className="text-sm text-muted-foreground">{t('ms')}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

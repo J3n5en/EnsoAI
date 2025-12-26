@@ -9,7 +9,7 @@ interface EditorTabsProps {
   tabs: EditorTab[];
   activeTabPath: string | null;
   onTabClick: (path: string) => void;
-  onTabClose: (path: string, e: React.MouseEvent) => void;
+  onTabClose: (path: string, e: React.MouseEvent) => void | Promise<void>;
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
 }
 
