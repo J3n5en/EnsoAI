@@ -48,10 +48,11 @@ async function runWithAdminPrivileges(shellCommand: string): Promise<void> {
 
   // Linux: try multiple methods
   // 1. Try zenity (GTK dialog, works on most DEs including XFCE)
+  // Note: Use --entry --hide-text instead of --password for better compatibility with zenity 4.x
   if (await commandExists('zenity')) {
     return new Promise((resolve, reject) => {
       const script = `
-        PASSWORD=$(zenity --password --title="EnsoAI CLI 安装" 2>/dev/null)
+        PASSWORD=$(zenity --entry --hide-text --title="EnsoAI CLI" --text="请输入密码以安装 CLI:" 2>/dev/null)
         if [ -z "$PASSWORD" ]; then
           exit 1
         fi
