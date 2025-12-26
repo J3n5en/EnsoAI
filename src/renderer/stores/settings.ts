@@ -157,6 +157,19 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   atMentionedKeybinding: { key: 'm', meta: true, shift: true }, // Cmd/Ctrl+Shift+M
 };
 
+// Commit message generator settings
+export interface CommitMessageGeneratorSettings {
+  enabled: boolean;
+  maxDiffLines: number;
+  timeout: number; // in seconds
+}
+
+export const defaultCommitMessageGeneratorSettings: CommitMessageGeneratorSettings = {
+  enabled: true,
+  maxDiffLines: 1000,
+  timeout: 60,
+};
+
 // Editor settings
 export type EditorLineNumbers = 'on' | 'off' | 'relative';
 export type EditorWordWrap = 'on' | 'off' | 'wordWrapColumn' | 'bounded';
@@ -290,6 +303,7 @@ interface SettingsState {
   agentNotificationDelay: number; // in seconds
   agentNotificationEnterDelay: number; // delay after Enter before starting idle timer
   claudeCodeIntegration: ClaudeCodeIntegrationSettings;
+  commitMessageGenerator: CommitMessageGeneratorSettings;
 
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Locale) => void;
@@ -318,6 +332,7 @@ interface SettingsState {
   setAgentNotificationDelay: (delay: number) => void;
   setAgentNotificationEnterDelay: (delay: number) => void;
   setClaudeCodeIntegration: (settings: Partial<ClaudeCodeIntegrationSettings>) => void;
+  setCommitMessageGenerator: (settings: Partial<CommitMessageGeneratorSettings>) => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -358,6 +373,7 @@ export const useSettingsStore = create<SettingsState>()(
       agentNotificationDelay: 3, // 3 seconds
       agentNotificationEnterDelay: 0, // 0 = disabled, start timer immediately
       claudeCodeIntegration: defaultClaudeCodeIntegrationSettings,
+      commitMessageGenerator: defaultCommitMessageGeneratorSettings,
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -463,6 +479,10 @@ export const useSettingsStore = create<SettingsState>()(
       setClaudeCodeIntegration: (settings) =>
         set((state) => ({
           claudeCodeIntegration: { ...state.claudeCodeIntegration, ...settings },
+        })),
+      setCommitMessageGenerator: (settings) =>
+        set((state) => ({
+          commitMessageGenerator: { ...state.commitMessageGenerator, ...settings },
         })),
     }),
     {

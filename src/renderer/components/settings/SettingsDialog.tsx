@@ -2198,7 +2198,12 @@ function AgentForm({ agent, onSubmit, onCancel }: AgentFormProps) {
 
 function IntegrationSettings() {
   const { t } = useI18n();
-  const { claudeCodeIntegration, setClaudeCodeIntegration } = useSettingsStore();
+  const {
+    claudeCodeIntegration,
+    setClaudeCodeIntegration,
+    commitMessageGenerator,
+    setCommitMessageGenerator,
+  } = useSettingsStore();
   const [bridgePort, setBridgePort] = React.useState<number | null>(null);
 
   const debounceOptions = React.useMemo(
@@ -2290,6 +2295,76 @@ function IntegrationSettings() {
           </div>
         </div>
       )}
+
+      {/* Commit Message Generator Section */}
+      <div className="mt-6 border-t pt-6">
+        <div>
+          <h3 className="text-lg font-medium">{t('Commit Message Generator')}</h3>
+          <p className="text-sm text-muted-foreground">
+            {t('Auto-generate commit messages using Claude')}
+          </p>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-sm font-medium">{t('Enable Generator')}</span>
+            <p className="text-xs text-muted-foreground">
+              {t('Generate commit messages with AI assistance')}
+            </p>
+          </div>
+          <Switch
+            checked={commitMessageGenerator.enabled}
+            onCheckedChange={(checked) => setCommitMessageGenerator({ enabled: checked })}
+          />
+        </div>
+
+        {commitMessageGenerator.enabled && (
+          <div className="mt-4 space-y-4 border-t pt-4">
+            {/* Max Diff Lines */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Max Diff Lines')}</span>
+              <div className="space-y-1.5">
+                <Input
+                  type="number"
+                  value={commitMessageGenerator.maxDiffLines}
+                  onChange={(e) =>
+                    setCommitMessageGenerator({ maxDiffLines: Number(e.target.value) || 1000 })
+                  }
+                  min={100}
+                  max={10000}
+                  className="w-32"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t('Maximum number of diff lines to include')}
+                </p>
+              </div>
+            </div>
+
+            {/* Timeout */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Timeout')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={String(commitMessageGenerator.timeout)}
+                  onValueChange={(v) => setCommitMessageGenerator({ timeout: Number(v) })}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue>{commitMessageGenerator.timeout}s</SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {[30, 60, 120, 180].map((sec) => (
+                      <SelectItem key={sec} value={String(sec)}>
+                        {sec}s
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('Timeout in seconds')}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

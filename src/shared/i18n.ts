@@ -456,7 +456,7 @@ export const zhTranslations: Record<string, string> = {
   'Claude Code Integration': 'Claude Code 集成',
   'Connect to Claude Code CLI for enhanced IDE features':
     '连接 Claude Code CLI 以获得增强的 IDE 功能',
-  'Enable Integration': '启用集成',
+  'Enable Integration': '启动 IDE 集成',
   'Start WebSocket server for Claude Code connection': '启动 WebSocket 服务器以连接 Claude Code',
   'Debounce Time': '防抖时间',
   'Delay before sending selection changes to Claude Code':
@@ -466,6 +466,19 @@ export const zhTranslations: Record<string, string> = {
   'Sent to Claude Code': '已发送到 Claude Code',
   'Send to Claude': '发送到 Claude',
   lines: '行',
+  // Commit Message Generator
+  'Commit Message Generator': '生成 Commit Message',
+  'Auto-generate commit messages using Claude': '使用 Claude 自动生成 commit 消息',
+  'Enable Generator': '启用生成器',
+  'Generate commit messages with AI assistance': '使用 AI 辅助生成 commit 消息',
+  'Max Diff Lines': '最大 Diff 行数',
+  'Maximum number of diff lines to include': '包含的最大 diff 行数',
+  Timeout: '超时',
+  'Timeout in seconds': '超时时间（秒）',
+  seconds: '秒',
+  'Generate commit message': '生成 commit 消息',
+  'Failed to generate commit message': '生成 commit 消息失败',
+  'Generation timed out': '生成超时',
   // Auto Save section
   'Auto Save': '自动保存',
   'Auto save settings': '自动保存设置',

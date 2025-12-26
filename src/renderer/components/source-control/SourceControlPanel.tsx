@@ -427,6 +427,7 @@ export function SourceControlPanel({
                       stagedCount={staged.length}
                       onCommit={handleCommit}
                       isCommitting={commitMutation.isPending}
+                      rootPath={rootPath}
                     />
                   </>
                 )}

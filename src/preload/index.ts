@@ -69,6 +69,11 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_DIFF, workdir, hash, filePath, status),
     getDiffStats: (workdir: string): Promise<{ insertions: number; deletions: number }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_STATS, workdir),
+    generateCommitMessage: (
+      workdir: string,
+      options: { maxDiffLines: number; timeout: number }
+    ): Promise<{ success: boolean; message?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_GENERATE_COMMIT_MSG, workdir, options),
   },
 
   // Worktree

@@ -19,6 +19,7 @@ export const IPC_CHANNELS = {
   GIT_COMMIT_FILES: 'git:commit:files',
   GIT_COMMIT_DIFF: 'git:commit:diff',
   GIT_DIFF_STATS: 'git:diff:stats',
+  GIT_GENERATE_COMMIT_MSG: 'git:generate-commit-msg',
 
   // Worktree
   WORKTREE_LIST: 'worktree:list',

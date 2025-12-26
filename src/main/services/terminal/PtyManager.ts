@@ -41,7 +41,7 @@ function adjustArgsForShell(shell: string, args: string[]): string[] {
 }
 
 // GUI apps don't inherit shell PATH, add common paths
-function getEnhancedPath(): string {
+export function getEnhancedPath(): string {
   const home = process.env.HOME || process.env.USERPROFILE || homedir();
   const currentPath = process.env.PATH || '';
 

@@ -1,8 +1,10 @@
+import { execSync, spawn } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { type FileChangeStatus, IPC_CHANNELS } from '@shared/types';
 import { ipcMain } from 'electron';
 import { GitService } from '../services/git/GitService';
+import { getEnhancedPath } from '../services/terminal/PtyManager';
 
 const gitServices = new Map<string, GitService>();
 
@@ -173,4 +175,117 @@ export function registerGitHandlers(): void {
     const git = getGitService(workdir);
     return git.getDiffStats();
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_GENERATE_COMMIT_MSG,
+    async (
+      _,
+      workdir: string,
+      options: { maxDiffLines: number; timeout: number }
+    ): Promise<{ success: boolean; message?: string; error?: string }> => {
+      const resolved = validateWorkdir(workdir);
+
+      // Helper to run git commands
+      const runGit = (cmd: string): string => {
+        try {
+          return execSync(cmd, { cwd: resolved, encoding: 'utf-8', timeout: 5000 }).trim();
+        } catch {
+          return '';
+        }
+      };
+
+      // Gather git info
+      const recentCommits = runGit('git --no-pager log -5 --format="%s"');
+      const stagedStat = runGit('git --no-pager diff --cached --stat');
+      const unstagedStat = runGit('git --no-pager diff --stat');
+      const stagedDiff = runGit('git --no-pager diff --cached');
+      const unstagedDiff = runGit(`git --no-pager diff | head -${options.maxDiffLines}`);
+
+      const diffStat = [stagedStat, unstagedStat].filter(Boolean).join('\n');
+      const diffContent = [stagedDiff, unstagedDiff].filter(Boolean).join('\n');
+
+      const truncatedDiff =
+        diffContent.split('\n').slice(0, options.maxDiffLines).join('\n') ||
+        '(no changes detected)';
+
+      const prompt = `你无法调用任何工具，我消息里已经包含了所有你需要的信息，无需解释，直接返回一句简短的 commit message。
+
+参考风格：
+${recentCommits || '(no recent commits)'}
+
+变更摘要：
+${diffStat || '(no stats)'}
+
+变更详情：
+${truncatedDiff}`;
+
+      return new Promise((resolve) => {
+        const timeoutMs = options.timeout * 1000;
+
+        const args = [
+          '-p',
+          '--output-format',
+          'json',
+          '--no-session-persistence',
+          '--tools',
+          '',
+          '--model',
+          'haiku',
+        ];
+
+        const proc = spawn('claude', args, {
+          cwd: resolved,
+          shell: true,
+          env: {
+            ...process.env,
+            PATH: getEnhancedPath(),
+          },
+        });
+
+        proc.stdin.write(prompt);
+        proc.stdin.end();
+
+        let stdout = '';
+        let stderr = '';
+
+        const timer = setTimeout(() => {
+          proc.kill('SIGTERM');
+          resolve({ success: false, error: 'timeout' });
+        }, timeoutMs);
+
+        proc.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        proc.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        proc.on('close', (code) => {
+          clearTimeout(timer);
+
+          if (code !== 0) {
+            resolve({ success: false, error: stderr || `Exit code: ${code}` });
+            return;
+          }
+
+          try {
+            const result = JSON.parse(stdout);
+            if (result.type === 'result' && result.subtype === 'success' && result.result) {
+              resolve({ success: true, message: result.result });
+            } else {
+              resolve({ success: false, error: result.error || 'Unknown error' });
+            }
+          } catch {
+            resolve({ success: false, error: 'Failed to parse response' });
+          }
+        });
+
+        proc.on('error', (err) => {
+          clearTimeout(timer);
+          resolve({ success: false, error: err.message });
+        });
+      });
+    }
+  );
 }
