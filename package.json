@@ -1,11 +1,11 @@
 {
   "name": "enso-ai",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "EnsoAI - Git Worktree Manager with AI Agent",
   "main": "./out/main/index.js",
   "author": {
     "name": "EnsoAI Team",
-    "email": "crolin-zhang@users.noreply.github.com"
+    "email": "admin@j3n5en.com"
   },
   "license": "MIT",
   "type": "module",
