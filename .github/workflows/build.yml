@@ -136,12 +136,115 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
 
-  trigger-release-notes:
+  generate-release-notes:
     needs: [build-mac, build-windows, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 10
     steps:
-      - name: Trigger Release Notes
-        run: gh workflow run release-notes.yml -R ${{ github.repository }} -f tag=${{ github.ref_name }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set Tag
+        id: tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          echo "name=$TAG" >> $GITHUB_OUTPUT
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get Previous Tag
+        id: prev_tag
+        run: |
+          CURRENT_TAG="${{ steps.tag.outputs.name }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -A1 "^${CURRENT_TAG}$" | tail -1)
+          if [ "$PREV_TAG" = "$CURRENT_TAG" ] || [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "prev_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          VERSION="${{ steps.tag.outputs.version }}"
+          PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
+
+          # 获取 commits
+          COMMITS=$(git log ${PREV_TAG}..${TAG} --pretty=format:"%s" --no-merges)
+
+          # 分类
+          FEATURES=""
+          FIXES=""
+          CICD=""
+
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+
+            if [[ "$line" =~ ^feat ]]; then
+              DESC=$(echo "$line" | sed 's/^feat[^:]*: //')
+              FEATURES="${FEATURES}\n- **${DESC}**"
+            elif [[ "$line" =~ ^fix ]]; then
+              DESC=$(echo "$line" | sed 's/^fix[^:]*: //')
+              FIXES="${FIXES}\n- **${DESC}**"
+            elif [[ "$line" =~ ^ci ]] || [[ "$line" =~ ^build ]]; then
+              DESC=$(echo "$line" | sed 's/^\(ci\|build\)[^:]*: //')
+              CICD="${CICD}\n- ${DESC}"
+            fi
+          done <<< "$COMMITS"
+
+          # 构建 notes
+          {
+            echo "## 更新内容"
+            echo ""
+
+            if [[ -n "$FEATURES" ]]; then
+              echo "### ✨ 新功能"
+              echo -e "$FEATURES"
+              echo ""
+            fi
+
+            if [[ -n "$FIXES" ]]; then
+              echo "### 🐛 问题修复"
+              echo -e "$FIXES"
+              echo ""
+            fi
+
+            if [[ -n "$CICD" ]]; then
+              echo "### 🔨 CI/CD"
+              echo -e "$CICD"
+              echo ""
+            fi
+
+            echo "---"
+            echo ""
+            echo "## 📦 下载"
+            echo ""
+            echo "| 平台 | 文件 |"
+            echo "|------|------|"
+            echo "| macOS (Apple Silicon) | [EnsoAI-${VERSION}-arm64.dmg](https://github.com/${{ github.repository }}/releases/download/${TAG}/EnsoAI-${VERSION}-arm64.dmg) |"
+            echo "| macOS (Intel) | [EnsoAI-${VERSION}.dmg](https://github.com/${{ github.repository }}/releases/download/${TAG}/EnsoAI-${VERSION}.dmg) |"
+            echo "| Windows (x64 安装版) | [EnsoAI-Setup-${VERSION}.exe](https://github.com/${{ github.repository }}/releases/download/${TAG}/EnsoAI-Setup-${VERSION}.exe) |"
+            echo "| Windows (x64 便携版) | [EnsoAI-${VERSION}-portable.exe](https://github.com/${{ github.repository }}/releases/download/${TAG}/EnsoAI-${VERSION}-portable.exe) |"
+            echo "| Linux (x64 AppImage) | [EnsoAI-${VERSION}.AppImage](https://github.com/${{ github.repository }}/releases/download/${TAG}/EnsoAI-${VERSION}.AppImage) |"
+            echo "| Linux (x64 deb) | [ensoai_${VERSION}_amd64.deb](https://github.com/${{ github.repository }}/releases/download/${TAG}/ensoai_${VERSION}_amd64.deb) |"
+            echo ""
+            echo "> ⚠️ **macOS 用户注意**: 由于应用未签名，首次打开可能提示\"已损坏\"，请在终端执行以下命令："
+            echo "> \`\`\`bash"
+            echo "> sudo xattr -dr com.apple.quarantine /Applications/EnsoAI.app"
+            echo "> \`\`\`"
+            echo ""
+            echo "---"
+            echo ""
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+          } > release-notes.md
+
+          cat release-notes.md
+
+      - name: Update Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit ${{ steps.tag.outputs.name }} --notes-file release-notes.md
