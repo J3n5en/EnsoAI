@@ -1,5 +1,5 @@
 import { exec } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -8,6 +8,24 @@ import type { AgentCliInfo, AgentCliStatus, BuiltinAgentId, CustomAgent } from '
 const isWindows = process.platform === 'win32';
 
 const execAsync = promisify(exec);
+
+/**
+ * Find user's default shell
+ */
+function findUserShell(): string {
+  const userShell = process.env.SHELL;
+  if (userShell && existsSync(userShell)) {
+    return userShell;
+  }
+  // Fallback to common shells
+  const shells = ['/bin/zsh', '/bin/bash', '/bin/sh'];
+  for (const shell of shells) {
+    if (existsSync(shell)) {
+      return shell;
+    }
+  }
+  return '/bin/sh';
+}
 
 interface BuiltinAgentConfig {
   id: BuiltinAgentId;
@@ -70,6 +88,28 @@ class CliDetector {
   private cachedStatus: AgentCliStatus | null = null;
   private wslAvailable: boolean | null = null;
 
+  /**
+   * Execute command in login shell to load user's environment (PATH, nvm, etc.)
+   */
+  private async execInLoginShell(command: string, timeout = 5000): Promise<string> {
+    if (isWindows) {
+      // Windows: use cmd directly with enhanced PATH
+      const { stdout } = await execAsync(command, {
+        timeout,
+        env: { ...process.env, PATH: this.getEnhancedPath() },
+      });
+      return stdout;
+    }
+
+    // Unix: use login shell to load user's full environment
+    const shell = findUserShell();
+    const escapedCommand = command.replace(/"/g, '\\"');
+    const { stdout } = await execAsync(`${shell} -ilc "${escapedCommand}"`, {
+      timeout,
+    });
+    return stdout;
+  }
+
   private async isWslAvailable(): Promise<boolean> {
     if (this.wslAvailable !== null) {
       return this.wslAvailable;
@@ -113,6 +153,7 @@ class CliDetector {
       join(home, '.local', 'bin'),
       join(home, '.volta', 'bin'),
       join(home, '.cargo', 'bin'), // Rust
+      join(home, '.bun', 'bin'), // Bun
       ...this.getNvmNodeBins(home),
     ];
     return paths.filter(Boolean).join(delimiter);
@@ -130,13 +171,7 @@ class CliDetector {
 
   async detectBuiltin(config: BuiltinAgentConfig): Promise<AgentCliInfo> {
     try {
-      const { stdout } = await execAsync(`${config.command} ${config.versionFlag}`, {
-        timeout: 5000,
-        env: {
-          ...process.env,
-          PATH: this.getEnhancedPath(),
-        },
-      });
+      const stdout = await this.execInLoginShell(`${config.command} ${config.versionFlag}`);
 
       let version: string | undefined;
       if (config.versionRegex) {
@@ -207,13 +242,7 @@ class CliDetector {
 
   async detectCustom(agent: CustomAgent): Promise<AgentCliInfo> {
     try {
-      const { stdout } = await execAsync(`${agent.command} --version`, {
-        timeout: 5000,
-        env: {
-          ...process.env,
-          PATH: this.getEnhancedPath(),
-        },
-      });
+      const stdout = await this.execInLoginShell(`${agent.command} --version`);
 
       const match = stdout.match(/(\d+\.\d+\.\d+)/);
       const version = match ? match[1] : undefined;
