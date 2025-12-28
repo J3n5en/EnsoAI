@@ -159,48 +159,50 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           HASH="${{ steps.sha.outputs.hash }}"
 
-          cat > scoop-bucket/bucket/ensoai.json << EOF
-          {
-            "version": "${VERSION}",
-            "description": "Git Worktree Manager with AI Agent",
-            "homepage": "https://github.com/J3n5en/EnsoAI",
-            "license": "MIT",
-            "architecture": {
-              "64bit": {
-                "url": "https://github.com/J3n5en/EnsoAI/releases/download/v${VERSION}/EnsoAI-Setup-${VERSION}.exe#/setup.exe",
-                "hash": "${HASH}"
-              }
-            },
-            "installer": {
-              "script": [
-                "Start-Process \"\\\$dir\\\\setup.exe\" -ArgumentList '/S', \"/D=\\\$dir\" -Wait"
-              ]
-            },
-            "post_install": [
-              "Remove-Item \"\\\$dir\\\\setup.exe\" -Force"
-            ],
-            "bin": "EnsoAI.exe",
-            "shortcuts": [
-              ["EnsoAI.exe", "EnsoAI"]
-            ],
-            "uninstaller": {
-              "script": [
-                "Stop-Process -Name 'EnsoAI' -Force -ErrorAction SilentlyContinue",
-                "Start-Sleep -Seconds 2"
-              ]
-            },
-            "checkver": {
-              "github": "https://github.com/J3n5en/EnsoAI"
-            },
-            "autoupdate": {
-              "architecture": {
-                "64bit": {
-                  "url": "https://github.com/J3n5en/EnsoAI/releases/download/v\\\$version/EnsoAI-Setup-\\\$version.exe#/setup.exe"
-                }
-              }
-            }
-          }
-          EOF
+          cat > scoop-bucket/bucket/ensoai.json << 'EOFSCOOP'
+{
+  "version": "__VERSION__",
+  "description": "Git Worktree Manager with AI Agent",
+  "homepage": "https://github.com/J3n5en/EnsoAI",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/J3n5en/EnsoAI/releases/download/v__VERSION__/EnsoAI-Setup-__VERSION__.exe#/setup.exe",
+      "hash": "__HASH__"
+    }
+  },
+  "installer": {
+    "script": [
+      "Start-Process \"$dir\\setup.exe\" -ArgumentList '/S', \"/D=$dir\" -Wait"
+    ]
+  },
+  "post_install": [
+    "Remove-Item \"$dir\\setup.exe\" -Force"
+  ],
+  "bin": "EnsoAI.exe",
+  "shortcuts": [
+    ["EnsoAI.exe", "EnsoAI"]
+  ],
+  "uninstaller": {
+    "script": [
+      "Stop-Process -Name 'EnsoAI' -Force -ErrorAction SilentlyContinue",
+      "Start-Sleep -Seconds 2"
+    ]
+  },
+  "checkver": {
+    "github": "https://github.com/J3n5en/EnsoAI"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/J3n5en/EnsoAI/releases/download/v$version/EnsoAI-Setup-$version.exe#/setup.exe"
+      }
+    }
+  }
+}
+EOFSCOOP
+          sed -i "s/__VERSION__/${VERSION}/g" scoop-bucket/bucket/ensoai.json
+          sed -i "s/__HASH__/${HASH}/g" scoop-bucket/bucket/ensoai.json
 
       - name: Commit and Push
         working-directory: scoop-bucket
