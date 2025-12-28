@@ -20,11 +20,26 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      should_run: ${{ steps.check_tag.outputs.should_run }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if commit has release tag
+        id: check_tag
+        run: |
+          if git describe --exact-match --tags HEAD 2>/dev/null | grep -q '^v'; then
+            echo "Release tag found, skipping nightly build"
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "No release tag, proceeding with nightly build"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate Version
+        if: steps.check_tag.outputs.should_run == 'true'
         id: version
         run: |
           BASE_VERSION=$(node -p "require('./package.json').version")
@@ -36,6 +51,7 @@ jobs:
   # 先构建 Vite 产物，共享给所有平台
   build-app:
     needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -92,6 +108,7 @@ jobs:
 
   build-mac:
     needs: [prepare, build-app]
+    if: needs.prepare.outputs.should_run == 'true'
     strategy:
       matrix:
         include:
@@ -169,6 +186,7 @@ jobs:
 
   build-windows:
     needs: [prepare, build-app]
+    if: needs.prepare.outputs.should_run == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -240,6 +258,7 @@ jobs:
 
   build-linux:
     needs: [prepare, build-app]
+    if: needs.prepare.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -310,6 +329,7 @@ jobs:
 
   release:
     needs: [prepare, build-mac, build-windows, build-linux]
+    if: needs.prepare.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
