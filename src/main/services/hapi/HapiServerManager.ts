@@ -76,11 +76,13 @@ class HapiServerManager extends EventEmitter {
       const { shell, execArgs } = shellDetector.resolveShellForCommand(this.currentShellConfig);
       // Quote shell path in case it contains spaces (e.g., "C:\Program Files\PowerShell\7\pwsh.exe")
       const fullCommand = `"${shell}" ${execArgs.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
+      console.log('[HapiServerManager] execInLoginShell:', fullCommand);
       // Don't override PATH - let the login shell load environment from profile
       // This is important for version managers like vfox that initialize in profile
       const { stdout } = await execAsync(fullCommand, { timeout });
       return stdout;
     }
+    console.log('[HapiServerManager] execInLoginShell: no shellConfig, using fallback');
 
     // Fallback to findLoginShell (uses cmd.exe on Windows, $SHELL on Unix)
     const { shell, args } = findLoginShell();
