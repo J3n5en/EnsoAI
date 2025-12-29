@@ -116,14 +116,30 @@ class HapiServerManager extends EventEmitter {
     }
 
     try {
-      const stdout = await this.execInLoginShell('hapi --version', 3000);
+      // Increase timeout to 8000ms - PowerShell profile loading can take time
+      const stdout = await this.execInLoginShell('hapi --version', 8000);
       console.log('[HapiServerManager] hapi --version output:', stdout);
       const match = stdout.match(/(\d+\.\d+\.\d+)/);
       this.globalStatus = {
         installed: true,
         version: match ? match[1] : undefined,
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      // PowerShell profile may have non-fatal errors (e.g., Set-PSReadLineOption in non-TTY)
+      // Check if stdout contains version info despite the error
+      const execError = error as { stdout?: string };
+      if (execError.stdout) {
+        const match = execError.stdout.match(/(\d+\.\d+\.\d+)/);
+        if (match) {
+          console.log('[HapiServerManager] hapi detected from error stdout:', execError.stdout);
+          this.globalStatus = {
+            installed: true,
+            version: match[1],
+          };
+          this.globalCacheTimestamp = Date.now();
+          return this.globalStatus;
+        }
+      }
       console.error('[HapiServerManager] hapi detection failed:', error);
       this.globalStatus = { installed: false };
     }
@@ -165,7 +181,22 @@ class HapiServerManager extends EventEmitter {
         installed: true,
         version: match ? match[1] : undefined,
       };
-    } catch (error) {
+    } catch (error: unknown) {
+      // PowerShell profile may have non-fatal errors (e.g., Set-PSReadLineOption in non-TTY)
+      // Check if stdout contains version info despite the error
+      const execError = error as { stdout?: string };
+      if (execError.stdout) {
+        const match = execError.stdout.match(/happy version:\s*(\d+\.\d+\.\d+)/i);
+        if (match) {
+          console.log('[HapiServerManager] happy detected from error stdout:', execError.stdout);
+          this.happyGlobalStatus = {
+            installed: true,
+            version: match[1],
+          };
+          this.happyGlobalCacheTimestamp = Date.now();
+          return this.happyGlobalStatus;
+        }
+      }
       console.error('[HapiServerManager] happy detection failed:', error);
       this.happyGlobalStatus = { installed: false };
     }
