@@ -117,12 +117,14 @@ class HapiServerManager extends EventEmitter {
 
     try {
       const stdout = await this.execInLoginShell('hapi --version', 3000);
+      console.log('[HapiServerManager] hapi --version output:', stdout);
       const match = stdout.match(/(\d+\.\d+\.\d+)/);
       this.globalStatus = {
         installed: true,
         version: match ? match[1] : undefined,
       };
-    } catch {
+    } catch (error) {
+      console.error('[HapiServerManager] hapi detection failed:', error);
       this.globalStatus = { installed: false };
     }
 
@@ -156,13 +158,15 @@ class HapiServerManager extends EventEmitter {
       // Directly execute 'happy --version' like CliDetector does for agent detection
       // This avoids compatibility issues with Get-Command/where.exe/which
       const stdout = await this.execInLoginShell('happy --version', 8000);
+      console.log('[HapiServerManager] happy --version output:', stdout);
       // Match version from first line: "happy version: X.Y.Z"
       const match = stdout.match(/happy version:\s*(\d+\.\d+\.\d+)/i);
       this.happyGlobalStatus = {
         installed: true,
         version: match ? match[1] : undefined,
       };
-    } catch {
+    } catch (error) {
+      console.error('[HapiServerManager] happy detection failed:', error);
       this.happyGlobalStatus = { installed: false };
     }
 
