@@ -5,7 +5,11 @@
 <h1 align="center">EnsoAI</h1>
 
 <p align="center">
-  <strong>Git Worktree Manager with AI Agents</strong>
+  <strong>Multiple Agents, Parallel Flow</strong>
+</p>
+<p align="center">
+  Unleash parallel intelligence within a single project.<br/>
+  Let Claude, Gemini, and Codex weave through different worktrees simultaneously without context switching.
 </p>
 
 <p align="center">
@@ -22,15 +26,17 @@
 
 ---
 
-### What is EnsoAI?
+## Workflow, Reimagined.
 
-EnsoAI is a desktop application that combines **Git Worktree management** with **AI coding agents**. It provides a unified workspace where you can manage multiple git worktrees while leveraging AI assistants like Claude, Codex, and Gemini to help with your development tasks.
+Stop stashing and popping. EnsoAI treats every branch as a first-class workspace with its own dedicated AI context.
 
-![EnsoAI Screenshot](docs/assets/screenshot-main.png)
+![EnsoAI Terminal](docs/assets/feature-terminal.png)
 
-### Installation
+---
 
-#### Package Managers (Recommended)
+## Installation
+
+### Package Managers (Recommended)
 
 **macOS (Homebrew)**
 
@@ -46,7 +52,7 @@ scoop bucket add ensoai https://github.com/J3n5en/scoop-ensoai
 scoop install ensoai
 ```
 
-#### Manual Download
+### Manual Download
 
 Download the installer for your platform from [GitHub Releases](https://github.com/J3n5en/EnsoAI/releases/latest):
 
@@ -59,7 +65,7 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 | Linux (AppImage) | `EnsoAI-x.x.x.AppImage` |
 | Linux (deb) | `ensoai_x.x.x_amd64.deb` |
 
-#### Build from Source
+### Build from Source
 
 ```bash
 # Clone the repository
@@ -78,12 +84,17 @@ pnpm build:win    # Windows
 pnpm build:linux  # Linux
 ```
 
-### Features
+---
 
-#### Multi-Agent Support
+## Features
 
-Seamlessly switch between different AI coding agents:
+### Multi-Agent Matrix
 
+Seamlessly switch between Claude, Codex, Gemini, and local LLMs. Each worktree gets its own persistent AI session.
+
+![Multi-Agent Matrix](docs/assets/feature-terminal.png)
+
+Built-in support:
 - **Claude** - Anthropic's AI assistant with session persistence
 - **Codex** - OpenAI's coding assistant
 - **Gemini** - Google's AI assistant
@@ -93,72 +104,82 @@ Seamlessly switch between different AI coding agents:
 
 You can also add custom agents by specifying the CLI command.
 
-![Agent Panel Setting](docs/assets/screenshot-agents-setting.png)
-![Agent Panel](docs/assets/screenshot-agents.png)
+---
 
-#### Git Worktree Management
+### Visual Source Control
 
-Efficiently manage multiple worktrees in a single workspace:
+Review diffs, stage changes, and manage commits with a beautiful, keyboard-centric Git interface.
 
-- Create worktrees from existing or new branches
-- Switch between worktrees instantly
-- Delete worktrees with optional branch cleanup
-- Visual worktree list with branch status
-
-![Worktree Management](docs/assets/screenshot-worktree.png)
-
-#### Integrated File Editor
-
-Built-in Monaco Editor for seamless code editing:
-
-- Syntax highlighting for 50+ languages
-- Multi-tab editing with drag-and-drop reorder
-- File tree with create/rename/delete operations
-- Automatic language detection
-- Editor state persistence across sessions
-
-![File Panel](docs/assets/screenshot-editor.png)
-
-#### Source Control
-
-Integrated Git source control panel:
+![Git Manager](docs/assets/feature-editor.png)
 
 - Change list showing all modified files
 - Stage/unstage operations
 - Commit history browser
 - Code diff view
 
-![Source Control](docs/assets/screenshot-source-control.png)
+---
 
-#### Multi-Tab Terminal
+### Integrated File Editor
 
-Full-featured terminal emulator:
+Built-in Monaco editor for quick edits. Syntax highlighting for 50+ languages with drag-and-drop multi-tab support.
 
-- Multiple shell tabs (Cmd+T to create, Cmd+W to close)
-- Ghostty theme support
-- Customizable font settings
-- Shift+Enter for newline input
+![File Editor](docs/assets/feature-git.png)
 
-![Terminal Panel](docs/assets/screenshot-terminal.png)
+- Multi-tab editing with drag-and-drop reorder
+- File tree with create/rename/delete operations
+- Automatic language detection
+- Editor state persistence across sessions
 
-#### Command Palette (Action Panel)
+---
+
+### AI Code Review
+
+Auto-generate high-quality commit messages and perform deep code reviews using your favorite AI agents.
+
+![AI Code Review](docs/assets/feature-agents.png)
+
+---
+
+### 3-Way Merge Tool
+
+Built-in professional 3-way merge editor. Clearly visualize conflict sources and resolve them with a single click and real-time result preview.
+
+![3-Way Merge Tool](docs/assets/feature-merge.png)
+
+---
+
+### Git Worktree Management
+
+Create, switch, and manage Git worktrees instantly. No more context switching costs between branches.
+
+- Create worktrees from existing or new branches
+- Switch between worktrees instantly
+- Delete worktrees with optional branch cleanup
+- Visual worktree list with branch status
+
+---
+
+### IDE Bridge
+
+Use EnsoAI for orchestration, then jump into VS Code or Cursor for deep diving with a single click.
 
 Quick access to all actions via `Cmd+Shift+P`:
-
 - **Panel Control** - Toggle Workspace/Worktree sidebar visibility
 - **Settings** - Open settings dialog (Cmd+,)
 - **Open In** - Open current project in Cursor, Ghostty, VS Code, etc.
 
-![Action Panel](docs/assets/screenshot-action-panel.png)
+---
 
-#### Additional Features
+### Additional Features
 
 - **Multi-Window Support** - Open multiple workspaces simultaneously
-- **Theme Sync** - Sync app theme with terminal theme (Ghostty)
+- **Theme Sync** - Sync app theme with terminal theme (400+ Ghostty themes)
 - **Keyboard Shortcuts** - Efficient navigation (Cmd+1-9 to switch tabs)
 - **Settings Persistence** - All settings saved to JSON for easy recovery
 
-### Tech Stack
+---
+
+## Tech Stack
 
 - **Framework**: Electron + React 19 + TypeScript
 - **Styling**: Tailwind CSS 4

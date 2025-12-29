@@ -5,7 +5,11 @@
 <h1 align="center">EnsoAI</h1>
 
 <p align="center">
-  <strong>Git Worktree 管理器 + AI 编程助手</strong>
+  <strong>多路智能，并行穿梭</strong>
+</p>
+<p align="center">
+  让多路 AI 助手化身并行线程，在同一个项目的不同分支间自由穿梭。<br/>
+  Claude、Gemini 与 Codex 同步协作，思路永不中断。
 </p>
 <p align="center">
   <a href="README.md">中文</a> | <a href="README.en.md">English</a>
@@ -21,15 +25,17 @@
 
 ---
 
-### EnsoAI 是什么？
+## 重构你的工作流
 
-EnsoAI 是一款将 **Git Worktree 管理**与 **AI 编程助手**相结合的桌面应用。它提供了一个统一的工作空间，让你可以在管理多个 git worktree 的同时，借助 Claude、Codex、Gemini 等 AI 助手来辅助开发工作。
+告别 git stash。EnsoAI 将每个分支视为一等公民，赋予其独立的工作区与 AI 上下文。
 
-![EnsoAI 截图](docs/assets/screenshot-main.png)
+![EnsoAI 终端](docs/assets/feature-terminal.png)
 
-### 安装
+---
 
-#### 包管理器（推荐）
+## 安装
+
+### 包管理器（推荐）
 
 **macOS (Homebrew)**
 
@@ -45,7 +51,7 @@ scoop bucket add ensoai https://github.com/J3n5en/scoop-ensoai
 scoop install ensoai
 ```
 
-#### 手动下载
+### 手动下载
 
 从 [GitHub Releases](https://github.com/J3n5en/EnsoAI/releases/latest) 下载适合你平台的安装包：
 
@@ -58,7 +64,7 @@ scoop install ensoai
 | Linux (AppImage) | `EnsoAI-x.x.x.AppImage` |
 | Linux (deb) | `ensoai_x.x.x_amd64.deb` |
 
-#### 从源码构建
+### 从源码构建
 
 ```bash
 # 克隆仓库
@@ -77,12 +83,17 @@ pnpm build:win    # Windows
 pnpm build:linux  # Linux
 ```
 
-### 功能特性
+---
 
-#### 多 Agent 支持
+## 功能特性
 
-无缝切换不同的 AI 编程助手：
+### 多 Agent 矩阵
 
+无缝切换 Claude、Codex、Gemini 或本地 LLM。每个 Worktree 都有独立的持久化 AI 会话。
+
+![多 Agent 矩阵](docs/assets/feature-terminal.png)
+
+内置支持：
 - **Claude** - Anthropic 的 AI 助手，支持会话持久化
 - **Codex** - OpenAI 的编程助手
 - **Gemini** - Google 的 AI 助手
@@ -92,72 +103,82 @@ pnpm build:linux  # Linux
 
 你也可以通过指定 CLI 命令来添加自定义 Agent。
 
-![Agent 面板设置](docs/assets/screenshot-agents-setting.png)
-![Agent 面板](docs/assets/screenshot-agents.png)
+---
 
-#### Git Worktree 管理
+### 内置 Git 管理器
 
-在单一工作空间中高效管理多个 worktree：
+优雅的可视化 Git 面板。通过键盘即可完成差异对比、暂存修改和提交代码。
 
-- 从现有分支或新分支创建 worktree
-- 即时切换 worktree
-- 删除 worktree 并可选择同时删除分支
-- 可视化 worktree 列表，显示分支状态
-
-![Worktree 管理](docs/assets/screenshot-worktree.png)
-
-#### 内置文件编辑器
-
-基于 Monaco Editor 的代码编辑器：
-
-- 支持 50+ 种语言的语法高亮
-- 多标签编辑，支持拖拽排序
-- 文件树支持创建/重命名/删除操作
-- 自动语言检测
-- 编辑器状态跨会话持久化
-
-![文件面板](docs/assets/screenshot-editor.png)
-
-#### 源代码管理
-
-集成的 Git 源代码管理面板：
+![Git 管理器](docs/assets/feature-editor.png)
 
 - 变更列表显示所有修改的文件
 - 支持暂存/取消暂存操作
 - 提交历史浏览
 - 代码差异对比视图
 
-![源代码管理](docs/assets/screenshot-source-control.png)
+---
 
-#### 多标签终端
+### 内置代码编辑器
 
-功能完整的终端模拟器：
+基于 Monaco 构建的轻量级编辑器。支持 50+ 种语言高亮，提供流畅的多标签拖拽体验。
 
-- 多 Shell 标签（Cmd+T 新建，Cmd+W 关闭）
-- 支持 Ghostty 主题
-- 可自定义字体设置
-- Shift+Enter 输入换行
+![代码编辑器](docs/assets/feature-git.png)
 
-![终端面板](docs/assets/screenshot-terminal.png)
+- 多标签编辑，支持拖拽排序
+- 文件树支持创建/重命名/删除操作
+- 自动语言检测
+- 编辑器状态跨会话持久化
 
-#### 命令面板 (Action Panel)
+---
 
-通过 `Cmd+Shift+P` 快速访问所有操作：
+### AI 代码审查
 
+自动生成高质量的 Commit Message，并利用 AI 助手对代码变更进行深度审查与优化。
+
+![AI 代码审查](docs/assets/feature-agents.png)
+
+---
+
+### 三栏合并工具
+
+内置专业的三栏合并编辑器。清晰展示冲突来源，支持一键采纳变更与实时结果预览，让解决冲突变得轻松愉悦。
+
+![三栏合并工具](docs/assets/feature-merge.png)
+
+---
+
+### Worktree 管理
+
+毫秒级创建与切换 Git Worktree。在不同功能分支间自由穿梭，无需重复配置环境。
+
+- 从现有分支或新分支创建 worktree
+- 即时切换 worktree
+- 删除 worktree 并可选择同时删除分支
+- 可视化 worktree 列表，显示分支状态
+
+---
+
+### IDE 桥接
+
+在 EnsoAI 中统筹全局，一键跳转至 VS Code 或 Cursor 进行深度开发。无缝衔接现有工具链。
+
+通过 `Cmd+Shift+P` 打开命令面板：
 - **面板控制** - 切换 Workspace/Worktree 侧边栏显示
 - **设置** - 打开设置对话框 (Cmd+,)
 - **打开方式** - 在 Cursor、Ghostty、VS Code 等中打开当前项目
 
-![Action Panel](docs/assets/screenshot-action-panel.png)
+---
 
-#### 其他特性
+### 其他特性
 
 - **多窗口支持** - 同时打开多个工作空间
-- **主题同步** - 应用主题可与终端主题（Ghostty）同步
+- **主题同步** - 应用主题可与终端主题（400+ Ghostty 主题）同步
 - **键盘快捷键** - 高效导航（Cmd+1-9 切换标签）
 - **设置持久化** - 所有设置保存为 JSON，便于恢复
 
-### 技术栈
+---
+
+## 技术栈
 
 - **框架**: Electron + React 19 + TypeScript
 - **样式**: Tailwind CSS 4
@@ -213,8 +234,9 @@ EnsoAI 专注于 **Git Worktree + AI Agent** 的协作场景。它不是要替�
 </details>
 
 <details>
-<summary><strong>为什么使用官方 cli 而不使用 ACP？</strong></summary>
-虽然 ACP 能够统一不同 Agent 的核心能力，但是也仅限于核心能力缺失了很多功能。切换不同 Agent 的场景其实并不多而且不同 Agent 的 cli 核心功能都相似。所以我们认为对于有经验的开发者各cli 更具有生产力。
+<summary><strong>为什么使用官方 CLI 而不使用 ACP？</strong></summary>
+
+虽然 ACP 能够统一不同 Agent 的核心能力，但是也仅限于核心能力缺失了很多功能。切换不同 Agent 的场景其实并不多而且不同 Agent 的 CLI 核心功能都相似。所以我们认为对于有经验的开发者各 CLI 更具有生产力。
 
 </details>
 

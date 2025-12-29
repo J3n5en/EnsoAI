@@ -40,10 +40,8 @@ compression: maximum
 
 mac:
   target:
-    - target: dmg
-      arch: [arm64, x64]
-    - target: zip
-      arch: [arm64, x64]
+    - dmg
+    - zip
   category: public.app-category.developer-tools
   icon: build/icon.icns
   hardenedRuntime: true
