@@ -151,43 +151,15 @@ class HapiServerManager extends EventEmitter {
     }
 
     try {
-      // First check if happy exists (fast)
-      // Choose command based on shell type:
-      // - PowerShell: Get-Command (native, respects $env:PATH from profile)
-      // - cmd: where.exe
-      // - Unix shells (bash/zsh/fish) and WSL: command -v (POSIX compatible)
-      let whichCmd: string;
-      if (isWindows && this.currentShellConfig) {
-        const shellType = this.currentShellConfig.shellType;
-        if (shellType === 'powershell' || shellType === 'powershell7') {
-          whichCmd = 'Get-Command happy -ErrorAction Stop';
-        } else if (shellType === 'cmd') {
-          whichCmd = 'where.exe happy';
-        } else {
-          // gitbash, wsl, or other Unix-like shells
-          whichCmd = 'command -v happy';
-        }
-      } else if (isWindows) {
-        // Fallback: use where.exe for Windows without shell config
-        whichCmd = 'where.exe happy';
-      } else {
-        whichCmd = 'command -v happy';
-      }
-      await this.execInLoginShell(whichCmd, 2000);
-
-      // If exists, try to get version (may take longer due to claude version check)
-      try {
-        const stdout = await this.execInLoginShell('happy --version', 8000);
-        // Match version from first line: "happy version: X.Y.Z"
-        const match = stdout.match(/happy version:\s*(\d+\.\d+\.\d+)/i);
-        this.happyGlobalStatus = {
-          installed: true,
-          version: match ? match[1] : undefined,
-        };
-      } catch {
-        // Command exists but version check failed, still mark as installed
-        this.happyGlobalStatus = { installed: true };
-      }
+      // Directly execute 'happy --version' like CliDetector does for agent detection
+      // This avoids compatibility issues with Get-Command/where.exe/which
+      const stdout = await this.execInLoginShell('happy --version', 8000);
+      // Match version from first line: "happy version: X.Y.Z"
+      const match = stdout.match(/happy version:\s*(\d+\.\d+\.\d+)/i);
+      this.happyGlobalStatus = {
+        installed: true,
+        version: match ? match[1] : undefined,
+      };
     } catch {
       this.happyGlobalStatus = { installed: false };
     }
