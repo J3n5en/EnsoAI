@@ -76,13 +76,11 @@ class HapiServerManager extends EventEmitter {
       const { shell, execArgs } = shellDetector.resolveShellForCommand(this.currentShellConfig);
       // Quote shell path in case it contains spaces (e.g., "C:\Program Files\PowerShell\7\pwsh.exe")
       const fullCommand = `"${shell}" ${execArgs.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
-      console.log('[HapiServerManager] execInLoginShell:', fullCommand);
       // Don't override PATH - let the login shell load environment from profile
       // This is important for version managers like vfox that initialize in profile
       const { stdout } = await execAsync(fullCommand, { timeout });
       return stdout;
     }
-    console.log('[HapiServerManager] execInLoginShell: no shellConfig, using fallback');
 
     // Fallback to findLoginShell (uses cmd.exe on Windows, $SHELL on Unix)
     const { shell, args } = findLoginShell();
@@ -118,7 +116,6 @@ class HapiServerManager extends EventEmitter {
     try {
       // Increase timeout to 30000ms - PowerShell profile loading can be slow on first run
       const stdout = await this.execInLoginShell('hapi --version', 30000);
-      console.log('[HapiServerManager] hapi --version output:', stdout);
       const match = stdout.match(/(\d+\.\d+\.\d+)/);
       this.globalStatus = {
         installed: true,
@@ -131,7 +128,6 @@ class HapiServerManager extends EventEmitter {
       if (execError.stdout) {
         const match = execError.stdout.match(/(\d+\.\d+\.\d+)/);
         if (match) {
-          console.log('[HapiServerManager] hapi detected from error stdout:', execError.stdout);
           this.globalStatus = {
             installed: true,
             version: match[1],
@@ -140,7 +136,6 @@ class HapiServerManager extends EventEmitter {
           return this.globalStatus;
         }
       }
-      console.error('[HapiServerManager] hapi detection failed:', error);
       this.globalStatus = { installed: false };
       // Don't cache failed result - allow immediate retry
       return this.globalStatus;
@@ -176,7 +171,6 @@ class HapiServerManager extends EventEmitter {
       // Directly execute 'happy --version' like CliDetector does for agent detection
       // This avoids compatibility issues with Get-Command/where.exe/which
       const stdout = await this.execInLoginShell('happy --version', 30000);
-      console.log('[HapiServerManager] happy --version output:', stdout);
       // Match version from first line: "happy version: X.Y.Z"
       const match = stdout.match(/happy version:\s*(\d+\.\d+\.\d+)/i);
       this.happyGlobalStatus = {
@@ -190,7 +184,6 @@ class HapiServerManager extends EventEmitter {
       if (execError.stdout) {
         const match = execError.stdout.match(/happy version:\s*(\d+\.\d+\.\d+)/i);
         if (match) {
-          console.log('[HapiServerManager] happy detected from error stdout:', execError.stdout);
           this.happyGlobalStatus = {
             installed: true,
             version: match[1],
@@ -199,7 +192,6 @@ class HapiServerManager extends EventEmitter {
           return this.happyGlobalStatus;
         }
       }
-      console.error('[HapiServerManager] happy detection failed:', error);
       this.happyGlobalStatus = { installed: false };
       // Don't cache failed result - allow immediate retry
       return this.happyGlobalStatus;
