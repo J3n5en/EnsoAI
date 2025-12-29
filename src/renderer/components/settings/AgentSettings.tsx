@@ -101,6 +101,7 @@ export function AgentSettings() {
     customAgents,
     wslEnabled,
     hapiSettings,
+    shellConfig,
     setAgentEnabled,
     setAgentDefault,
     addCustomAgent,
@@ -191,10 +192,10 @@ export function AgentSettings() {
 
   // Check happy global installation on mount
   React.useEffect(() => {
-    window.electronAPI.happy.checkGlobal().then((result) => {
+    window.electronAPI.happy.checkGlobal(false, shellConfig).then((result) => {
       setHappyGlobal(result);
     });
-  }, []);
+  }, [shellConfig]);
 
   // Get all agents including WSL and Hapi variants
   const allAgentInfos = React.useMemo(() => {

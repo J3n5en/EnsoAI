@@ -3,9 +3,12 @@ import { exec, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { promisify } from 'node:util';
+import type { ShellConfig } from '@shared/types';
 import { findLoginShell, getEnhancedPath } from '../terminal/PtyManager';
+import { shellDetector } from '../terminal/ShellDetector';
 
 const execAsync = promisify(exec);
+const isWindows = process.platform === 'win32';
 
 export interface HapiConfig {
   webappPort: number;
@@ -33,8 +36,6 @@ export interface HapiStatus {
   error?: string;
 }
 
-const isWindows = process.platform === 'win32';
-
 class HapiServerManager extends EventEmitter {
   private process: ChildProcess | null = null;
   private status: HapiStatus = { running: false };
@@ -49,16 +50,41 @@ class HapiServerManager extends EventEmitter {
   private happyGlobalStatus: HappyGlobalStatus | null = null;
   private happyGlobalCacheTimestamp: number = 0;
 
+  // Shell config for command execution
+  private currentShellConfig: ShellConfig | null = null;
+
   generateToken(): string {
     return randomBytes(32).toString('hex');
   }
 
   /**
-   * Execute command in login shell to load user's environment
+   * Set shell config for command execution
+   */
+  setShellConfig(config: ShellConfig): void {
+    this.currentShellConfig = config;
+  }
+
+  /**
+   * Execute command in login shell to load user's environment.
+   * Uses user's configured shell from settings if available.
    */
   private async execInLoginShell(command: string, timeout = 5000): Promise<string> {
+    const escapedCommand = command.replace(/"/g, '\\"');
+
+    // Use user's configured shell if available
+    if (this.currentShellConfig) {
+      const { shell, execArgs } = shellDetector.resolveShellForCommand(this.currentShellConfig);
+      const fullCommand = `${shell} ${execArgs.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
+      const { stdout } = await execAsync(fullCommand, {
+        timeout,
+        env: { ...process.env, PATH: getEnhancedPath() },
+      });
+      return stdout;
+    }
+
+    // Fallback to findLoginShell (uses cmd.exe on Windows, $SHELL on Unix)
     const { shell, args } = findLoginShell();
-    const fullCommand = `${shell} ${args.map((a) => `"${a}"`).join(' ')} "${command.replace(/"/g, '\\"')}"`;
+    const fullCommand = `${shell} ${args.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
     const { stdout } = await execAsync(fullCommand, {
       timeout,
       env: { ...process.env, PATH: getEnhancedPath() },
@@ -69,7 +95,15 @@ class HapiServerManager extends EventEmitter {
   /**
    * Check if hapi is globally installed (cached)
    */
-  async checkGlobalInstall(forceRefresh = false): Promise<HapiGlobalStatus> {
+  async checkGlobalInstall(
+    forceRefresh = false,
+    shellConfig?: ShellConfig
+  ): Promise<HapiGlobalStatus> {
+    // Set shell config if provided
+    if (shellConfig) {
+      this.setShellConfig(shellConfig);
+    }
+
     // Return cached result if still valid
     if (
       !forceRefresh &&
@@ -98,7 +132,15 @@ class HapiServerManager extends EventEmitter {
    * Check if happy is globally installed (cached)
    * Uses 'which happy' for fast detection, then gets version separately
    */
-  async checkHappyGlobalInstall(forceRefresh = false): Promise<HappyGlobalStatus> {
+  async checkHappyGlobalInstall(
+    forceRefresh = false,
+    shellConfig?: ShellConfig
+  ): Promise<HappyGlobalStatus> {
+    // Set shell config if provided
+    if (shellConfig) {
+      this.setShellConfig(shellConfig);
+    }
+
     // Return cached result if still valid
     if (
       !forceRefresh &&

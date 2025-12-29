@@ -23,6 +23,7 @@ import type {
   MergeConflict,
   MergeConflictContent,
   MergeState,
+  ShellConfig,
   ShellInfo,
   TerminalCreateOptions,
   TerminalResizeOptions,
@@ -274,11 +275,15 @@ const electronAPI = {
   cli: {
     detect: (
       customAgents?: CustomAgent[],
-      options?: { includeWsl?: boolean; forceRefresh?: boolean }
+      options?: { includeWsl?: boolean; forceRefresh?: boolean; shellConfig?: ShellConfig }
     ): Promise<AgentCliStatus> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLI_DETECT, customAgents, options),
-    detectOne: (agentId: string, customAgent?: CustomAgent): Promise<AgentCliInfo> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CLI_DETECT_ONE, agentId, customAgent),
+    detectOne: (
+      agentId: string,
+      customAgent?: CustomAgent,
+      options?: { shellConfig?: ShellConfig }
+    ): Promise<AgentCliInfo> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLI_DETECT_ONE, agentId, customAgent, options),
     // CLI Installer
     getInstallStatus: (): Promise<{ installed: boolean; path: string | null; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLI_INSTALL_STATUS),
@@ -305,6 +310,8 @@ const electronAPI = {
   // Shell
   shell: {
     detect: (): Promise<ShellInfo[]> => ipcRenderer.invoke(IPC_CHANNELS.SHELL_DETECT),
+    resolveForCommand: (config: ShellConfig): Promise<{ shell: string; execArgs: string[] }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_RESOLVE_FOR_COMMAND, config),
     openExternal: (url: string): Promise<void> => shell.openExternal(url),
   },
 
@@ -405,8 +412,11 @@ const electronAPI = {
 
   // Hapi Remote Sharing
   hapi: {
-    checkGlobal: (forceRefresh?: boolean): Promise<{ installed: boolean; version?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.HAPI_CHECK_GLOBAL, forceRefresh),
+    checkGlobal: (
+      forceRefresh?: boolean,
+      shellConfig?: ShellConfig
+    ): Promise<{ installed: boolean; version?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HAPI_CHECK_GLOBAL, forceRefresh, shellConfig),
     start: (config: {
       webappPort: number;
       cliApiToken: string;
@@ -462,8 +472,11 @@ const electronAPI = {
 
   // Happy
   happy: {
-    checkGlobal: (forceRefresh?: boolean): Promise<{ installed: boolean; version?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, forceRefresh),
+    checkGlobal: (
+      forceRefresh?: boolean,
+      shellConfig?: ShellConfig
+    ): Promise<{ installed: boolean; version?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, forceRefresh, shellConfig),
   },
 
   // Cloudflared Tunnel

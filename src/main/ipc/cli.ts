@@ -22,8 +22,8 @@ export function registerCliHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.CLI_DETECT_ONE,
-    async (_, agentId: string, customAgent?: CustomAgent) => {
-      return await cliDetector.detectOne(agentId, customAgent);
+    async (_, agentId: string, customAgent?: CustomAgent, options?: CliDetectOptions) => {
+      return await cliDetector.detectOne(agentId, customAgent, options);
     }
   );
 

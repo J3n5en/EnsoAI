@@ -76,7 +76,7 @@ export function SessionBar({
   const dragStart = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
 
   // Get enabled agents from settings
-  const { agentSettings, customAgents, hapiSettings } = useSettingsStore();
+  const { agentSettings, customAgents, hapiSettings, shellConfig } = useSettingsStore();
 
   // Detect installed agents on mount only (uses cached results from main process)
   useEffect(() => {
@@ -94,13 +94,17 @@ export function SessionBar({
         const baseId = agentId.slice(0, -5);
         const customAgent = customAgents.find((a) => a.id === baseId);
         // Check native first
-        const nativeResult = await window.electronAPI.cli.detectOne(baseId, customAgent);
+        const nativeResult = await window.electronAPI.cli.detectOne(baseId, customAgent, {
+          shellConfig,
+        });
         if (nativeResult.installed) {
           newInstalled.add(agentId);
           return;
         }
         // If not installed natively, check WSL (Windows only)
-        const wslResult = await window.electronAPI.cli.detectOne(`${baseId}-wsl`, customAgent);
+        const wslResult = await window.electronAPI.cli.detectOne(`${baseId}-wsl`, customAgent, {
+          shellConfig,
+        });
         if (wslResult.installed) {
           newInstalled.add(agentId);
         }
@@ -111,19 +115,23 @@ export function SessionBar({
       const isHappy = agentId.endsWith('-happy');
       if (isHappy) {
         // Check if happy is globally installed first
-        const happyStatus = await window.electronAPI.happy.checkGlobal();
+        const happyStatus = await window.electronAPI.happy.checkGlobal(false, shellConfig);
         if (!happyStatus.installed) return;
 
         const baseId = agentId.slice(0, -6);
         const customAgent = customAgents.find((a) => a.id === baseId);
         // Check native first
-        const nativeResult = await window.electronAPI.cli.detectOne(baseId, customAgent);
+        const nativeResult = await window.electronAPI.cli.detectOne(baseId, customAgent, {
+          shellConfig,
+        });
         if (nativeResult.installed) {
           newInstalled.add(agentId);
           return;
         }
         // If not installed natively, check WSL (Windows only)
-        const wslResult = await window.electronAPI.cli.detectOne(`${baseId}-wsl`, customAgent);
+        const wslResult = await window.electronAPI.cli.detectOne(`${baseId}-wsl`, customAgent, {
+          shellConfig,
+        });
         if (wslResult.installed) {
           newInstalled.add(agentId);
         }
@@ -135,7 +143,7 @@ export function SessionBar({
       const baseId = isWsl ? agentId.slice(0, -4) : agentId;
       const customAgent = customAgents.find((a) => a.id === baseId);
 
-      const result = await window.electronAPI.cli.detectOne(agentId, customAgent);
+      const result = await window.electronAPI.cli.detectOne(agentId, customAgent, { shellConfig });
       if (result.installed) {
         newInstalled.add(agentId);
       }
@@ -144,7 +152,7 @@ export function SessionBar({
     Promise.all(detectPromises).then(() => {
       setInstalledAgents(newInstalled);
     });
-  }, [agentSettings, customAgents, hapiSettings.enabled]);
+  }, [agentSettings, customAgents, hapiSettings.enabled, shellConfig]);
 
   // Filter to only enabled AND installed agents (includes WSL/Hapi variants)
   // For Hapi agents, also check if hapi is still enabled

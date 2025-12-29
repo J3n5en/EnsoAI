@@ -11,6 +11,7 @@ interface ShellDefinition {
   name: string;
   paths: string[];
   args: string[];
+  execArgs: string[]; // Args for executing a command (e.g., ['-c'] for bash, ['/c'] for cmd)
   isWsl?: boolean;
 }
 
@@ -20,24 +21,28 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
     name: 'PowerShell 7',
     paths: ['C:\\Program Files\\PowerShell\\7\\pwsh.exe'],
     args: ['-NoLogo'],
+    execArgs: ['-NoLogo', '-Command'],
   },
   {
     id: 'powershell',
     name: 'PowerShell',
     paths: ['powershell.exe'],
     args: ['-NoLogo'],
+    execArgs: ['-NoLogo', '-Command'],
   },
   {
     id: 'cmd',
     name: 'Command Prompt',
     paths: ['cmd.exe'],
     args: [],
+    execArgs: ['/c'],
   },
   {
     id: 'gitbash',
     name: 'Git Bash',
     paths: ['C:\\Program Files\\Git\\bin\\bash.exe', 'C:\\Program Files (x86)\\Git\\bin\\bash.exe'],
     args: ['-i', '-l'],
+    execArgs: ['-i', '-l', '-c'],
   },
   {
     id: 'nushell',
@@ -48,12 +53,14 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
       `${process.env.USERPROFILE}\\scoop\\shims\\nu.exe`,
     ],
     args: ['-l', '-i'],
+    execArgs: ['-l', '-c'],
   },
   {
     id: 'wsl',
     name: 'WSL',
     paths: ['wsl.exe'],
     args: [],
+    execArgs: ['--', 'sh', '-c'],
     isWsl: true,
   },
 ];
@@ -64,30 +71,35 @@ const UNIX_SHELLS: ShellDefinition[] = [
     name: 'Zsh',
     paths: ['/bin/zsh', '/usr/bin/zsh', '/usr/local/bin/zsh', '/opt/homebrew/bin/zsh'],
     args: ['-i', '-l'],
+    execArgs: ['-i', '-l', '-c'],
   },
   {
     id: 'bash',
     name: 'Bash',
     paths: ['/bin/bash', '/usr/bin/bash', '/usr/local/bin/bash'],
     args: ['-i', '-l'],
+    execArgs: ['-i', '-l', '-c'],
   },
   {
     id: 'fish',
     name: 'Fish',
     paths: ['/usr/bin/fish', '/usr/local/bin/fish', '/opt/homebrew/bin/fish'],
     args: ['-i', '-l'],
+    execArgs: ['-l', '-c'],
   },
   {
     id: 'nushell',
     name: 'Nushell',
     paths: ['/usr/local/bin/nu', '/opt/homebrew/bin/nu', `${process.env.HOME}/.cargo/bin/nu`],
     args: ['-l', '-i'],
+    execArgs: ['-l', '-c'],
   },
   {
     id: 'sh',
     name: 'Sh',
     paths: ['/bin/sh'],
     args: [],
+    execArgs: ['-c'],
   },
 ];
 
@@ -225,6 +237,77 @@ class ShellDetector {
     return isWindows
       ? { shell: 'powershell.exe', args: ['-NoLogo'] }
       : { shell: '/bin/sh', args: [] };
+  }
+
+  /**
+   * Resolve shell config for executing a command.
+   * Returns shell path and execArgs (args needed to execute a command string).
+   */
+  resolveShellForCommand(config: ShellConfig): { shell: string; execArgs: string[] } {
+    if (config.shellType === 'custom') {
+      const shell = config.customShellPath || (isWindows ? 'powershell.exe' : '/bin/sh');
+      // For custom shell, try to infer execArgs based on shell name
+      const execArgs = this.inferExecArgs(shell, config.customShellArgs);
+      return { shell, execArgs };
+    }
+
+    const definitions = isWindows ? WINDOWS_SHELLS : UNIX_SHELLS;
+
+    if (config.shellType === 'system' && !isWindows) {
+      const systemShell = process.env.SHELL;
+      if (systemShell && existsSync(systemShell)) {
+        const execArgs = this.inferExecArgs(systemShell);
+        return { shell: systemShell, execArgs };
+      }
+    }
+
+    const def = definitions.find((d) => d.id === config.shellType);
+    if (def) {
+      const path = this.findAvailablePath(def.paths);
+      if (path) {
+        return { shell: path, execArgs: def.execArgs };
+      }
+    }
+
+    return isWindows
+      ? { shell: 'powershell.exe', execArgs: ['-NoLogo', '-Command'] }
+      : { shell: '/bin/sh', execArgs: ['-c'] };
+  }
+
+  /**
+   * Infer execArgs based on shell path/name.
+   */
+  private inferExecArgs(shellPath: string, customArgs?: string[]): string[] {
+    const shellName = shellPath.split(/[/\\]/).pop()?.toLowerCase() || '';
+
+    // Check all definitions for matching shell
+    const allDefs = [...WINDOWS_SHELLS, ...UNIX_SHELLS];
+    for (const def of allDefs) {
+      if (def.paths.some((p) => p.toLowerCase().includes(shellName))) {
+        return def.execArgs;
+      }
+    }
+
+    // Fallback based on common shell names
+    if (shellName.includes('pwsh') || shellName.includes('powershell')) {
+      return ['-NoLogo', '-Command'];
+    }
+    if (shellName.includes('cmd')) {
+      return ['/c'];
+    }
+    if (shellName.includes('bash') || shellName.includes('zsh')) {
+      return ['-i', '-l', '-c'];
+    }
+    if (shellName.includes('fish') || shellName.includes('nu')) {
+      return ['-l', '-c'];
+    }
+
+    // If custom args provided, append -c for Unix-like shells
+    if (customArgs?.length) {
+      return [...customArgs, '-c'];
+    }
+
+    return isWindows ? ['/c'] : ['-c'];
   }
 
   getDefaultShell(): string {

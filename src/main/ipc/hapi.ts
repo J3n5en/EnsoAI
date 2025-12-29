@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { IPC_CHANNELS } from '@shared/types';
+import { IPC_CHANNELS, type ShellConfig } from '@shared/types';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { type CloudflaredConfig, cloudflaredManager } from '../services/hapi/CloudflaredManager';
 import { type HapiConfig, hapiServerManager } from '../services/hapi/HapiServerManager';
@@ -21,14 +21,20 @@ interface StoredHapiSettings {
 
 export function registerHapiHandlers(): void {
   // Check global hapi installation (cached)
-  ipcMain.handle(IPC_CHANNELS.HAPI_CHECK_GLOBAL, async (_, forceRefresh?: boolean) => {
-    return await hapiServerManager.checkGlobalInstall(forceRefresh);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.HAPI_CHECK_GLOBAL,
+    async (_, forceRefresh?: boolean, shellConfig?: ShellConfig) => {
+      return await hapiServerManager.checkGlobalInstall(forceRefresh, shellConfig);
+    }
+  );
 
   // Check global happy installation (cached)
-  ipcMain.handle(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, async (_, forceRefresh?: boolean) => {
-    return await hapiServerManager.checkHappyGlobalInstall(forceRefresh);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.HAPPY_CHECK_GLOBAL,
+    async (_, forceRefresh?: boolean, shellConfig?: ShellConfig) => {
+      return await hapiServerManager.checkHappyGlobalInstall(forceRefresh, shellConfig);
+    }
+  );
 
   // Hapi Server handlers
   ipcMain.handle(IPC_CHANNELS.HAPI_START, async (_, config: HapiConfig) => {

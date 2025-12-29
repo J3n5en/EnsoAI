@@ -35,7 +35,7 @@ interface CloudflaredStatus {
 
 export function HapiSettings() {
   const { t } = useI18n();
-  const { hapiSettings, setHapiSettings } = useSettingsStore();
+  const { hapiSettings, setHapiSettings, shellConfig } = useSettingsStore();
   const [status, setStatus] = React.useState<HapiStatus>({ running: false });
   const [loading, setLoading] = React.useState(false);
 
@@ -72,12 +72,12 @@ export function HapiSettings() {
   // Fetch initial status
   React.useEffect(() => {
     // Check hapi global installation
-    window.electronAPI.hapi.checkGlobal().then((result) => {
+    window.electronAPI.hapi.checkGlobal(false, shellConfig).then((result) => {
       setHapiGlobal(result);
     });
 
     // Check happy global installation
-    window.electronAPI.happy.checkGlobal().then((result) => {
+    window.electronAPI.happy.checkGlobal(false, shellConfig).then((result) => {
       setHappyGlobal(result);
     });
 
@@ -110,7 +110,7 @@ export function HapiSettings() {
       cleanupHapi();
       cleanupCf();
     };
-  }, [setHapiSettings]);
+  }, [setHapiSettings, shellConfig]);
 
   const getConfig = React.useCallback(() => {
     return {

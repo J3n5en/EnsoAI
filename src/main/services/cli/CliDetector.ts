@@ -3,30 +3,19 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import type { AgentCliInfo, AgentCliStatus, BuiltinAgentId, CustomAgent } from '@shared/types';
+import type {
+  AgentCliInfo,
+  AgentCliStatus,
+  BuiltinAgentId,
+  CustomAgent,
+  ShellConfig,
+} from '@shared/types';
 import { getEnhancedPath } from '../terminal/PtyManager';
+import { shellDetector } from '../terminal/ShellDetector';
 
 const isWindows = process.platform === 'win32';
 
 const execAsync = promisify(exec);
-
-/**
- * Find user's default shell
- */
-function findUserShell(): string {
-  const userShell = process.env.SHELL;
-  if (userShell && existsSync(userShell)) {
-    return userShell;
-  }
-  // Fallback to common shells
-  const shells = ['/bin/zsh', '/bin/bash', '/bin/sh'];
-  for (const shell of shells) {
-    if (existsSync(shell)) {
-      return shell;
-    }
-  }
-  return '/bin/sh';
-}
 
 interface BuiltinAgentConfig {
   id: BuiltinAgentId;
@@ -83,6 +72,7 @@ const BUILTIN_AGENT_CONFIGS: BuiltinAgentConfig[] = [
 
 export interface CliDetectOptions {
   includeWsl?: boolean;
+  shellConfig?: ShellConfig;
 }
 
 class CliDetector {
@@ -91,34 +81,51 @@ class CliDetector {
   private cacheTimestamp: number = 0;
   private readonly CACHE_TTL = 60000; // 1 minute cache
   private wslAvailable: boolean | null = null;
+  private currentShellConfig: ShellConfig | null = null;
+
+  /**
+   * Set shell config for command execution
+   */
+  setShellConfig(config: ShellConfig): void {
+    this.currentShellConfig = config;
+  }
 
   /**
    * Execute command in login shell to load user's environment (PATH, nvm, etc.)
+   * Uses user's configured shell from settings.
    */
   private async execInLoginShell(command: string, timeout = 5000): Promise<string> {
-    if (isWindows) {
-      // Windows: use cmd directly with enhanced PATH
-      const { stdout } = await execAsync(command, {
+    const escapedCommand = command.replace(/"/g, '\\"');
+
+    // Use user's configured shell if available
+    if (this.currentShellConfig) {
+      const { shell, execArgs } = shellDetector.resolveShellForCommand(this.currentShellConfig);
+      const fullCommand = `${shell} ${execArgs.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
+      const { stdout } = await execAsync(fullCommand, {
         timeout,
         env: { ...process.env, PATH: getEnhancedPath() },
       });
       return stdout;
     }
 
-    // Unix: use login shell to load user's full environment
-    // Try interactive login shell first (-ilc) to load .zshrc/.bashrc
-    // This is needed for version managers like fnm/nvm that are configured in rc files
-    // Fall back to non-interactive (-lc) if -i fails (e.g., some shells without tty)
-    const shell = findUserShell();
-    const escapedCommand = command.replace(/"/g, '\\"');
+    // Fallback to default behavior
+    if (isWindows) {
+      // Windows: use PowerShell by default for better environment support
+      const { stdout } = await execAsync(`powershell.exe -NoLogo -Command "${escapedCommand}"`, {
+        timeout,
+        env: { ...process.env, PATH: getEnhancedPath() },
+      });
+      return stdout;
+    }
 
+    // Unix: use $SHELL with login flags
+    const shell = process.env.SHELL || '/bin/sh';
     try {
       const { stdout } = await execAsync(`${shell} -ilc "${escapedCommand}"`, {
         timeout,
       });
       return stdout;
     } catch {
-      // Fallback to non-interactive login shell
       const { stdout } = await execAsync(`${shell} -lc "${escapedCommand}"`, {
         timeout,
       });
@@ -284,7 +291,16 @@ class CliDetector {
     return Date.now() - this.cacheTimestamp < this.CACHE_TTL;
   }
 
-  async detectOne(agentId: string, customAgent?: CustomAgent): Promise<AgentCliInfo> {
+  async detectOne(
+    agentId: string,
+    customAgent?: CustomAgent,
+    options?: CliDetectOptions
+  ): Promise<AgentCliInfo> {
+    // Set shell config if provided
+    if (options?.shellConfig) {
+      this.setShellConfig(options.shellConfig);
+    }
+
     // Check cache first
     if (this.isCacheValid() && this.cachedAgents.has(agentId)) {
       return this.cachedAgents.get(agentId)!;
@@ -444,6 +460,11 @@ class CliDetector {
     customAgents: CustomAgent[] = [],
     options: CliDetectOptions = {}
   ): Promise<AgentCliStatus> {
+    // Set shell config if provided
+    if (options.shellConfig) {
+      this.setShellConfig(options.shellConfig);
+    }
+
     // Return cached status if still valid
     if (this.isCacheValid() && this.cachedStatus) {
       return this.cachedStatus;

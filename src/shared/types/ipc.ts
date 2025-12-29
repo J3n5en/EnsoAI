@@ -92,6 +92,7 @@ export const IPC_CHANNELS = {
 
   // Shell Detector
   SHELL_DETECT: 'shell:detect',
+  SHELL_RESOLVE_FOR_COMMAND: 'shell:resolveForCommand',
 
   // Settings
   SETTINGS_READ: 'settings:read',

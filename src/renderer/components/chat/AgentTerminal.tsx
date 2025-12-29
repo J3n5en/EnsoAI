@@ -41,19 +41,31 @@ export function AgentTerminal({
     agentNotificationDelay,
     agentNotificationEnterDelay,
     hapiSettings,
+    shellConfig,
   } = useSettingsStore();
 
   // Track if hapi is globally installed (cached in main process)
   const [hapiGlobalInstalled, setHapiGlobalInstalled] = useState<boolean | null>(null);
 
+  // Resolved shell for command execution
+  const [resolvedShell, setResolvedShell] = useState<{
+    shell: string;
+    execArgs: string[];
+  } | null>(null);
+
+  // Resolve shell configuration on mount and when shellConfig changes
+  useEffect(() => {
+    window.electronAPI.shell.resolveForCommand(shellConfig).then(setResolvedShell);
+  }, [shellConfig]);
+
   // Check hapi global installation on mount (only for hapi environment)
   useEffect(() => {
     if (environment === 'hapi') {
-      window.electronAPI.hapi.checkGlobal().then((status) => {
+      window.electronAPI.hapi.checkGlobal(false, shellConfig).then((status) => {
         setHapiGlobalInstalled(status.installed);
       });
     }
-  }, [environment]);
+  }, [environment, shellConfig]);
   const outputBufferRef = useRef('');
   const startTimeRef = useRef<number | null>(null);
   const hasInitializedRef = useRef(false);
@@ -67,6 +79,11 @@ export function AgentTerminal({
 
   // Build command with session args
   const { command, env } = useMemo(() => {
+    // Wait for shell config to be resolved
+    if (!resolvedShell) {
+      return { command: undefined, env: undefined };
+    }
+
     const supportsSession = agentCommand === 'claude';
     const supportIde = agentCommand === 'claude';
     const agentArgs =
@@ -98,22 +115,10 @@ export function AgentTerminal({
         envVars = { CLI_API_TOKEN: hapiSettings.cliApiToken };
       }
 
-      if (isWindows) {
-        return {
-          command: {
-            shell: 'cmd.exe',
-            args: ['/c', hapiCommand],
-          },
-          env: envVars,
-        };
-      }
-
-      const shells = ['/bin/zsh', '/bin/bash', '/bin/sh'];
-      const shell = shells[0];
       return {
         command: {
-          shell,
-          args: ['-i', '-l', '-c', hapiCommand],
+          shell: resolvedShell.shell,
+          args: [...resolvedShell.execArgs, hapiCommand],
         },
         env: envVars,
       };
@@ -125,22 +130,10 @@ export function AgentTerminal({
       const happyArgs = agentCommand === 'claude' ? '' : agentCommand;
       const happyCommand = `happy ${happyArgs} ${agentArgs.join(' ')}`.trim();
 
-      if (isWindows) {
-        return {
-          command: {
-            shell: 'cmd.exe',
-            args: ['/c', happyCommand],
-          },
-          env: envVars,
-        };
-      }
-
-      const shells = ['/bin/zsh', '/bin/bash', '/bin/sh'];
-      const shell = shells[0];
       return {
         command: {
-          shell,
-          args: ['-i', '-l', '-c', happyCommand],
+          shell: resolvedShell.shell,
+          args: [...resolvedShell.execArgs, happyCommand],
         },
         env: envVars,
       };
@@ -161,24 +154,11 @@ export function AgentTerminal({
       };
     }
 
-    // Native Windows - use cmd /c to ensure exit after command completion
-    if (isWindows) {
-      return {
-        command: {
-          shell: 'cmd.exe',
-          args: ['/c', fullCommand],
-        },
-        env: envVars,
-      };
-    }
-
-    // Native Unix: try zsh first, fallback to bash, then sh
-    const shells = ['/bin/zsh', '/bin/bash', '/bin/sh'];
-    const shell = shells[0]; // Will be validated by node-pty
+    // Native environment: use user's configured shell
     return {
       command: {
-        shell,
-        args: ['-i', '-l', '-c', fullCommand],
+        shell: resolvedShell.shell,
+        args: [...resolvedShell.execArgs, fullCommand],
       },
       env: envVars,
     };
@@ -189,6 +169,7 @@ export function AgentTerminal({
     environment,
     hapiSettings.cliApiToken,
     hapiGlobalInstalled,
+    resolvedShell,
   ]);
 
   // Handle exit with auto-close logic
@@ -352,13 +333,16 @@ export function AgentTerminal({
     [activated, onActivated, agentNotificationEnterDelay]
   );
 
-  // For hapi environment, wait for global check to complete before activating terminal
+  // Wait for shell config and hapi check to complete before activating terminal
   const effectiveIsActive = useMemo(() => {
+    if (!resolvedShell) {
+      return false;
+    }
     if (environment === 'hapi' && hapiGlobalInstalled === null) {
       return false;
     }
     return isActive;
-  }, [environment, hapiGlobalInstalled, isActive]);
+  }, [environment, hapiGlobalInstalled, isActive, resolvedShell]);
 
   const {
     containerRef,
@@ -473,7 +457,9 @@ export function AgentTerminal({
         onClearSearch={clearSearch}
         theme={settings.theme}
       />
-      {(isLoading || (environment === 'hapi' && hapiGlobalInstalled === null)) && (
+      {(isLoading ||
+        !resolvedShell ||
+        (environment === 'hapi' && hapiGlobalInstalled === null)) && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div
