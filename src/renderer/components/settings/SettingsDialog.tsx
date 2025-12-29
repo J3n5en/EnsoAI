@@ -69,11 +69,11 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
           }
         />
       )}
-      <DialogPopup className="sm:max-w-2xl" showCloseButton={true}>
+      <DialogPopup className="sm:max-w-4xl" showCloseButton={true}>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <DialogTitle className="text-lg font-medium">{t('Settings')}</DialogTitle>
         </div>
-        <div className="flex h-[500px]">
+        <div className="flex h-[600px]">
           {/* Left: Category List */}
           <nav className="w-48 shrink-0 space-y-1 border-r p-2">
             {categories.map((category) => (
