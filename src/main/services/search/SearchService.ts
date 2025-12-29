@@ -124,9 +124,10 @@ function findRipgrep(): string | null {
 
   // Try to find in PATH
   try {
-    const command = isWindows ? 'where rg' : 'which rg';
+    // Use 'where.exe' on Windows (not 'where' which is PowerShell alias for Where-Object)
+    const command = isWindows ? 'where.exe rg' : 'which rg';
     const result = execSync(command, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] });
-    // 'where' on Windows may return multiple lines, take the first one
+    // 'where.exe' on Windows may return multiple lines, take the first one
     const firstLine = result.trim().split('\n')[0];
     return firstLine?.trim() || null;
   } catch {

@@ -152,8 +152,8 @@ class HapiServerManager extends EventEmitter {
 
     try {
       // First check if happy exists (fast)
-      // Use 'where' on Windows, 'which' on Unix
-      const whichCmd = isWindows ? 'where happy' : 'which happy';
+      // Use 'where.exe' on Windows (not 'where' which is PowerShell alias), 'which' on Unix
+      const whichCmd = isWindows ? 'where.exe happy' : 'which happy';
       await this.execInLoginShell(whichCmd, 2000);
 
       // If exists, try to get version (may take longer due to claude version check)
