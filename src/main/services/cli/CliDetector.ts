@@ -1,9 +1,10 @@
 import { exec } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { AgentCliInfo, AgentCliStatus, BuiltinAgentId, CustomAgent } from '@shared/types';
+import { getEnhancedPath } from '../terminal/PtyManager';
 
 const isWindows = process.platform === 'win32';
 
@@ -99,7 +100,7 @@ class CliDetector {
       // Windows: use cmd directly with enhanced PATH
       const { stdout } = await execAsync(command, {
         timeout,
-        env: { ...process.env, PATH: this.getEnhancedPath() },
+        env: { ...process.env, PATH: getEnhancedPath() },
       });
       return stdout;
     }
@@ -141,29 +142,6 @@ class CliDetector {
       this.wslAvailable = false;
       return false;
     }
-  }
-
-  /**
-   * Get enhanced PATH for Windows (Unix uses login shell instead)
-   */
-  private getEnhancedPath(): string {
-    const home = process.env.HOME || process.env.USERPROFILE || homedir();
-    const currentPath = process.env.PATH || '';
-
-    // nvm-windows: NVM_SYMLINK points to current Node.js version
-    const nvmSymlink = process.env.NVM_SYMLINK;
-    // scoop: SCOOP env var for custom install path, otherwise default ~/scoop
-    const scoopHome = process.env.SCOOP || join(home, 'scoop');
-
-    const paths = [
-      currentPath,
-      join(home, 'AppData', 'Roaming', 'npm'),
-      join(home, '.volta', 'bin'),
-      join(scoopHome, 'shims'),
-      join(home, '.bun', 'bin'),
-      nvmSymlink,
-    ];
-    return paths.filter(Boolean).join(delimiter);
   }
 
   async detectBuiltin(config: BuiltinAgentConfig): Promise<AgentCliInfo> {

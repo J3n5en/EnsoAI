@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -7,6 +7,56 @@ import * as pty from 'node-pty';
 import { detectShell, shellDetector } from './ShellDetector';
 
 const isWindows = process.platform === 'win32';
+
+// Cache for Windows registry PATH (read once)
+let cachedWindowsPath: string | null = null;
+
+/**
+ * Read full PATH from Windows registry (user + system level)
+ * This ensures GUI apps get the same PATH as terminal apps
+ */
+function getWindowsRegistryPath(): string {
+  if (cachedWindowsPath !== null) {
+    return cachedWindowsPath;
+  }
+
+  try {
+    // Read user-level PATH
+    let userPath = '';
+    try {
+      const userOutput = execSync('reg query "HKCU\\Environment" /v Path 2>nul', {
+        encoding: 'utf8',
+        timeout: 3000,
+      });
+      const userMatch = userOutput.match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+      userPath = userMatch ? userMatch[1].trim() : '';
+    } catch {
+      // User PATH might not exist
+    }
+
+    // Read system-level PATH
+    let systemPath = '';
+    try {
+      const systemOutput = execSync(
+        'reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" /v Path 2>nul',
+        { encoding: 'utf8', timeout: 3000 }
+      );
+      const systemMatch = systemOutput.match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+      systemPath = systemMatch ? systemMatch[1].trim() : '';
+    } catch {
+      // System PATH should always exist, but handle error gracefully
+    }
+
+    // Combine: system PATH first, then user PATH (Windows convention)
+    const combinedPath = [systemPath, userPath].filter(Boolean).join(delimiter);
+    cachedWindowsPath = combinedPath || process.env.PATH || '';
+    return cachedWindowsPath;
+  } catch {
+    // Fallback to process.env.PATH
+    cachedWindowsPath = process.env.PATH || '';
+    return cachedWindowsPath;
+  }
+}
 
 interface PtySession {
   pty: pty.IPty;
@@ -64,22 +114,14 @@ export function findLoginShell(): { shell: string; args: string[] } {
 // GUI apps don't inherit shell PATH, add common paths
 export function getEnhancedPath(): string {
   const home = process.env.HOME || process.env.USERPROFILE || homedir();
-  const currentPath = process.env.PATH || '';
 
   if (isWindows) {
-    // Windows: Add common Node.js paths
-    const nvmSymlink = process.env.NVM_SYMLINK;
-    const scoopHome = process.env.SCOOP || join(home, 'scoop');
-    const additionalPaths = [
-      join(home, 'AppData', 'Roaming', 'npm'),
-      join(home, '.volta', 'bin'),
-      join(scoopHome, 'shims'),
-      join(home, '.bun', 'bin'),
-      nvmSymlink,
-    ].filter(Boolean) as string[];
-    const allPaths = [...new Set([...additionalPaths, ...currentPath.split(delimiter)])];
-    return allPaths.join(delimiter);
+    // Windows: Read full PATH from registry to get user-level PATH
+    // This covers all package managers (nvm, volta, scoop, vfox, etc.)
+    return getWindowsRegistryPath();
   }
+
+  const currentPath = process.env.PATH || '';
 
   // Unix: Add common paths
   const additionalPaths = [
