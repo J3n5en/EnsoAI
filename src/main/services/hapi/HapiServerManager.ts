@@ -116,8 +116,8 @@ class HapiServerManager extends EventEmitter {
     }
 
     try {
-      // Increase timeout to 15000ms - PowerShell profile loading can take time
-      const stdout = await this.execInLoginShell('hapi --version', 15000);
+      // Increase timeout to 30000ms - PowerShell profile loading can be slow on first run
+      const stdout = await this.execInLoginShell('hapi --version', 30000);
       console.log('[HapiServerManager] hapi --version output:', stdout);
       const match = stdout.match(/(\d+\.\d+\.\d+)/);
       this.globalStatus = {
@@ -142,6 +142,8 @@ class HapiServerManager extends EventEmitter {
       }
       console.error('[HapiServerManager] hapi detection failed:', error);
       this.globalStatus = { installed: false };
+      // Don't cache failed result - allow immediate retry
+      return this.globalStatus;
     }
 
     this.globalCacheTimestamp = Date.now();
@@ -173,7 +175,7 @@ class HapiServerManager extends EventEmitter {
     try {
       // Directly execute 'happy --version' like CliDetector does for agent detection
       // This avoids compatibility issues with Get-Command/where.exe/which
-      const stdout = await this.execInLoginShell('happy --version', 15000);
+      const stdout = await this.execInLoginShell('happy --version', 30000);
       console.log('[HapiServerManager] happy --version output:', stdout);
       // Match version from first line: "happy version: X.Y.Z"
       const match = stdout.match(/happy version:\s*(\d+\.\d+\.\d+)/i);
@@ -199,6 +201,8 @@ class HapiServerManager extends EventEmitter {
       }
       console.error('[HapiServerManager] happy detection failed:', error);
       this.happyGlobalStatus = { installed: false };
+      // Don't cache failed result - allow immediate retry
+      return this.happyGlobalStatus;
     }
 
     this.happyGlobalCacheTimestamp = Date.now();
