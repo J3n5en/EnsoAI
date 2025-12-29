@@ -74,7 +74,8 @@ class HapiServerManager extends EventEmitter {
     // Use user's configured shell if available
     if (this.currentShellConfig) {
       const { shell, execArgs } = shellDetector.resolveShellForCommand(this.currentShellConfig);
-      const fullCommand = `${shell} ${execArgs.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
+      // Quote shell path in case it contains spaces (e.g., "C:\Program Files\PowerShell\7\pwsh.exe")
+      const fullCommand = `"${shell}" ${execArgs.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
       const { stdout } = await execAsync(fullCommand, {
         timeout,
         env: { ...process.env, PATH: getEnhancedPath() },
@@ -84,7 +85,7 @@ class HapiServerManager extends EventEmitter {
 
     // Fallback to findLoginShell (uses cmd.exe on Windows, $SHELL on Unix)
     const { shell, args } = findLoginShell();
-    const fullCommand = `${shell} ${args.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
+    const fullCommand = `"${shell}" ${args.map((a) => `"${a}"`).join(' ')} "${escapedCommand}"`;
     const { stdout } = await execAsync(fullCommand, {
       timeout,
       env: { ...process.env, PATH: getEnhancedPath() },

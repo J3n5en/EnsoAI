@@ -21,7 +21,8 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
     name: 'PowerShell 7',
     paths: ['C:\\Program Files\\PowerShell\\7\\pwsh.exe'],
     args: ['-NoLogo'],
-    execArgs: ['-NoLogo', '-Command'],
+    // -Login loads user profile (for version managers like vfox, nvm-windows, etc.)
+    execArgs: ['-NoLogo', '-Login', '-Command'],
   },
   {
     id: 'powershell',
