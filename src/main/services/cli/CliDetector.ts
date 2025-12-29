@@ -353,17 +353,15 @@ class CliDetector {
   }
 
   /**
-   * Batch detect all agents in a single shell session (much faster)
-   * Windows: Falls back to individual detection (cmd doesn't support Unix shell syntax)
+   * Detect all agents in parallel using Promise.all
    */
-  private async batchDetectInShell(
+  private async detectAllInShell(
     configs: Array<{ id: string; command: string; versionFlag: string; versionRegex?: RegExp }>,
     customAgents: CustomAgent[]
   ): Promise<Map<string, { installed: boolean; version?: string }>> {
     const results = new Map<string, { installed: boolean; version?: string }>();
     const allCommands: Array<{ id: string; command: string; versionRegex?: RegExp }> = [];
 
-    // Add builtin configs
     for (const config of configs) {
       allCommands.push({
         id: config.id,
@@ -372,7 +370,6 @@ class CliDetector {
       });
     }
 
-    // Add custom agents
     for (const agent of customAgents) {
       allCommands.push({
         id: agent.id,
@@ -381,90 +378,27 @@ class CliDetector {
       });
     }
 
-    if (allCommands.length === 0) {
-      return results;
-    }
-
-    // Windows: cmd doesn't support Unix shell syntax (&&, ||, 2>&1, ;)
-    // Fall back to individual detection
-    if (isWindows) {
-      const detectPromises = allCommands.map(async ({ id, command, versionRegex }) => {
-        try {
-          const output = await this.execInLoginShell(command, 5000);
-          const versionMatch = versionRegex ? output.match(versionRegex) : null;
-          results.set(id, {
-            installed: true,
-            version: versionMatch ? versionMatch[1] : undefined,
-          });
-        } catch {
-          results.set(id, { installed: false });
-        }
-      });
-      await Promise.all(detectPromises);
-      return results;
-    }
-
-    // Unix: Use batch command with markers for better performance
-    // Format: echo "###ID###" && command 2>&1 || true; echo "###ID###" && ...
-    const batchParts = allCommands.map(
-      ({ id, command }) => `echo "###${id}###" && (${command} 2>&1 || echo "__NOT_FOUND__")`
-    );
-    const batchCommand = batchParts.join('; ');
-
-    try {
-      const output = await this.execInLoginShell(batchCommand, 15000);
-
-      // Parse output by markers
-      for (const { id, versionRegex } of allCommands) {
-        const marker = `###${id}###`;
-        const markerIndex = output.indexOf(marker);
-        if (markerIndex === -1) {
-          results.set(id, { installed: false });
-          continue;
-        }
-
-        // Find content between this marker and next marker (or end)
-        const startIndex = markerIndex + marker.length;
-        const nextMarkerMatch = output.slice(startIndex).match(/###[\w-]+###/);
-        const endIndex = nextMarkerMatch
-          ? startIndex + (nextMarkerMatch.index ?? output.length)
-          : output.length;
-        const content = output.slice(startIndex, endIndex).trim();
-
-        if (content.includes('__NOT_FOUND__') || content.includes('command not found')) {
-          results.set(id, { installed: false });
-        } else {
-          const versionMatch = versionRegex ? content.match(versionRegex) : null;
-          results.set(id, {
-            installed: true,
-            version: versionMatch ? versionMatch[1] : undefined,
-          });
-        }
+    const detectPromises = allCommands.map(async ({ id, command, versionRegex }) => {
+      try {
+        const output = await this.execInLoginShell(command, 5000);
+        const versionMatch = versionRegex ? output.match(versionRegex) : null;
+        results.set(id, {
+          installed: true,
+          version: versionMatch ? versionMatch[1] : undefined,
+        });
+      } catch {
+        results.set(id, { installed: false });
       }
-    } catch {
-      // Batch failed, fallback to individual detection
-      const detectPromises = allCommands.map(async ({ id, command, versionRegex }) => {
-        try {
-          const output = await this.execInLoginShell(command, 5000);
-          const versionMatch = versionRegex ? output.match(versionRegex) : null;
-          results.set(id, {
-            installed: true,
-            version: versionMatch ? versionMatch[1] : undefined,
-          });
-        } catch {
-          results.set(id, { installed: false });
-        }
-      });
-      await Promise.all(detectPromises);
-    }
+    });
 
+    await Promise.all(detectPromises);
     return results;
   }
 
   /**
-   * Batch detect in WSL (single WSL shell session)
+   * Detect all agents in WSL in parallel using Promise.all
    */
-  private async batchDetectInWsl(
+  private async detectAllInWsl(
     configs: Array<{ id: string; command: string; versionFlag: string; versionRegex?: RegExp }>,
     customAgents: CustomAgent[]
   ): Promise<Map<string, { installed: boolean; version?: string }>> {
@@ -487,65 +421,22 @@ class CliDetector {
       });
     }
 
-    if (allCommands.length === 0) {
-      return results;
-    }
-
-    const batchParts = allCommands.map(
-      ({ id, command }) => `echo "###${id}###" && (${command} 2>&1 || echo "__NOT_FOUND__")`
-    );
-    const innerCommand = batchParts.join('; ');
-    const escapedCommand = innerCommand.replace(/"/g, '\\"');
-
-    try {
-      const { stdout } = await execAsync(`wsl -- sh -c 'exec $SHELL -ilc "${escapedCommand}"'`, {
-        timeout: 20000,
-      });
-
-      for (const { id, versionRegex } of allCommands) {
-        const marker = `###${id}###`;
-        const markerIndex = stdout.indexOf(marker);
-        if (markerIndex === -1) {
-          results.set(id, { installed: false });
-          continue;
-        }
-
-        const startIndex = markerIndex + marker.length;
-        const nextMarkerMatch = stdout.slice(startIndex).match(/###[\w-]+###/);
-        const endIndex = nextMarkerMatch
-          ? startIndex + (nextMarkerMatch.index ?? stdout.length)
-          : stdout.length;
-        const content = stdout.slice(startIndex, endIndex).trim();
-
-        if (content.includes('__NOT_FOUND__') || content.includes('command not found')) {
-          results.set(id, { installed: false });
-        } else {
-          const versionMatch = versionRegex ? content.match(versionRegex) : null;
-          results.set(id, {
-            installed: true,
-            version: versionMatch ? versionMatch[1] : undefined,
-          });
-        }
+    const detectPromises = allCommands.map(async ({ id, command, versionRegex }) => {
+      try {
+        const { stdout } = await execAsync(`wsl -- sh -c 'exec $SHELL -ilc "${command}"'`, {
+          timeout: 8000,
+        });
+        const versionMatch = versionRegex ? stdout.match(versionRegex) : null;
+        results.set(id, {
+          installed: true,
+          version: versionMatch ? versionMatch[1] : undefined,
+        });
+      } catch {
+        results.set(id, { installed: false });
       }
-    } catch {
-      // Batch failed, fallback to individual detection
-      const detectPromises = allCommands.map(async ({ id, command, versionRegex }) => {
-        try {
-          const { stdout } = await execAsync(`wsl -- sh -c 'exec $SHELL -ilc "${command}"'`, {
-            timeout: 8000,
-          });
-          const versionMatch = versionRegex ? stdout.match(versionRegex) : null;
-          results.set(id, {
-            installed: true,
-            version: versionMatch ? versionMatch[1] : undefined,
-          });
-        } catch {
-          results.set(id, { installed: false });
-        }
-      });
-      await Promise.all(detectPromises);
-    }
+    });
 
+    await Promise.all(detectPromises);
     return results;
   }
 
@@ -560,8 +451,8 @@ class CliDetector {
 
     const agents: AgentCliInfo[] = [];
 
-    // Batch detect native agents (single shell session)
-    const nativeResults = await this.batchDetectInShell(BUILTIN_AGENT_CONFIGS, customAgents);
+    // Detect native agents in parallel
+    const nativeResults = await this.detectAllInShell(BUILTIN_AGENT_CONFIGS, customAgents);
 
     // Build native agent info
     for (const config of BUILTIN_AGENT_CONFIGS) {
@@ -590,9 +481,9 @@ class CliDetector {
       });
     }
 
-    // Batch detect WSL agents if enabled (single WSL shell session)
+    // Detect WSL agents in parallel if enabled
     if (options.includeWsl && (await this.isWslAvailable())) {
-      const wslResults = await this.batchDetectInWsl(BUILTIN_AGENT_CONFIGS, customAgents);
+      const wslResults = await this.detectAllInWsl(BUILTIN_AGENT_CONFIGS, customAgents);
 
       for (const config of BUILTIN_AGENT_CONFIGS) {
         const result = wslResults.get(`${config.id}-wsl`);
