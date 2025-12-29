@@ -152,8 +152,27 @@ class HapiServerManager extends EventEmitter {
 
     try {
       // First check if happy exists (fast)
-      // Use 'where.exe' on Windows (not 'where' which is PowerShell alias), 'which' on Unix
-      const whichCmd = isWindows ? 'where.exe happy' : 'which happy';
+      // Choose command based on shell type:
+      // - PowerShell: Get-Command (native, respects $env:PATH from profile)
+      // - cmd: where.exe
+      // - Unix shells (bash/zsh/fish) and WSL: command -v (POSIX compatible)
+      let whichCmd: string;
+      if (isWindows && this.currentShellConfig) {
+        const shellType = this.currentShellConfig.shellType;
+        if (shellType === 'powershell' || shellType === 'powershell7') {
+          whichCmd = 'Get-Command happy -ErrorAction Stop';
+        } else if (shellType === 'cmd') {
+          whichCmd = 'where.exe happy';
+        } else {
+          // gitbash, wsl, or other Unix-like shells
+          whichCmd = 'command -v happy';
+        }
+      } else if (isWindows) {
+        // Fallback: use where.exe for Windows without shell config
+        whichCmd = 'where.exe happy';
+      } else {
+        whichCmd = 'command -v happy';
+      }
       await this.execInLoginShell(whichCmd, 2000);
 
       // If exists, try to get version (may take longer due to claude version check)
