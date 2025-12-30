@@ -95,6 +95,9 @@ export const IPC_CHANNELS = {
   CLI_INSTALL: 'cli:install',
   CLI_UNINSTALL: 'cli:uninstall',
 
+  // Embedded CLI
+  CLI_EMBEDDED_PATH: 'cli:embedded:path',
+
   // Shell Detector
   SHELL_DETECT: 'shell:detect',
   SHELL_RESOLVE_FOR_COMMAND: 'shell:resolveForCommand',

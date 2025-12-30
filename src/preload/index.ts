@@ -313,6 +313,13 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CLI_INSTALL),
     uninstall: (): Promise<{ installed: boolean; path: string | null; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLI_UNINSTALL),
+    // Embedded CLI
+    getEmbeddedCliPath: (): Promise<{
+      available: boolean;
+      nodePath: string;
+      cliPath: string;
+      version?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.CLI_EMBEDDED_PATH),
   },
 
   // Settings

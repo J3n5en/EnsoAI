@@ -7,6 +7,12 @@ import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
 
+interface EmbeddedCliPath {
+  available: boolean;
+  nodePath: string;
+  cliPath: string;
+}
+
 interface AgentTerminalProps {
   cwd?: string;
   sessionId?: string;
@@ -47,6 +53,9 @@ export function AgentTerminal({
   // Track if hapi is globally installed (cached in main process)
   const [hapiGlobalInstalled, setHapiGlobalInstalled] = useState<boolean | null>(null);
 
+  // Embedded CLI path (for claude agent using built-in Node)
+  const [embeddedCliPath, setEmbeddedCliPath] = useState<EmbeddedCliPath | null>(null);
+
   // Resolved shell for command execution
   const [resolvedShell, setResolvedShell] = useState<{
     shell: string;
@@ -57,6 +66,13 @@ export function AgentTerminal({
   useEffect(() => {
     window.electronAPI.shell.resolveForCommand(shellConfig).then(setResolvedShell);
   }, [shellConfig]);
+
+  // Get embedded CLI path on mount (for claude agent in native environment)
+  useEffect(() => {
+    if (agentCommand === 'claude' && environment === 'native') {
+      window.electronAPI.cli.getEmbeddedCliPath().then(setEmbeddedCliPath);
+    }
+  }, [agentCommand, environment]);
 
   // Check hapi global installation on mount (only for hapi environment)
   useEffect(() => {
@@ -81,6 +97,11 @@ export function AgentTerminal({
   const { command, env } = useMemo(() => {
     // Wait for shell config to be resolved
     if (!resolvedShell) {
+      return { command: undefined, env: undefined };
+    }
+
+    // Wait for embedded CLI path check to complete (for claude in native environment)
+    if (agentCommand === 'claude' && environment === 'native' && embeddedCliPath === null) {
       return { command: undefined, env: undefined };
     }
 
@@ -139,8 +160,22 @@ export function AgentTerminal({
       };
     }
 
-    const fullCommand = `${agentCommand} ${agentArgs.join(' ')}`.trim();
     const shellName = resolvedShell.shell.toLowerCase();
+
+    // Use embedded CLI for claude agent if available (native environment only)
+    const useEmbeddedCli =
+      agentCommand === 'claude' && environment === 'native' && embeddedCliPath?.available;
+
+    // Build the full command string
+    // For embedded CLI: use quoted paths to handle spaces
+    const fullCommand = useEmbeddedCli
+      ? `"${embeddedCliPath.nodePath}" "${embeddedCliPath.cliPath}" ${agentArgs.join(' ')}`.trim()
+      : `${agentCommand} ${agentArgs.join(' ')}`.trim();
+
+    // Set ELECTRON_RUN_AS_NODE for embedded CLI
+    if (useEmbeddedCli) {
+      envVars = { ...envVars, ELECTRON_RUN_AS_NODE: '1' };
+    }
 
     // WSL environment: run through WSL with interactive login shell
     if (environment === 'wsl' && isWindows) {
@@ -158,10 +193,14 @@ export function AgentTerminal({
     // PowerShell: wrap command in script block to preserve argument structure
     // Without this, PowerShell interprets args like --session-id as its own parameters
     if (shellName.includes('powershell') || shellName.includes('pwsh')) {
+      // For embedded CLI on PowerShell, use direct invocation with & operator
+      const psCommand = useEmbeddedCli
+        ? `& "${embeddedCliPath.nodePath}" "${embeddedCliPath.cliPath}" ${agentArgs.join(' ')}`
+        : `& { ${fullCommand} }`;
       return {
         command: {
           shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, `& { ${fullCommand} }`],
+          args: [...resolvedShell.execArgs, psCommand],
         },
         env: envVars,
       };
@@ -183,6 +222,7 @@ export function AgentTerminal({
     hapiSettings.cliApiToken,
     hapiGlobalInstalled,
     resolvedShell,
+    embeddedCliPath,
   ]);
 
   // Handle exit with auto-close logic
@@ -354,8 +394,12 @@ export function AgentTerminal({
     if (environment === 'hapi' && hapiGlobalInstalled === null) {
       return false;
     }
+    // Wait for embedded CLI path check to complete (for claude in native environment)
+    if (agentCommand === 'claude' && environment === 'native' && embeddedCliPath === null) {
+      return false;
+    }
     return isActive;
-  }, [environment, hapiGlobalInstalled, isActive, resolvedShell]);
+  }, [agentCommand, environment, hapiGlobalInstalled, isActive, resolvedShell, embeddedCliPath]);
 
   const {
     containerRef,
@@ -472,7 +516,8 @@ export function AgentTerminal({
       />
       {(isLoading ||
         !resolvedShell ||
-        (environment === 'hapi' && hapiGlobalInstalled === null)) && (
+        (environment === 'hapi' && hapiGlobalInstalled === null) ||
+        (agentCommand === 'claude' && environment === 'native' && embeddedCliPath === null)) && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div

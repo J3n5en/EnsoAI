@@ -49,6 +49,11 @@ files:
 asar: true
 compression: maximum
 
+# Extra resources (outside asar, accessible via process.resourcesPath)
+extraResources:
+  - from: resources/cli.js
+    to: cli.js
+
 mac:
   target:
     - dmg

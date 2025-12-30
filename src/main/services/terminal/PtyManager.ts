@@ -182,6 +182,29 @@ export class PtyManager {
       args = adjustArgsForShell(shell, args);
     }
 
+    // Build environment for pty spawn
+    const spawnEnv = {
+      ...process.env,
+      ...getProxyEnvVars(),
+      ...options.env,
+      PATH: getEnhancedPath(),
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
+      LANG: process.env.LANG || 'en_US.UTF-8',
+      LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
+    } as Record<string, string>;
+
+    // Debug log for shell command execution
+    console.log('[pty] Spawning shell:', {
+      id,
+      shell,
+      args,
+      cwd,
+      ELECTRON_RUN_AS_NODE: spawnEnv.ELECTRON_RUN_AS_NODE || '(not set)',
+      customEnvKeys: options.env ? Object.keys(options.env) : [],
+    });
+
     let ptyProcess: pty.IPty;
     try {
       ptyProcess = pty.spawn(shell, args, {
@@ -189,40 +212,21 @@ export class PtyManager {
         cols: options.cols || 80,
         rows: options.rows || 24,
         cwd,
-        env: {
-          ...process.env,
-          ...getProxyEnvVars(),
-          ...options.env,
-          PATH: getEnhancedPath(),
-          TERM: 'xterm-256color',
-          COLORTERM: 'truecolor',
-          // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
-          LANG: process.env.LANG || 'en_US.UTF-8',
-          LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
-        } as Record<string, string>,
+        env: spawnEnv,
       });
     } catch (error) {
+      console.error('[pty] Failed to spawn:', error);
       if (!isWindows) {
         const fallbackShell = findFallbackShell();
         if (fallbackShell !== shell) {
           const fallbackArgs = adjustArgsForShell(fallbackShell, args);
-          console.warn(`[pty] Failed to spawn ${shell}. Falling back to ${fallbackShell}`);
+          console.warn(`[pty] Falling back to ${fallbackShell} with args:`, fallbackArgs);
           ptyProcess = pty.spawn(fallbackShell, fallbackArgs, {
             name: 'xterm-256color',
             cols: options.cols || 80,
             rows: options.rows || 24,
             cwd,
-            env: {
-              ...process.env,
-              ...getProxyEnvVars(),
-              ...options.env,
-              PATH: getEnhancedPath(),
-              TERM: 'xterm-256color',
-              COLORTERM: 'truecolor',
-              // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
-              LANG: process.env.LANG || 'en_US.UTF-8',
-              LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
-            } as Record<string, string>,
+            env: spawnEnv,
           });
           shell = fallbackShell;
           args = fallbackArgs;
@@ -243,6 +247,7 @@ export class PtyManager {
     this.sessions.set(id, session);
 
     ptyProcess.onExit(({ exitCode, signal }) => {
+      console.log('[pty] Process exited:', { id, exitCode, signal });
       // Read onExit from session to allow it to be replaced during cleanup
       const currentSession = this.sessions.get(id);
       const exitHandler = currentSession?.onExit;

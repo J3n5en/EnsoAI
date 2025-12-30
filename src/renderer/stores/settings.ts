@@ -423,11 +423,11 @@ interface SettingsState {
 
 const defaultAgentSettings: AgentSettings = {
   claude: { enabled: true, isDefault: true },
-  codex: { enabled: true, isDefault: false },
-  droid: { enabled: true, isDefault: false },
-  gemini: { enabled: true, isDefault: false },
-  auggie: { enabled: true, isDefault: false },
-  cursor: { enabled: true, isDefault: false },
+  codex: { enabled: false, isDefault: false },
+  droid: { enabled: false, isDefault: false },
+  gemini: { enabled: false, isDefault: false },
+  auggie: { enabled: false, isDefault: false },
+  cursor: { enabled: false, isDefault: false },
 };
 
 export const useSettingsStore = create<SettingsState>()(
