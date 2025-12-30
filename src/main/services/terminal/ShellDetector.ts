@@ -61,7 +61,7 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
     name: 'WSL',
     paths: ['wsl.exe'],
     args: [],
-    execArgs: ['--', 'sh', '-c'],
+    execArgs: ['--', 'bash', '-ilc'],
     isWsl: true,
   },
 ];
