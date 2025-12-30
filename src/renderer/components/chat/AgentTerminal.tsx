@@ -193,9 +193,11 @@ export function AgentTerminal({
     // PowerShell: wrap command in script block to preserve argument structure
     // Without this, PowerShell interprets args like --session-id as its own parameters
     if (shellName.includes('powershell') || shellName.includes('pwsh')) {
-      // For embedded CLI on PowerShell, use direct invocation with & operator
+      // For embedded CLI on PowerShell:
+      // - Set ELECTRON_RUN_AS_NODE explicitly in PowerShell (env inheritance issues)
+      // - Use & operator for direct invocation
       const psCommand = useEmbeddedCli
-        ? `& "${embeddedCliPath.nodePath}" "${embeddedCliPath.cliPath}" ${agentArgs.join(' ')}`
+        ? `$env:ELECTRON_RUN_AS_NODE = "1"; & "${embeddedCliPath.nodePath}" "${embeddedCliPath.cliPath}" ${agentArgs.join(' ')}`
         : `& { ${fullCommand} }`;
       return {
         command: {
@@ -206,7 +208,21 @@ export function AgentTerminal({
       };
     }
 
-    // Native environment: use user's configured shell
+    // CMD: set environment variable explicitly before command
+    if (shellName.includes('cmd')) {
+      const cmdCommand = useEmbeddedCli
+        ? `set ELECTRON_RUN_AS_NODE=1 && "${embeddedCliPath.nodePath}" "${embeddedCliPath.cliPath}" ${agentArgs.join(' ')}`
+        : fullCommand;
+      return {
+        command: {
+          shell: resolvedShell.shell,
+          args: [...resolvedShell.execArgs, cmdCommand],
+        },
+        env: envVars,
+      };
+    }
+
+    // Native environment (Unix shells): use user's configured shell
     return {
       command: {
         shell: resolvedShell.shell,
