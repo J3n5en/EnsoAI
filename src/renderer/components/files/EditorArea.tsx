@@ -319,127 +319,6 @@ export function EditorArea({
         onClearPendingCursor();
       }
 
-      // Selection change listener for Claude IDE Bridge (only when enabled)
-      if (claudeCodeIntegration.enabled) {
-        // Create selection action widget
-        const widgetDomNode = document.createElement('div');
-        widgetDomNode.className = 'monaco-selection-widget';
-
-        const sendToClaudeHandler = () => {
-          const selection = editor.getSelection();
-          if (!selection || selection.isEmpty() || !activeTabPath) return;
-
-          const lineCount = selection.endLineNumber - selection.startLineNumber + 1;
-          const fileName = activeTabPath.split('/').pop() || activeTabPath;
-
-          window.electronAPI.mcp.sendAtMentioned({
-            filePath: activeTabPath,
-            lineStart: selection.startLineNumber,
-            lineEnd: selection.endLineNumber,
-          });
-
-          toastManager.add({
-            type: 'success',
-            timeout: 1200,
-            title: t('Sent to Claude Code'),
-            description: `${fileName}:${selection.startLineNumber}-${selection.endLineNumber} (${lineCount} ${t('lines')})`,
-          });
-
-          // Hide widget after sending
-          if (selectionWidgetRef.current) {
-            editor.removeContentWidget(selectionWidgetRef.current);
-            selectionWidgetRef.current = null;
-          }
-        };
-
-        // Render React button into widget
-        if (!widgetRootRef.current) {
-          widgetRootRef.current = createRoot(widgetDomNode);
-        }
-        widgetRootRef.current.render(
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
-            onClick={sendToClaudeHandler}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <Sparkles className="h-3 w-3" />
-            {t('Send to Claude')}
-          </button>
-        );
-
-        let currentPosition: monaco.IPosition | null = null;
-
-        const selectionWidget: monaco.editor.IContentWidget = {
-          getId: () => 'selection.action.widget',
-          getDomNode: () => widgetDomNode,
-          getPosition: () =>
-            currentPosition
-              ? {
-                  position: currentPosition,
-                  preference: [
-                    m.editor.ContentWidgetPositionPreference.ABOVE,
-                    m.editor.ContentWidgetPositionPreference.BELOW,
-                  ],
-                }
-              : null,
-        };
-
-        editor.onDidChangeCursorSelection((e) => {
-          if (!activeTabPath) return;
-
-          const selection = e.selection;
-          const model = editor.getModel();
-          if (!model) return;
-
-          // Update cursor line in store for "Open in editor" functionality
-          setCurrentCursorLine(selection.startLineNumber);
-
-          const selectedText = model.getValueInRange(selection);
-
-          // Show/hide selection widget
-          if (!selection.isEmpty() && selectedText.trim().length > 0) {
-            currentPosition = selection.getEndPosition();
-            if (!selectionWidgetRef.current) {
-              selectionWidgetRef.current = selectionWidget;
-              editor.addContentWidget(selectionWidget);
-            } else {
-              editor.layoutContentWidget(selectionWidget);
-            }
-          } else {
-            if (selectionWidgetRef.current) {
-              editor.removeContentWidget(selectionWidgetRef.current);
-              selectionWidgetRef.current = null;
-            }
-          }
-
-          // Clear previous debounce timer
-          if (selectionDebounceRef.current) {
-            clearTimeout(selectionDebounceRef.current);
-          }
-
-          // Debounce selection notifications using settings value
-          selectionDebounceRef.current = setTimeout(() => {
-            window.electronAPI.mcp.sendSelectionChanged({
-              text: selectedText,
-              filePath: activeTabPath,
-              fileUrl: `file://${activeTabPath}`,
-              selection: {
-                start: {
-                  line: selection.startLineNumber,
-                  character: selection.startColumn,
-                },
-                end: {
-                  line: selection.endLineNumber,
-                  character: selection.endColumn,
-                },
-                isEmpty: selection.isEmpty(),
-              },
-            });
-          }, claudeCodeIntegration.selectionChangedDebounce);
-        });
-      }
-
       // Sync scroll from editor to preview (for markdown files)
       editor.onDidScrollChange((e) => {
         if (!previewRef.current || isSyncingScrollRef.current) return;
@@ -464,14 +343,173 @@ export function EditorArea({
       activeTabPath,
       onSave,
       claudeCodeIntegration.enabled,
-      claudeCodeIntegration.selectionChangedDebounce,
       claudeCodeIntegration.atMentionedKeybinding,
       t,
-      setCurrentCursorLine,
       pendingCursor,
       onClearPendingCursor,
     ]
   );
+
+  // Claude Code Integration: Selection widget and notifications (dynamic based on settings)
+  useEffect(() => {
+    const editor = editorRef.current;
+    const m = monacoRef.current;
+    if (!editor || !m) return;
+
+    // Always track cursor line for "Open in editor" functionality
+    const cursorDisposable = editor.onDidChangeCursorSelection((e) => {
+      setCurrentCursorLine(e.selection.startLineNumber);
+    });
+
+    if (!claudeCodeIntegration.enabled) {
+      // Clean up any existing widget when disabled
+      if (selectionWidgetRef.current) {
+        editor.removeContentWidget(selectionWidgetRef.current);
+        selectionWidgetRef.current = null;
+      }
+      return () => {
+        cursorDisposable.dispose();
+      };
+    }
+
+    // Create selection action widget
+    const widgetDomNode = document.createElement('div');
+    widgetDomNode.className = 'monaco-selection-widget';
+
+    const sendToClaudeHandler = () => {
+      const selection = editor.getSelection();
+      if (!selection || selection.isEmpty() || !activeTabPath) return;
+
+      const lineCount = selection.endLineNumber - selection.startLineNumber + 1;
+      const fileName = activeTabPath.split('/').pop() || activeTabPath;
+
+      window.electronAPI.mcp.sendAtMentioned({
+        filePath: activeTabPath,
+        lineStart: selection.startLineNumber,
+        lineEnd: selection.endLineNumber,
+      });
+
+      toastManager.add({
+        type: 'success',
+        timeout: 1200,
+        title: t('Sent to Claude Code'),
+        description: `${fileName}:${selection.startLineNumber}-${selection.endLineNumber} (${lineCount} ${t('lines')})`,
+      });
+
+      // Hide widget after sending
+      if (selectionWidgetRef.current) {
+        editor.removeContentWidget(selectionWidgetRef.current);
+        selectionWidgetRef.current = null;
+      }
+    };
+
+    // Render React button into widget
+    if (widgetRootRef.current) {
+      widgetRootRef.current.unmount();
+    }
+    widgetRootRef.current = createRoot(widgetDomNode);
+    widgetRootRef.current.render(
+      <button
+        type="button"
+        className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
+        onClick={sendToClaudeHandler}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <Sparkles className="h-3 w-3" />
+        {t('Send to Claude')}
+      </button>
+    );
+
+    let currentPosition: monaco.IPosition | null = null;
+
+    const selectionWidget: monaco.editor.IContentWidget = {
+      getId: () => 'selection.action.widget',
+      getDomNode: () => widgetDomNode,
+      getPosition: () =>
+        currentPosition
+          ? {
+              position: currentPosition,
+              preference: [
+                m.editor.ContentWidgetPositionPreference.ABOVE,
+                m.editor.ContentWidgetPositionPreference.BELOW,
+              ],
+            }
+          : null,
+    };
+
+    const selectionDisposable = editor.onDidChangeCursorSelection((e) => {
+      if (!activeTabPath) return;
+
+      const selection = e.selection;
+      const model = editor.getModel();
+      if (!model) return;
+
+      const selectedText = model.getValueInRange(selection);
+
+      // Show/hide selection widget
+      if (!selection.isEmpty() && selectedText.trim().length > 0) {
+        currentPosition = selection.getEndPosition();
+        if (!selectionWidgetRef.current) {
+          selectionWidgetRef.current = selectionWidget;
+          editor.addContentWidget(selectionWidget);
+        } else {
+          editor.layoutContentWidget(selectionWidget);
+        }
+      } else {
+        if (selectionWidgetRef.current) {
+          editor.removeContentWidget(selectionWidgetRef.current);
+          selectionWidgetRef.current = null;
+        }
+      }
+
+      // Clear previous debounce timer
+      if (selectionDebounceRef.current) {
+        clearTimeout(selectionDebounceRef.current);
+      }
+
+      // Debounce selection notifications using settings value
+      selectionDebounceRef.current = setTimeout(() => {
+        window.electronAPI.mcp.sendSelectionChanged({
+          text: selectedText,
+          filePath: activeTabPath,
+          fileUrl: `file://${activeTabPath}`,
+          selection: {
+            start: {
+              line: selection.startLineNumber,
+              character: selection.startColumn,
+            },
+            end: {
+              line: selection.endLineNumber,
+              character: selection.endColumn,
+            },
+            isEmpty: selection.isEmpty(),
+          },
+        });
+      }, claudeCodeIntegration.selectionChangedDebounce);
+    });
+
+    return () => {
+      cursorDisposable.dispose();
+      selectionDisposable.dispose();
+      if (selectionWidgetRef.current) {
+        editor.removeContentWidget(selectionWidgetRef.current);
+        selectionWidgetRef.current = null;
+      }
+      if (widgetRootRef.current) {
+        widgetRootRef.current.unmount();
+        widgetRootRef.current = null;
+      }
+      if (selectionDebounceRef.current) {
+        clearTimeout(selectionDebounceRef.current);
+      }
+    };
+  }, [
+    claudeCodeIntegration.enabled,
+    claudeCodeIntegration.selectionChangedDebounce,
+    activeTabPath,
+    t,
+    setCurrentCursorLine,
+  ]);
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
