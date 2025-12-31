@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GlobalSearchDialog, type SearchMode } from '@/components/search';
 import { useEditor } from '@/hooks/useEditor';
 import { useFileTree } from '@/hooks/useFileTree';
@@ -6,6 +6,12 @@ import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
 import { EditorArea } from './EditorArea';
 import { FileTree } from './FileTree';
 import { NewItemDialog } from './NewItemDialog';
+
+// Panel size constraints
+const PANEL_MIN_WIDTH = 180;
+const PANEL_MAX_WIDTH = 500;
+const PANEL_DEFAULT_WIDTH = 256;
+const STORAGE_KEY = 'enso-file-panel-width';
 
 // Helper to check if a keyboard event matches a keybinding
 function matchesKeybinding(e: KeyboardEvent, binding: TerminalKeybinding): boolean {
@@ -54,6 +60,45 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
 
   const [newItemType, setNewItemType] = useState<NewItemType>(null);
   const [newItemParentPath, setNewItemParentPath] = useState<string>('');
+
+  // Panel resize state
+  const [panelWidth, setPanelWidth] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? Number(saved) : PANEL_DEFAULT_WIDTH;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Panel resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = e.clientX - containerRect.left;
+      const clampedWidth = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, newWidth));
+      setPanelWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      localStorage.setItem(STORAGE_KEY, String(panelWidth));
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, panelWidth]);
 
   // Global search state
   const [searchOpen, setSearchOpen] = useState(false);
@@ -236,9 +281,9 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
   }
 
   return (
-    <div className="flex h-full">
+    <div ref={containerRef} className={`flex h-full ${isResizing ? 'select-none' : ''}`}>
       {/* File Tree - left panel */}
-      <div className="w-64 shrink-0 border-r">
+      <div className="relative shrink-0 border-r" style={{ width: panelWidth }}>
         <FileTree
           tree={tree}
           expandedPaths={expandedPaths}
@@ -255,6 +300,11 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           }}
           isLoading={isLoading}
           rootPath={rootPath}
+        />
+        {/* Resize handle */}
+        <div
+          className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+          onMouseDown={handleResizeStart}
         />
       </div>
 
