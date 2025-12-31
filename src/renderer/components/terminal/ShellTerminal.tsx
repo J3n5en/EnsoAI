@@ -10,6 +10,7 @@ interface ShellTerminalProps {
   isActive?: boolean;
   onExit?: () => void;
   onTitleChange?: (title: string) => void;
+  onSplit?: () => void;
 }
 
 export function ShellTerminal({
@@ -17,6 +18,7 @@ export function ShellTerminal({
   isActive = false,
   onExit,
   onTitleChange,
+  onSplit,
 }: ShellTerminalProps) {
   const { t } = useI18n();
 
@@ -70,6 +72,8 @@ export function ShellTerminal({
       e.preventDefault();
 
       const selectedId = await window.electronAPI.contextMenu.show([
+        { id: 'split', label: t('Split Terminal') },
+        { id: 'separator-0', label: '', type: 'separator' },
         { id: 'clear', label: t('Clear terminal') },
         { id: 'refresh', label: t('Refresh terminal') },
         { id: 'separator-1', label: '', type: 'separator' },
@@ -81,6 +85,9 @@ export function ShellTerminal({
       if (!selectedId) return;
 
       switch (selectedId) {
+        case 'split':
+          onSplit?.();
+          break;
         case 'clear':
           clear();
           break;
@@ -103,7 +110,7 @@ export function ShellTerminal({
           break;
       }
     },
-    [terminal, clear, refreshRenderer, t]
+    [terminal, clear, refreshRenderer, t, onSplit]
   );
 
   useEffect(() => {

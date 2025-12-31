@@ -41,6 +41,7 @@ export const zhTranslations: Record<string, string> = {
   'Choose workspace first': '请先选择一个工作区',
   'Choose Worktree': '选择 Worktree',
   'Clear terminal': '清除终端',
+  'Split Terminal': '分屏',
   'Click to load worktrees': '点击加载 worktrees',
   Close: '关闭',
   'Close Session': '关闭 Session',

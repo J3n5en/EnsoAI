@@ -1,200 +1,280 @@
-import { List, Plus, Terminal, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { normalizePath, pathsEqual } from '@/App/storage';
-import { Button } from '@/components/ui/button';
-import { useI18n } from '@/i18n';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { normalizePath } from '@/App/storage';
 import { matchesKeybinding } from '@/lib/keybinding';
-import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
-import { ShellTerminal } from './ShellTerminal';
-
-interface TerminalTab {
-  id: string;
-  name: string;
-  cwd: string; // Track which worktree this tab belongs to
-  title?: string; // Terminal title from OSC escape sequence
-  userEdited?: boolean; // User manually edited the name, takes priority over title
-}
+import { ResizeHandle } from './ResizeHandle';
+import { TerminalGroup } from './TerminalGroup';
+import type { TerminalGroup as TerminalGroupType, TerminalTab } from './types';
+import { getNextTabName } from './types';
 
 interface TerminalPanelProps {
   cwd?: string;
   isActive?: boolean;
 }
 
-interface TerminalState {
-  tabs: TerminalTab[];
-  activeIds: Record<string, string>; // { [cwd]: activeTabId }
+interface GroupState {
+  groups: TerminalGroupType[];
+  activeGroupId: string | null;
+  // Flex percentages for each group
+  flexPercents: number[];
 }
 
-function createInitialState(): TerminalState {
-  return { tabs: [], activeIds: {} };
+function createInitialGroupState(): GroupState {
+  return {
+    groups: [],
+    activeGroupId: null,
+    flexPercents: [],
+  };
 }
 
-function getNextName(tabs: TerminalTab[], forCwd: string): string {
-  const cwdTabs = tabs.filter((t) => pathsEqual(t.cwd, forCwd));
-  const numbers = cwdTabs
-    .map((t) => {
-      const match = t.name.match(/^Untitled-(\d+)$/);
-      return match ? Number.parseInt(match[1], 10) : 0;
-    })
-    .filter((n) => n > 0);
-  const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-  return `Untitled-${max + 1}`;
-}
+// Per-worktree state
+type WorktreeGroupStates = Record<string, GroupState>;
 
 export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
-  const { t } = useI18n();
-  const [state, setState] = useState<TerminalState>(createInitialState);
-  const { tabs, activeIds } = state;
-
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [worktreeStates, setWorktreeStates] = useState<WorktreeGroupStates>({});
   const terminalKeybindings = useSettingsStore((state) => state.terminalKeybindings);
   const { setTerminalCount, registerTerminalCloseHandler } = useWorktreeActivityStore();
 
-  // Get tabs for current worktree
-  const currentTabs = useMemo(() => {
-    return tabs.filter((t) => cwd && pathsEqual(t.cwd, cwd));
-  }, [tabs, cwd]);
-  const activeId = cwd ? activeIds[normalizePath(cwd)] || null : null;
+  // Get current worktree's state
+  const currentState = useMemo(() => {
+    if (!cwd) return createInitialGroupState();
+    const normalizedCwd = normalizePath(cwd);
+    return worktreeStates[normalizedCwd] || createInitialGroupState();
+  }, [cwd, worktreeStates]);
 
-  // Stable terminal IDs - only append, never reorder (prevents DOM reordering issues with xterm)
-  const [terminalIds, setTerminalIds] = useState<string[]>(() => tabs.map((t) => t.id));
+  const { groups, activeGroupId } = currentState;
 
-  // Update stable terminal IDs when tabs change (append new, remove deleted)
+  // Count total tabs for worktree activity tracking
   useEffect(() => {
-    setTerminalIds((prev) => {
-      const currentIds = new Set(prev);
-      const tabIds = new Set(tabs.map((t) => t.id));
-      // Append new tabs (preserve creation order)
-      const newIds = tabs.filter((t) => !currentIds.has(t.id)).map((t) => t.id);
-      // Filter out deleted tabs
-      const filtered = prev.filter((id) => tabIds.has(id));
-      return newIds.length > 0 ? [...filtered, ...newIds] : filtered;
-    });
-  }, [tabs]);
-
-  // Sync terminal tab counts to worktree activity store
-  useEffect(() => {
-    // Always set current worktree count (even if 0)
-    if (cwd) {
-      const count = tabs.filter((t) => pathsEqual(t.cwd, cwd)).length;
-      setTerminalCount(cwd, count);
-    }
-  }, [tabs, cwd, setTerminalCount]);
+    if (!cwd) return;
+    const totalTabs = groups.reduce((sum, g) => sum + g.tabs.length, 0);
+    setTerminalCount(cwd, totalTabs);
+  }, [groups, cwd, setTerminalCount]);
 
   // Register close handler for external close requests
   useEffect(() => {
     const handleCloseAll = (worktreePath: string) => {
-      setState((prev) => {
-        // Close all tabs for this worktree
-        const tabsToClose = prev.tabs.filter((t) => pathsEqual(t.cwd, worktreePath));
-        if (tabsToClose.length === 0) return prev;
-
-        const newTabs = prev.tabs.filter((t) => !pathsEqual(t.cwd, worktreePath));
-        const newActiveIds = { ...prev.activeIds };
-        delete newActiveIds[normalizePath(worktreePath)];
-
-        // Explicitly set count to 0
-        setTerminalCount(worktreePath, 0);
-
-        return { tabs: newTabs, activeIds: newActiveIds };
+      const normalizedPath = normalizePath(worktreePath);
+      setWorktreeStates((prev) => {
+        const newStates = { ...prev };
+        delete newStates[normalizedPath];
+        return newStates;
       });
+      setTerminalCount(worktreePath, 0);
     };
 
     return registerTerminalCloseHandler(handleCloseAll);
   }, [registerTerminalCloseHandler, setTerminalCount]);
 
-  const handleNewTab = useCallback(() => {
-    if (!cwd) return;
-    setState((prev) => {
-      const newTab: TerminalTab = {
-        id: crypto.randomUUID(),
-        name: getNextName(prev.tabs, cwd),
-        cwd,
-      };
-      return {
-        tabs: [...prev.tabs, newTab],
-        activeIds: { ...prev.activeIds, [normalizePath(cwd)]: newTab.id },
-      };
-    });
-  }, [cwd]);
-
-  const handleCloseTab = useCallback(
-    (id: string) => {
+  // Update state helper
+  const updateCurrentState = useCallback(
+    (updater: (state: GroupState) => GroupState) => {
       if (!cwd) return;
-      setState((prev) => {
-        const closingTab = prev.tabs.find((t) => t.id === id);
-        if (!closingTab) return prev;
+      const normalizedCwd = normalizePath(cwd);
+      setWorktreeStates((prev) => ({
+        ...prev,
+        [normalizedCwd]: updater(prev[normalizedCwd] || createInitialGroupState()),
+      }));
+    },
+    [cwd]
+  );
 
-        const tabCwd = closingTab.cwd;
-        const normalizedTabCwd = normalizePath(tabCwd);
-        const newTabs = prev.tabs.filter((t) => t.id !== id);
-        const cwdTabs = newTabs.filter((t) => pathsEqual(t.cwd, tabCwd));
-
-        const newActiveIds = { ...prev.activeIds };
-
-        // If no more tabs for this worktree, clear active ID
-        if (cwdTabs.length === 0) {
-          delete newActiveIds[normalizedTabCwd];
-        } else if (prev.activeIds[normalizedTabCwd] === id) {
-          // Switch to adjacent tab
-          const oldCwdTabs = prev.tabs.filter((t) => pathsEqual(t.cwd, tabCwd));
-          const closedIndex = oldCwdTabs.findIndex((t) => t.id === id);
-          const newIndex = Math.min(closedIndex, cwdTabs.length - 1);
-          newActiveIds[normalizedTabCwd] = cwdTabs[newIndex].id;
+  // Handle tab changes within a group (searches all worktrees for the group)
+  const handleTabsChange = useCallback(
+    (groupId: string, tabs: TerminalTab[], activeTabId: string | null) => {
+      setWorktreeStates((prev) => {
+        // Find which worktree contains this group
+        for (const [path, state] of Object.entries(prev)) {
+          const groupIndex = state.groups.findIndex((g) => g.id === groupId);
+          if (groupIndex !== -1) {
+            return {
+              ...prev,
+              [path]: {
+                ...state,
+                groups: state.groups.map((g) =>
+                  g.id === groupId ? { ...g, tabs, activeTabId } : g
+                ),
+              },
+            };
+          }
         }
-        return { tabs: newTabs, activeIds: newActiveIds };
+        return prev;
       });
     },
-    [cwd]
+    []
   );
 
-  const handleSelectTab = useCallback(
-    (id: string) => {
-      if (!cwd) return;
-      setState((prev) => ({ ...prev, activeIds: { ...prev.activeIds, [normalizePath(cwd)]: id } }));
+  // Handle group activation
+  const handleGroupClick = useCallback(
+    (groupId: string) => {
+      updateCurrentState((state) => ({
+        ...state,
+        activeGroupId: groupId,
+      }));
     },
-    [cwd]
+    [updateCurrentState]
   );
 
-  // Handle terminal title changes (OSC escape sequences)
-  const handleTitleChange = useCallback((id: string, title: string) => {
-    setState((prev) => ({
-      ...prev,
-      tabs: prev.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
-    }));
+  // Handle split - create new group to the right
+  const handleSplit = useCallback(
+    (fromGroupId: string) => {
+      if (!cwd) return;
+
+      updateCurrentState((state) => {
+        const fromIndex = state.groups.findIndex((g) => g.id === fromGroupId);
+        if (fromIndex === -1) return state;
+
+        const newGroup: TerminalGroupType = {
+          id: crypto.randomUUID(),
+          tabs: [
+            {
+              id: crypto.randomUUID(),
+              name: getNextTabName(
+                state.groups.flatMap((g) => g.tabs),
+                cwd
+              ),
+              cwd,
+            },
+          ],
+          activeTabId: null,
+        };
+        // Set activeTabId to the first tab
+        newGroup.activeTabId = newGroup.tabs[0].id;
+
+        const newGroups = [...state.groups];
+        newGroups.splice(fromIndex + 1, 0, newGroup);
+
+        // Recalculate flex percentages evenly
+        const newFlexPercents = newGroups.map(() => 100 / newGroups.length);
+
+        return {
+          ...state,
+          groups: newGroups,
+          activeGroupId: newGroup.id,
+          flexPercents: newFlexPercents,
+        };
+      });
+    },
+    [cwd, updateCurrentState]
+  );
+
+  // Handle group becoming empty - remove it (searches all worktrees)
+  const handleGroupEmpty = useCallback((groupId: string) => {
+    setWorktreeStates((prev) => {
+      // Find which worktree contains this group
+      for (const [path, state] of Object.entries(prev)) {
+        const groupIndex = state.groups.findIndex((g) => g.id === groupId);
+        if (groupIndex !== -1) {
+          const newGroups = state.groups.filter((g) => g.id !== groupId);
+
+          if (newGroups.length === 0) {
+            // Remove this worktree's state entirely
+            const newStates = { ...prev };
+            delete newStates[path];
+            return newStates;
+          }
+
+          // Recalculate flex percentages
+          const newFlexPercents = newGroups.map(() => 100 / newGroups.length);
+
+          // Update active group if needed
+          let newActiveGroupId = state.activeGroupId;
+          if (state.activeGroupId === groupId) {
+            const removedIndex = state.groups.findIndex((g) => g.id === groupId);
+            const newIndex = Math.min(removedIndex, newGroups.length - 1);
+            newActiveGroupId = newGroups[newIndex]?.id || null;
+          }
+
+          return {
+            ...prev,
+            [path]: {
+              ...state,
+              groups: newGroups,
+              activeGroupId: newActiveGroupId,
+              flexPercents: newFlexPercents,
+            },
+          };
+        }
+      }
+      return prev;
+    });
   }, []);
 
-  const handleNextTab = useCallback(() => {
-    if (!cwd) return;
-    const normalizedCwd = normalizePath(cwd);
-    setState((prev) => {
-      const cwdTabs = prev.tabs.filter((t) => pathsEqual(t.cwd, cwd));
-      if (cwdTabs.length <= 1) return prev;
-      const currentIndex = cwdTabs.findIndex((t) => t.id === prev.activeIds[normalizedCwd]);
-      const nextIndex = (currentIndex + 1) % cwdTabs.length;
-      return { ...prev, activeIds: { ...prev.activeIds, [normalizedCwd]: cwdTabs[nextIndex].id } };
-    });
-  }, [cwd]);
+  // Handle resize between groups
+  const handleResize = useCallback(
+    (index: number, deltaPercent: number) => {
+      updateCurrentState((state) => {
+        if (state.groups.length < 2) return state;
 
-  const handlePrevTab = useCallback(() => {
-    if (!cwd) return;
-    const normalizedCwd = normalizePath(cwd);
-    setState((prev) => {
-      const cwdTabs = prev.tabs.filter((t) => pathsEqual(t.cwd, cwd));
-      if (cwdTabs.length <= 1) return prev;
-      const currentIndex = cwdTabs.findIndex((t) => t.id === prev.activeIds[normalizedCwd]);
-      const prevIndex = currentIndex <= 0 ? cwdTabs.length - 1 : currentIndex - 1;
-      return { ...prev, activeIds: { ...prev.activeIds, [normalizedCwd]: cwdTabs[prevIndex].id } };
-    });
-  }, [cwd]);
+        const newFlexPercents = [...state.flexPercents];
+        const minPercent = 20;
 
-  // Terminal tab keyboard shortcuts
+        // Adjust the two adjacent groups
+        const leftNew = newFlexPercents[index] + deltaPercent;
+        const rightNew = newFlexPercents[index + 1] - deltaPercent;
+
+        // Clamp to minimum
+        if (leftNew >= minPercent && rightNew >= minPercent) {
+          newFlexPercents[index] = leftNew;
+          newFlexPercents[index + 1] = rightNew;
+        }
+
+        return {
+          ...state,
+          flexPercents: newFlexPercents,
+        };
+      });
+    },
+    [updateCurrentState]
+  );
+
+  // Create initial group with a terminal if none exists
+  const handleNewTerminal = useCallback(() => {
+    if (!cwd) return;
+
+    updateCurrentState((state) => {
+      if (state.groups.length > 0) {
+        // Add tab to active group
+        const targetGroupId = state.activeGroupId || state.groups[0].id;
+        const allTabs = state.groups.flatMap((g) => g.tabs);
+        const newTab: TerminalTab = {
+          id: crypto.randomUUID(),
+          name: getNextTabName(allTabs, cwd),
+          cwd,
+        };
+
+        return {
+          ...state,
+          groups: state.groups.map((g) =>
+            g.id === targetGroupId ? { ...g, tabs: [...g.tabs, newTab], activeTabId: newTab.id } : g
+          ),
+        };
+      }
+
+      // Create first group
+      const newGroup: TerminalGroupType = {
+        id: crypto.randomUUID(),
+        tabs: [
+          {
+            id: crypto.randomUUID(),
+            name: 'Untitled-1',
+            cwd,
+          },
+        ],
+        activeTabId: null,
+      };
+      newGroup.activeTabId = newGroup.tabs[0].id;
+
+      return {
+        groups: [newGroup],
+        activeGroupId: newGroup.id,
+        flexPercents: [100],
+      };
+    });
+  }, [cwd, updateCurrentState]);
+
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isActive) return;
@@ -202,279 +282,133 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
       // New tab
       if (matchesKeybinding(e, terminalKeybindings.newTab)) {
         e.preventDefault();
-        handleNewTab();
+        handleNewTerminal();
         return;
       }
 
       // Close tab
       if (matchesKeybinding(e, terminalKeybindings.closeTab)) {
         e.preventDefault();
-        if (activeId) {
-          handleCloseTab(activeId);
+        const activeGroup = groups.find((g) => g.id === activeGroupId);
+        if (activeGroup?.activeTabId) {
+          const newTabs = activeGroup.tabs.filter((t) => t.id !== activeGroup.activeTabId);
+          if (newTabs.length === 0) {
+            handleGroupEmpty(activeGroup.id);
+          } else {
+            const closedIndex = activeGroup.tabs.findIndex((t) => t.id === activeGroup.activeTabId);
+            const newIndex = Math.min(closedIndex, newTabs.length - 1);
+            handleTabsChange(activeGroup.id, newTabs, newTabs[newIndex].id);
+          }
         }
         return;
       }
 
-      // Next tab
+      // Next/Prev tab within active group
       if (matchesKeybinding(e, terminalKeybindings.nextTab)) {
         e.preventDefault();
-        handleNextTab();
+        const activeGroup = groups.find((g) => g.id === activeGroupId);
+        if (activeGroup && activeGroup.tabs.length > 1) {
+          const currentIndex = activeGroup.tabs.findIndex((t) => t.id === activeGroup.activeTabId);
+          const nextIndex = (currentIndex + 1) % activeGroup.tabs.length;
+          handleTabsChange(activeGroup.id, activeGroup.tabs, activeGroup.tabs[nextIndex].id);
+        }
         return;
       }
 
-      // Prev tab
       if (matchesKeybinding(e, terminalKeybindings.prevTab)) {
         e.preventDefault();
-        handlePrevTab();
+        const activeGroup = groups.find((g) => g.id === activeGroupId);
+        if (activeGroup && activeGroup.tabs.length > 1) {
+          const currentIndex = activeGroup.tabs.findIndex((t) => t.id === activeGroup.activeTabId);
+          const prevIndex = currentIndex <= 0 ? activeGroup.tabs.length - 1 : currentIndex - 1;
+          handleTabsChange(activeGroup.id, activeGroup.tabs, activeGroup.tabs[prevIndex].id);
+        }
         return;
       }
 
-      // Cmd+1-9 to switch tabs (keep this as a bonus feature)
+      // Cmd+1-9 to switch tabs in active group
       if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
-        const index = Number.parseInt(e.key, 10) - 1;
-        if (index < currentTabs.length) {
-          handleSelectTab(currentTabs[index].id);
+        const activeGroup = groups.find((g) => g.id === activeGroupId);
+        if (activeGroup) {
+          const index = Number.parseInt(e.key, 10) - 1;
+          if (index < activeGroup.tabs.length) {
+            handleTabsChange(activeGroup.id, activeGroup.tabs, activeGroup.tabs[index].id);
+          }
         }
         return;
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     isActive,
-    activeId,
-    currentTabs,
+    groups,
+    activeGroupId,
     terminalKeybindings,
-    handleNewTab,
-    handleCloseTab,
-    handleNextTab,
-    handlePrevTab,
-    handleSelectTab,
+    handleNewTerminal,
+    handleTabsChange,
+    handleGroupEmpty,
   ]);
 
-  const handleStartEdit = useCallback((tab: TerminalTab) => {
-    setEditingId(tab.id);
-    setEditingName(tab.name);
-    setTimeout(() => inputRef.current?.select(), 0);
-  }, []);
-
-  const handleFinishEdit = useCallback(() => {
-    if (editingId && editingName.trim()) {
-      setState((prev) => ({
-        ...prev,
-        tabs: prev.tabs.map((t) =>
-          t.id === editingId ? { ...t, name: editingName.trim(), userEdited: true } : t
-        ),
-      }));
+  // Auto-create first terminal when panel becomes active and empty
+  useEffect(() => {
+    if (isActive && cwd && groups.length === 0) {
+      handleNewTerminal();
     }
-    setEditingId(null);
-    setEditingName('');
-  }, [editingId, editingName]);
+  }, [isActive, cwd, groups.length, handleNewTerminal]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        handleFinishEdit();
-      } else if (e.key === 'Escape') {
-        setEditingId(null);
-        setEditingName('');
-      }
-    },
-    [handleFinishEdit]
-  );
+  if (!cwd) return null;
 
-  // Drag and drop handlers
-  const handleDragStart = useCallback((e: React.DragEvent, tabId: string) => {
-    setDraggedId(tabId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', tabId);
-    // Make drag image semi-transparent
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '0.5';
-    }
-  }, []);
+  const normalizedCwd = normalizePath(cwd);
 
-  const handleDragEnd = useCallback((e: React.DragEvent) => {
-    setDraggedId(null);
-    setDropTargetId(null);
-    if (e.currentTarget instanceof HTMLElement) {
-      e.currentTarget.style.opacity = '1';
-    }
-  }, []);
+  // Check if there are any terminals across all worktrees
+  const hasAnyTerminals = Object.keys(worktreeStates).length > 0;
 
-  const handleDragOver = useCallback(
-    (e: React.DragEvent, tabId: string) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (draggedId && tabId !== draggedId) {
-        setDropTargetId(tabId);
-      }
-    },
-    [draggedId]
-  );
-
-  const handleDragLeave = useCallback(() => {
-    setDropTargetId(null);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent, targetId: string) => {
-      e.preventDefault();
-      if (!draggedId || draggedId === targetId) {
-        setDraggedId(null);
-        setDropTargetId(null);
-        return;
-      }
-
-      setState((prev) => {
-        const draggedIndex = prev.tabs.findIndex((t) => t.id === draggedId);
-        const targetIndex = prev.tabs.findIndex((t) => t.id === targetId);
-        if (draggedIndex === -1 || targetIndex === -1) return prev;
-
-        const newTabs = [...prev.tabs];
-        const [removed] = newTabs.splice(draggedIndex, 1);
-        newTabs.splice(targetIndex, 0, removed);
-        return { ...prev, tabs: newTabs };
-      });
-
-      setDraggedId(null);
-      setDropTargetId(null);
-    },
-    [draggedId]
-  );
-
-  // Check if current worktree has no terminals
-  const hasNoCurrentTabs = currentTabs.length === 0;
+  if (!hasAnyTerminals) {
+    // No terminals anywhere, auto-creation effect will handle it
+    return null;
+  }
 
   return (
-    <div className="flex h-full w-full flex-col">
-      {/* Tab Bar - only show current worktree's tabs */}
-      {!hasNoCurrentTabs && (
-        <div className="flex h-9 items-center border-b border-border bg-background/50 backdrop-blur-sm">
-          <div className="flex flex-1 items-center overflow-x-auto" onDoubleClick={handleNewTab}>
-            {currentTabs.map((tab) => {
-              const isTabActive = activeId === tab.id;
-              const isDragging = draggedId === tab.id;
-              const isDropTarget = dropTargetId === tab.id;
-              return (
-                <div
-                  key={tab.id}
-                  draggable={editingId !== tab.id}
-                  onDragStart={(e) => handleDragStart(e, tab.id)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(e) => handleDragOver(e, tab.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, tab.id)}
-                  onClick={() => handleSelectTab(tab.id)}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    handleStartEdit(tab);
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSelectTab(tab.id)}
-                  role="button"
-                  tabIndex={0}
-                  className={cn(
-                    'group relative flex h-9 min-w-[120px] max-w-[180px] items-center gap-2 border-r border-border px-3 text-sm transition-colors cursor-grab',
-                    isTabActive
-                      ? 'bg-background text-foreground'
-                      : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-                    isDragging && 'opacity-50',
-                    isDropTarget && 'ring-2 ring-primary ring-inset'
-                  )}
-                >
-                  <List className="h-3.5 w-3.5 shrink-0 opacity-60" />
-                  {editingId === tab.id ? (
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={handleFinishEdit}
-                      onKeyDown={handleKeyDown}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 min-w-0 bg-transparent outline-none border-b border-current text-sm"
-                    />
-                  ) : (
-                    <span className="flex-1 truncate">
-                      {tab.userEdited ? tab.name : tab.title || tab.name}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCloseTab(tab.id);
-                    }}
-                    className={cn(
-                      'flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors',
-                      'hover:bg-destructive/20 hover:text-destructive',
-                      !isTabActive && 'opacity-0 group-hover:opacity-100'
-                    )}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                  {isTabActive && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                  )}
-                </div>
-              );
-            })}
+    <div className="relative h-full w-full">
+      {/* Render all worktrees' terminals to keep them mounted */}
+      {Object.entries(worktreeStates).map(([worktreePath, state]) => {
+        const isCurrentWorktree = worktreePath === normalizedCwd;
+        return (
+          <div
+            key={worktreePath}
+            className={
+              isCurrentWorktree
+                ? 'flex h-full w-full'
+                : 'absolute inset-0 opacity-0 pointer-events-none'
+            }
+          >
+            {state.groups.map((group, index) => (
+              <div
+                key={group.id}
+                className="flex h-full"
+                style={{ flex: `0 0 ${state.flexPercents[index]}%` }}
+              >
+                <TerminalGroup
+                  group={group}
+                  cwd={worktreePath}
+                  isActive={isActive && isCurrentWorktree}
+                  isGroupActive={group.id === state.activeGroupId}
+                  onTabsChange={handleTabsChange}
+                  onGroupClick={() => handleGroupClick(group.id)}
+                  onSplit={() => handleSplit(group.id)}
+                  onGroupEmpty={handleGroupEmpty}
+                />
+                {index < state.groups.length - 1 && (
+                  <ResizeHandle onResize={(delta) => handleResize(index, delta)} />
+                )}
+              </div>
+            ))}
           </div>
-
-          {/* New Tab Button */}
-          <div className="flex items-center border-l border-border px-1">
-            <button
-              type="button"
-              onClick={handleNewTab}
-              className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              title={t('New Terminal')}
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Terminal Content - render all worktrees' terminals to keep them mounted */}
-      {/* Use opacity-0 instead of invisible to avoid WebGL rendering artifacts */}
-      <div className="relative flex-1">
-        {terminalIds.map((id) => {
-          const tab = tabs.find((t) => t.id === id);
-          if (!tab) return null;
-          // Only show terminal if panel is active, belongs to current worktree AND is the active tab
-          const isTerminalActive = isActive && !!cwd && pathsEqual(tab.cwd, cwd) && activeId === id;
-          return (
-            <div
-              key={id}
-              className={
-                isTerminalActive
-                  ? 'h-full w-full'
-                  : 'absolute inset-0 opacity-0 pointer-events-none'
-              }
-            >
-              <ShellTerminal
-                cwd={tab.cwd}
-                isActive={isTerminalActive}
-                onExit={() => handleCloseTab(id)}
-                onTitleChange={(title) => handleTitleChange(id, title)}
-              />
-            </div>
-          );
-        })}
-
-        {/* Empty state overlay when current worktree has no terminals */}
-        {hasNoCurrentTabs && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-muted-foreground bg-background">
-            <Terminal className="h-12 w-12 opacity-50" />
-            <p className="text-sm">{t('No terminals open')}</p>
-            <Button variant="outline" size="sm" onClick={handleNewTab}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t('New Terminal')}
-            </Button>
-          </div>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }
