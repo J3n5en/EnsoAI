@@ -62,7 +62,7 @@ export function UpdateNotification() {
   // Show downloading indicator in corner
   if (status?.status === 'downloading' && status.progress) {
     return (
-      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border bg-background/95 px-3 py-2 shadow-lg backdrop-blur">
+      <div className="fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-lg border bg-background/95 px-3 py-2 shadow-lg backdrop-blur">
         <Download className="h-4 w-4 animate-pulse text-primary" />
         <div className="flex flex-col">
           <span className="text-xs text-muted-foreground">{t('Downloading update')}</span>
