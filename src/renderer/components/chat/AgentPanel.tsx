@@ -475,7 +475,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
             onMouseEnter={() => setShowAgentMenu(true)}
             onMouseLeave={() => setShowAgentMenu(false)}
           >
-            <Button variant="outline" size="sm" onClick={handleNewSession}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                handleNewSession();
+                setShowAgentMenu(false);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               {t('New Session')}
             </Button>
