@@ -605,7 +605,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [updateCurrentGroupState]
   );
 
-  // Handle split - move current session to new group if multiple, else create new session
+  // Handle split - create new group to the right
+  // If source group has multiple sessions, move the active session to new group
+  // If source group has only 1 session, create a new session in new group
   const handleSplit = useCallback(
     (fromGroupId: string) => {
       if (!cwd) return;
@@ -614,73 +616,72 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         const fromIndex = state.groups.findIndex((g) => g.id === fromGroupId);
         if (fromIndex === -1) return state;
 
-        const fromGroup = state.groups[fromIndex];
+        const sourceGroup = state.groups[fromIndex];
 
-        // If group has multiple sessions, move current session to new group
-        if (fromGroup.sessionIds.length > 1 && fromGroup.activeSessionId) {
-          const movingSessionId = fromGroup.activeSessionId;
-          const remainingSessionIds = fromGroup.sessionIds.filter((id) => id !== movingSessionId);
-          const newActiveInFromGroup = remainingSessionIds[0] || null;
+        // If source group has multiple sessions, move the active session to new group
+        if (sourceGroup.sessionIds.length > 1 && sourceGroup.activeSessionId) {
+          const sessionToMove = sourceGroup.activeSessionId;
 
+          // Remove session from source group
+          const newSourceSessionIds = sourceGroup.sessionIds.filter((id) => id !== sessionToMove);
+          const closedIndex = sourceGroup.sessionIds.indexOf(sessionToMove);
+          const newSourceActiveIndex = Math.min(closedIndex, newSourceSessionIds.length - 1);
+          const newSourceActiveSessionId = newSourceSessionIds[newSourceActiveIndex] || null;
+
+          // Create new group with the moved session
           const newGroup: AgentGroupType = {
             id: crypto.randomUUID(),
-            sessionIds: [movingSessionId],
-            activeSessionId: movingSessionId,
+            sessionIds: [sessionToMove],
+            activeSessionId: sessionToMove,
           };
 
           const newGroups = state.groups.map((g) =>
             g.id === fromGroupId
-              ? { ...g, sessionIds: remainingSessionIds, activeSessionId: newActiveInFromGroup }
+              ? { ...g, sessionIds: newSourceSessionIds, activeSessionId: newSourceActiveSessionId }
               : g
           );
           newGroups.splice(fromIndex + 1, 0, newGroup);
 
+          // Recalculate flex percentages evenly
           const newFlexPercents = newGroups.map(() => 100 / newGroups.length);
 
           return {
+            ...state,
             groups: newGroups,
             activeGroupId: newGroup.id,
             flexPercents: newFlexPercents,
           };
         }
 
-        // Single session - create new session for split (done outside updateCurrentGroupState)
-        return state;
+        // Source group has only 1 session, create a new session in new group
+        const newSession = createSession(
+          repoPath,
+          cwd,
+          defaultAgentId,
+          customAgents,
+          agentSettings
+        );
+        addSession(newSession);
+
+        const newGroup: AgentGroupType = {
+          id: crypto.randomUUID(),
+          sessionIds: [newSession.id],
+          activeSessionId: newSession.id,
+        };
+
+        const newGroups = [...state.groups];
+        newGroups.splice(fromIndex + 1, 0, newGroup);
+
+        // Recalculate flex percentages evenly
+        const newFlexPercents = newGroups.map(() => 100 / newGroups.length);
+
+        return {
+          ...state,
+          groups: newGroups,
+          activeGroupId: newGroup.id,
+          flexPercents: newFlexPercents,
+        };
       });
-
-      // Check if we need to create a new session (single session case)
-      const normalizedCwd = normalizePath(cwd);
-      const currentState = worktreeGroupStates[normalizedCwd];
-      if (currentState) {
-        const fromGroup = currentState.groups.find((g) => g.id === fromGroupId);
-        if (fromGroup && fromGroup.sessionIds.length === 1) {
-          // Create new session for the split
-          const newSession = createSession(repoPath, cwd, defaultAgentId, customAgents, agentSettings);
-          addSession(newSession);
-
-          updateCurrentGroupState((state) => {
-            const fromIndex = state.groups.findIndex((g) => g.id === fromGroupId);
-            if (fromIndex === -1) return state;
-
-            const newGroup: AgentGroupType = {
-              id: crypto.randomUUID(),
-              sessionIds: [newSession.id],
-              activeSessionId: newSession.id,
-            };
-
-            const newGroups = [...state.groups];
-            newGroups.splice(fromIndex + 1, 0, newGroup);
-
-            const newFlexPercents = newGroups.map(() => 100 / newGroups.length);
-
-            return {
-              groups: newGroups,
-              activeGroupId: newGroup.id,
-              flexPercents: newFlexPercents,
-            };
-          });
-        }
-      }
     },
     [
       cwd,
@@ -690,11 +691,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       agentSettings,
       addSession,
       updateCurrentGroupState,
-      worktreeGroupStates,
     ]
   );
 
-  // Handle merge - move session from current group to previous group
+  // Handle merge - move active session from current group to previous group
   const handleMerge = useCallback(
     (fromGroupId: string) => {
       updateCurrentGroupState((state) => {

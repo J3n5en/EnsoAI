@@ -17,12 +17,12 @@ interface AgentTerminalProps {
   initialized?: boolean;
   activated?: boolean;
   isActive?: boolean;
+  canMerge?: boolean; // whether merge option should be enabled (has multiple groups)
   onInitialized?: () => void;
   onActivated?: () => void;
   onExit?: () => void;
   onTerminalTitleChange?: (title: string) => void;
   onSplit?: () => void;
-  canMerge?: boolean;
   onMerge?: () => void;
   onFocus?: () => void;
 }
@@ -40,12 +40,12 @@ export function AgentTerminal({
   initialized,
   activated,
   isActive = false,
+  canMerge = false,
   onInitialized,
   onActivated,
   onExit,
   onTerminalTitleChange,
   onSplit,
-  canMerge,
   onMerge,
   onFocus,
 }: AgentTerminalProps) {

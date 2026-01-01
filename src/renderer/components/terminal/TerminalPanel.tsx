@@ -318,6 +318,50 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
     [cwd, updateCurrentState]
   );
 
+  // Handle merge - merge current group with the previous group (or next if first)
+  const handleMerge = useCallback(
+    (fromGroupId: string) => {
+      updateCurrentState((state) => {
+        if (state.groups.length < 2) return state;
+
+        const fromIndex = state.groups.findIndex((g) => g.id === fromGroupId);
+        if (fromIndex === -1) return state;
+
+        // Determine target group (prefer merging to the left, else right)
+        const targetIndex = fromIndex > 0 ? fromIndex - 1 : fromIndex + 1;
+        const sourceGroup = state.groups[fromIndex];
+        const targetGroup = state.groups[targetIndex];
+
+        // Move all tabs from source to target
+        const newTargetTabs = [...targetGroup.tabs, ...sourceGroup.tabs];
+
+        // Remove source group
+        const newGroups = state.groups
+          .filter((g) => g.id !== fromGroupId)
+          .map((g) =>
+            g.id === targetGroup.id
+              ? {
+                  ...g,
+                  tabs: newTargetTabs,
+                  activeTabId: sourceGroup.activeTabId || g.activeTabId,
+                }
+              : g
+          );
+
+        // Recalculate flex percentages evenly
+        const newFlexPercents = newGroups.map(() => 100 / newGroups.length);
+
+        // Update active group to target
+        return {
+          groups: newGroups,
+          activeGroupId: targetGroup.id,
+          flexPercents: newFlexPercents,
+        };
+      });
+    },
+    [updateCurrentState]
+  );
+
   // Handle group becoming empty - remove it (searches all worktrees)
   const handleGroupEmpty = useCallback((groupId: string) => {
     setWorktreeStates((prev) => {
@@ -719,9 +763,11 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
                     <ShellTerminal
                       cwd={info.tab.cwd}
                       isActive={isTerminalActive}
+                      canMerge={state.groups.length > 1}
                       onExit={() => handleTerminalClose(tabId)}
                       onTitleChange={(title) => handleTitleChange(tabId, title)}
                       onSplit={() => handleSplit(info.group.id)}
+                      onMerge={() => handleMerge(info.group.id)}
                     />
                   </div>
                 );
