@@ -47,6 +47,10 @@ interface EditorAreaProps {
   rootPath?: string;
   onTabClick: (path: string) => void;
   onTabClose: (path: string) => void | Promise<void>;
+  onCloseOthers?: (keepPath: string) => void | Promise<void>;
+  onCloseAll?: () => void | Promise<void>;
+  onCloseLeft?: (path: string) => void | Promise<void>;
+  onCloseRight?: (path: string) => void | Promise<void>;
   onTabReorder: (fromIndex: number, toIndex: number) => void;
   onContentChange: (path: string, content: string, isDirty?: boolean) => void;
   onViewStateChange: (path: string, viewState: unknown) => void;
@@ -63,6 +67,10 @@ export function EditorArea({
   rootPath,
   onTabClick,
   onTabClose,
+  onCloseOthers,
+  onCloseAll,
+  onCloseLeft,
+  onCloseRight,
   onTabReorder,
   onContentChange,
   onViewStateChange,
@@ -702,6 +710,10 @@ export function EditorArea({
             activeTabPath={activeTabPath}
             onTabClick={handleTabClick}
             onTabClose={handleTabClose}
+            onCloseOthers={onCloseOthers}
+            onCloseAll={onCloseAll}
+            onCloseLeft={onCloseLeft}
+            onCloseRight={onCloseRight}
             onTabReorder={onTabReorder}
           />
         </div>

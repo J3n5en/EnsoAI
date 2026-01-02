@@ -1,6 +1,8 @@
 import { X } from 'lucide-react';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Menu, MenuItem, MenuPopup, MenuSeparator } from '@/components/ui/menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import type { EditorTab } from '@/stores/editor';
 import { getFileIcon, getFileIconColor } from './fileIcons';
@@ -10,6 +12,10 @@ interface EditorTabsProps {
   activeTabPath: string | null;
   onTabClick: (path: string) => void;
   onTabClose: (path: string, e: React.MouseEvent) => void | Promise<void>;
+  onCloseOthers?: (keepPath: string) => void | Promise<void>;
+  onCloseAll?: () => void | Promise<void>;
+  onCloseLeft?: (path: string) => void | Promise<void>;
+  onCloseRight?: (path: string) => void | Promise<void>;
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
 }
 
@@ -18,9 +24,17 @@ export function EditorTabs({
   activeTabPath,
   onTabClick,
   onTabClose,
+  onCloseOthers,
+  onCloseAll,
+  onCloseLeft,
+  onCloseRight,
   onTabReorder,
 }: EditorTabsProps) {
+  const { t } = useI18n();
   const draggedIndexRef = useRef<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [menuTabPath, setMenuTabPath] = useState<string | null>(null);
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
     draggedIndexRef.current = index;
@@ -45,6 +59,16 @@ export function EditorTabs({
     [onTabReorder]
   );
 
+  const menuTabIndex = useMemo(() => {
+    if (!menuTabPath) return -1;
+    return tabs.findIndex((tab) => tab.path === menuTabPath);
+  }, [tabs, menuTabPath]);
+
+  const canCloseOthers = !!onCloseOthers && !!menuTabPath && tabs.length > 1;
+  const canCloseAll = !!onCloseAll && tabs.length > 0;
+  const canCloseLeft = !!onCloseLeft && menuTabIndex > 0;
+  const canCloseRight = !!onCloseRight && menuTabIndex >= 0 && menuTabIndex < tabs.length - 1;
+
   if (tabs.length === 0) {
     return null;
   }
@@ -66,6 +90,13 @@ export function EditorTabs({
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, index)}
                 onClick={() => onTabClick(tab.path)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenuTabPath(tab.path);
+                  setMenuPosition({ x: e.clientX, y: e.clientY });
+                  setMenuOpen(true);
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && onTabClick(tab.path)}
                 role="button"
                 tabIndex={0}
@@ -105,6 +136,71 @@ export function EditorTabs({
           })}
         </div>
       </ScrollArea>
+
+      <Menu open={menuOpen} onOpenChange={setMenuOpen}>
+        <MenuPopup
+          style={{
+            position: 'fixed',
+            left: menuPosition.x,
+            top: menuPosition.y,
+          }}
+        >
+          <MenuItem
+            disabled={!menuTabPath}
+            onClick={async () => {
+              if (!menuTabPath) return;
+              await onTabClose(menuTabPath, {
+                stopPropagation() {},
+              } as unknown as React.MouseEvent);
+              setMenuOpen(false);
+            }}
+          >
+            {t('Close Tab')}
+          </MenuItem>
+          <MenuItem
+            disabled={!canCloseOthers}
+            onClick={async () => {
+              if (!menuTabPath || !onCloseOthers) return;
+              await onCloseOthers(menuTabPath);
+              setMenuOpen(false);
+            }}
+          >
+            {t('Close Others')}
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem
+            disabled={!canCloseLeft}
+            onClick={async () => {
+              if (!menuTabPath || !onCloseLeft) return;
+              await onCloseLeft(menuTabPath);
+              setMenuOpen(false);
+            }}
+          >
+            {t('Close Tabs to the Left')}
+          </MenuItem>
+          <MenuItem
+            disabled={!canCloseRight}
+            onClick={async () => {
+              if (!menuTabPath || !onCloseRight) return;
+              await onCloseRight(menuTabPath);
+              setMenuOpen(false);
+            }}
+          >
+            {t('Close Tabs to the Right')}
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem
+            disabled={!canCloseAll}
+            onClick={async () => {
+              if (!onCloseAll) return;
+              await onCloseAll();
+              setMenuOpen(false);
+            }}
+          >
+            {t('Close All Tabs')}
+          </MenuItem>
+        </MenuPopup>
+      </Menu>
     </div>
   );
 }

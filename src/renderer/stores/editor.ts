@@ -33,6 +33,10 @@ interface EditorState {
 
   openFile: (file: Omit<EditorTab, 'title' | 'viewState'> & { title?: string }) => void;
   closeFile: (path: string) => void;
+  closeOtherFiles: (keepPath: string) => void;
+  closeFilesToLeft: (path: string) => void;
+  closeFilesToRight: (path: string) => void;
+  closeAllFiles: () => void;
   setActiveFile: (path: string | null) => void;
   updateFileContent: (path: string, content: string, isDirty?: boolean) => void;
   markFileSaved: (path: string) => void;
@@ -89,6 +93,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           : state.activeTabPath;
       return { tabs: newTabs, activeTabPath: newActive };
     }),
+
+  closeOtherFiles: (keepPath) =>
+    set((state) => {
+      const keepTab = state.tabs.find((tab) => tab.path === keepPath);
+      if (!keepTab) return { tabs: state.tabs, activeTabPath: state.activeTabPath };
+      return { tabs: [keepTab], activeTabPath: keepPath };
+    }),
+
+  closeFilesToLeft: (path) =>
+    set((state) => {
+      const index = state.tabs.findIndex((tab) => tab.path === path);
+      if (index <= 0) return { tabs: state.tabs, activeTabPath: state.activeTabPath };
+      const newTabs = state.tabs.slice(index);
+      const activeStillOpen = state.activeTabPath
+        ? newTabs.some((t) => t.path === state.activeTabPath)
+        : false;
+      const newActive = activeStillOpen ? state.activeTabPath : (newTabs[0]?.path ?? null);
+      return { tabs: newTabs, activeTabPath: newActive };
+    }),
+
+  closeFilesToRight: (path) =>
+    set((state) => {
+      const index = state.tabs.findIndex((tab) => tab.path === path);
+      if (index < 0 || index >= state.tabs.length - 1) {
+        return { tabs: state.tabs, activeTabPath: state.activeTabPath };
+      }
+      const newTabs = state.tabs.slice(0, index + 1);
+      const activeStillOpen = state.activeTabPath
+        ? newTabs.some((t) => t.path === state.activeTabPath)
+        : false;
+      const newActive = activeStillOpen
+        ? state.activeTabPath
+        : (newTabs[newTabs.length - 1]?.path ?? null);
+      return { tabs: newTabs, activeTabPath: newActive };
+    }),
+
+  closeAllFiles: () =>
+    set({ tabs: [], activeTabPath: null, pendingCursor: null, currentCursorLine: null }),
 
   setActiveFile: (path) => set({ activeTabPath: path }),
 

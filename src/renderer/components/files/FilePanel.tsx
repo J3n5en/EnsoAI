@@ -50,6 +50,10 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
     loadFile,
     saveFile,
     closeFile,
+    closeOtherFiles,
+    closeFilesToLeft,
+    closeFilesToRight,
+    closeAllFiles,
     setActiveFile,
     updateFileContent,
     setTabViewState,
@@ -318,6 +322,10 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           rootPath={rootPath}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
+          onCloseOthers={closeOtherFiles}
+          onCloseAll={closeAllFiles}
+          onCloseLeft={closeFilesToLeft}
+          onCloseRight={closeFilesToRight}
           onTabReorder={reorderTabs}
           onContentChange={updateFileContent}
           onViewStateChange={setTabViewState}
