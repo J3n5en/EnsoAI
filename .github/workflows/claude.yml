@@ -43,7 +43,7 @@ jobs:
               "env": {
                 "ANTHROPIC_BASE_URL": "${{ secrets.ANTHROPIC_BASE_URL }}",
                 "ANTHROPIC_AUTH_TOKEN": "${{ secrets.ANTHROPIC_AUTH_TOKEN }}",
-                "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
+                "ANTHROPIC_MODEL": "opus",
                 "API_TIMEOUT_MS": "600000",
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
               }

@@ -48,7 +48,7 @@ jobs:
               "env": {
                 "ANTHROPIC_BASE_URL": "${{ secrets.ANTHROPIC_BASE_URL }}",
                 "ANTHROPIC_AUTH_TOKEN": "${{ secrets.ANTHROPIC_AUTH_TOKEN }}",
-                "ANTHROPIC_MODEL": "claude-opus-4-5-20251101",
+                "ANTHROPIC_MODEL": "opus",
                 "API_TIMEOUT_MS": "3000000",
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
               }
