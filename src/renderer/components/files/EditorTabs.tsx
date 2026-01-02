@@ -12,6 +12,7 @@ interface EditorTabsProps {
   activeTabPath: string | null;
   onTabClick: (path: string) => void;
   onTabClose: (path: string, e: React.MouseEvent) => void | Promise<void>;
+  onClose?: (path: string) => void | Promise<void>;
   onCloseOthers?: (keepPath: string) => void | Promise<void>;
   onCloseAll?: () => void | Promise<void>;
   onCloseLeft?: (path: string) => void | Promise<void>;
@@ -24,6 +25,7 @@ export function EditorTabs({
   activeTabPath,
   onTabClick,
   onTabClose,
+  onClose,
   onCloseOthers,
   onCloseAll,
   onCloseLeft,
@@ -146,12 +148,10 @@ export function EditorTabs({
           }}
         >
           <MenuItem
-            disabled={!menuTabPath}
+            disabled={!menuTabPath || !onClose}
             onClick={async () => {
-              if (!menuTabPath) return;
-              await onTabClose(menuTabPath, {
-                stopPropagation() {},
-              } as unknown as React.MouseEvent);
+              if (!menuTabPath || !onClose) return;
+              await onClose(menuTabPath);
               setMenuOpen(false);
             }}
           >

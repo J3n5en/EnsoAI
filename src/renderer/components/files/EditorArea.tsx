@@ -710,6 +710,7 @@ export function EditorArea({
             activeTabPath={activeTabPath}
             onTabClick={handleTabClick}
             onTabClose={handleTabClose}
+            onClose={onTabClose}
             onCloseOthers={onCloseOthers}
             onCloseAll={onCloseAll}
             onCloseLeft={onCloseLeft}
