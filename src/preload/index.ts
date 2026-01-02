@@ -333,6 +333,7 @@ const electronAPI = {
     resolveForCommand: (config: ShellConfig): Promise<{ shell: string; execArgs: string[] }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_RESOLVE_FOR_COMMAND, config),
     openExternal: (url: string): Promise<void> => shell.openExternal(url),
+    openPath: (path: string): Promise<string> => shell.openPath(path),
   },
 
   // Menu actions from main process

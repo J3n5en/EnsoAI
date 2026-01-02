@@ -608,13 +608,14 @@ function WorktreeItem({
             )}
           </div>
 
-          {/* Path */}
+          {/* Path - use rtl direction to show ellipsis at start, keeping end visible */}
           <div
             className={cn(
-              'w-full truncate pl-6 text-xs',
+              'w-full overflow-hidden whitespace-nowrap text-ellipsis pl-6 text-xs [direction:rtl] [text-align:left] [unicode-bidi:plaintext]',
               isPrunable && 'line-through',
               isActive ? 'text-accent-foreground/70' : 'text-muted-foreground'
             )}
+            title={worktree.path}
           >
             {worktree.path}
           </div>
@@ -723,6 +724,19 @@ function WorktreeItem({
 
             {/* Separator if there are activity options */}
             {hasActivity && <div className="my-1 h-px bg-border" />}
+
+            {/* Open Folder */}
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
+              onClick={() => {
+                setMenuOpen(false);
+                window.electronAPI.shell.openPath(worktree.path);
+              }}
+            >
+              <FolderOpen className="h-4 w-4" />
+              {t('Open folder')}
+            </button>
 
             {/* Merge to Branch */}
             {onMerge && !isMain && !isPrunable && (

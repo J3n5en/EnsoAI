@@ -4,6 +4,7 @@ import {
   ChevronRight,
   FolderGit2,
   FolderMinus,
+  FolderOpen,
   GitBranch,
   GitMerge,
   PanelLeftClose,
@@ -514,9 +515,15 @@ export function TreeSidebar({
                           isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
                         )}
                       />
-                      <span className="min-w-0 flex-1 truncate font-medium text-sm text-left">
-                        {repo.name}
-                      </span>
+                      <div className="min-w-0 flex-1 flex flex-col">
+                        <span className="truncate font-medium text-sm text-left">{repo.name}</span>
+                        <span
+                          className="overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
+                          title={repo.path}
+                        >
+                          {repo.path}
+                        </span>
+                      </div>
                     </button>
                     {/* Drop indicator - bottom */}
                     {dropRepoTargetIndex === index &&
@@ -654,7 +661,7 @@ export function TreeSidebar({
           >
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-accent"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-accent"
               onClick={handleRemoveRepoClick}
             >
               <FolderMinus className="h-4 w-4" />
@@ -917,11 +924,8 @@ function WorktreeTreeItem({
                   : 'text-muted-foreground'
             )}
           />
-          <div className="min-w-0 flex-1 flex flex-col">
+          <div className="min-w-0 flex-1">
             <span className={cn('truncate', isPrunable && 'line-through')}>{branchDisplay}</span>
-            <span className="truncate text-[10px] text-muted-foreground" title={worktree.path}>
-              {worktree.path}
-            </span>
           </div>
           {isPrunable ? (
             <span className="shrink-0 rounded bg-destructive/20 px-1 py-0.5 text-[9px] font-medium uppercase text-destructive">
@@ -1037,6 +1041,19 @@ function WorktreeTreeItem({
             {/* Separator if there are activity options */}
             {hasActivity && <div className="my-1 h-px bg-border" />}
 
+            {/* Open Folder */}
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
+              onClick={() => {
+                setMenuOpen(false);
+                window.electronAPI.shell.openPath(worktree.path);
+              }}
+            >
+              <FolderOpen className="h-4 w-4" />
+              {t('Open folder')}
+            </button>
+
             {/* Merge to Branch */}
             {onMerge && !isMain && !isPrunable && (
               <button
@@ -1059,7 +1076,7 @@ function WorktreeTreeItem({
             <button
               type="button"
               className={cn(
-                'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-accent/50',
+                'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-accent/50',
                 isMain && 'pointer-events-none opacity-50'
               )}
               onClick={() => {
