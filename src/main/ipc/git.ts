@@ -216,19 +216,14 @@ export function registerGitHandlers(): void {
         }
       };
 
-      // Gather git info
+      // Gather git info - only staged changes for commit message
       const recentCommits = runGit('git --no-pager log -5 --format="%s"');
       const stagedStat = runGit('git --no-pager diff --cached --stat');
-      const unstagedStat = runGit('git --no-pager diff --stat');
       const stagedDiff = runGit('git --no-pager diff --cached');
-      const unstagedDiff = runGit(`git --no-pager diff | head -${options.maxDiffLines}`);
-
-      const diffStat = [stagedStat, unstagedStat].filter(Boolean).join('\n');
-      const diffContent = [stagedDiff, unstagedDiff].filter(Boolean).join('\n');
 
       const truncatedDiff =
-        diffContent.split('\n').slice(0, options.maxDiffLines).join('\n') ||
-        '(no changes detected)';
+        stagedDiff.split('\n').slice(0, options.maxDiffLines).join('\n') ||
+        '(no staged changes detected)';
 
       const prompt = `你无法调用任何工具，我消息里已经包含了所有你需要的信息，无需解释，直接返回一句简短的 commit message。
 
@@ -236,13 +231,14 @@ export function registerGitHandlers(): void {
 ${recentCommits || '(no recent commits)'}
 
 变更摘要：
-${diffStat || '(no stats)'}
+${stagedStat || '(no stats)'}
 
 变更详情：
 ${truncatedDiff}`;
 
       return new Promise((resolve) => {
         const timeoutMs = options.timeout * 1000;
+        const { shell, args: shellArgs } = getShellForCommand();
 
         const claudeArgs = [
           '-p',
@@ -254,12 +250,9 @@ ${truncatedDiff}`;
           '--model',
           options.model || 'haiku',
         ];
+        const command = `claude ${claudeArgs.join(' ')}`;
 
-        // Use user's configured shell to load environment (nvm, homebrew, etc.)
-        const claudeCommand = `claude ${claudeArgs.join(' ')}`;
-        const { shell, args: shellArgs } = getShellForCommand();
-
-        const proc = spawn(shell, [...shellArgs, claudeCommand], {
+        const proc = spawn(shell, [...shellArgs, command], {
           cwd: resolved,
           env: getEnvForCommand(),
         });
@@ -271,6 +264,7 @@ ${truncatedDiff}`;
           }
         });
 
+        // Write prompt to stdin for both Claude and Droid CLI
         proc.stdin.write(prompt);
         proc.stdin.end();
 
