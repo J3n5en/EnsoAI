@@ -1,4 +1,13 @@
-import { Bot, FileCode, Keyboard, Link, Palette, Settings, Share2 } from 'lucide-react';
+import {
+  Bot,
+  FileCode,
+  FlaskConical,
+  Keyboard,
+  Link,
+  Palette,
+  Settings,
+  Share2,
+} from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogPopup, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -13,6 +22,7 @@ import { GeneralSettings } from './GeneralSettings';
 import { HapiSettings } from './HapiSettings';
 import { IntegrationSettings } from './IntegrationSettings';
 import { KeybindingsSettings } from './KeybindingsSettings';
+import { LabsSettings } from './LabsSettings';
 
 interface SettingsDialogProps {
   trigger?: React.ReactElement;
@@ -32,6 +42,7 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
     { id: 'agent', icon: Bot, label: t('Agent') },
     { id: 'integration', icon: Link, label: t('Claude Integration') },
     { id: 'hapi', icon: Share2, label: t('Remote Sharing') },
+    { id: 'labs', icon: FlaskConical, label: t('Labs') },
   ];
 
   // Controlled mode (open prop provided) doesn't need trigger
@@ -103,6 +114,7 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
             {activeCategory === 'agent' && <AgentSettings />}
             {activeCategory === 'integration' && <IntegrationSettings />}
             {activeCategory === 'hapi' && <HapiSettings />}
+            {activeCategory === 'labs' && <LabsSettings />}
           </div>
         </div>
       </DialogPopup>

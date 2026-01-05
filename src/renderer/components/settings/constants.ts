@@ -8,7 +8,8 @@ export type SettingsCategory =
   | 'keybindings'
   | 'agent'
   | 'integration'
-  | 'hapi';
+  | 'hapi'
+  | 'labs';
 
 export const fontWeightOptions: { value: FontWeight; label: string }[] = [
   { value: 'normal', label: 'Normal' },

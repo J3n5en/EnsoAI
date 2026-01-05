@@ -41,6 +41,7 @@ export default defineConfig({
         '@shared': path.resolve(__dirname, 'src/shared'),
       },
     },
+    publicDir: path.resolve(__dirname, 'resources'),
     build: {
       rollupOptions: {
         input: {

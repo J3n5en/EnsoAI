@@ -461,6 +461,8 @@ interface SettingsState {
   // MCP, Prompts management
   mcpServers: McpServer[];
   promptPresets: PromptPreset[];
+  // Labs (experimental features)
+  labsUseGhosttyWeb: boolean;
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -518,6 +520,7 @@ interface SettingsState {
   updatePromptPreset: (id: string, updates: Partial<PromptPreset>) => void;
   removePromptPreset: (id: string) => void;
   setPromptPresetEnabled: (id: string) => void;
+  setLabsUseGhosttyWeb: (enabled: boolean) => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -572,9 +575,9 @@ export const useSettingsStore = create<SettingsState>()(
       defaultWorktreePath: '', // Empty means use default ~/ensoai/workspaces
       proxySettings: defaultProxySettings,
       autoCreateSessionOnActivate: false, // Default: don't auto-create sessions
-      // MCP, Prompts defaults
       mcpServers: [],
       promptPresets: [],
+      labsUseGhosttyWeb: false,
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -802,6 +805,7 @@ export const useSettingsStore = create<SettingsState>()(
             enabled: p.id === id,
           })),
         })),
+      setLabsUseGhosttyWeb: (labsUseGhosttyWeb) => set({ labsUseGhosttyWeb }),
     }),
     {
       name: 'enso-settings',

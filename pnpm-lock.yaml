@@ -70,6 +70,9 @@ importers:
       framer-motion:
         specifier: ^12.23.26
         version: 12.23.26(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      ghostty-web:
+        specifier: github:J3n5en/ghostty-web
+        version: https://codeload.github.com/J3n5en/ghostty-web/tar.gz/b6198fbbb4b8ec82311fff6c605b8fc22489a2fa
       lucide-react:
         specifier: ^0.562.0
         version: 0.562.0(react@19.2.3)
@@ -2168,6 +2171,10 @@ packages:
   get-stream@5.2.0:
     resolution: {integrity: sha512-nBF+F1rAZVCu/p7rjzgA+Yb4lfYXrpl7a6VmJrU8wF9I1CKvP/QwPNZHnOlwbTkY6dvtFIzFMSyQXbLoTQPRpA==}
     engines: {node: '>=8'}
+
+  ghostty-web@https://codeload.github.com/J3n5en/ghostty-web/tar.gz/b6198fbbb4b8ec82311fff6c605b8fc22489a2fa:
+    resolution: {tarball: https://codeload.github.com/J3n5en/ghostty-web/tar.gz/b6198fbbb4b8ec82311fff6c605b8fc22489a2fa}
+    version: 0.3.0
 
   glob@10.5.0:
     resolution: {integrity: sha512-DfXN8DfhJ7NH3Oe7cFmu3NCu1wKbkReJ8TorzSAFbSKrlNaQSKfIzqYqVY8zlbs2NLBbWpRiU52GX2PbaBVNkg==}
@@ -5680,6 +5687,8 @@ snapshots:
   get-stream@5.2.0:
     dependencies:
       pump: 3.0.3
+
+  ghostty-web@https://codeload.github.com/J3n5en/ghostty-web/tar.gz/b6198fbbb4b8ec82311fff6c605b8fc22489a2fa: {}
 
   glob@10.5.0:
     dependencies:

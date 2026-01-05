@@ -3,7 +3,7 @@ import {
   TerminalSearchBar,
   type TerminalSearchBarRef,
 } from '@/components/terminal/TerminalSearchBar';
-import { useXterm } from '@/hooks/useXterm';
+import { useTerminalEmulator } from '@/hooks/useTerminalEmulator';
 import { useI18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -405,7 +405,7 @@ export function AgentTerminal({
     terminal,
     clear,
     refreshRenderer,
-  } = useXterm({
+  } = useTerminalEmulator({
     cwd,
     command,
     env,

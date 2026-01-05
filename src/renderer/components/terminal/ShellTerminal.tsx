@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useXterm } from '@/hooks/useXterm';
+import { useTerminalEmulator } from '@/hooks/useTerminalEmulator';
 import { useI18n } from '@/i18n';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { useSettingsStore } from '@/stores/settings';
@@ -36,7 +36,7 @@ export function ShellTerminal({
     terminal,
     clear,
     refreshRenderer,
-  } = useXterm({
+  } = useTerminalEmulator({
     cwd,
     isActive,
     onExit,

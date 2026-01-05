@@ -47,6 +47,7 @@
     "clsx": "^2.1.1",
     "electron-updater": "^6.6.2",
     "framer-motion": "^12.23.26",
+    "ghostty-web": "github:J3n5en/ghostty-web",
     "lucide-react": "^0.562.0",
     "mermaid": "^11.12.2",
     "monaco-editor": "^0.55.1",
