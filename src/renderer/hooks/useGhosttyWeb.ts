@@ -208,12 +208,15 @@ export function useGhosttyWeb({
       return;
     }
 
+    const fontFamily = settings.fontFamily || 'monospace';
+    const primaryFont = fontFamily.split(',')[0].trim();
+
     const terminal = new Terminal({
       ghostty,
       cursorBlink: true,
       cursorStyle: 'bar',
       fontSize: settings.fontSize,
-      fontFamily: settings.fontFamily,
+      fontFamily,
       theme: settings.theme as ITheme,
       scrollback: settings.scrollback,
     });
@@ -222,6 +225,12 @@ export function useGhosttyWeb({
     terminal.loadAddon(fitAddon);
 
     terminal.open(containerRef.current);
+
+    document.fonts.load(`${settings.fontSize}px "${primaryFont}"`).then(() => {
+      terminal.options.fontFamily = fontFamily;
+      fitAddon.fit();
+    });
+
     fitAddon.fit();
 
     terminal.onTitleChange((title) => {
