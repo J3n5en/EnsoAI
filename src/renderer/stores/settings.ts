@@ -57,6 +57,24 @@ function getDefaultLocale(): Locale {
   return 'en';
 }
 
+function applyInitialSettings(state: {
+  theme: Theme;
+  terminalTheme: string;
+  terminalFontFamily: string;
+  terminalFontSize: number;
+  language: Locale;
+}) {
+  if (state.theme === 'sync-terminal') {
+    applyTerminalThemeToApp(state.terminalTheme, true);
+  } else {
+    applyAppTheme(state.theme, state.terminalTheme);
+  }
+  applyTerminalFont(state.terminalFontFamily, state.terminalFontSize);
+  const resolvedLanguage = normalizeLocale(state.language);
+  document.documentElement.lang = resolvedLanguage === 'zh' ? 'zh-CN' : 'en';
+  window.electronAPI.app.setLanguage(resolvedLanguage);
+}
+
 export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
 
 export type LayoutMode = 'columns' | 'tree';
@@ -915,17 +933,10 @@ export const useSettingsStore = create<SettingsState>()(
         };
       },
       onRehydrateStorage: () => (state) => {
+        const effectiveState = state ?? useSettingsStore.getState();
+        applyInitialSettings(effectiveState);
+
         if (state) {
-          if (state.theme === 'sync-terminal') {
-            applyTerminalThemeToApp(state.terminalTheme, true);
-          } else {
-            applyAppTheme(state.theme, state.terminalTheme);
-          }
-          applyTerminalFont(state.terminalFontFamily, state.terminalFontSize);
-          const resolvedLanguage = normalizeLocale(state.language);
-          document.documentElement.lang = resolvedLanguage === 'zh' ? 'zh-CN' : 'en';
-          window.electronAPI.app.setLanguage(resolvedLanguage);
-          // Apply proxy settings on startup
           if (state.proxySettings) {
             window.electronAPI.app.setProxy(state.proxySettings);
           }
