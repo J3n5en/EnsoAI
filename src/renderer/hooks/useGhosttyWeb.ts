@@ -372,6 +372,7 @@ export function useGhosttyWeb({
       const modKey = isMac ? event.metaKey : event.ctrlKey;
 
       if (event.type === 'keydown' && modKey && !event.altKey) {
+        // Copy: Cmd+C (mac) or Ctrl+C (win/linux)
         if (event.key === 'c' || event.key === 'C') {
           if (terminal.hasSelection()) {
             navigator.clipboard.writeText(terminal.getSelection());
@@ -380,13 +381,10 @@ export function useGhosttyWeb({
           if (!isMac) return false;
           return true;
         }
+        // Paste: DO NOT intercept - let ghostty-web handle it naturally
+        // This allows Claude Code and other agents to receive image paste events
         if (event.key === 'v' || event.key === 'V') {
-          navigator.clipboard.readText().then((text) => {
-            if (text) {
-              terminal.paste(text);
-            }
-          });
-          return true;
+          return false;
         }
       }
 
