@@ -1,5 +1,9 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { AgentCliInfo, BuiltinAgentId, CustomAgent } from '@shared/types';
-import { execInPty } from '../../utils/shell';
+import { getEnvForCommand } from '../../utils/shell';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Check if an error is a timeout error
@@ -73,6 +77,16 @@ const BUILTIN_AGENT_CONFIGS: BuiltinAgentConfig[] = [
 ];
 
 class CliDetector {
+  private async execVersionCommand(executable: string, args: string[]): Promise<string> {
+    const { stdout, stderr } = await execFileAsync(executable, args, {
+      timeout: 15000,
+      env: getEnvForCommand(),
+      windowsHide: true,
+    });
+    // Some CLIs print version to stderr; treat both as output for regex match.
+    return `${stdout ?? ''}${stderr ?? ''}`.trim();
+  }
+
   private async detectBuiltin(
     config: BuiltinAgentConfig,
     customPath?: string
@@ -80,7 +94,7 @@ class CliDetector {
     try {
       // Use customPath if provided, otherwise use default command
       const effectiveCommand = customPath || config.command;
-      const stdout = await execInPty(`${effectiveCommand} ${config.versionFlag}`);
+      const stdout = await this.execVersionCommand(effectiveCommand, [config.versionFlag]);
 
       let version: string | undefined;
       if (config.versionRegex) {
@@ -111,7 +125,7 @@ class CliDetector {
 
   private async detectCustom(agent: CustomAgent): Promise<AgentCliInfo> {
     try {
-      const stdout = await execInPty(`${agent.command} --version`);
+      const stdout = await this.execVersionCommand(agent.command, ['--version']);
 
       const match = stdout.match(/(\d+\.\d+\.\d+)/);
       const version = match ? match[1] : undefined;
