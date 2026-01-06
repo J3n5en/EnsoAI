@@ -382,8 +382,8 @@ export function useGhosttyWeb({
         }
         if (event.key === 'v' || event.key === 'V') {
           navigator.clipboard.readText().then((text) => {
-            if (text && ptyIdRef.current) {
-              window.electronAPI.terminal.write(ptyIdRef.current, text);
+            if (text) {
+              terminal.paste(text);
             }
           });
           return true;
