@@ -380,6 +380,14 @@ export function useGhosttyWeb({
           if (!isMac) return false;
           return true;
         }
+        if (event.key === 'v' || event.key === 'V') {
+          navigator.clipboard.readText().then((text) => {
+            if (text && ptyIdRef.current) {
+              window.electronAPI.terminal.write(ptyIdRef.current, text);
+            }
+          });
+          return true;
+        }
       }
 
       if (event.type === 'keydown' && ptyIdRef.current) {
