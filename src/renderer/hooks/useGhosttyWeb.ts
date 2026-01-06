@@ -266,11 +266,13 @@ export function useGhosttyWeb({
           return;
         }
 
-        // For non-text clipboard content (images/files), send Ctrl+V character
+        // For non-text clipboard content (images/files) on macOS, send Ctrl+V character
+        // Windows already sends \x16 in keydown handler
         // TUI apps like Claude Code read images from system clipboard via pbpaste/xclip
-        // They just need the \x16 signal to know to read it
-        if (!text && types.length > 0 && ptyIdRef.current) {
-          console.log('[ghostty-web] Non-text clipboard content detected, sending \\x16');
+        const platform = window.electronAPI.env.platform;
+        const isMac = platform === 'darwin';
+        if (!text && types.length > 0 && ptyIdRef.current && isMac) {
+          console.log('[ghostty-web] macOS: Non-text clipboard content detected, sending \\x16');
           event.preventDefault();
           event.stopImmediatePropagation();
           window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
