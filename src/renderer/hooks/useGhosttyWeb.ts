@@ -42,6 +42,7 @@ export interface UseGhosttyWebOptions {
   onData?: (data: string) => void;
   onCustomKey?: (event: KeyboardEvent, ptyId: string) => boolean;
   onTitleChange?: (title: string) => void;
+  onPaste?: (event: ClipboardEvent) => boolean;
   onSplit?: () => void;
   onMerge?: () => void;
   canMerge?: boolean;
@@ -98,6 +99,7 @@ export function useGhosttyWeb({
   onData,
   onCustomKey,
   onTitleChange,
+  onPaste,
   onSplit,
   onMerge,
   canMerge = false,
@@ -114,6 +116,7 @@ export function useGhosttyWeb({
   const cleanupRef = useRef<(() => void) | null>(null);
   const exitCleanupRef = useRef<(() => void) | null>(null);
   const systemShortcutCleanupRef = useRef<(() => void) | null>(null);
+  const pasteCleanupRef = useRef<(() => void) | null>(null);
 
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
@@ -123,6 +126,8 @@ export function useGhosttyWeb({
   onCustomKeyRef.current = onCustomKey;
   const onTitleChangeRef = useRef(onTitleChange);
   onTitleChangeRef.current = onTitleChange;
+  const onPasteRef = useRef(onPaste);
+  onPasteRef.current = onPaste;
   const onSplitRef = useRef(onSplit);
   onSplitRef.current = onSplit;
   const onMergeRef = useRef(onMerge);
@@ -248,6 +253,16 @@ export function useGhosttyWeb({
       systemShortcutCleanupRef.current = () => {
         terminalElement.removeEventListener('keydown', systemShortcutHandler, true);
       };
+
+      const pasteHandler = (event: ClipboardEvent) => {
+        if (onPasteRef.current?.(event)) {
+          event.stopImmediatePropagation();
+        }
+      };
+      terminalElement.addEventListener('paste', pasteHandler, true);
+      pasteCleanupRef.current = () => {
+        terminalElement.removeEventListener('paste', pasteHandler, true);
+      };
     }
 
     terminal.onTitleChange((title) => {
@@ -372,6 +387,7 @@ export function useGhosttyWeb({
       const modKey = isMac ? event.metaKey : event.ctrlKey;
 
       if (event.type === 'keydown' && modKey && !event.altKey) {
+        // Copy: Cmd+C (mac) or Ctrl+C (win/linux)
         if (event.key === 'c' || event.key === 'C') {
           if (terminal.hasSelection()) {
             navigator.clipboard.writeText(terminal.getSelection());
@@ -379,6 +395,11 @@ export function useGhosttyWeb({
           }
           if (!isMac) return false;
           return true;
+        }
+        // Paste: DO NOT intercept - let ghostty-web handle it naturally
+        // This allows Claude Code and other agents to receive image paste events
+        if (event.key === 'v' || event.key === 'V') {
+          return false;
         }
       }
 
@@ -494,6 +515,7 @@ export function useGhosttyWeb({
       cleanupRef.current?.();
       exitCleanupRef.current?.();
       systemShortcutCleanupRef.current?.();
+      pasteCleanupRef.current?.();
       if (ptyIdRef.current) {
         window.electronAPI.terminal.destroy(ptyIdRef.current);
       }
