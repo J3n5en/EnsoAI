@@ -47,8 +47,6 @@ export interface UseXtermOptions {
   onCustomKey?: (event: KeyboardEvent, ptyId: string) => boolean;
   /** Called when terminal title changes (via OSC escape sequence) */
   onTitleChange?: (title: string) => void;
-  /** Called on paste event (unused in xterm, added for interface compatibility) */
-  onPaste?: (event: ClipboardEvent) => boolean;
   /** Called when split pane shortcut is triggered */
   onSplit?: () => void;
   /** Called when merge pane shortcut is triggered */
