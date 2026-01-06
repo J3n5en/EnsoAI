@@ -422,18 +422,15 @@ export function useGhosttyWeb({
           if (!isMac) return false;
           return true;
         }
-        // Paste: Block ghostty-web's keydown handling (which sends empty string on Windows)
-        // Let browser's paste event trigger naturally, handled by ghostty-web's pasteListener
+        // Paste handling differs by platform
         if (event.key === 'v' || event.key === 'V') {
-          console.log(
-            '[ghostty-web] Ctrl/Cmd+V detected, returning true to block ghostty keydown handling',
-            {
-              platform,
-              isMac,
-              modKey,
-              eventType: event.type,
-            }
-          );
+          if (!isMac && ptyIdRef.current) {
+            // Windows/Linux: Send Ctrl+V character (\x16) for TUI apps to read clipboard
+            // This is needed for image paste - TUI apps like Claude Code read images via system clipboard
+            console.log('[ghostty-web] Windows Ctrl+V: sending \\x16 to PTY');
+            window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
+          }
+          // Block ghostty-web's default keydown handling
           return true;
         }
       }
