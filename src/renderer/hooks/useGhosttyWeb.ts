@@ -257,11 +257,23 @@ export function useGhosttyWeb({
       const pasteHandler = (event: ClipboardEvent) => {
         const clipboardData = event.clipboardData;
         const text = clipboardData?.getData('text/plain');
-        const types = clipboardData?.types;
+        const types = clipboardData?.types || [];
         console.log('[ghostty-web] paste event triggered', { text: text?.slice(0, 50), types });
+
         if (onPasteRef.current?.(event)) {
           console.log('[ghostty-web] onPaste returned true, stopping propagation');
           event.stopImmediatePropagation();
+          return;
+        }
+
+        // For non-text clipboard content (images/files), send Ctrl+V character
+        // TUI apps like Claude Code read images from system clipboard via pbpaste/xclip
+        // They just need the \x16 signal to know to read it
+        if (!text && types.length > 0 && ptyIdRef.current) {
+          console.log('[ghostty-web] Non-text clipboard content detected, sending \\x16');
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
         }
       };
       terminalElement.addEventListener('paste', pasteHandler, true);
