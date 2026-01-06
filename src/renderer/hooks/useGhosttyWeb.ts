@@ -266,15 +266,12 @@ export function useGhosttyWeb({
           return;
         }
 
-        // For non-text clipboard content (images/files), send Ctrl+V character (\x16)
-        // TUI apps like Claude Code read images from system clipboard via pbpaste/xclip/PowerShell
-        if (!text && types.length > 0 && ptyIdRef.current) {
+        // ghostty-web now handles non-text clipboard content internally (sends \x16)
+        // Just log for debugging
+        if (!text && types.length > 0) {
           console.log(
-            '[ghostty-web] Non-text clipboard content detected, sending \\x16 in paste handler'
+            '[ghostty-web] Non-text clipboard content detected, ghostty-web will handle it'
           );
-          // Don't prevent default - let the event continue for Electron/browser handling
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
-          return;
         }
       };
       terminalElement.addEventListener('paste', pasteHandler, true);
@@ -423,12 +420,10 @@ export function useGhosttyWeb({
           if (!isMac) return false;
           return true;
         }
-        // Paste: Block ghostty-web's default keydown handling, let paste event handle it
+        // Paste: Let ghostty-web handle it (sends \x16 for Ctrl+V, triggers paste for Cmd+V)
         if (event.key === 'v' || event.key === 'V') {
-          console.log(
-            '[ghostty-web] Ctrl/Cmd+V detected, blocking keydown, waiting for paste event'
-          );
-          return true;
+          console.log('[ghostty-web] Ctrl/Cmd+V detected, letting ghostty-web handle it');
+          return false;
         }
       }
 

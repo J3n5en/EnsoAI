@@ -848,10 +848,14 @@ const X = {
    * @param event - KeyboardEvent
    */
   handleKeyDown(A) {
-    if (this.isDisposed || this.isComposing || A.isComposing || A.keyCode === 229 || (this.onKeyCallback && this.onKeyCallback({ key: A.key, domEvent: A }), this.customKeyEventHandler && this.customKeyEventHandler(A)))
+    if (this.isDisposed || this.isComposing || A.isComposing || A.keyCode === 229)
       return;
+    if (this.onKeyCallback && this.onKeyCallback({ key: A.key, domEvent: A }), this.customKeyEventHandler && this.customKeyEventHandler(A)) {
+      A.preventDefault();
+      return;
+    }
     if (A.ctrlKey && A.code === "KeyV") {
-      this.onDataCallback("");
+      this.onDataCallback(String.fromCharCode(22));
       return;
     }
     if (A.metaKey && A.code === "KeyV")
@@ -975,7 +979,7 @@ const X = {
     }
     const g = B.getData("text/plain");
     if (!g) {
-      B.types.length > 0 && this.onDataCallback("");
+      B.types.length > 0 && this.onDataCallback(String.fromCharCode(22));
       return;
     }
     this.shouldIgnorePasteEvent(g, "paste") || (this.emitPasteData(g), this.recordPasteData(g, "paste"));
@@ -1503,7 +1507,7 @@ class QA {
   measureFont() {
     const B = document.createElement("canvas").getContext("2d");
     B.font = `${this.fontSize}px ${this.fontFamily}`;
-    const g = B.measureText("Mygjpq"), E = Math.round(B.measureText("M").width), C = g.actualBoundingBoxAscent || this.fontSize * 0.8, I = g.actualBoundingBoxDescent || this.fontSize * 0.25, D = Math.ceil(C + I + 6), i = Math.ceil(C) + 3;
+    const g = B.measureText("M"), E = Math.ceil(g.width), C = g.actualBoundingBoxAscent || this.fontSize * 0.8, I = g.actualBoundingBoxDescent || this.fontSize * 0.2, D = Math.ceil(C + I) + 2, i = Math.ceil(C) + 1;
     return { width: E, height: D, baseline: i };
   }
   /**
