@@ -75,7 +75,8 @@ export async function execInPty(command: string, options: ExecInPtyOptions = {})
     const { shell, args } = getShellForCommand();
     const shellName = shell.toLowerCase();
 
-    // Construct shell args with command (same logic as AgentTerminal)
+    // Construct shell args with command
+    // Shell will naturally exit with the command's exit code
     let shellArgs: string[];
     if (shellName.includes('wsl')) {
       // WSL: wsl.exe doesn't load user's shell environment by default.
@@ -83,12 +84,8 @@ export async function execInPty(command: string, options: ExecInPtyOptions = {})
       // to ensure PATH and other environment variables are properly initialized.
       const escapedCommand = command.replace(/"/g, '\\"');
       shellArgs = ['-e', 'sh', '-lc', `exec "$SHELL" -ilc "${escapedCommand}"`];
-    } else if (shellName.includes('powershell') || shellName.includes('pwsh')) {
-      shellArgs = [...args, `& { ${command}; exit $LASTEXITCODE }`];
-    } else if (shellName.includes('cmd')) {
-      shellArgs = [...args, `${command} & exit %ERRORLEVEL%`];
     } else {
-      shellArgs = [...args, `${command}; exit $?`];
+      shellArgs = [...args, command];
     }
 
     let output = '';
