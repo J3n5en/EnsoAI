@@ -272,9 +272,9 @@ export function useGhosttyWeb({
           console.log(
             '[ghostty-web] Non-text clipboard content detected, sending \\x16 in paste handler'
           );
-          event.preventDefault();
-          event.stopImmediatePropagation();
+          // Don't prevent default - let the event continue for Electron/browser handling
           window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
+          return;
         }
       };
       terminalElement.addEventListener('paste', pasteHandler, true);
