@@ -255,7 +255,12 @@ export function useGhosttyWeb({
       };
 
       const pasteHandler = (event: ClipboardEvent) => {
+        const clipboardData = event.clipboardData;
+        const text = clipboardData?.getData('text/plain');
+        const types = clipboardData?.types;
+        console.log('[ghostty-web] paste event triggered', { text: text?.slice(0, 50), types });
         if (onPasteRef.current?.(event)) {
+          console.log('[ghostty-web] onPaste returned true, stopping propagation');
           event.stopImmediatePropagation();
         }
       };
@@ -343,6 +348,15 @@ export function useGhosttyWeb({
 
     terminal.attachCustomKeyEventHandler((event) => {
       // ghostty-web: return true = handled (stop), return false = not handled (continue)
+      if (event.key === 'v' || event.key === 'V') {
+        console.log('[ghostty-web] customKeyEventHandler called for V key', {
+          type: event.type,
+          key: event.key,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          altKey: event.altKey,
+        });
+      }
 
       // macOS system shortcuts (non-configurable)
       if (event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -399,6 +413,15 @@ export function useGhosttyWeb({
         // Paste: Block ghostty-web's keydown handling (which sends empty string on Windows)
         // Let browser's paste event trigger naturally, handled by ghostty-web's pasteListener
         if (event.key === 'v' || event.key === 'V') {
+          console.log(
+            '[ghostty-web] Ctrl/Cmd+V detected, returning true to block ghostty keydown handling',
+            {
+              platform,
+              isMac,
+              modKey,
+              eventType: event.type,
+            }
+          );
           return true;
         }
       }
