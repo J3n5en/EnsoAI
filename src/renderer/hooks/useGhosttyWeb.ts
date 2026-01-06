@@ -266,13 +266,12 @@ export function useGhosttyWeb({
           return;
         }
 
-        // For non-text clipboard content (images/files) on macOS, send Ctrl+V character
-        // Windows already sends \x16 in keydown handler
-        // TUI apps like Claude Code read images from system clipboard via pbpaste/xclip
-        const platform = window.electronAPI.env.platform;
-        const isMac = platform === 'darwin';
-        if (!text && types.length > 0 && ptyIdRef.current && isMac) {
-          console.log('[ghostty-web] macOS: Non-text clipboard content detected, sending \\x16');
+        // For non-text clipboard content (images/files), send Ctrl+V character (\x16)
+        // TUI apps like Claude Code read images from system clipboard via pbpaste/xclip/PowerShell
+        if (!text && types.length > 0 && ptyIdRef.current) {
+          console.log(
+            '[ghostty-web] Non-text clipboard content detected, sending \\x16 in paste handler'
+          );
           event.preventDefault();
           event.stopImmediatePropagation();
           window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
@@ -424,15 +423,11 @@ export function useGhosttyWeb({
           if (!isMac) return false;
           return true;
         }
-        // Paste handling differs by platform
+        // Paste: Block ghostty-web's default keydown handling, let paste event handle it
         if (event.key === 'v' || event.key === 'V') {
-          if (!isMac && ptyIdRef.current) {
-            // Windows/Linux: Send Ctrl+V character (\x16) for TUI apps to read clipboard
-            // This is needed for image paste - TUI apps like Claude Code read images via system clipboard
-            console.log('[ghostty-web] Windows Ctrl+V: sending \\x16 to PTY');
-            window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
-          }
-          // Block ghostty-web's default keydown handling
+          console.log(
+            '[ghostty-web] Ctrl/Cmd+V detected, blocking keydown, waiting for paste event'
+          );
           return true;
         }
       }
