@@ -5,6 +5,7 @@ import path from 'node:path';
 import { type FileChangeStatus, IPC_CHANNELS } from '@shared/types';
 import { ipcMain } from 'electron';
 import { GitService } from '../services/git/GitService';
+import { getProxyEnvVars } from '../services/proxy/ProxyConfig';
 import { getEnvForCommand, getShellForCommand, killProcessTree } from '../utils/shell';
 
 const gitServices = new Map<string, GitService>();
@@ -254,7 +255,7 @@ ${truncatedDiff}`;
 
         const proc = spawn(shell, [...shellArgs, command], {
           cwd: resolved,
-          env: getEnvForCommand(),
+          env: { ...getEnvForCommand(), ...getProxyEnvVars() },
         });
 
         // Handle stdin errors to prevent EPIPE crashes
@@ -442,7 +443,7 @@ ${gitLog || '(No commit history available)'}`;
 
       const proc = spawn(shell, [...shellArgs, claudeCommand], {
         cwd: resolved,
-        env: getEnvForCommand(),
+        env: { ...getEnvForCommand(), ...getProxyEnvVars() },
       });
 
       activeCodeReviews.set(reviewId, proc);

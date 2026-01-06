@@ -465,7 +465,7 @@ export class GitService {
       // Check if gh is authenticated
       await execAsync('gh auth status', {
         cwd: this.workdir,
-        env: { ...process.env, PATH: getEnhancedPath() },
+        env: { ...process.env, ...getProxyEnvVars(), PATH: getEnhancedPath() },
       });
       return { installed: true, authenticated: true };
     } catch {
@@ -479,7 +479,7 @@ export class GitService {
         'gh pr list --state open --json number,title,headRefName,state,author,updatedAt,isDraft --limit 50',
         {
           cwd: this.workdir,
-          env: { ...process.env, PATH: getEnhancedPath() },
+          env: { ...process.env, ...getProxyEnvVars(), PATH: getEnhancedPath() },
         }
       );
 
