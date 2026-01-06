@@ -396,10 +396,10 @@ export function useGhosttyWeb({
           if (!isMac) return false;
           return true;
         }
-        // Paste: DO NOT intercept - let ghostty-web handle it naturally
-        // This allows Claude Code and other agents to receive image paste events
+        // Paste: Block ghostty-web's keydown handling (which sends empty string on Windows)
+        // Let browser's paste event trigger naturally, handled by ghostty-web's pasteListener
         if (event.key === 'v' || event.key === 'V') {
-          return false;
+          return true;
         }
       }
 
