@@ -15,7 +15,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/*"],
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "ghostty-web": ["resources/ghostty-web/ghostty-web.d.ts"]
     }
   },
   "include": ["src/**/*", "electron.vite.config.ts"]

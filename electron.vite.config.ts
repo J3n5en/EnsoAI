@@ -39,6 +39,7 @@ export default defineConfig({
       alias: {
         '@': path.resolve(__dirname, 'src/renderer'),
         '@shared': path.resolve(__dirname, 'src/shared'),
+        'ghostty-web': path.resolve(__dirname, 'resources/ghostty-web/ghostty-web.js'),
       },
     },
     publicDir: path.resolve(__dirname, 'resources'),

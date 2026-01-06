@@ -113,6 +113,7 @@ export function useGhosttyWeb({
   const ptyIdRef = useRef<string | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const exitCleanupRef = useRef<(() => void) | null>(null);
+  const systemShortcutCleanupRef = useRef<(() => void) | null>(null);
 
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
@@ -233,6 +234,22 @@ export function useGhosttyWeb({
 
     fitAddon.fit();
 
+    const terminalElement = terminal.element;
+    if (terminalElement) {
+      const systemShortcutHandler = (event: KeyboardEvent) => {
+        if (event.metaKey && !event.ctrlKey && !event.altKey) {
+          const systemKeys = ['q', ',', 'h', 'm'];
+          if (systemKeys.includes(event.key.toLowerCase())) {
+            event.stopImmediatePropagation();
+          }
+        }
+      };
+      terminalElement.addEventListener('keydown', systemShortcutHandler, true);
+      systemShortcutCleanupRef.current = () => {
+        terminalElement.removeEventListener('keydown', systemShortcutHandler, true);
+      };
+    }
+
     terminal.onTitleChange((title) => {
       onTitleChangeRef.current?.(title);
     });
@@ -311,8 +328,16 @@ export function useGhosttyWeb({
 
     terminal.attachCustomKeyEventHandler((event) => {
       // ghostty-web: return true = handled (stop), return false = not handled (continue)
-      // This is OPPOSITE of xterm.js semantics!
 
+      // macOS system shortcuts (non-configurable)
+      if (event.metaKey && !event.ctrlKey && !event.altKey) {
+        const macSystemKeys = ['q', ',', 'h', 'm'];
+        if (macSystemKeys.includes(event.key.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // User-configurable terminal keybindings - return true to skip ghostty handling but let event bubble
       if (
         matchesKeybinding(event, settings.xtermKeybindings.newTab) ||
         matchesKeybinding(event, settings.xtermKeybindings.closeTab) ||
@@ -331,6 +356,7 @@ export function useGhosttyWeb({
           return true;
         }
       }
+
       if (
         (event.metaKey || event.ctrlKey) &&
         !event.shiftKey &&
@@ -467,6 +493,7 @@ export function useGhosttyWeb({
     return () => {
       cleanupRef.current?.();
       exitCleanupRef.current?.();
+      systemShortcutCleanupRef.current?.();
       if (ptyIdRef.current) {
         window.electronAPI.terminal.destroy(ptyIdRef.current);
       }
