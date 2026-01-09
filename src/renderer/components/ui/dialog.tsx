@@ -48,11 +48,18 @@ function DialogPopup({
   children,
   showCloseButton = true,
   bottomStickOnMobile = true,
+  disableNestedTransform = false,
+  style,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   bottomStickOnMobile?: boolean;
+  disableNestedTransform?: boolean;
 }) {
+  const mergedStyle = disableNestedTransform
+    ? ({ ...(style ?? {}), ['--nested-dialogs']: 0 } as React.CSSProperties)
+    : style;
+
   return (
     <DialogPortal>
       <DialogBackdrop />
@@ -66,6 +73,7 @@ function DialogPopup({
               'max-sm:rounded-none max-sm:border-x-0 max-sm:border-t max-sm:border-b-0 max-sm:opacity-[calc(1-min(var(--nested-dialogs),1))] max-sm:data-ending-style:translate-y-4 max-sm:data-starting-style:translate-y-4 max-sm:before:hidden max-sm:before:rounded-none',
             className
           )}
+          style={mergedStyle}
           data-slot="dialog-popup"
           {...props}
         >

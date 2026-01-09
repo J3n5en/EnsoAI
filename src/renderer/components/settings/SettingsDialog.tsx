@@ -69,7 +69,7 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
           }
         />
       )}
-      <DialogPopup className="sm:max-w-4xl" showCloseButton={true}>
+      <DialogPopup className="sm:max-w-4xl" showCloseButton={true} disableNestedTransform>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <DialogTitle className="text-lg font-medium">{t('Settings')}</DialogTitle>
         </div>
