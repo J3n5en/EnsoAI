@@ -71,11 +71,15 @@ class AutoUpdaterService {
       this.sendStatus({ status: 'error', error: error.message });
     });
 
+    autoUpdater.autoDownload = autoUpdateEnabled;
+
     // Check on window focus (with 30-minute debounce)
     this.onFocusHandler = () => {
-      const now = Date.now();
-      if (now - this.lastCheckTime >= MIN_FOCUS_CHECK_INTERVAL_MS) {
-        this.checkForUpdates();
+      if (autoUpdater.autoDownload) {
+        const now = Date.now();
+        if (now - this.lastCheckTime >= MIN_FOCUS_CHECK_INTERVAL_MS) {
+          this.checkForUpdates();
+        }
       }
     };
     window.on('focus', this.onFocusHandler);
