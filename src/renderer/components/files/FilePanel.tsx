@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GlobalSearchDialog, type SearchMode } from '@/components/search';
+
+// Global ref for passing selected text to search dialog
+declare global {
+  interface Window {
+    _pendingSearchQuery?: string;
+  }
+}
+
 import { useEditor } from '@/hooks/useEditor';
 import { useFileTree } from '@/hooks/useFileTree';
 import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
-import { EditorArea } from './EditorArea';
+import { EditorArea, type EditorAreaRef } from './EditorArea';
 import { FileTree } from './FileTree';
 import { NewItemDialog } from './NewItemDialog';
 
@@ -65,6 +73,8 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
   const [newItemType, setNewItemType] = useState<NewItemType>(null);
   const [newItemParentPath, setNewItemParentPath] = useState<string>('');
 
+  const editorAreaRef = useRef<EditorAreaRef>(null);
+
   // Panel resize state
   const [panelWidth, setPanelWidth] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -111,6 +121,16 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
   // Get search keybindings from settings
   const searchKeybindings = useSettingsStore((s) => s.searchKeybindings);
 
+  // Helper to open search dialog with current selection
+  const openSearch = useCallback((mode: SearchMode, selectedText?: string) => {
+    setSearchMode(mode);
+    // Store selected text in a ref so GlobalSearchDialog can access it when opening
+    if (selectedText !== undefined) {
+      window._pendingSearchQuery = selectedText;
+    }
+    setSearchOpen(true);
+  }, []);
+
   // Cmd+W: close tab, Cmd+1-9: switch tab, search shortcuts from settings
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -124,11 +144,10 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
         return;
       }
 
-      // Content search (default: Cmd+Shift+F)
       if (matchesKeybinding(e, searchKeybindings.searchContent)) {
         e.preventDefault();
-        setSearchMode('content');
-        setSearchOpen(true);
+        const selectedText = editorAreaRef.current?.getSelectedText() ?? '';
+        openSearch('content', selectedText);
         return;
       }
 
@@ -148,7 +167,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, tabs, activeTab, closeFile, setActiveFile, searchKeybindings]);
+  }, [isActive, tabs, activeTab, closeFile, setActiveFile, searchKeybindings, openSearch]);
 
   // Handle file click (single click = open in editor)
   const handleFileClick = useCallback(
@@ -276,6 +295,13 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
     [navigateToFile]
   );
 
+  const handleGlobalSearch = useCallback(
+    (selectedText: string) => {
+      openSearch('content', selectedText);
+    },
+    [openSearch]
+  );
+
   if (!rootPath) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -299,8 +325,8 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           onDelete={handleDelete}
           onRefresh={refresh}
           onOpenSearch={() => {
-            setSearchMode('content');
-            setSearchOpen(true);
+            const selectedText = editorAreaRef.current?.getSelectedText() ?? '';
+            openSearch('content', selectedText);
           }}
           isLoading={isLoading}
           rootPath={rootPath}
@@ -315,6 +341,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
       {/* Editor Area - right panel */}
       <div className="flex-1 overflow-hidden">
         <EditorArea
+          ref={editorAreaRef}
           tabs={tabs}
           activeTab={activeTab}
           activeTabPath={activeTab?.path ?? null}
@@ -332,6 +359,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           onSave={handleSave}
           onClearPendingCursor={handleClearPendingCursor}
           onBreadcrumbClick={handleBreadcrumbClick}
+          onGlobalSearch={handleGlobalSearch}
         />
       </div>
 

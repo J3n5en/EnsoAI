@@ -1,7 +1,15 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { Eye, EyeOff, FileCode, Sparkles } from 'lucide-react';
 import type * as monaco from 'monaco-editor';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
   Breadcrumb,
@@ -33,6 +41,10 @@ import './monacoSetup';
 
 type Monaco = typeof monaco;
 
+export interface EditorAreaRef {
+  getSelectedText: () => string;
+}
+
 function isMarkdownFile(path: string | null): boolean {
   if (!path) return false;
   const ext = path.split('.').pop()?.toLowerCase();
@@ -57,31 +69,50 @@ interface EditorAreaProps {
   onSave: (path: string) => void;
   onClearPendingCursor: () => void;
   onBreadcrumbClick?: (path: string) => void;
+  onGlobalSearch?: (selectedText: string) => void;
 }
 
-export function EditorArea({
-  tabs,
-  activeTab,
-  activeTabPath,
-  pendingCursor,
-  rootPath,
-  onTabClick,
-  onTabClose,
-  onCloseOthers,
-  onCloseAll,
-  onCloseLeft,
-  onCloseRight,
-  onTabReorder,
-  onContentChange,
-  onViewStateChange,
-  onSave,
-  onClearPendingCursor,
-  onBreadcrumbClick,
-}: EditorAreaProps) {
+export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function EditorArea(
+  {
+    tabs,
+    activeTab,
+    activeTabPath,
+    pendingCursor,
+    rootPath,
+    onTabClick,
+    onTabClose,
+    onCloseOthers,
+    onCloseAll,
+    onCloseLeft,
+    onCloseRight,
+    onTabReorder,
+    onContentChange,
+    onViewStateChange,
+    onSave,
+    onClearPendingCursor,
+    onBreadcrumbClick,
+    onGlobalSearch,
+  }: EditorAreaProps,
+  ref: React.Ref<EditorAreaRef>
+) {
   const { t } = useI18n();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const { terminalTheme, editorSettings, claudeCodeIntegration } = useSettingsStore();
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getSelectedText: () => {
+        const editor = editorRef.current;
+        if (!editor) return '';
+        const selection = editor.getSelection();
+        if (!selection || selection.isEmpty()) return '';
+        return editor.getModel()?.getValueInRange(selection) ?? '';
+      },
+    }),
+    []
+  );
 
   // Markdown preview state
   const isMarkdown = isMarkdownFile(activeTabPath);
@@ -277,6 +308,15 @@ export function EditorArea({
         }
       });
 
+      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
+        const selection = editor.getSelection();
+        const selectedText =
+          !selection || selection.isEmpty()
+            ? ''
+            : (editor.getModel()?.getValueInRange(selection) ?? '');
+        onGlobalSearch?.(selectedText);
+      });
+
       // Add configurable shortcut to mention selection in Claude
       if (claudeCodeIntegration.enabled) {
         const keybinding = buildMonacoKeybinding(m, claudeCodeIntegration.atMentionedKeybinding);
@@ -357,6 +397,7 @@ export function EditorArea({
       activeTab?.viewState,
       activeTabPath,
       onSave,
+      onGlobalSearch,
       claudeCodeIntegration.enabled,
       claudeCodeIntegration.atMentionedKeybinding,
       t,
@@ -864,4 +905,4 @@ export function EditorArea({
       </div>
     </div>
   );
-}
+});
