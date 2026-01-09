@@ -19,6 +19,12 @@ export function registerUpdaterHandlers(): void {
     autoUpdaterService.quitAndInstall();
   });
 
+  ipcMain.handle(IPC_CHANNELS.UPDATER_DOWNLOAD_UPDATE, async () => {
+    if (!isUpdaterEnabled()) return;
+    const { autoUpdaterService } = await import('../services/updater/AutoUpdater');
+    await autoUpdaterService.downloadUpdate();
+  });
+
   ipcMain.handle(IPC_CHANNELS.UPDATER_SET_AUTO_UPDATE_ENABLED, async (_, enabled: boolean) => {
     if (!isUpdaterEnabled()) return;
     const { autoUpdaterService } = await import('../services/updater/AutoUpdater');

@@ -485,6 +485,9 @@ export const zhTranslations: Record<string, string> = {
     '新版本 {{version}} 已下载完成，是否立即重启安装？',
   'Version {{version}} is available. Please download it manually.':
     '新版本 {{version}} 已发布，请前往下载页面手动更新。',
+  'Version {{version}} is available. Do you want to download and update now?':
+    '检测到新版本 {{version}}，是否立即下载并更新？',
+  'Update now': '立即更新',
   中文: '中文',
   // Editor settings
   Editor: '编辑器',

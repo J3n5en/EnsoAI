@@ -115,6 +115,15 @@ class AutoUpdaterService {
     }
   }
 
+  async downloadUpdate(): Promise<void> {
+    try {
+      await autoUpdater.downloadUpdate();
+    } catch (error) {
+      console.error('Failed to download update:', error);
+      throw error;
+    }
+  }
+
   quitAndInstall(): void {
     if (this.updateDownloaded) {
       this._isQuittingForUpdate = true;

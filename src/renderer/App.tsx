@@ -124,6 +124,7 @@ export default function App() {
 
   // Layout mode from settings
   const layoutMode = useSettingsStore((s) => s.layoutMode);
+  const autoUpdateEnabled = useSettingsStore((s) => s.autoUpdateEnabled);
 
   // Panel resize hook
   const { repositoryWidth, worktreeWidth, treeSidebarWidth, resizing, handleResizeStart } =
@@ -1014,7 +1015,7 @@ export default function App() {
       />
 
       {/* Update Notification */}
-      <UpdateNotification />
+      <UpdateNotification autoUpdateEnabled={autoUpdateEnabled} />
 
       {/* Close Confirmation Dialog */}
       <Dialog
