@@ -37,6 +37,11 @@ interface GroupedProject {
   terminals: TerminalSession[];
 }
 
+type SelectableItem =
+  | { type: 'project'; project: GroupedProject }
+  | { type: 'agent'; session: Session }
+  | { type: 'terminal'; terminal: TerminalSession };
+
 export function RunningProjectsPopover({
   onSelectWorktreeByPath,
   onSwitchTab,
@@ -44,7 +49,9 @@ export function RunningProjectsPopover({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
@@ -72,6 +79,7 @@ export function RunningProjectsPopover({
     if (open) {
       setSearchQuery('');
       setMenuOpen(false);
+      setSelectedIndex(0);
       setTimeout(() => {
         searchInputRef.current?.focus();
       }, 50);
@@ -121,25 +129,97 @@ export function RunningProjectsPopover({
     });
   }, [groupedProjects, searchQuery]);
 
+  const selectableItems = useMemo<SelectableItem[]>(() => {
+    const items: SelectableItem[] = [];
+    for (const project of filteredProjects) {
+      items.push({ type: 'project', project });
+      for (const session of project.agents) {
+        items.push({ type: 'agent', session });
+      }
+      for (const terminal of project.terminals) {
+        items.push({ type: 'terminal', terminal });
+      }
+    }
+    return items;
+  }, [filteredProjects]);
+
   const totalRunning = groupedProjects.length;
 
-  const handleSelectProject = async (project: GroupedProject) => {
-    await onSelectWorktreeByPath(project.path);
-    setOpen(false);
-  };
+  const handleSelectItem = useCallback(
+    async (item: SelectableItem) => {
+      switch (item.type) {
+        case 'project':
+          await onSelectWorktreeByPath(item.project.path);
+          break;
+        case 'agent':
+          await onSelectWorktreeByPath(item.session.cwd);
+          setAgentActiveId(item.session.cwd, item.session.id);
+          onSwitchTab?.('chat');
+          break;
+        case 'terminal':
+          await onSelectWorktreeByPath(item.terminal.cwd);
+          setTerminalActive(item.terminal.id);
+          onSwitchTab?.('terminal');
+          break;
+      }
+      setOpen(false);
+    },
+    [onSelectWorktreeByPath, onSwitchTab, setAgentActiveId, setTerminalActive]
+  );
 
-  const handleSelectAgent = async (session: Session) => {
-    await onSelectWorktreeByPath(session.cwd);
-    setAgentActiveId(session.cwd, session.id);
-    onSwitchTab?.('chat');
-    setOpen(false);
-  };
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (menuOpen) return;
 
-  const handleSelectTerminal = async (terminal: TerminalSession) => {
-    await onSelectWorktreeByPath(terminal.cwd);
-    setTerminalActive(terminal.id);
-    onSwitchTab?.('terminal');
-    setOpen(false);
+      const itemCount = selectableItems.length;
+      if (itemCount === 0) return;
+
+      const scrollToIndex = (index: number) => {
+        requestAnimationFrame(() => {
+          const el = listRef.current?.querySelector(`[data-index="${index}"]`);
+          el?.scrollIntoView({ block: 'nearest' });
+        });
+      };
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setSelectedIndex((prev) => {
+            const next = (prev + 1) % itemCount;
+            scrollToIndex(next);
+            return next;
+          });
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setSelectedIndex((prev) => {
+            const next = (prev - 1 + itemCount) % itemCount;
+            scrollToIndex(next);
+            return next;
+          });
+          break;
+        case 'Enter':
+          e.preventDefault();
+          {
+            const currentIndex = Math.min(selectedIndex, itemCount - 1);
+            const item = selectableItems[currentIndex];
+            if (item) handleSelectItem(item);
+          }
+          break;
+      }
+    },
+    [menuOpen, selectableItems, selectedIndex, handleSelectItem]
+  );
+
+  const getItemId = (item: SelectableItem): string => {
+    switch (item.type) {
+      case 'project':
+        return `project-${item.project.path}`;
+      case 'agent':
+        return `agent-${item.session.id}`;
+      case 'terminal':
+        return `terminal-${item.terminal.id}`;
+    }
   };
 
   const handleContextMenu = useCallback((e: React.MouseEvent, project: GroupedProject) => {
@@ -198,67 +278,93 @@ export function RunningProjectsPopover({
                 placeholder={t('Search running projects...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
                 className="h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
               />
             </div>
-            <div className="max-h-[60vh] overflow-y-auto p-2">
+            <div ref={listRef} className="max-h-[60vh] overflow-y-auto p-2">
               {filteredProjects.length === 0 ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">
                   {searchQuery ? t('No matching results') : t('No running projects')}
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {filteredProjects.map((project) => (
-                    <div key={project.path}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-accent/50"
-                        onClick={() => handleSelectProject(project)}
-                        onContextMenu={(e) => handleContextMenu(e, project)}
-                      >
-                        <FolderGit2 className="h-4 w-4 shrink-0 text-yellow-500" />
-                        <span className="min-w-0 flex-1 truncate text-left">
-                          <span className="text-muted-foreground">{project.repoName}</span>
-                          <span className="mx-1 text-muted-foreground/50">/</span>
-                          <span>{project.branchName}</span>
-                        </span>
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {project.agents.length + project.terminals.length}
-                        </span>
-                      </button>
-                      {project.agents.map((session) => (
+                  {selectableItems.map((item, index) => {
+                    const isSelected = index === selectedIndex;
+                    const itemId = getItemId(item);
+
+                    if (item.type === 'project') {
+                      return (
                         <button
-                          key={session.id}
+                          key={itemId}
                           type="button"
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1 pl-6 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                          onClick={() => handleSelectAgent(session)}
+                          data-index={index}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-accent/50',
+                            isSelected && 'bg-accent'
+                          )}
+                          onClick={() => handleSelectItem(item)}
+                          onContextMenu={(e) => handleContextMenu(e, item.project)}
+                          onMouseEnter={() => setSelectedIndex(index)}
+                        >
+                          <FolderGit2 className="h-4 w-4 shrink-0 text-yellow-500" />
+                          <span className="min-w-0 flex-1 truncate text-left">
+                            <span className="text-muted-foreground">{item.project.repoName}</span>
+                            <span className="mx-1 text-muted-foreground/50">/</span>
+                            <span>{item.project.branchName}</span>
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {item.project.agents.length + item.project.terminals.length}
+                          </span>
+                        </button>
+                      );
+                    }
+
+                    if (item.type === 'agent') {
+                      return (
+                        <button
+                          key={itemId}
+                          type="button"
+                          data-index={index}
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded-md px-2 py-1 pl-6 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                            isSelected && 'bg-accent text-foreground'
+                          )}
+                          onClick={() => handleSelectItem(item)}
+                          onMouseEnter={() => setSelectedIndex(index)}
                         >
                           <Bot className="h-3.5 w-3.5 shrink-0" />
                           <span className="min-w-0 flex-1 truncate text-left">
-                            {session.name || session.agentId}
-                            {session.terminalTitle && (
+                            {item.session.name || item.session.agentId}
+                            {item.session.terminalTitle && (
                               <span className="ml-1 text-muted-foreground/70">
-                                ({session.terminalTitle})
+                                ({item.session.terminalTitle})
                               </span>
                             )}
                           </span>
                         </button>
-                      ))}
-                      {project.terminals.map((terminal) => (
-                        <button
-                          key={terminal.id}
-                          type="button"
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1 pl-6 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                          onClick={() => handleSelectTerminal(terminal)}
-                        >
-                          <Terminal className="h-3.5 w-3.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate text-left">
-                            {terminal.title || 'Terminal'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ))}
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={itemId}
+                        type="button"
+                        data-index={index}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-md px-2 py-1 pl-6 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                          isSelected && 'bg-accent text-foreground'
+                        )}
+                        onClick={() => handleSelectItem(item)}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                      >
+                        <Terminal className="h-3.5 w-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate text-left">
+                          {item.terminal.title || 'Terminal'}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
