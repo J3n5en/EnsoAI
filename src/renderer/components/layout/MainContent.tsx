@@ -5,6 +5,7 @@ import { DEFAULT_TAB_ORDER, type TabId } from '@/App/constants';
 import { OpenInMenu } from '@/components/app/OpenInMenu';
 import { AgentPanel } from '@/components/chat/AgentPanel';
 import { FilePanel } from '@/components/files';
+import { RunningProjectsPopover } from '@/components/layout/RunningProjectsPopover';
 import { SourceControlPanel } from '@/components/source-control';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,6 +35,7 @@ interface MainContentProps {
   onExpandRepository?: () => void;
   onExpandWorktree?: () => void;
   onSwitchWorktree?: (worktreePath: string) => void;
+  onSwitchTab?: (tab: TabId) => void;
 }
 
 export function MainContent({
@@ -49,6 +51,7 @@ export function MainContent({
   onExpandRepository,
   onExpandWorktree,
   onSwitchWorktree,
+  onSwitchTab,
 }: MainContentProps) {
   const { t } = useI18n();
 
@@ -183,7 +186,7 @@ export function MainContent({
       <header
         className={cn(
           'flex h-12 shrink-0 items-center justify-between border-b px-4 drag-region',
-          needsTrafficLightPadding && 'pl-[70px]'
+          needsTrafficLightPadding && 'pl-[80px]'
         )}
       >
         {/* Left: Expand buttons + Tabs */}
@@ -199,10 +202,15 @@ export function MainContent({
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                 className="flex items-center overflow-hidden"
               >
-                {/* Left separator */}
                 {needsTrafficLightPadding && <div className="mx-1 h-4 w-px bg-border" />}
+                {repositoryCollapsed && onSwitchWorktree && onSwitchTab && (
+                  <RunningProjectsPopover
+                    onSelectWorktreeByPath={onSwitchWorktree}
+                    onSwitchTab={onSwitchTab}
+                    showBadge={false}
+                  />
+                )}
                 {layoutMode === 'tree' ? (
-                  /* Tree mode: single expand button */
                   onExpandRepository && (
                     <button
                       type="button"
@@ -214,7 +222,6 @@ export function MainContent({
                     </button>
                   )
                 ) : (
-                  /* Columns mode: separate repository and worktree buttons */
                   <>
                     {repositoryCollapsed && onExpandRepository && (
                       <button
@@ -238,7 +245,6 @@ export function MainContent({
                     )}
                   </>
                 )}
-                {/* Right separator */}
                 <div className="mx-1 h-4 w-px bg-border" />
               </motion.div>
             )}

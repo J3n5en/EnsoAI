@@ -998,6 +998,7 @@ export default function App() {
             : () => setWorktreeCollapsed(false)
         }
         onSwitchWorktree={handleSwitchWorktreePath}
+        onSwitchTab={handleTabChange}
       />
 
       {/* Global Settings Dialog */}

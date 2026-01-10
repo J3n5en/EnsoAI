@@ -27,6 +27,7 @@ import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 interface RunningProjectsPopoverProps {
   onSelectWorktreeByPath: (worktreePath: string) => Promise<void> | void;
   onSwitchTab?: (tab: TabId) => void;
+  showBadge?: boolean;
 }
 
 interface GroupedProject {
@@ -47,6 +48,7 @@ type SelectableItem =
 export function RunningProjectsPopover({
   onSelectWorktreeByPath,
   onSwitchTab,
+  showBadge = true,
 }: RunningProjectsPopoverProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -276,7 +278,7 @@ export function RunningProjectsPopover({
         onClick={() => setOpen(true)}
       >
         <Activity className="h-4 w-4" />
-        {totalRunning > 0 && (
+        {showBadge && totalRunning > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-green-500 px-1 text-[10px] font-medium text-white">
             {totalRunning}
           </span>
