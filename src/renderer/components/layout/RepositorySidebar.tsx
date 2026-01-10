@@ -8,7 +8,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ALL_GROUP_ID, type RepositoryGroup } from '@/App/constants';
+import { ALL_GROUP_ID, type RepositoryGroup, type TabId } from '@/App/constants';
 import {
   CreateGroupDialog,
   GroupEditDialog,
@@ -36,6 +36,7 @@ import {
 import { useI18n } from '@/i18n';
 import { hexToRgba } from '@/lib/colors';
 import { cn } from '@/lib/utils';
+import { RunningProjectsPopover } from './RunningProjectsPopover';
 
 interface Repository {
   name: string;
@@ -60,6 +61,8 @@ interface RepositorySidebarProps {
   onUpdateGroup: (groupId: string, name: string, emoji: string, color: string) => void;
   onDeleteGroup: (groupId: string) => void;
   onMoveToGroup?: (repoPath: string, groupId: string | null) => void;
+  onSwitchTab?: (tab: TabId) => void;
+  onSwitchWorktreeByPath?: (path: string) => Promise<void> | void;
 }
 
 export function RepositorySidebar({
@@ -79,6 +82,8 @@ export function RepositorySidebar({
   onUpdateGroup,
   onDeleteGroup,
   onMoveToGroup,
+  onSwitchTab,
+  onSwitchWorktreeByPath,
 }: RepositorySidebarProps) {
   const { t, tNode } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
@@ -203,6 +208,12 @@ export function RepositorySidebar({
     <aside className="flex h-full w-full flex-col border-r bg-background">
       {/* Header */}
       <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
+        {onSwitchWorktreeByPath && (
+          <RunningProjectsPopover
+            onSelectWorktreeByPath={onSwitchWorktreeByPath}
+            onSwitchTab={onSwitchTab}
+          />
+        )}
         {onCollapse && (
           <button
             type="button"

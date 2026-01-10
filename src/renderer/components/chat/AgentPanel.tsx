@@ -158,6 +158,36 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
   }, [allSessions, repoPath, cwd]);
 
+  // Sync activeIds from store to group state when changed externally (e.g., from RunningProjectsPopover)
+  useEffect(() => {
+    if (!cwd || groups.length === 0) return;
+
+    const normalizedCwd = normalizePath(cwd);
+    const unsubscribe = useAgentSessionsStore.subscribe(
+      (state) => state.activeIds[normalizedCwd],
+      (storeActiveId) => {
+        if (!storeActiveId) return;
+
+        // Find which group contains this session
+        const targetGroup = groups.find((g) => g.sessionIds.includes(storeActiveId));
+        if (!targetGroup) return;
+
+        // Only update if different from current group's activeSessionId
+        if (targetGroup.activeSessionId !== storeActiveId) {
+          updateCurrentGroupState((state) => ({
+            ...state,
+            groups: state.groups.map((g) =>
+              g.id === targetGroup.id ? { ...g, activeSessionId: storeActiveId } : g
+            ),
+            activeGroupId: targetGroup.id,
+          }));
+        }
+      }
+    );
+
+    return unsubscribe;
+  }, [cwd, groups, updateCurrentGroupState]);
+
   // Empty state agent menu
   const [showAgentMenu, setShowAgentMenu] = useState(false);
   const [installedAgents, setInstalledAgents] = useState<Set<string>>(new Set());

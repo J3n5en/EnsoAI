@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ALL_GROUP_ID, type Repository, type RepositoryGroup } from '@/App/constants';
+import { ALL_GROUP_ID, type Repository, type RepositoryGroup, type TabId } from '@/App/constants';
 import {
   CreateGroupDialog,
   GroupEditDialog,
@@ -52,6 +52,7 @@ import { useI18n } from '@/i18n';
 import { hexToRgba } from '@/lib/colors';
 import { cn } from '@/lib/utils';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
+import { RunningProjectsPopover } from './RunningProjectsPopover';
 
 interface TreeSidebarProps {
   repositories: Repository[];
@@ -86,6 +87,8 @@ interface TreeSidebarProps {
   onUpdateGroup: (groupId: string, name: string, emoji: string, color: string) => void;
   onDeleteGroup: (groupId: string) => void;
   onMoveToGroup?: (repoPath: string, groupId: string | null) => void;
+  onSwitchTab?: (tab: TabId) => void;
+  onSwitchWorktreeByPath?: (path: string) => Promise<void> | void;
 }
 
 export function TreeSidebar({
@@ -118,6 +121,8 @@ export function TreeSidebar({
   onUpdateGroup,
   onDeleteGroup,
   onMoveToGroup,
+  onSwitchTab,
+  onSwitchWorktreeByPath,
 }: TreeSidebarProps) {
   const { t, tNode } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
@@ -437,50 +442,56 @@ export function TreeSidebar({
     <aside className="flex h-full w-full flex-col border-r bg-background">
       {/* Header */}
       <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
-        {/* Create worktree button */}
-        {selectedRepo && (
-          <CreateWorktreeDialog
-            branches={branches}
-            projectName={selectedRepo?.split('/').pop() || ''}
-            workdir={workdir}
-            isLoading={isCreating}
-            onSubmit={async (options) => {
-              await onCreateWorktree(options);
-              refetchExpandedWorktrees();
-            }}
-            trigger={
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                title={t('New Worktree')}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            }
-          />
-        )}
-        {/* Refresh button */}
-        <button
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-          onClick={() => {
-            onRefresh();
-            refetchExpandedWorktrees();
-          }}
-          title={t('Refresh')}
-        >
-          <RefreshCw className="h-4 w-4" />
-        </button>
-        {onCollapse && (
+        <div className="flex items-center gap-1">
+          {/* Create worktree button */}
+          {selectedRepo && (
+            <CreateWorktreeDialog
+              branches={branches}
+              projectName={selectedRepo?.split('/').pop() || ''}
+              workdir={workdir}
+              isLoading={isCreating}
+              onSubmit={async (options) => {
+                await onCreateWorktree(options);
+                refetchExpandedWorktrees();
+              }}
+              trigger={
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                  title={t('New Worktree')}
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              }
+            />
+          )}
+          {/* Refresh button */}
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-            onClick={onCollapse}
-            title={t('Collapse')}
+            onClick={() => {
+              onRefresh();
+              refetchExpandedWorktrees();
+            }}
+            title={t('Refresh')}
           >
-            <PanelLeftClose className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
           </button>
-        )}
+          <RunningProjectsPopover
+            onSelectWorktreeByPath={onSwitchWorktreeByPath || (() => {})}
+            onSwitchTab={onSwitchTab}
+          />
+          {onCollapse && (
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+              onClick={onCollapse}
+              title={t('Collapse')}
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <GroupSelector
