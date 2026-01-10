@@ -430,7 +430,7 @@ export const defaultSearchKeybindings: SearchKeybindings = {
 };
 
 export const defaultGlobalKeybindings: GlobalKeybindings = {
-  runningProjects: { key: 'e', meta: true },
+  runningProjects: { key: 'l', meta: true },
 };
 
 interface SettingsState {
