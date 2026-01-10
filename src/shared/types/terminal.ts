@@ -2,9 +2,6 @@ export interface TerminalSession {
   id: string;
   title: string;
   cwd: string;
-  shell: string;
-  cols: number;
-  rows: number;
 }
 
 export interface TerminalCreateOptions {

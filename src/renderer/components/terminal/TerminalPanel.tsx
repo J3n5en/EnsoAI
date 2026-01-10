@@ -13,6 +13,7 @@ import { useI18n } from '@/i18n';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { useInitScriptStore } from '@/stores/initScript';
 import { useSettingsStore } from '@/stores/settings';
+import { useTerminalStore } from '@/stores/terminal';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { ResizeHandle } from './ResizeHandle';
 import { ShellTerminal } from './ShellTerminal';
@@ -53,6 +54,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
     (state) => state.autoCreateSessionOnActivate
   );
   const { setTerminalCount, registerTerminalCloseHandler } = useWorktreeActivityStore();
+  const syncTerminalSessions = useTerminalStore((s) => s.syncSessions);
   const { pendingScript, clearPendingScript } = useInitScriptStore();
   const pendingScriptProcessedRef = useRef<string | null>(null);
 
@@ -71,6 +73,20 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
     const totalTabs = groups.reduce((sum, g) => sum + g.tabs.length, 0);
     setTerminalCount(cwd, totalTabs);
   }, [groups, cwd, setTerminalCount]);
+
+  // Sync all terminal sessions to global store for RunningProjectsPopover
+  useEffect(() => {
+    const allSessions = Object.values(worktreeStates).flatMap((state) =>
+      state.groups.flatMap((g) =>
+        g.tabs.map((t) => ({
+          id: t.id,
+          title: t.title || t.name,
+          cwd: t.cwd,
+        }))
+      )
+    );
+    syncTerminalSessions(allSessions);
+  }, [worktreeStates, syncTerminalSessions]);
 
   // Maintain global terminal IDs - only add new ones, never remove while tab exists
   useEffect(() => {

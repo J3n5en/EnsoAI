@@ -27,9 +27,6 @@ export function useTerminal() {
         id,
         title: 'Terminal',
         cwd: options?.cwd || window.electronAPI.env.HOME || '/',
-        shell: options?.shell || shellConfig.shellType,
-        cols: options?.cols || 80,
-        rows: options?.rows || 24,
       });
       return id;
     },

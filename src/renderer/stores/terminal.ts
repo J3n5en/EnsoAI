@@ -9,6 +9,7 @@ interface TerminalState {
   removeSession: (id: string) => void;
   setActiveSession: (id: string | null) => void;
   updateSession: (id: string, updates: Partial<TerminalSession>) => void;
+  syncSessions: (sessions: TerminalSession[]) => void;
 }
 
 export const useTerminalStore = create<TerminalState>((set) => ({
@@ -33,4 +34,5 @@ export const useTerminalStore = create<TerminalState>((set) => ({
     set((state) => ({
       sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
     })),
+  syncSessions: (sessions) => set({ sessions }),
 }));
