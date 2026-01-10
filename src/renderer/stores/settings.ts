@@ -175,6 +175,10 @@ export interface SearchKeybindings {
   searchContent: TerminalKeybinding;
 }
 
+export interface GlobalKeybindings {
+  runningProjects: TerminalKeybinding;
+}
+
 // Unified xterm keybindings (for Terminal, Agent, and all xterm-based components)
 export interface XtermKeybindings {
   newTab: TerminalKeybinding;
@@ -425,6 +429,10 @@ export const defaultSearchKeybindings: SearchKeybindings = {
   searchContent: { key: 'f', meta: true, shift: true },
 };
 
+export const defaultGlobalKeybindings: GlobalKeybindings = {
+  runningProjects: { key: 'e', meta: true },
+};
+
 interface SettingsState {
   theme: Theme;
   layoutMode: LayoutMode;
@@ -442,6 +450,7 @@ interface SettingsState {
   mainTabKeybindings: MainTabKeybindings;
   sourceControlKeybindings: SourceControlKeybindings;
   searchKeybindings: SearchKeybindings;
+  globalKeybindings: GlobalKeybindings;
   editorSettings: EditorSettings;
   agentSettings: AgentSettings;
   agentDetectionStatus: AgentDetectionStatus;
@@ -478,6 +487,7 @@ interface SettingsState {
   setMainTabKeybindings: (keybindings: MainTabKeybindings) => void;
   setSourceControlKeybindings: (keybindings: SourceControlKeybindings) => void;
   setSearchKeybindings: (keybindings: SearchKeybindings) => void;
+  setGlobalKeybindings: (keybindings: GlobalKeybindings) => void;
   setEditorSettings: (settings: Partial<EditorSettings>) => void;
   setAgentEnabled: (agentId: string, enabled: boolean) => void;
   setAgentDefault: (agentId: string) => void;
@@ -552,6 +562,7 @@ export const useSettingsStore = create<SettingsState>()(
       mainTabKeybindings: defaultMainTabKeybindings,
       sourceControlKeybindings: defaultSourceControlKeybindings,
       searchKeybindings: defaultSearchKeybindings,
+      globalKeybindings: defaultGlobalKeybindings,
       editorSettings: defaultEditorSettings,
       agentSettings: defaultAgentSettings,
       agentDetectionStatus: defaultAgentDetectionStatus,
@@ -617,6 +628,7 @@ export const useSettingsStore = create<SettingsState>()(
       setMainTabKeybindings: (mainTabKeybindings) => set({ mainTabKeybindings }),
       setSourceControlKeybindings: (sourceControlKeybindings) => set({ sourceControlKeybindings }),
       setSearchKeybindings: (searchKeybindings) => set({ searchKeybindings }),
+      setGlobalKeybindings: (globalKeybindings) => set({ globalKeybindings }),
       setEditorSettings: (settings) =>
         set((state) => ({
           editorSettings: { ...state.editorSettings, ...settings },
@@ -891,6 +903,10 @@ export const useSettingsStore = create<SettingsState>()(
           searchKeybindings: {
             ...currentState.searchKeybindings,
             ...persisted.searchKeybindings,
+          },
+          globalKeybindings: {
+            ...currentState.globalKeybindings,
+            ...persisted.globalKeybindings,
           },
           editorSettings: {
             ...currentState.editorSettings,

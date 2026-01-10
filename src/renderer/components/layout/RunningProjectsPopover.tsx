@@ -17,8 +17,10 @@ import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { toastManager } from '@/components/ui/toast';
 import { useWorktreeListMultiple } from '@/hooks/useWorktree';
 import { useI18n } from '@/i18n';
+import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
+import { useSettingsStore } from '@/stores/settings';
 import { useTerminalStore } from '@/stores/terminal';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 
@@ -59,6 +61,8 @@ export function RunningProjectsPopover({
   const menuRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  const globalKeybindings = useSettingsStore((s) => s.globalKeybindings);
+
   const activities = useWorktreeActivityStore((s) => s.activities);
   const closeAgentSessions = useWorktreeActivityStore((s) => s.closeAgentSessions);
   const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
@@ -85,6 +89,18 @@ export function RunningProjectsPopover({
       }, 50);
     }
   }, [open]);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (matchesKeybinding(e, globalKeybindings.runningProjects)) {
+        e.preventDefault();
+        setOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [globalKeybindings.runningProjects]);
 
   const worktreeByPath = useMemo(() => {
     const map = new Map<string, GitWorktree>();

@@ -101,13 +101,35 @@ export function KeybindingsSettings() {
     setSourceControlKeybindings,
     searchKeybindings,
     setSearchKeybindings,
+    globalKeybindings,
+    setGlobalKeybindings,
   } = useSettingsStore();
   const { t } = useI18n();
 
   return (
     <div className="space-y-6">
-      {/* Main Tab Switching */}
+      {/* Global */}
       <div>
+        <h3 className="text-lg font-medium">{t('Global')}</h3>
+        <p className="text-sm text-muted-foreground mb-4">{t('App-wide shortcuts')}</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+            <span className="text-sm">{t('Running Projects')}</span>
+            <KeybindingInput
+              value={globalKeybindings.runningProjects}
+              onChange={(binding) => {
+                setGlobalKeybindings({
+                  ...globalKeybindings,
+                  runningProjects: binding,
+                });
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Tab Switching */}
+      <div className="border-t pt-6">
         <h3 className="text-lg font-medium">{t('Main tab switching')}</h3>
         <p className="text-sm text-muted-foreground mb-4">
           {t('Set global main tab shortcuts (Cmd on macOS, Win on Windows)')}
