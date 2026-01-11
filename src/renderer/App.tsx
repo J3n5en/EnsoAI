@@ -788,6 +788,27 @@ export default function App() {
       deleteWorktreeAfterMerge: options.deleteWorktreeAfterMerge,
       deleteBranchAfterMerge: options.deleteBranchAfterMerge,
     });
+
+    // Notify user if changes were stashed, with specific paths
+    const stashedPaths: string[] = [];
+    if (result.mainStashStatus === 'stashed' && result.mainWorktreePath) {
+      stashedPaths.push(result.mainWorktreePath);
+    }
+    if (result.worktreeStashStatus === 'stashed' && result.worktreePath) {
+      stashedPaths.push(result.worktreePath);
+    }
+    if (stashedPaths.length > 0) {
+      toastManager.add({
+        type: 'info',
+        title: t('Changes stashed'),
+        description:
+          t(
+            'Your uncommitted changes were stashed. After resolving conflicts, run "git stash pop" in:'
+          ) +
+          '\n' +
+          stashedPaths.join('\n'),
+      });
+    }
   };
 
   const handleResolveConflict = async (file: string, content: string) => {

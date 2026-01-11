@@ -701,6 +701,21 @@ export const zhTranslations: Record<string, string> = {
     '主 worktree 有未提交的更改，请先提交或暂存',
   'There are still unresolved conflicts': '仍有未解决的冲突',
   'Merge completed with warnings': '合并完成但有警告',
+  'Stash pop had conflicts. Please resolve manually.': '恢复暂存时发生冲突，请手动解决',
+  'Stash pop conflict in main worktree: {{path}}': '主工作区恢复暂存时发生冲突: {{path}}',
+  'Stash pop conflict in worktree: {{path}}': '工作区恢复暂存时发生冲突: {{path}}',
+  'Worktree stash pending - resolve main conflict first, then run "git stash pop" in: {{path}}':
+    '工作区暂存待恢复 - 请先解决主工作区冲突，然后在以下目录运行 "git stash pop": {{path}}',
+  'Changes were automatically stashed and restored after merge': '更改已自动暂存并在合并后恢复',
+  'Your uncommitted changes were stashed. After resolving conflicts, run "git stash pop" to restore them.':
+    '您未提交的更改已被暂存。解决冲突后，请运行 "git stash pop" 恢复更改。',
+  'Main worktree changes were stashed': '主工作区的更改已被暂存',
+  'Worktree changes were stashed': '工作区的更改已被暂存',
+  'Auto stash uncommitted changes': '自动暂存未提交的更改',
+  'Automatically stash and restore uncommitted changes': '合并前自动暂存更改，完成后自动恢复',
+  'Changes stashed': '更改已暂存',
+  'Your uncommitted changes were stashed. After resolving conflicts, run "git stash pop" in:':
+    '您未提交的更改已被暂存。解决冲突后，请在以下目录运行 "git stash pop":',
   // Global Search
   'Search file name...': '搜索文件名...',
   'Search in files...': '在文件中搜索...',

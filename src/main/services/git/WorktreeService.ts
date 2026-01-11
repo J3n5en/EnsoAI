@@ -9,6 +9,7 @@ import type {
   MergeConflict,
   MergeConflictContent,
   MergeState,
+  StashStatus,
   WorktreeCreateOptions,
   WorktreeMergeCleanupOptions,
   WorktreeMergeOptions,
@@ -267,25 +268,122 @@ export class WorktreeService {
     // Get the source branch from the worktree
     const sourceBranch = await this.getWorktreeBranch(options.worktreePath);
 
+    // Track stash state for both worktrees
+    let worktreeStashed = false;
+    let mainStashed = false;
+    const autoStash = options.autoStash !== false; // Default to true (IDEA-style)
+
     // Check if worktree has uncommitted changes
     const worktreeGit = simpleGit(options.worktreePath);
+
+    // Helper function to restore stashes
+    // IMPORTANT: Git stash is a shared stack across all worktrees in the same repository.
+    // Push order: worktree first, then main (so main is on top of stack)
+    // Pop order must be LIFO: main first, then worktree
+    // CRITICAL: If main pop fails, we must NOT continue to pop worktree,
+    // because the failed stash entry remains at stack top and would be wrongly applied.
+    type StashRestoreResult = {
+      mainStashStatus: StashStatus;
+      worktreeStashStatus: StashStatus;
+    };
+
+    const restoreStashes = async (): Promise<StashRestoreResult> => {
+      let mainStashStatus: StashStatus = 'none';
+      let worktreeStashStatus: StashStatus = 'none';
+
+      // LIFO order: main was pushed last, so pop it first
+      if (mainStashed) {
+        try {
+          await mainGit.stash(['pop']);
+          mainStashStatus = 'applied';
+        } catch {
+          // Pop failed (likely conflict) - stash entry remains at stack top
+          mainStashStatus = 'conflict';
+          // CRITICAL: Do NOT continue to pop worktree!
+          // The failed main stash is still at stash@{0}, popping now would apply
+          // main's changes to worktree directory, causing data corruption.
+          // Mark worktree as still stashed so user knows to handle it manually.
+          if (worktreeStashed) {
+            worktreeStashStatus = 'stashed';
+          }
+          return { mainStashStatus, worktreeStashStatus };
+        }
+      }
+
+      // Only pop worktree stash if main pop succeeded (or main wasn't stashed)
+      if (worktreeStashed) {
+        try {
+          await worktreeGit.stash(['pop']);
+          worktreeStashStatus = 'applied';
+        } catch {
+          worktreeStashStatus = 'conflict';
+        }
+      }
+
+      return { mainStashStatus, worktreeStashStatus };
+    };
+
+    // Helper to get stash status when changes are still stashed (not yet popped)
+    const getStashedStatus = (): StashRestoreResult => ({
+      mainStashStatus: mainStashed ? 'stashed' : 'none',
+      worktreeStashStatus: worktreeStashed ? 'stashed' : 'none',
+    });
+
+    // Helper to get paths for stash status (for UI to show user where to run stash pop)
+    const getStashPaths = () => ({
+      mainWorktreePath: mainStashed ? mainWorktreePath : undefined,
+      worktreePath: worktreeStashed ? options.worktreePath : undefined,
+    });
+
     const worktreeStatus = await worktreeGit.status();
     if (!worktreeStatus.isClean()) {
-      return {
-        success: false,
-        merged: false,
-        error: 'Worktree has uncommitted changes. Please commit or stash them first.',
-      };
+      if (autoStash) {
+        try {
+          await worktreeGit.stash(['push', '-m', 'Auto stash before merge']);
+          worktreeStashed = true;
+        } catch (stashError) {
+          return {
+            success: false,
+            merged: false,
+            error: `Failed to stash worktree changes: ${stashError instanceof Error ? stashError.message : String(stashError)}`,
+          };
+        }
+      } else {
+        return {
+          success: false,
+          merged: false,
+          error: 'Worktree has uncommitted changes. Please commit or stash them first.',
+        };
+      }
     }
 
     // Check if main worktree has uncommitted changes
     const mainStatus = await mainGit.status();
     if (!mainStatus.isClean()) {
-      return {
-        success: false,
-        merged: false,
-        error: 'Main worktree has uncommitted changes. Please commit or stash them first.',
-      };
+      if (autoStash) {
+        try {
+          await mainGit.stash(['push', '-m', 'Auto stash before merge']);
+          mainStashed = true;
+        } catch (stashError) {
+          // Restore worktree stash if we stashed it (reuse restoreStashes)
+          const stashResult = await restoreStashes();
+          return {
+            success: false,
+            merged: false,
+            error: `Failed to stash main worktree changes: ${stashError instanceof Error ? stashError.message : String(stashError)}`,
+            ...stashResult,
+          };
+        }
+      } else {
+        // Restore worktree stash if we stashed it
+        const stashResult = await restoreStashes();
+        return {
+          success: false,
+          merged: false,
+          error: 'Main worktree has uncommitted changes. Please commit or stash them first.',
+          ...stashResult,
+        };
+      }
     }
     const originalBranch = mainStatus.current;
 
@@ -315,19 +413,25 @@ export class WorktreeService {
         try {
           await mainGit.rebase([sourceBranch]);
           const log = await mainGit.log({ maxCount: 1 });
+          const stashResult = await restoreStashes();
           return {
             success: true,
             merged: true,
             commitHash: log.latest?.hash,
+            ...stashResult,
           };
         } catch (rebaseError) {
           // Check for conflicts
           const conflicts = await this.getConflicts(mainWorktreePath);
           if (conflicts.length > 0) {
+            // Don't restore stashes when there are conflicts - user needs to resolve first
+            // Return 'stashed' status so UI knows changes are safely stashed
             return {
               success: false,
               merged: false,
               conflicts,
+              ...getStashedStatus(),
+              ...getStashPaths(),
             };
           }
           // Rebase failed without conflicts - abort and return error
@@ -336,12 +440,14 @@ export class WorktreeService {
           } catch {
             // Ignore abort errors
           }
+          const stashResult = await restoreStashes();
           const errorMessage =
             rebaseError instanceof Error ? rebaseError.message : String(rebaseError);
           return {
             success: false,
             merged: false,
             error: `Rebase failed: ${errorMessage}`,
+            ...stashResult,
           };
         }
       }
@@ -374,20 +480,45 @@ export class WorktreeService {
           }
         }
 
+        // Restore stashes after successful merge
+        const stashResult = await restoreStashes();
+
+        // Provide specific warnings for each worktree with conflicts
+        if (stashResult.mainStashStatus === 'conflict') {
+          warnings.push(`Stash pop conflict in main worktree: ${mainWorktreePath}`);
+        }
+        if (stashResult.worktreeStashStatus === 'conflict') {
+          warnings.push(`Stash pop conflict in worktree: ${options.worktreePath}`);
+        }
+        // If main failed and worktree is still stashed, inform user
+        if (
+          stashResult.mainStashStatus === 'conflict' &&
+          stashResult.worktreeStashStatus === 'stashed'
+        ) {
+          warnings.push(
+            `Worktree stash pending - resolve main conflict first, then run "git stash pop" in: ${options.worktreePath}`
+          );
+        }
+
         return {
           success: true,
           merged: true,
           commitHash: log.latest?.hash,
           warnings: warnings.length > 0 ? warnings : undefined,
+          ...stashResult,
         };
       } catch (mergeError) {
         // Check for conflicts
         const conflicts = await this.getConflicts(mainWorktreePath);
         if (conflicts.length > 0) {
+          // Don't restore stashes when there are conflicts - user needs to resolve first
+          // Return 'stashed' status so UI knows changes are safely stashed
           return {
             success: false,
             merged: false,
             conflicts,
+            ...getStashedStatus(),
+            ...getStashPaths(),
           };
         }
         throw mergeError;
@@ -402,11 +533,15 @@ export class WorktreeService {
         }
       }
 
+      // Restore stashes on error
+      const stashResult = await restoreStashes();
+
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
         merged: false,
         error: errorMessage,
+        ...stashResult,
       };
     }
   }

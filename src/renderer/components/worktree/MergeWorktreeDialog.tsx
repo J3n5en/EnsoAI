@@ -54,6 +54,7 @@ export function MergeWorktreeDialog({
   const { t } = useI18n();
   const [targetBranch, setTargetBranch] = React.useState<string>('');
   const [strategy, setStrategy] = React.useState<MergeStrategy>('merge');
+  const [autoStash, setAutoStash] = React.useState(true);
   const [deleteWorktree, setDeleteWorktree] = React.useState(false);
   const [deleteBranch, setDeleteBranch] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -98,6 +99,7 @@ export function MergeWorktreeDialog({
         targetBranch,
         strategy,
         noFf: strategy === 'merge',
+        autoStash,
         deleteWorktreeAfterMerge: deleteWorktree,
         deleteBranchAfterMerge: deleteBranch,
       };
@@ -133,6 +135,7 @@ export function MergeWorktreeDialog({
   const resetForm = () => {
     setTargetBranch(mainBranch?.name || '');
     setStrategy('merge');
+    setAutoStash(true);
     setDeleteWorktree(false);
     setDeleteBranch(false);
     setError(null);
@@ -219,6 +222,20 @@ export function MergeWorktreeDialog({
                 </SelectPopup>
               </Select>
             </Field>
+
+            {/* Auto Stash Option */}
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={autoStash}
+                onCheckedChange={(checked) => setAutoStash(checked === true)}
+              />
+              <div className="flex flex-col">
+                <span>{t('Auto stash uncommitted changes')}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t('Automatically stash and restore uncommitted changes')}
+                </span>
+              </div>
+            </label>
 
             {/* Cleanup Options */}
             <div className="space-y-3">
