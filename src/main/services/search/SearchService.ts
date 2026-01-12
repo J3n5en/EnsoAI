@@ -13,6 +13,16 @@ const MAX_FILE_RESULTS = 100;
 const MAX_CONTENT_RESULTS = 500;
 const SEARCH_TIMEOUT_MS = 10000;
 
+// 统一的排除规则
+const EXCLUDE_GLOBS = [
+  '!node_modules/**',
+  '!dist/**',
+  '!build/**',
+  '!.git/**',
+  '!*.lock',
+  '!package-lock.json',
+];
+
 const rgPath = originalRgPath.replace(/\.asar([\\/])/, '.asar.unpacked$1');
 
 // 模糊匹配分数计算
@@ -58,22 +68,7 @@ async function getAllFilesWithRipgrep(
   rootPath: string
 ): Promise<{ path: string; name: string; relativePath: string }[]> {
   return new Promise((resolve) => {
-    const args = [
-      '--files',
-      '--glob',
-      '!node_modules/**',
-      '--glob',
-      '!dist/**',
-      '--glob',
-      '!build/**',
-      '--glob',
-      '!.git/**',
-      '--glob',
-      '!*.lock',
-      '--glob',
-      '!package-lock.json',
-      rootPath,
-    ];
+    const args = ['--files', ...EXCLUDE_GLOBS.flatMap((g) => ['--glob', g]), rootPath];
 
     const files: { path: string; name: string; relativePath: string }[] = [];
     let buffer = '';
@@ -186,12 +181,7 @@ export class SearchService {
       ];
 
       // 忽略常见目录
-      args.push('--glob', '!node_modules/**');
-      args.push('--glob', '!dist/**');
-      args.push('--glob', '!build/**');
-      args.push('--glob', '!.git/**');
-      args.push('--glob', '!*.lock');
-      args.push('--glob', '!package-lock.json');
+      args.push(...EXCLUDE_GLOBS.flatMap((g) => ['--glob', g]));
 
       // ripgrep 默认遵循 .gitignore，如果不使用则添加 --no-ignore
       if (!useGitignore) args.push('--no-ignore');
