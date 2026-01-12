@@ -446,11 +446,10 @@ export function DiffViewer({
 
       selectionCommentWidgetRef.current = commentWidget;
 
-      // Render comment form
-      if (selectionCommentRootRef.current) {
-        selectionCommentRootRef.current.unmount();
+      // Render comment form - 重用已存在的 root 避免重复创建
+      if (!selectionCommentRootRef.current) {
+        selectionCommentRootRef.current = createRoot(selectionCommentDomRef.current!);
       }
-      selectionCommentRootRef.current = createRoot(selectionCommentDomRef.current!);
       selectionCommentRootRef.current.render(
         <CommentForm
           lineNumber={selection.startLineNumber}
@@ -497,11 +496,10 @@ export function DiffViewer({
       modifiedEditor.addContentWidget(commentWidget);
     };
 
-    // Render the button
-    if (selectionWidgetRootRef.current) {
-      selectionWidgetRootRef.current.unmount();
+    // Render the button - 重用已存在的 root 避免重复创建
+    if (!selectionWidgetRootRef.current) {
+      selectionWidgetRootRef.current = createRoot(selectionWidgetDomRef.current);
     }
-    selectionWidgetRootRef.current = createRoot(selectionWidgetDomRef.current);
     selectionWidgetRootRef.current.render(
       <button
         type="button"

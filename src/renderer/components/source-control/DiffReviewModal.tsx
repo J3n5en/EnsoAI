@@ -186,6 +186,11 @@ export function DiffReviewModal({
 
   // Editor refs
   const editorRef = useRef<DiffEditorInstance | null>(null);
+  // 保存 model 引用，用于切换文件或关闭 modal 时清理
+  const modelRef = useRef<{
+    original: ReturnType<typeof monaco.editor.createModel> | null;
+    modified: ReturnType<typeof monaco.editor.createModel> | null;
+  }>({ original: null, modified: null });
 
   // Line comment refs
   const [hoveredLine, setHoveredLine] = useState<number | null>(null);
@@ -248,6 +253,29 @@ export function DiffReviewModal({
   // Reset state when modal closes
   useEffect(() => {
     if (!open) {
+      // 在组件卸载前，先安全地清理 editor 的 model 引用
+      // 必须先 setModel(null) 让 DiffEditorWidget 释放引用，再 dispose model
+      // 否则会出现 "TextModel got disposed before DiffEditorWidget model got reset" 错误
+      const editor = editorRef.current;
+      if (editor) {
+        try {
+          // 先让 DiffEditorWidget 安全释放对 model 的引用
+          editor.setModel(null);
+        } catch {
+          // Ignore if editor already disposed
+        }
+        editorRef.current = null;
+      }
+
+      // 使用 modelRef 清理 model（更安全，因为 editor 可能已经 dispose）
+      try {
+        modelRef.current.original?.dispose();
+        modelRef.current.modified?.dispose();
+      } catch {
+        // Model may already be disposed
+      }
+      modelRef.current = { original: null, modified: null };
+
       setSelectedFile(null);
       setAllComments([]);
       setEditorReady(false);
@@ -291,6 +319,21 @@ export function DiffReviewModal({
 
   // Handle editor mount
   const handleEditorMount = useCallback((editor: DiffEditorInstance) => {
+    // 清理之前的 model（切换文件时）
+    try {
+      modelRef.current.original?.dispose();
+      modelRef.current.modified?.dispose();
+    } catch {
+      // Model may already be disposed
+    }
+
+    // 保存新的 model 引用
+    const model = editor.getModel();
+    modelRef.current = {
+      original: model?.original ?? null,
+      modified: model?.modified ?? null,
+    };
+
     editorRef.current = editor;
     setEditorReady(true);
   }, []);
@@ -437,9 +480,11 @@ export function DiffReviewModal({
         modifiedEditor.removeContentWidget(commentWidgetRef.current);
         commentWidgetRef.current = null;
       }
-      if (commentRootRef.current) {
-        commentRootRef.current.unmount();
+      // 延迟 unmount 避免在 React 渲染期间同步卸载
+      const prevRoot = commentRootRef.current;
+      if (prevRoot) {
         commentRootRef.current = null;
+        queueMicrotask(() => prevRoot.unmount());
       }
       return;
     }
@@ -464,11 +509,10 @@ export function DiffReviewModal({
       }),
     };
 
-    // Render form
-    if (commentRootRef.current) {
-      commentRootRef.current.unmount();
+    // Render form - 重用已存在的 root 避免重复创建
+    if (!commentRootRef.current) {
+      commentRootRef.current = createRoot(commentDomRef.current);
     }
-    commentRootRef.current = createRoot(commentDomRef.current);
     commentRootRef.current.render(
       <CommentForm
         lineNumber={commentingLine}
@@ -532,10 +576,10 @@ export function DiffReviewModal({
 
       selectionCommentWidgetRef.current = commentWidget;
 
-      if (selectionCommentRootRef.current) {
-        selectionCommentRootRef.current.unmount();
+      // 重用已存在的 root 避免重复创建
+      if (!selectionCommentRootRef.current) {
+        selectionCommentRootRef.current = createRoot(selectionCommentDomRef.current!);
       }
-      selectionCommentRootRef.current = createRoot(selectionCommentDomRef.current!);
       selectionCommentRootRef.current.render(
         <CommentForm
           lineNumber={selection.startLineNumber}
@@ -561,11 +605,10 @@ export function DiffReviewModal({
       modifiedEditor.addContentWidget(commentWidget);
     };
 
-    // Render button
-    if (selectionWidgetRootRef.current) {
-      selectionWidgetRootRef.current.unmount();
+    // Render button - 重用已存在的 root 避免重复创建
+    if (!selectionWidgetRootRef.current) {
+      selectionWidgetRootRef.current = createRoot(selectionWidgetDomRef.current);
     }
-    selectionWidgetRootRef.current = createRoot(selectionWidgetDomRef.current);
     selectionWidgetRootRef.current.render(
       <button
         type="button"
@@ -927,6 +970,8 @@ export function DiffReviewModal({
                   language={getLanguageFromPath(selectedFile.path)}
                   theme={CUSTOM_THEME_NAME}
                   onMount={handleEditorMount}
+                  keepCurrentOriginalModel={true}
+                  keepCurrentModifiedModel={true}
                   options={{
                     readOnly: true,
                     renderSideBySide: true,
