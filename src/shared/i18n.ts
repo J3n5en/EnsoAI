@@ -933,6 +933,17 @@ export const zhTranslations: Record<string, string> = {
   Completed: '已完成',
   tasks: '个任务',
   'and {{count}} more...': '还有 {{count}} 个...',
+  // Diff Review Modal
+  'Diff Review': '差异审查',
+  'Leave a comment...': '留下评论...',
+  'Reply...': '回复...',
+  'Add reply...': '添加回复...',
+  comments: '条评论',
+  'Changed Files': '更改的文件',
+  'Select a file to view diff': '选择文件以查看差异',
+  'Hover over line numbers and click + to add comments': '悬停行号并点击 + 添加评论',
+  Send: '发送',
+  You: '你',
 };
 
 export function normalizeLocale(input?: string): Locale {

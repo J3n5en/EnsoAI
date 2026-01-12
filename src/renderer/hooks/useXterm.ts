@@ -571,15 +571,8 @@ export function useXterm({
 
   useEffect(() => {
     const shouldActivate = isActive || initialCommandRef.current;
-    console.log('[useXterm] activation effect:', {
-      isActive,
-      shouldActivate,
-      hasBeenActivated: hasBeenActivatedRef.current,
-      initialCommand: initialCommandRef.current,
-    });
     if (shouldActivate && !hasBeenActivatedRef.current) {
       hasBeenActivatedRef.current = true;
-      console.log('[useXterm] activating terminal');
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           initTerminal();

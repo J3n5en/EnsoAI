@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { FileCode, FolderOpen, GitBranch, Sparkles, Terminal } from 'lucide-react';
+import { FileCode, FolderOpen, GitBranch, MessageSquare, Sparkles, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_TAB_ORDER, type TabId } from '@/App/constants';
 import { OpenInMenu } from '@/components/app/OpenInMenu';
@@ -7,6 +7,7 @@ import { AgentPanel } from '@/components/chat/AgentPanel';
 import { FilePanel } from '@/components/files';
 import { RunningProjectsPopover } from '@/components/layout/RunningProjectsPopover';
 import { SourceControlPanel } from '@/components/source-control';
+import { DiffReviewModal } from '@/components/source-control/DiffReviewModal';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -17,6 +18,7 @@ import {
 } from '@/components/ui/empty';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { TerminalPanel } from '../terminal';
 
@@ -54,6 +56,12 @@ export function MainContent({
   onSwitchTab,
 }: MainContentProps) {
   const { t } = useI18n();
+
+  // Diff Review Modal state
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const getActiveSessionId = useAgentSessionsStore((s) => s.getActiveSessionId);
+  const activeSessionId =
+    repoPath && worktreePath ? getActiveSessionId(repoPath, worktreePath) : null;
 
   // Tab metadata configuration
   const tabConfigMap: Record<TabId, { icon: React.ElementType; label: string }> = {
@@ -295,8 +303,17 @@ export function MainContent({
           })}
         </div>
 
-        {/* Right: Open In Menu */}
+        {/* Right: Review button + Open In Menu */}
         <div className="flex items-center gap-2 no-drag">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsReviewModalOpen(true)}
+            className="h-8"
+          >
+            <MessageSquare className="h-4 w-4 mr-1.5" />
+            {t('Review')}
+          </Button>
           <OpenInMenu path={worktreePath} activeTab={activeTab} />
         </div>
       </header>
@@ -398,6 +415,15 @@ export function MainContent({
           />
         </div>
       </div>
+
+      {/* Diff Review Modal */}
+      <DiffReviewModal
+        open={isReviewModalOpen}
+        onOpenChange={setIsReviewModalOpen}
+        rootPath={worktreePath}
+        sessionId={activeSessionId}
+        onSend={() => onTabChange('chat')}
+      />
     </main>
   );
 }

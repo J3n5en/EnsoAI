@@ -6,6 +6,7 @@ import {
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
 
 interface AgentTerminalProps {
   cwd?: string;
@@ -405,6 +406,7 @@ export function AgentTerminal({
     terminal,
     clear,
     refreshRenderer,
+    write,
   } = useXterm({
     cwd,
     command,
@@ -420,6 +422,15 @@ export function AgentTerminal({
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
+
+  // Register write and focus functions to global store for external access
+  const { register, unregister } = useTerminalWriteStore();
+  useEffect(() => {
+    if (!sessionId || !write) return;
+
+    register(sessionId, write, () => terminal?.focus());
+    return () => unregister(sessionId);
+  }, [sessionId, write, terminal, register, unregister]);
 
   // Handle Cmd+F / Ctrl+F
   const handleKeyDown = useCallback(
