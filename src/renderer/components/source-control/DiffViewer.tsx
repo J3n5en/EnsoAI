@@ -1,6 +1,15 @@
 import { DiffEditor } from '@monaco-editor/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, ExternalLink, FileCode, Pencil, Plus, Save } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  FileCode,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Save,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CommentForm } from '@/components/files/EditorLineComment';
@@ -176,11 +185,20 @@ export function DiffViewer({
   // Line comment state
   const [hoveredLine, setHoveredLine] = useState<number | null>(null);
   const [commentingLine, setCommentingLine] = useState<number | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
   const isHoveringButtonRef = useRef(false);
   const addButtonWidgetRef = useRef<HTMLDivElement | null>(null);
   const addButtonRootRef = useRef<Root | null>(null);
   const commentWidgetRef = useRef<HTMLDivElement | null>(null);
   const commentRootRef = useRef<Root | null>(null);
+
+  // Selection comment state
+  const selectionWidgetRef = useRef<monaco.editor.IContentWidget | null>(null);
+  const selectionWidgetDomRef = useRef<HTMLDivElement | null>(null);
+  const selectionWidgetRootRef = useRef<Root | null>(null);
+  const selectionCommentWidgetRef = useRef<monaco.editor.IContentWidget | null>(null);
+  const selectionCommentDomRef = useRef<HTMLDivElement | null>(null);
+  const selectionCommentRootRef = useRef<Root | null>(null);
 
   // Define theme on mount and when terminal theme changes
   useEffect(() => {
@@ -222,8 +240,9 @@ export function DiffViewer({
 
   // Line comment button widget - hover over gutter
   useEffect(() => {
+    if (!editorReady || !sessionId) return;
     const editor = editorRef.current;
-    if (!editor || !sessionId) return;
+    if (!editor) return;
 
     const modifiedEditor = editor.getModifiedEditor();
 
@@ -270,10 +289,11 @@ export function DiffViewer({
       mouseMoveDisposable.dispose();
       mouseLeaveDisposable.dispose();
     };
-  }, [sessionId]);
+  }, [editorReady, sessionId]);
 
   // Update add button position and visibility
   useEffect(() => {
+    if (!editorReady) return;
     const editor = editorRef.current;
     const dom = addButtonWidgetRef.current;
     if (!editor || !dom || !sessionId) return;
@@ -319,10 +339,11 @@ export function DiffViewer({
     } else {
       dom.style.display = 'none';
     }
-  }, [hoveredLine, commentingLine, sessionId, t]);
+  }, [editorReady, hoveredLine, commentingLine, sessionId, t]);
 
   // Comment form widget
   useEffect(() => {
+    if (!editorReady) return;
     const editor = editorRef.current;
     if (!editor || !sessionId || !file) return;
 
@@ -369,14 +390,186 @@ export function DiffViewer({
         onCancel={() => setCommentingLine(null)}
       />
     );
-  }, [commentingLine, sessionId, file, handleSubmitComment]);
+  }, [editorReady, commentingLine, sessionId, file, handleSubmitComment]);
 
   // Cleanup comment state when file changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally trigger cleanup when file changes
   useEffect(() => {
     setCommentingLine(null);
     setHoveredLine(null);
+    setEditorReady(false);
   }, [file?.path]);
+
+  // Selection comment widget - show button when text is selected
+  useEffect(() => {
+    if (!editorReady || !sessionId || !file) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const modifiedEditor = editor.getModifiedEditor();
+
+    // Create DOM nodes for selection widgets
+    if (!selectionWidgetDomRef.current) {
+      selectionWidgetDomRef.current = document.createElement('div');
+      selectionWidgetDomRef.current.className = 'diff-selection-comment-button';
+      selectionWidgetDomRef.current.style.zIndex = '100';
+    }
+
+    if (!selectionCommentDomRef.current) {
+      selectionCommentDomRef.current = document.createElement('div');
+      selectionCommentDomRef.current.className = 'diff-selection-comment-form';
+      selectionCommentDomRef.current.style.cssText = 'z-index: 100; width: 320px;';
+    }
+
+    const showCommentForm = () => {
+      const selection = modifiedEditor.getSelection();
+      if (!selection || selection.isEmpty()) return;
+
+      // Hide button widget
+      if (selectionWidgetRef.current) {
+        modifiedEditor.removeContentWidget(selectionWidgetRef.current);
+        selectionWidgetRef.current = null;
+      }
+
+      // Create comment widget
+      const commentWidget: monaco.editor.IContentWidget = {
+        getId: () => 'diff.selection.comment.form',
+        getDomNode: () => selectionCommentDomRef.current!,
+        getPosition: () => ({
+          position: {
+            lineNumber: selection.positionLineNumber,
+            column: selection.positionColumn,
+          },
+          preference: [monaco.editor.ContentWidgetPositionPreference.BELOW],
+        }),
+      };
+
+      selectionCommentWidgetRef.current = commentWidget;
+
+      // Render comment form
+      if (selectionCommentRootRef.current) {
+        selectionCommentRootRef.current.unmount();
+      }
+      selectionCommentRootRef.current = createRoot(selectionCommentDomRef.current!);
+      selectionCommentRootRef.current.render(
+        <CommentForm
+          lineNumber={selection.startLineNumber}
+          endLineNumber={selection.endLineNumber}
+          filePath={file.path}
+          onSubmit={(text) => {
+            // Verify terminal writer exists
+            const writer = useTerminalWriteStore.getState().writers.get(sessionId);
+            if (!writer) {
+              console.warn('Terminal writer not found for session:', sessionId);
+              return;
+            }
+
+            // Format: @path#L1-L10 or @path#L5
+            const lineRef =
+              selection.startLineNumber === selection.endLineNumber
+                ? `L${selection.startLineNumber}`
+                : `L${selection.startLineNumber}-L${selection.endLineNumber}`;
+            const message = text
+              ? `@${file.path}#${lineRef}\nUser comment: "${text}"`
+              : `@${file.path}#${lineRef}`;
+            write(sessionId, `${message}\r`);
+
+            // Close comment widget
+            if (selectionCommentWidgetRef.current) {
+              modifiedEditor.removeContentWidget(selectionCommentWidgetRef.current);
+              selectionCommentWidgetRef.current = null;
+            }
+
+            // Focus terminal after short delay
+            setTimeout(() => {
+              focus(sessionId);
+            }, 100);
+          }}
+          onCancel={() => {
+            if (selectionCommentWidgetRef.current) {
+              modifiedEditor.removeContentWidget(selectionCommentWidgetRef.current);
+              selectionCommentWidgetRef.current = null;
+            }
+          }}
+        />
+      );
+
+      modifiedEditor.addContentWidget(commentWidget);
+    };
+
+    // Render the button
+    if (selectionWidgetRootRef.current) {
+      selectionWidgetRootRef.current.unmount();
+    }
+    selectionWidgetRootRef.current = createRoot(selectionWidgetDomRef.current);
+    selectionWidgetRootRef.current.render(
+      <button
+        type="button"
+        className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
+        onClick={showCommentForm}
+        onMouseDown={(e) => e.preventDefault()}
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+        {t('Add comment')}
+      </button>
+    );
+
+    // Listen to selection changes
+    const selectionWidget: monaco.editor.IContentWidget = {
+      getId: () => 'diff.selection.comment.button',
+      getDomNode: () => selectionWidgetDomRef.current!,
+      getPosition: () => {
+        const selection = modifiedEditor.getSelection();
+        if (!selection || selection.isEmpty()) return null;
+        return {
+          position: {
+            lineNumber: selection.positionLineNumber,
+            column: selection.positionColumn,
+          },
+          preference: [monaco.editor.ContentWidgetPositionPreference.ABOVE],
+        };
+      },
+    };
+
+    const handleSelectionChange = () => {
+      const selection = modifiedEditor.getSelection();
+
+      // Remove comment form if selection changes
+      if (selectionCommentWidgetRef.current) {
+        modifiedEditor.removeContentWidget(selectionCommentWidgetRef.current);
+        selectionCommentWidgetRef.current = null;
+      }
+
+      if (selection && !selection.isEmpty()) {
+        // Show button widget
+        if (!selectionWidgetRef.current) {
+          selectionWidgetRef.current = selectionWidget;
+          modifiedEditor.addContentWidget(selectionWidget);
+        }
+        modifiedEditor.layoutContentWidget(selectionWidget);
+      } else {
+        // Hide button widget
+        if (selectionWidgetRef.current) {
+          modifiedEditor.removeContentWidget(selectionWidgetRef.current);
+          selectionWidgetRef.current = null;
+        }
+      }
+    };
+
+    const disposable = modifiedEditor.onDidChangeCursorSelection(handleSelectionChange);
+
+    return () => {
+      disposable.dispose();
+      if (selectionWidgetRef.current) {
+        modifiedEditor.removeContentWidget(selectionWidgetRef.current);
+        selectionWidgetRef.current = null;
+      }
+      if (selectionCommentWidgetRef.current) {
+        modifiedEditor.removeContentWidget(selectionCommentWidgetRef.current);
+        selectionCommentWidgetRef.current = null;
+      }
+    };
+  }, [editorReady, sessionId, file, t, write, focus]);
 
   // Cleanup widgets on unmount
   useEffect(() => {
@@ -396,6 +589,14 @@ export function DiffViewer({
       if (commentWidgetRef.current) {
         commentWidgetRef.current.remove();
         commentWidgetRef.current = null;
+      }
+      if (selectionWidgetRootRef.current) {
+        selectionWidgetRootRef.current.unmount();
+        selectionWidgetRootRef.current = null;
+      }
+      if (selectionCommentRootRef.current) {
+        selectionCommentRootRef.current.unmount();
+        selectionCommentRootRef.current = null;
       }
     };
   }, []);
@@ -505,6 +706,7 @@ export function DiffViewer({
     (editor: DiffEditorInstance) => {
       editorRef.current = editor;
       editorFilePathRef.current = file?.path ?? null;
+      setEditorReady(true);
 
       const currentModel = editor.getModel();
       if (currentModel) {
