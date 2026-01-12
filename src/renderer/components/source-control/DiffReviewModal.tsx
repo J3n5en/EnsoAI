@@ -261,6 +261,29 @@ export function DiffReviewModal({
     setEditorReady(false);
     setHoveredLine(null);
     setCommentingLine(null);
+    // Clear widget refs so they get recreated for new editor
+    if (addButtonRootRef.current) {
+      addButtonRootRef.current.unmount();
+      addButtonRootRef.current = null;
+    }
+    addButtonWidgetRef.current = null;
+    if (commentRootRef.current) {
+      commentRootRef.current.unmount();
+      commentRootRef.current = null;
+    }
+    commentWidgetRef.current = null;
+    if (selectionWidgetRootRef.current) {
+      selectionWidgetRootRef.current.unmount();
+      selectionWidgetRootRef.current = null;
+    }
+    selectionWidgetDomRef.current = null;
+    selectionWidgetRef.current = null;
+    if (selectionCommentRootRef.current) {
+      selectionCommentRootRef.current.unmount();
+      selectionCommentRootRef.current = null;
+    }
+    selectionCommentDomRef.current = null;
+    selectionCommentWidgetRef.current = null;
   }, [selectedFile]);
 
   // Handle editor mount
