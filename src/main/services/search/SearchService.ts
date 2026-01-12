@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
-import { readdir, stat } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { basename, relative } from 'node:path';
 import type {
   ContentSearchMatch,
   ContentSearchParams,
@@ -54,64 +53,91 @@ function fuzzyMatch(query: string, target: string): number {
   return 0;
 }
 
-// 递归遍历目录
-async function walkDirectory(
-  dir: string,
-  rootPath: string,
-  results: { path: string; name: string; relativePath: string }[],
-  maxResults: number
-): Promise<void> {
-  if (results.length >= maxResults) return;
+// 使用 ripgrep 获取所有文件列表
+async function getAllFilesWithRipgrep(
+  rootPath: string
+): Promise<{ path: string; name: string; relativePath: string }[]> {
+  return new Promise((resolve) => {
+    const args = [
+      '--files',
+      '--glob',
+      '!node_modules/**',
+      '--glob',
+      '!dist/**',
+      '--glob',
+      '!build/**',
+      '--glob',
+      '!.git/**',
+      '--glob',
+      '!*.lock',
+      '--glob',
+      '!package-lock.json',
+      rootPath,
+    ];
 
-  try {
-    const entries = await readdir(dir);
+    const files: { path: string; name: string; relativePath: string }[] = [];
+    let buffer = '';
 
-    for (const entry of entries) {
-      if (results.length >= maxResults) break;
+    const rg = spawn(rgPath, args);
 
-      // 跳过隐藏文件和常见忽略目录
-      if (
-        entry.startsWith('.') ||
-        entry === 'node_modules' ||
-        entry === 'dist' ||
-        entry === 'build'
-      ) {
-        continue;
+    rg.stdout.on('data', (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const filePath = line.trim();
+        if (!filePath) continue;
+
+        files.push({
+          path: filePath,
+          name: basename(filePath),
+          relativePath: relative(rootPath, filePath),
+        });
+      }
+    });
+
+    // 超时处理
+    const timeoutId = setTimeout(() => {
+      rg.stdout.removeAllListeners('data');
+      rg.removeAllListeners('close');
+      rg.removeAllListeners('error');
+      rg.kill();
+      resolve(files);
+    }, SEARCH_TIMEOUT_MS);
+
+    rg.on('close', () => {
+      clearTimeout(timeoutId);
+
+      // 处理最后一行
+      if (buffer.trim()) {
+        const filePath = buffer.trim();
+        files.push({
+          path: filePath,
+          name: basename(filePath),
+          relativePath: relative(rootPath, filePath),
+        });
       }
 
-      const fullPath = join(dir, entry);
-      const relativePath = relative(rootPath, fullPath);
+      resolve(files);
+    });
 
-      try {
-        const stats = await stat(fullPath);
-
-        if (stats.isDirectory()) {
-          await walkDirectory(fullPath, rootPath, results, maxResults);
-        } else {
-          results.push({
-            path: fullPath,
-            name: entry,
-            relativePath,
-          });
-        }
-      } catch {
-        // 跳过无法访问的文件
-      }
-    }
-  } catch {
-    // 跳过无法访问的目录
-  }
+    rg.on('error', (err) => {
+      clearTimeout(timeoutId);
+      console.error('[SearchService] ripgrep --files spawn error:', err.message);
+      resolve([]);
+    });
+  });
 }
 
 export class SearchService {
-  // 文件名搜索
+  // 文件名搜索（使用 ripgrep --files）
   async searchFiles(params: FileSearchParams): Promise<FileSearchResult[]> {
     const { rootPath, query, maxResults = MAX_FILE_RESULTS } = params;
 
     if (!query.trim()) return [];
 
-    const allFiles: { path: string; name: string; relativePath: string }[] = [];
-    await walkDirectory(rootPath, rootPath, allFiles, maxResults * 10);
+    const allFiles = await getAllFilesWithRipgrep(rootPath);
 
     // 计算匹配分数并排序
     const scoredResults = allFiles
