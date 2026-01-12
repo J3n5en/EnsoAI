@@ -1,7 +1,9 @@
 import { DiffEditor } from '@monaco-editor/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, ExternalLink, FileCode, Pencil, Save } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, FileCode, Pencil, Plus, Save } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { CommentForm } from '@/components/files/EditorLineComment';
 import { monaco } from '@/components/files/monacoSetup';
 import {
   Empty,
@@ -19,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { useNavigationStore } from '@/stores/navigation';
 import { useSettingsStore } from '@/stores/settings';
 import { useSourceControlStore } from '@/stores/sourceControl';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
 
 type DiffEditorInstance = ReturnType<typeof monaco.editor.createDiffEditor>;
 
@@ -97,6 +100,7 @@ interface DiffViewerProps {
   diff?: { path: string; original: string; modified: string };
   skipFetch?: boolean;
   isCommitView?: boolean; // Add flag to indicate commit history view
+  sessionId?: string | null;
 }
 
 export function DiffViewer({
@@ -109,12 +113,15 @@ export function DiffViewer({
   diff: externalDiff,
   skipFetch = false,
   isCommitView = false,
+  sessionId,
 }: DiffViewerProps) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const { terminalTheme, sourceControlKeybindings, editorSettings } = useSettingsStore();
   const { navigationDirection, setNavigationDirection } = useSourceControlStore();
   const navigateToFile = useNavigationStore((s) => s.navigateToFile);
+  const write = useTerminalWriteStore((state) => state.write);
+  const focus = useTerminalWriteStore((state) => state.focus);
 
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -166,6 +173,15 @@ export function DiffViewer({
   const [isThemeReady, setIsThemeReady] = useState(false);
   const diffContentRef = useRef<string>(''); // Track diff content changes
 
+  // Line comment state
+  const [hoveredLine, setHoveredLine] = useState<number | null>(null);
+  const [commentingLine, setCommentingLine] = useState<number | null>(null);
+  const isHoveringButtonRef = useRef(false);
+  const addButtonWidgetRef = useRef<HTMLDivElement | null>(null);
+  const addButtonRootRef = useRef<Root | null>(null);
+  const commentWidgetRef = useRef<HTMLDivElement | null>(null);
+  const commentRootRef = useRef<Root | null>(null);
+
   // Define theme on mount and when terminal theme changes
   useEffect(() => {
     defineMonacoDiffTheme(terminalTheme);
@@ -174,6 +190,215 @@ export function DiffViewer({
       setIsThemeReady(true);
     }
   }, [terminalTheme, isThemeReady]);
+
+  // Handle submit comment
+  const handleSubmitComment = useCallback(
+    (lineNumber: number, text: string) => {
+      if (!sessionId || !file) return;
+
+      // Verify terminal writer exists
+      const writer = useTerminalWriteStore.getState().writers.get(sessionId);
+      if (!writer) {
+        console.warn('Terminal writer not found for session:', sessionId);
+        return;
+      }
+
+      // Send comment to terminal
+      const message = text
+        ? `@${file.path}#L${lineNumber}\nUser comment: "${text}"`
+        : `@${file.path}#L${lineNumber}`;
+      write(sessionId, `${message}\r`);
+
+      // Close comment form
+      setCommentingLine(null);
+
+      // Focus terminal after short delay
+      setTimeout(() => {
+        focus(sessionId);
+      }, 100);
+    },
+    [sessionId, file, write, focus]
+  );
+
+  // Line comment button widget - hover over gutter
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !sessionId) return;
+
+    const modifiedEditor = editor.getModifiedEditor();
+
+    // Create DOM node for add button
+    if (!addButtonWidgetRef.current) {
+      addButtonWidgetRef.current = document.createElement('div');
+      addButtonWidgetRef.current.className = 'diff-line-comment-button';
+      addButtonWidgetRef.current.style.cssText = `
+        position: absolute;
+        display: none;
+        z-index: 100;
+        cursor: pointer;
+      `;
+      // Append to editor's DOM container
+      modifiedEditor.getDomNode()?.appendChild(addButtonWidgetRef.current);
+    }
+
+    // Mouse move handler to track hovered line
+    const handleMouseMove = (e: monaco.editor.IEditorMouseEvent) => {
+      if (isHoveringButtonRef.current) return;
+
+      const target = e.target;
+      const isGutter =
+        target.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
+        target.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS ||
+        target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN;
+
+      if (isGutter && target.position) {
+        setHoveredLine(target.position.lineNumber);
+      } else {
+        setHoveredLine(null);
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (isHoveringButtonRef.current) return;
+      setHoveredLine(null);
+    };
+
+    const mouseMoveDisposable = modifiedEditor.onMouseMove(handleMouseMove);
+    const mouseLeaveDisposable = modifiedEditor.onMouseLeave(handleMouseLeave);
+
+    return () => {
+      mouseMoveDisposable.dispose();
+      mouseLeaveDisposable.dispose();
+    };
+  }, [sessionId]);
+
+  // Update add button position and visibility
+  useEffect(() => {
+    const editor = editorRef.current;
+    const dom = addButtonWidgetRef.current;
+    if (!editor || !dom || !sessionId) return;
+
+    const modifiedEditor = editor.getModifiedEditor();
+
+    if (hoveredLine && !commentingLine) {
+      const lineTop = modifiedEditor.getTopForLineNumber(hoveredLine);
+      const scrollTop = modifiedEditor.getScrollTop();
+
+      const left = 4;
+      const top = lineTop - scrollTop;
+
+      dom.style.display = 'block';
+      dom.style.left = `${left}px`;
+      dom.style.top = `${top}px`;
+
+      if (!addButtonRootRef.current) {
+        addButtonRootRef.current = createRoot(dom);
+      }
+
+      addButtonRootRef.current.render(
+        <button
+          type="button"
+          className="flex items-center justify-center w-5 h-5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          onClick={() => {
+            setCommentingLine(hoveredLine);
+            setHoveredLine(null);
+            isHoveringButtonRef.current = false;
+          }}
+          onMouseEnter={() => {
+            isHoveringButtonRef.current = true;
+          }}
+          onMouseLeave={() => {
+            isHoveringButtonRef.current = false;
+            setHoveredLine(null);
+          }}
+          title={t('Add comment')}
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      );
+    } else {
+      dom.style.display = 'none';
+    }
+  }, [hoveredLine, commentingLine, sessionId, t]);
+
+  // Comment form widget
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !sessionId || !file) return;
+
+    const modifiedEditor = editor.getModifiedEditor();
+
+    if (!commentingLine) {
+      // Hide comment form
+      if (commentWidgetRef.current) {
+        commentWidgetRef.current.style.display = 'none';
+      }
+      return;
+    }
+
+    // Create DOM node for comment form
+    if (!commentWidgetRef.current) {
+      commentWidgetRef.current = document.createElement('div');
+      commentWidgetRef.current.className = 'diff-line-comment-form';
+      commentWidgetRef.current.style.cssText = `
+        position: absolute;
+        z-index: 100;
+      `;
+      modifiedEditor.getDomNode()?.appendChild(commentWidgetRef.current);
+    }
+
+    // Position the form
+    const lineTop = modifiedEditor.getTopForLineNumber(commentingLine);
+    const scrollTop = modifiedEditor.getScrollTop();
+    const lineHeight = modifiedEditor.getOption(monaco.editor.EditorOption.lineHeight);
+
+    commentWidgetRef.current.style.display = 'block';
+    commentWidgetRef.current.style.left = '40px';
+    commentWidgetRef.current.style.top = `${lineTop - scrollTop + lineHeight}px`;
+
+    // Render the form
+    if (!commentRootRef.current) {
+      commentRootRef.current = createRoot(commentWidgetRef.current);
+    }
+
+    commentRootRef.current.render(
+      <CommentForm
+        lineNumber={commentingLine}
+        filePath={file.path}
+        onSubmit={(text) => handleSubmitComment(commentingLine, text)}
+        onCancel={() => setCommentingLine(null)}
+      />
+    );
+  }, [commentingLine, sessionId, file, handleSubmitComment]);
+
+  // Cleanup comment state when file changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally trigger cleanup when file changes
+  useEffect(() => {
+    setCommentingLine(null);
+    setHoveredLine(null);
+  }, [file?.path]);
+
+  // Cleanup widgets on unmount
+  useEffect(() => {
+    return () => {
+      if (addButtonRootRef.current) {
+        addButtonRootRef.current.unmount();
+        addButtonRootRef.current = null;
+      }
+      if (commentRootRef.current) {
+        commentRootRef.current.unmount();
+        commentRootRef.current = null;
+      }
+      if (addButtonWidgetRef.current) {
+        addButtonWidgetRef.current.remove();
+        addButtonWidgetRef.current = null;
+      }
+      if (commentWidgetRef.current) {
+        commentWidgetRef.current.remove();
+        commentWidgetRef.current = null;
+      }
+    };
+  }, []);
 
   // Highlight current diff range
   const highlightCurrentDiff = useCallback(

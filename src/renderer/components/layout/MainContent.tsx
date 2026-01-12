@@ -416,6 +416,7 @@ export function MainContent({
             isActive={activeTab === 'source-control'}
             onExpandWorktree={onExpandWorktree}
             worktreeCollapsed={worktreeCollapsed}
+            sessionId={activeSessionId}
           />
         </div>
       </div>
