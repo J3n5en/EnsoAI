@@ -193,7 +193,8 @@ export function DiffReviewModal({
   const isHoveringButtonRef = useRef(false);
   const addButtonWidgetRef = useRef<HTMLDivElement | null>(null);
   const addButtonRootRef = useRef<Root | null>(null);
-  const commentWidgetRef = useRef<HTMLDivElement | null>(null);
+  const commentWidgetRef = useRef<monaco.editor.IContentWidget | null>(null);
+  const commentDomRef = useRef<HTMLDivElement | null>(null);
   const commentRootRef = useRef<Root | null>(null);
 
   // Selection comment refs
@@ -272,6 +273,7 @@ export function DiffReviewModal({
       commentRootRef.current = null;
     }
     commentWidgetRef.current = null;
+    commentDomRef.current = null;
     if (selectionWidgetRootRef.current) {
       selectionWidgetRootRef.current.unmount();
       selectionWidgetRootRef.current = null;
@@ -416,7 +418,7 @@ export function DiffReviewModal({
     }
   }, [editorReady, open, hoveredLine, commentingLine, t]);
 
-  // Comment form widget (single line)
+  // Comment form widget (single line) - using IContentWidget for proper scroll handling
   useEffect(() => {
     if (!editorReady || !open || !selectedFile) return;
     const editor = editorRef.current;
@@ -424,32 +426,44 @@ export function DiffReviewModal({
 
     const modifiedEditor = editor.getModifiedEditor();
 
+    // Remove existing widget if no commenting line
     if (!commentingLine) {
       if (commentWidgetRef.current) {
-        commentWidgetRef.current.style.display = 'none';
+        modifiedEditor.removeContentWidget(commentWidgetRef.current);
+        commentWidgetRef.current = null;
+      }
+      if (commentRootRef.current) {
+        commentRootRef.current.unmount();
+        commentRootRef.current = null;
       }
       return;
     }
 
-    if (!commentWidgetRef.current) {
-      commentWidgetRef.current = document.createElement('div');
-      commentWidgetRef.current.className = 'review-line-comment-form';
-      commentWidgetRef.current.style.cssText = 'position: absolute; z-index: 100;';
-      modifiedEditor.getDomNode()?.appendChild(commentWidgetRef.current);
+    // Create DOM node if needed
+    if (!commentDomRef.current) {
+      commentDomRef.current = document.createElement('div');
+      commentDomRef.current.className = 'review-line-comment-form';
+      commentDomRef.current.style.cssText = 'z-index: 100; width: 320px;';
     }
 
-    const lineTop = modifiedEditor.getTopForLineNumber(commentingLine);
-    const scrollTop = modifiedEditor.getScrollTop();
-    const lineHeight = modifiedEditor.getOption(monaco.editor.EditorOption.lineHeight);
+    // Create content widget
+    const widget: monaco.editor.IContentWidget = {
+      getId: () => 'review.line.comment.form',
+      getDomNode: () => commentDomRef.current!,
+      getPosition: () => ({
+        position: {
+          lineNumber: commentingLine,
+          column: 1,
+        },
+        preference: [monaco.editor.ContentWidgetPositionPreference.BELOW],
+      }),
+    };
 
-    commentWidgetRef.current.style.display = 'block';
-    commentWidgetRef.current.style.left = '40px';
-    commentWidgetRef.current.style.top = `${lineTop - scrollTop + lineHeight}px`;
-
-    if (!commentRootRef.current) {
-      commentRootRef.current = createRoot(commentWidgetRef.current);
+    // Render form
+    if (commentRootRef.current) {
+      commentRootRef.current.unmount();
     }
-
+    commentRootRef.current = createRoot(commentDomRef.current);
     commentRootRef.current.render(
       <CommentForm
         lineNumber={commentingLine}
@@ -458,6 +472,14 @@ export function DiffReviewModal({
         onCancel={() => setCommentingLine(null)}
       />
     );
+
+    // Store widget ref and add to editor
+    commentWidgetRef.current = widget;
+    modifiedEditor.addContentWidget(widget);
+
+    return () => {
+      modifiedEditor.removeContentWidget(widget);
+    };
   }, [editorReady, open, commentingLine, selectedFile, handleAddComment]);
 
   // Selection comment widget
