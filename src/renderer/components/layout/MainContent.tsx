@@ -398,7 +398,11 @@ export function MainContent({
             activeTab === 'file' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
-          <FilePanel rootPath={worktreePath} isActive={activeTab === 'file'} />
+          <FilePanel
+            rootPath={worktreePath}
+            isActive={activeTab === 'file'}
+            sessionId={activeSessionId}
+          />
         </div>
         {/* Source Control tab - keep mounted to preserve selection state */}
         <div

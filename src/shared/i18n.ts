@@ -944,6 +944,7 @@ export const zhTranslations: Record<string, string> = {
   'Hover over line numbers and click + to add comments': '悬停行号并点击 + 添加评论',
   Send: '发送',
   You: '你',
+  'Add comment': '添加评论',
 };
 
 export function normalizeLocale(input?: string): Locale {
