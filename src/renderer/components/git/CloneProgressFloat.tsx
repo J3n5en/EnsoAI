@@ -35,21 +35,27 @@ export function CloneProgressFloat({ onCloneComplete }: CloneProgressFloatProps)
   );
   const errorTasks = useMemo(() => tasks.filter((task) => task.status === 'error'), [tasks]);
 
-  // Limit displayed tasks
-  const visibleActiveTasks = activeTasks.slice(0, MAX_VISIBLE_TASKS);
-  const visibleCompletedTasks = completedTasks.slice(
-    0,
-    MAX_VISIBLE_TASKS - visibleActiveTasks.length
-  );
-  const visibleErrorTasks = errorTasks.slice(
-    0,
-    MAX_VISIBLE_TASKS - visibleActiveTasks.length - visibleCompletedTasks.length
-  );
-  const hiddenCount =
-    tasks.length -
-    visibleActiveTasks.length -
-    visibleCompletedTasks.length -
-    visibleErrorTasks.length;
+  // Limit displayed tasks with priority: Error > In Progress > Completed
+  const { visibleErrorTasks, visibleActiveTasks, visibleCompletedTasks, hiddenCount } =
+    useMemo(() => {
+      const visibleError = errorTasks.slice(0, MAX_VISIBLE_TASKS);
+      const remainingAfterError = MAX_VISIBLE_TASKS - visibleError.length;
+
+      const visibleActive = activeTasks.slice(0, remainingAfterError);
+      const remainingAfterActive = remainingAfterError - visibleActive.length;
+
+      const visibleCompleted = completedTasks.slice(0, remainingAfterActive);
+
+      const totalKnown = errorTasks.length + activeTasks.length + completedTasks.length;
+      const visibleCount = visibleError.length + visibleActive.length + visibleCompleted.length;
+
+      return {
+        visibleErrorTasks: visibleError,
+        visibleActiveTasks: visibleActive,
+        visibleCompletedTasks: visibleCompleted,
+        hiddenCount: totalKnown - visibleCount,
+      };
+    }, [errorTasks, activeTasks, completedTasks]);
 
   const stageLabels = useMemo<Record<string, string>>(
     () => ({
@@ -137,9 +143,33 @@ export function CloneProgressFloat({ onCloneComplete }: CloneProgressFloatProps)
     );
   }
 
-  // Expanded view - show full details
+  // Expanded view - show full details (priority: Error > In Progress > Completed)
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+      {/* Error tasks - highest priority */}
+      {visibleErrorTasks.map((task) => (
+        <div
+          key={task.id}
+          className="rounded-lg border border-destructive/50 bg-card shadow-lg p-3 animate-in slide-in-from-bottom-2"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">{task.repoName}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              onClick={(e) => handleDismiss(task.id, e)}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+          <p className="mt-1 text-xs text-destructive truncate" title={task.error}>
+            {task.error}
+          </p>
+        </div>
+      ))}
+
       {/* Active tasks */}
       {visibleActiveTasks.map((task) => (
         <div
@@ -194,38 +224,12 @@ export function CloneProgressFloat({ onCloneComplete }: CloneProgressFloatProps)
         </div>
       ))}
 
-      {/* Error tasks */}
-      {visibleErrorTasks.map((task) => (
-        <div
-          key={task.id}
-          className="rounded-lg border border-destructive/50 bg-card shadow-lg p-3 animate-in slide-in-from-bottom-2"
-        >
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">{task.repoName}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0"
-              onClick={(e) => handleDismiss(task.id, e)}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-          <p className="mt-1 text-xs text-destructive truncate" title={task.error}>
-            {task.error}
-          </p>
-        </div>
-      ))}
-
       {/* Hidden tasks indicator */}
       {hiddenCount > 0 && (
         <div className="rounded-lg border bg-card/80 shadow-lg p-2 animate-in slide-in-from-bottom-2">
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <MoreHorizontal className="h-3 w-3" />
-            <span>
-              {t('and')} {hiddenCount} {t('more')}...
-            </span>
+            <span>{t('and {{count}} more...', { count: hiddenCount })}</span>
           </div>
         </div>
       )}

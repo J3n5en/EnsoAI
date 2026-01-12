@@ -917,8 +917,7 @@ export const zhTranslations: Record<string, string> = {
   'Preparing...': '准备中...',
   Completed: '已完成',
   tasks: '个任务',
-  and: '还有',
-  more: '个',
+  'and {{count}} more...': '还有 {{count}} 个...',
 };
 
 export function normalizeLocale(input?: string): Locale {
