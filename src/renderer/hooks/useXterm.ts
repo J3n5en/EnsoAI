@@ -291,6 +291,17 @@ export function useXterm({
     terminal.open(containerRef.current);
     fitAddon.fit();
 
+    // IME compositionend 兜底：清空 textarea 防止旧内容残留导致输入异常
+    const textarea = terminal.textarea;
+    if (textarea) {
+      textarea.addEventListener('compositionend', () => {
+        // 延迟清空，确保 xterm 先读取最终文本
+        setTimeout(() => {
+          textarea.value = '';
+        }, 0);
+      });
+    }
+
     // Listen for title changes (OSC escape sequences)
     terminal.onTitleChange((title) => {
       onTitleChangeRef.current?.(title);
@@ -382,6 +393,11 @@ export function useXterm({
 
     // Custom key handler
     terminal.attachCustomKeyEventHandler((event) => {
+      // IME 组合输入期间必须放行，否则会导致中文输入异常
+      if (event.isComposing || event.keyCode === 229) {
+        return true;
+      }
+
       if (
         matchesKeybinding(event, settings.xtermKeybindings.newTab) ||
         matchesKeybinding(event, settings.xtermKeybindings.closeTab) ||
