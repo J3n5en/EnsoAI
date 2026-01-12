@@ -263,29 +263,30 @@ export function DiffReviewModal({
     setHoveredLine(null);
     setCommentingLine(null);
     // Clear widget refs so they get recreated for new editor
-    if (addButtonRootRef.current) {
-      addButtonRootRef.current.unmount();
-      addButtonRootRef.current = null;
-    }
+    // Use queueMicrotask to avoid unmounting during React render
+    const addButtonRoot = addButtonRootRef.current;
+    const commentRoot = commentRootRef.current;
+    const selectionWidgetRoot = selectionWidgetRootRef.current;
+    const selectionCommentRoot = selectionCommentRootRef.current;
+
+    addButtonRootRef.current = null;
     addButtonWidgetRef.current = null;
-    if (commentRootRef.current) {
-      commentRootRef.current.unmount();
-      commentRootRef.current = null;
-    }
+    commentRootRef.current = null;
     commentWidgetRef.current = null;
     commentDomRef.current = null;
-    if (selectionWidgetRootRef.current) {
-      selectionWidgetRootRef.current.unmount();
-      selectionWidgetRootRef.current = null;
-    }
+    selectionWidgetRootRef.current = null;
     selectionWidgetDomRef.current = null;
     selectionWidgetRef.current = null;
-    if (selectionCommentRootRef.current) {
-      selectionCommentRootRef.current.unmount();
-      selectionCommentRootRef.current = null;
-    }
+    selectionCommentRootRef.current = null;
     selectionCommentDomRef.current = null;
     selectionCommentWidgetRef.current = null;
+
+    queueMicrotask(() => {
+      addButtonRoot?.unmount();
+      commentRoot?.unmount();
+      selectionWidgetRoot?.unmount();
+      selectionCommentRoot?.unmount();
+    });
   }, [selectedFile]);
 
   // Handle editor mount
@@ -318,6 +319,10 @@ export function DiffReviewModal({
   const handleDeleteComment = useCallback((id: string) => {
     setAllComments((prev) => prev.filter((c) => c.id !== id));
   }, []);
+
+  // Store delete handler in ref for event delegation
+  const deleteHandlerRef = useRef(handleDeleteComment);
+  deleteHandlerRef.current = handleDeleteComment;
 
   // Line comment button widget - hover over gutter
   useEffect(() => {
@@ -470,6 +475,7 @@ export function DiffReviewModal({
         filePath={selectedFile.path}
         onSubmit={(text) => handleAddComment(commentingLine, commentingLine, text)}
         onCancel={() => setCommentingLine(null)}
+        submitLabel="add"
       />
     );
 
@@ -548,6 +554,7 @@ export function DiffReviewModal({
               selectionCommentWidgetRef.current = null;
             }
           }}
+          submitLabel="add"
         />
       );
 
@@ -623,6 +630,112 @@ export function DiffReviewModal({
       }
     };
   }, [editorReady, open, selectedFile, t, handleAddComment]);
+
+  // Display inline comments using viewZones
+  const viewZoneIdsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    if (!editorReady || !open || !selectedFile) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const modifiedEditor = editor.getModifiedEditor();
+    const commentsForFile = currentFileComments;
+
+    // Clear existing view zones
+    modifiedEditor.changeViewZones((accessor) => {
+      for (const id of viewZoneIdsRef.current) {
+        accessor.removeZone(id);
+      }
+      viewZoneIdsRef.current = [];
+    });
+
+    if (commentsForFile.length === 0) return;
+
+    // Group comments by end line
+    const commentsByLine = new Map<number, CommentData[]>();
+    for (const comment of commentsForFile) {
+      const line = comment.endLine;
+      const existing = commentsByLine.get(line) || [];
+      commentsByLine.set(line, [...existing, comment]);
+    }
+
+    // Add view zones for each line with comments
+    modifiedEditor.changeViewZones((accessor) => {
+      for (const [lineNumber, comments] of commentsByLine) {
+        const domNode = document.createElement('div');
+        domNode.className = 'inline-comment-zone';
+        domNode.style.cssText = 'padding: 4px 8px; position: relative; z-index: 10;';
+
+        const container = document.createElement('div');
+        container.className = 'space-y-2';
+
+        for (const comment of comments) {
+          const commentDiv = document.createElement('div');
+          commentDiv.className =
+            'flex items-start gap-2 rounded-md border bg-muted/50 p-2 text-sm max-w-md';
+
+          const lineRef =
+            comment.startLine === comment.endLine
+              ? `L${comment.startLine}`
+              : `L${comment.startLine}-L${comment.endLine}`;
+
+          commentDiv.innerHTML = `
+            <svg class="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="text-xs font-medium text-primary">${lineRef}</span>
+              </div>
+              <p class="whitespace-pre-wrap text-foreground line-clamp-3">${comment.text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+            </div>
+          `;
+
+          // Create delete button
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'p-1 rounded hover:bg-destructive/20 transition-colors shrink-0';
+          deleteBtn.title = t('Delete');
+          deleteBtn.innerHTML = `<svg class="h-3 w-3 text-muted-foreground hover:text-destructive" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+
+          const commentId = comment.id;
+          deleteBtn.onclick = () => deleteHandlerRef.current(commentId);
+
+          commentDiv.appendChild(deleteBtn);
+          container.appendChild(commentDiv);
+        }
+
+        domNode.appendChild(container);
+
+        const heightInLines = Math.max(2, comments.length * 3);
+
+        const zoneId = accessor.addZone({
+          afterLineNumber: lineNumber,
+          heightInLines,
+          domNode,
+        });
+
+        viewZoneIdsRef.current.push(zoneId);
+      }
+    });
+
+    return () => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      try {
+        const modifiedEditor = editor.getModifiedEditor();
+        modifiedEditor.changeViewZones((accessor) => {
+          for (const id of viewZoneIdsRef.current) {
+            accessor.removeZone(id);
+          }
+          viewZoneIdsRef.current = [];
+        });
+      } catch {
+        // Editor may already be disposed
+        viewZoneIdsRef.current = [];
+      }
+    };
+    // biome-ignore lint/correctness/useExhaustiveDependencies: using ref for handleDeleteComment
+  }, [editorReady, open, selectedFile, currentFileComments, t]);
 
   // Cleanup on unmount
   useEffect(() => {

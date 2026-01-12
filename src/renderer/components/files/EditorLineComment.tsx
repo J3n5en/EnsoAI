@@ -14,6 +14,7 @@ interface CommentFormProps {
   filePath: string;
   onSubmit: (text: string) => void;
   onCancel: () => void;
+  submitLabel?: 'send' | 'add';
 }
 
 export function CommentForm({
@@ -22,6 +23,7 @@ export function CommentForm({
   filePath,
   onSubmit,
   onCancel,
+  submitLabel = 'send',
 }: CommentFormProps) {
   const { t } = useI18n();
   const [text, setText] = useState('');
@@ -77,8 +79,17 @@ export function CommentForm({
           {t('Cancel')}
         </Button>
         <Button size="sm" onClick={handleSubmit}>
-          <Send className="h-3.5 w-3.5 mr-1.5" />
-          {t('Send')}
+          {submitLabel === 'add' ? (
+            <>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              {t('Add')}
+            </>
+          ) : (
+            <>
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              {t('Send')}
+            </>
+          )}
         </Button>
       </div>
     </div>

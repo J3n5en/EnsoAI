@@ -672,29 +672,21 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
   }, [autoCreateSessionOnActivate, isActive, cwd, groups.length, handleNewTerminal, pendingScript]);
 
   useEffect(() => {
-    console.log('[TerminalPanel] pendingScript effect:', {
-      pendingScript,
-      cwd,
-      groupsLength: groups.length,
-    });
     if (!pendingScript || !cwd) return;
 
     const normalizedPendingPath = normalizePath(pendingScript.worktreePath);
     const normalizedCurrentCwd = normalizePath(cwd);
 
-    console.log('[TerminalPanel] path check:', { normalizedPendingPath, normalizedCurrentCwd });
     if (normalizedPendingPath !== normalizedCurrentCwd) return;
 
     const scriptKey = `${normalizedPendingPath}:${pendingScript.script}`;
     if (pendingScriptProcessedRef.current === scriptKey) {
-      console.log('[TerminalPanel] script already processed, skipping');
       clearPendingScript();
       return;
     }
     pendingScriptProcessedRef.current = scriptKey;
 
     const script = pendingScript.script.trim().replace(/\n+/g, ' && ');
-    console.log('[TerminalPanel] creating terminal with script:', script);
 
     if (groups.length === 0) {
       updateCurrentState(() => {
@@ -711,7 +703,6 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
           activeTabId: null,
         };
         newGroup.activeTabId = newGroup.tabs[0].id;
-        console.log('[TerminalPanel] created new group with tab:', newGroup);
 
         return {
           groups: [newGroup],
@@ -727,7 +718,6 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
         cwd,
         initialCommand: script,
       };
-      console.log('[TerminalPanel] adding tab to existing group:', { targetGroupId, newTab });
 
       updateCurrentState((state) => ({
         ...state,

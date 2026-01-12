@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { FileCode, FolderOpen, GitBranch, MessageSquare, Sparkles, Terminal } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_TAB_ORDER, type TabId } from '@/App/constants';
 import { OpenInMenu } from '@/components/app/OpenInMenu';
 import { AgentPanel } from '@/components/chat/AgentPanel';
@@ -59,9 +59,21 @@ export function MainContent({
 
   // Diff Review Modal state
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const getActiveSessionId = useAgentSessionsStore((s) => s.getActiveSessionId);
-  const activeSessionId =
-    repoPath && worktreePath ? getActiveSessionId(repoPath, worktreePath) : null;
+
+  // Subscribe to sessions and activeIds for reactivity
+  const sessions = useAgentSessionsStore((s) => s.sessions);
+  const activeIds = useAgentSessionsStore((s) => s.activeIds);
+  const activeSessionId = useMemo(() => {
+    if (!repoPath || !worktreePath) return null;
+    const key = `${repoPath}:${worktreePath}`;
+    const activeId = activeIds[key];
+    if (activeId) {
+      const session = sessions.find((s) => s.id === activeId);
+      if (session) return activeId;
+    }
+    const firstSession = sessions.find((s) => s.repoPath === repoPath && s.cwd === worktreePath);
+    return firstSession?.id ?? null;
+  }, [repoPath, worktreePath, sessions, activeIds]);
 
   // Tab metadata configuration
   const tabConfigMap: Record<TabId, { icon: React.ElementType; label: string }> = {
@@ -305,15 +317,17 @@ export function MainContent({
 
         {/* Right: Review button + Open In Menu */}
         <div className="flex items-center gap-2 no-drag">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsReviewModalOpen(true)}
-            className="h-8"
-          >
-            <MessageSquare className="h-4 w-4 mr-1.5" />
-            {t('Review')}
-          </Button>
+          {activeSessionId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsReviewModalOpen(true)}
+              className="h-8"
+            >
+              <MessageSquare className="h-4 w-4 mr-1.5" />
+              {t('Review')}
+            </Button>
+          )}
           <OpenInMenu path={worktreePath} activeTab={activeTab} />
         </div>
       </header>
