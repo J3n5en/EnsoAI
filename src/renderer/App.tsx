@@ -256,7 +256,15 @@ export default function App() {
         });
       }
     });
-    return cleanup;
+
+    // Cleanup: close toast and unsubscribe on unmount
+    return () => {
+      if (providerToastRef.current) {
+        toastManager.close(providerToastRef.current);
+        providerToastRef.current = null;
+      }
+      cleanup();
+    };
   }, [claudeProviders, t]);
 
   // Save collapsed states to localStorage

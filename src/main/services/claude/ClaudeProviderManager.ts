@@ -44,7 +44,8 @@ export function watchClaudeSettings(window: BrowserWindow): void {
   // 监听目录而不是文件，因为很多编辑器保存时会先删除文件再新建
   try {
     settingsWatcher = fs.watch(configDir, (eventType, filename) => {
-      if (filename === 'settings.json') {
+      // filename 在某些平台上可能为 null，需要做健壮性检查
+      if (filename && filename === 'settings.json') {
         console.log(`[ClaudeProviderManager] Detected ${filename} change (${eventType})`);
 
         // 防抖处理：合并短时间内的多次事件
