@@ -825,6 +825,9 @@ export const zhTranslations: Record<string, string> = {
   'Opus Model': 'Opus 模型',
   'Haiku Model': 'Haiku 模型',
   'Provider switched': '已切换 Provider',
+  'New provider detected': '检测到新配置',
+  'Click to save this config': '点击保存此配置',
+  'Open Settings': '打开设置',
   // MCP Servers
   'MCP Servers': 'MCP 服务器',
   'No MCP servers configured': '暂无 MCP 服务器',

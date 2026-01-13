@@ -6,7 +6,7 @@ import type {
   WorktreeMergeResult,
 } from '@shared/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeHexColor } from '@/lib/colors';
 import {
   ALL_GROUP_ID,
@@ -107,6 +107,10 @@ export default function App() {
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState<
+    'general' | 'appearance' | 'editor' | 'keybindings' | 'agent' | 'integration' | 'hapi'
+  >('general');
+  const [scrollToProvider, setScrollToProvider] = useState(false);
 
   // Add Repository dialog state
   const [addRepoDialogOpen, setAddRepoDialogOpen] = useState(false);
@@ -209,6 +213,51 @@ export default function App() {
     });
     return cleanup;
   }, []);
+
+  // Listen for Claude Provider settings change (from cc-switch or other tools)
+  const claudeProviders = useSettingsStore((s) => s.claudeCodeIntegration.providers);
+  const providerToastRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
+  useEffect(() => {
+    const cleanup = window.electronAPI.claudeProvider.onSettingsChanged((data) => {
+      const { extracted } = data;
+      if (!extracted?.baseUrl) return;
+
+      // Close previous provider toast if exists
+      if (providerToastRef.current) {
+        toastManager.close(providerToastRef.current);
+      }
+
+      // Check if the new config matches any saved provider
+      const matched = claudeProviders.find(
+        (p) => p.baseUrl === extracted.baseUrl && p.authToken === extracted.authToken
+      );
+
+      if (matched) {
+        // Switched to a known provider
+        providerToastRef.current = toastManager.add({
+          type: 'info',
+          title: t('Provider switched'),
+          description: matched.name,
+        });
+      } else {
+        // New unsaved config detected
+        providerToastRef.current = toastManager.add({
+          type: 'info',
+          title: t('New provider detected'),
+          description: t('Click to save this config'),
+          actionProps: {
+            children: t('Open Settings'),
+            onClick: () => {
+              setSettingsCategory('integration');
+              setScrollToProvider(true);
+              setSettingsOpen(true);
+            },
+          },
+        });
+      }
+    });
+    return cleanup;
+  }, [claudeProviders, t]);
 
   // Save collapsed states to localStorage
   useEffect(() => {
@@ -1022,7 +1071,18 @@ export default function App() {
       />
 
       {/* Global Settings Dialog */}
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={(open) => {
+          setSettingsOpen(open);
+          if (!open) {
+            // Reset scroll flag when dialog closes
+            setScrollToProvider(false);
+          }
+        }}
+        initialCategory={settingsCategory}
+        scrollToProvider={scrollToProvider}
+      />
 
       {/* Add Repository Dialog */}
       <AddRepositoryDialog

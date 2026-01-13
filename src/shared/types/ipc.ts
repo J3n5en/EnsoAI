@@ -135,6 +135,7 @@ export const IPC_CHANNELS = {
   // Claude Provider
   CLAUDE_PROVIDER_READ_SETTINGS: 'claude:provider:readSettings',
   CLAUDE_PROVIDER_APPLY: 'claude:provider:apply',
+  CLAUDE_PROVIDER_SETTINGS_CHANGED: 'claude:provider:settingsChanged',
 
   // Claude MCP Management
   CLAUDE_MCP_READ: 'claude:mcp:read',

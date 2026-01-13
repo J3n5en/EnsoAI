@@ -501,6 +501,16 @@ const electronAPI = {
     }> => ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_READ_SETTINGS),
     apply: (provider: import('@shared/types').ClaudeProvider): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_APPLY, provider),
+    onSettingsChanged: (
+      callback: (data: {
+        settings: import('@shared/types').ClaudeSettings | null;
+        extracted: Partial<import('@shared/types').ClaudeProvider> | null;
+      }) => void
+    ): (() => void) => {
+      const handler = (_: unknown, data: Parameters<typeof callback>[0]) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROVIDER_SETTINGS_CHANGED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.CLAUDE_PROVIDER_SETTINGS_CHANGED, handler);
+    },
   },
 
   // Claude Config (MCP, Prompts, Plugins)

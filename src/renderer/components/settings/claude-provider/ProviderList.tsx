@@ -27,8 +27,17 @@ export function ProviderList({ className }: ProviderListProps) {
   const { data: claudeData } = useQuery({
     queryKey: ['claude-settings'],
     queryFn: () => window.electronAPI.claudeProvider.readSettings(),
-    refetchInterval: 5000,
+    // 有实时监听机制，轮询仅作为备用（延长到 30 秒）
+    refetchInterval: 30000,
   });
+
+  // 监听 settings 变化事件，实现实时同步
+  React.useEffect(() => {
+    const cleanup = window.electronAPI.claudeProvider.onSettingsChanged(() => {
+      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
+    });
+    return cleanup;
+  }, [queryClient]);
 
   // 计算当前激活的 Provider
   const activeProvider = React.useMemo(() => {
