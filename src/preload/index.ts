@@ -371,6 +371,20 @@ const electronAPI = {
     },
   },
 
+  // Window controls (for frameless window on Windows/Linux)
+  window: {
+    minimize: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
+    maximize: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
+    close: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_MAXIMIZED),
+    openDevTools: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_OPEN_DEVTOOLS),
+    onMaximizedChange: (callback: (isMaximized: boolean) => void): (() => void) => {
+      const handler = (_: unknown, isMaximized: boolean) => callback(isMaximized);
+      ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGED, handler);
+    },
+  },
+
   // Notification
   notification: {
     show: (options: {

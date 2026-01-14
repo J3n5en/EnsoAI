@@ -42,6 +42,7 @@ import { ActionPanel } from './components/layout/ActionPanel';
 import { MainContent } from './components/layout/MainContent';
 import { RepositorySidebar } from './components/layout/RepositorySidebar';
 import { TreeSidebar } from './components/layout/TreeSidebar';
+import { WindowTitleBar } from './components/layout/WindowTitleBar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
 import { SettingsDialog } from './components/settings/SettingsDialog';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -854,8 +855,13 @@ export default function App() {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden ${resizing ? 'select-none' : ''}`}>
-      {layoutMode === 'tree' ? (
+    <div className="flex h-screen flex-col overflow-hidden">
+      {/* Custom Title Bar for Windows/Linux */}
+      <WindowTitleBar onOpenSettings={() => setSettingsOpen(true)} />
+
+      {/* Main Layout */}
+      <div className={`flex flex-1 overflow-hidden ${resizing ? 'select-none' : ''}`}>
+        {layoutMode === 'tree' ? (
         // Tree Layout: Single sidebar with repos as root nodes and worktrees as children
         <AnimatePresence initial={false}>
           {!repositoryCollapsed && (
@@ -1133,8 +1139,9 @@ export default function App() {
         </Dialog>
       )}
 
-      {/* Clone Progress Float - shows clone progress in bottom right corner */}
-      <CloneProgressFloat onCloneComplete={handleCloneRepository} />
+        {/* Clone Progress Float - shows clone progress in bottom right corner */}
+        <CloneProgressFloat onCloneComplete={handleCloneRepository} />
+      </div>
     </div>
   );
 }

@@ -83,6 +83,14 @@ export const IPC_CHANNELS = {
   APP_SET_PROXY: 'app:setProxy',
   APP_TEST_PROXY: 'app:testProxy',
 
+  // Window Controls (for frameless window)
+  WINDOW_MINIMIZE: 'window:minimize',
+  WINDOW_MAXIMIZE: 'window:maximize',
+  WINDOW_CLOSE: 'window:close',
+  WINDOW_IS_MAXIMIZED: 'window:isMaximized',
+  WINDOW_MAXIMIZED_CHANGED: 'window:maximizedChanged',
+  WINDOW_OPEN_DEVTOOLS: 'window:openDevTools',
+
   // Dialog
   DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
   DIALOG_OPEN_FILE: 'dialog:openFile',

@@ -15,9 +15,11 @@ import { checkGitInstalled } from './services/git/checkGit';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
 import { createMainWindow } from './windows/MainWindow';
+import { registerWindowHandlers } from './ipc/window';
 
 let mainWindow: BrowserWindow | null = null;
 let pendingOpenPath: string | null = null;
+let cleanupWindowHandlers: (() => void) | null = null;
 
 // Register URL scheme handler (must be done before app is ready)
 if (process.defaultApp) {
@@ -198,6 +200,18 @@ app.whenReady().then(async () => {
   setCurrentLocale(readStoredLanguage());
 
   mainWindow = createMainWindow();
+
+  // Register window control handlers (must be after mainWindow is created)
+  cleanupWindowHandlers = registerWindowHandlers(mainWindow);
+
+  // Clean up window handlers when window is closed
+  mainWindow.on('closed', () => {
+    if (cleanupWindowHandlers) {
+      cleanupWindowHandlers();
+      cleanupWindowHandlers = null;
+    }
+    mainWindow = null;
+  });
 
   // IMPORTANT: Set up did-finish-load handler BEFORE handling command line args
   // to avoid race condition where page loads before handler is registered

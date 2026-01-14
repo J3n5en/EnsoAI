@@ -50,6 +50,9 @@ function saveWindowState(win: BrowserWindow): void {
 export function createMainWindow(): BrowserWindow {
   const state = loadWindowState();
 
+  const isMac = process.platform === 'darwin';
+  const isWindows = process.platform === 'win32';
+
   const win = new BrowserWindow({
     width: state.width,
     height: state.height,
@@ -57,8 +60,14 @@ export function createMainWindow(): BrowserWindow {
     y: state.y,
     minWidth: 685,
     minHeight: 600,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    ...(process.platform === 'darwin' && { trafficLightPosition: { x: 16, y: 16 } }),
+    // macOS: hiddenInset 保留 traffic lights 按钮
+    // Windows/Linux: hidden 隐藏标题栏，使用自定义 WindowTitleBar
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    // macOS 需要 frame 来显示 traffic lights；Windows/Linux 使用无边框窗口
+    frame: isMac,
+    ...(isMac && { trafficLightPosition: { x: 16, y: 16 } }),
+    // Windows 启用 thickFrame 以支持窗口边缘拖拽调整大小
+    ...(isWindows && { thickFrame: true }),
     backgroundColor: '#1e1e1e',
     show: false,
     webPreferences: {

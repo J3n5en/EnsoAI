@@ -5,6 +5,14 @@ import { ChevronRightIcon } from 'lucide-react';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
 
+/**
+ * 扩展 CSSProperties 以支持 Electron 特有的 WebkitAppRegion 属性
+ * 用于无边框窗口中控制拖拽区域
+ */
+interface ElectronCSSProperties extends React.CSSProperties {
+  WebkitAppRegion?: 'drag' | 'no-drag';
+}
+
 const Menu = MenuPrimitive.Root;
 
 const MenuPortal = MenuPrimitive.Portal;
@@ -61,6 +69,7 @@ function MenuItem({
   className,
   inset,
   variant = 'default',
+  style,
   ...props
 }: MenuPrimitive.Item.Props & {
   inset?: boolean;
@@ -75,6 +84,7 @@ function MenuItem({
       data-inset={inset}
       data-slot="menu-item"
       data-variant={variant}
+      style={{ WebkitAppRegion: 'no-drag', ...style } as ElectronCSSProperties}
       {...props}
     />
   );
@@ -249,6 +259,68 @@ function MenuSubPopup({
   );
 }
 
+/**
+ * TitleBarMenuPopup - 专门用于标题栏的菜单弹出层
+ * 使用透明 Backdrop 支持点击关闭，同时保持 no-drag
+ */
+function TitleBarMenuPopup({
+  children,
+  className,
+  sideOffset = 4,
+  align = 'start',
+  alignOffset = -4,
+  side = 'bottom',
+  ...props
+}: MenuPrimitive.Popup.Props & {
+  align?: MenuPrimitive.Positioner.Props['align'];
+  sideOffset?: MenuPrimitive.Positioner.Props['sideOffset'];
+  alignOffset?: MenuPrimitive.Positioner.Props['alignOffset'];
+  side?: MenuPrimitive.Positioner.Props['side'];
+}) {
+  return (
+    <MenuPrimitive.Portal>
+      {/* 透明 Backdrop，支持点击关闭，设置 no-drag 避免拖拽冲突 */}
+      <MenuPrimitive.Backdrop
+        className="fixed inset-0 z-[99]"
+        style={{ WebkitAppRegion: 'no-drag' } as ElectronCSSProperties}
+      />
+      <MenuPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        className="z-[100]"
+        data-slot="menu-positioner"
+        side={side}
+        sideOffset={sideOffset}
+        style={{ WebkitAppRegion: 'no-drag' } as ElectronCSSProperties}
+      >
+        <MenuPrimitive.Popup
+          className={cn(
+            // 基础样式
+            "relative flex not-[class*='w-']:min-w-32 rounded-md border bg-popover shadow-lg outline-none",
+            // 动画：使用 scale 和 opacity，与其他组件一致
+            "origin-(--transform-origin) transition-[scale,opacity] duration-300 ease-out",
+            "has-data-starting-style:scale-95 has-data-starting-style:opacity-0",
+            // 标题栏菜单使用更小的字体
+            "[&_[data-slot=menu-item]]:text-xs [&_[data-slot=menu-item]]:min-h-7 [&_[data-slot=menu-item]]:py-1.5",
+            "[&_[data-slot=menu-shortcut]]:text-[10px]",
+            className
+          )}
+          data-slot="menu-popup"
+          style={{ WebkitAppRegion: 'no-drag' } as ElectronCSSProperties}
+          {...props}
+        >
+          <div
+            className="max-h-(--available-height) w-full overflow-y-auto p-1"
+            style={{ WebkitAppRegion: 'no-drag' } as ElectronCSSProperties}
+          >
+            {children}
+          </div>
+        </MenuPrimitive.Popup>
+      </MenuPrimitive.Positioner>
+    </MenuPrimitive.Portal>
+  );
+}
+
 export {
   Menu,
   Menu as DropdownMenu,
@@ -258,6 +330,7 @@ export {
   MenuTrigger as DropdownMenuTrigger,
   MenuPopup,
   MenuPopup as DropdownMenuContent,
+  TitleBarMenuPopup,
   MenuGroup,
   MenuGroup as DropdownMenuGroup,
   MenuItem,
