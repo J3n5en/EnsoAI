@@ -18,6 +18,9 @@ export function useSourceControlActions({ rootPath, stagedCount }: UseSourceCont
   const { t } = useI18n();
   const { selectedFile, setSelectedFile } = useSourceControlStore();
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  // 使用单独的 dialogOpen 状态来控制对话框的可见性
+  // 这样可以避免在关闭动画期间清除 confirmAction 导致内容闪烁
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const stageMutation = useGitStage();
   const unstageMutation = useGitUnstage();
@@ -44,10 +47,12 @@ export function useSourceControlActions({ rootPath, stagedCount }: UseSourceCont
 
   const handleDiscard = useCallback((paths: string[]) => {
     setConfirmAction({ paths, type: 'discard' });
+    setDialogOpen(true);
   }, []);
 
   const handleDeleteUntracked = useCallback((paths: string[]) => {
     setConfirmAction({ paths, type: 'delete' });
+    setDialogOpen(true);
   }, []);
 
   const handleConfirmAction = useCallback(async () => {
@@ -81,8 +86,19 @@ export function useSourceControlActions({ rootPath, stagedCount }: UseSourceCont
       });
     }
 
-    setConfirmAction(null);
+    // 只关闭对话框，保留 confirmAction 的值直到对话框完全关闭
+    // 这样可以避免在关闭动画期间内容闪烁
+    setDialogOpen(false);
   }, [rootPath, confirmAction, discardMutation, selectedFile, setSelectedFile, stageMutation, t]);
+
+  // 当对话框关闭后清除 confirmAction
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      // 对话框关闭后清除 confirmAction
+      setConfirmAction(null);
+    }
+  }, []);
 
   const handleCommit = useCallback(
     async (message: string) => {
@@ -118,7 +134,8 @@ export function useSourceControlActions({ rootPath, stagedCount }: UseSourceCont
     handleCommit,
     // Confirmation dialog
     confirmAction,
-    setConfirmAction,
+    dialogOpen,
+    handleDialogOpenChange,
     handleConfirmAction,
     // Mutation state
     isCommitting: commitMutation.isPending,
