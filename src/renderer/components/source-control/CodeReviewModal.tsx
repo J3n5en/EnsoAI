@@ -1,12 +1,4 @@
-import {
-  AlertCircle,
-  CheckCircle,
-  Copy,
-  Loader2,
-  MessageSquare,
-  Minimize2,
-  XCircle,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle, Copy, Loader2, Minimize2, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { Components } from 'react-markdown';
 import Markdown from 'react-markdown';
@@ -121,11 +113,9 @@ interface CodeReviewModalProps {
 
 export function CodeReviewModal({ open, onOpenChange, repoPath }: CodeReviewModalProps) {
   const { t } = useI18n();
-  const { content, status, error, cost, model, sessionId, canContinue, startReview, reset } =
-    useCodeReview({ repoPath });
+  const { content, status, error, startReview, reset } = useCodeReview({ repoPath });
 
   const reviewRepoPath = useCodeReviewContinueStore((s) => s.review.repoPath);
-  const requestContinue = useCodeReviewContinueStore((s) => s.requestContinue);
   const minimize = useCodeReviewContinueStore((s) => s.minimize);
   const isMinimized = useCodeReviewContinueStore((s) => s.isMinimized);
 
@@ -201,14 +191,6 @@ export function CodeReviewModal({ open, onOpenChange, repoPath }: CodeReviewModa
     onOpenChange(false);
   }, [reset, onOpenChange]);
 
-  const handleContinue = useCallback(() => {
-    if (sessionId) {
-      requestContinue(sessionId);
-      reset();
-      onOpenChange(false);
-    }
-  }, [sessionId, requestContinue, reset, onOpenChange]);
-
   const StatusIcon = () => {
     switch (status) {
       case 'initializing':
@@ -247,20 +229,6 @@ export function CodeReviewModal({ open, onOpenChange, repoPath }: CodeReviewModa
           <DialogTitle className="flex items-center gap-2">
             <StatusIcon />
             <span>{t('Code Review')}</span>
-            {status === 'complete' && (
-              <>
-                {model && (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
-                    {model}
-                  </span>
-                )}
-                {cost !== null && (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    ${cost.toFixed(4)}
-                  </span>
-                )}
-              </>
-            )}
           </DialogTitle>
           <DialogDescription>{statusText()}</DialogDescription>
         </DialogHeader>
@@ -297,12 +265,6 @@ export function CodeReviewModal({ open, onOpenChange, repoPath }: CodeReviewModa
             <Button variant="outline" onClick={handleCopy}>
               <Copy className="h-4 w-4 mr-2" />
               {t('Copy')}
-            </Button>
-          )}
-          {status === 'complete' && canContinue && (
-            <Button variant="outline" onClick={handleContinue}>
-              <MessageSquare className="h-4 w-4 mr-2" />
-              {t('Continue Conversation')}
             </Button>
           )}
           {status !== 'idle' && status !== 'error' && isCurrentRepo && (

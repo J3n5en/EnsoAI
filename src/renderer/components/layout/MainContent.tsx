@@ -20,7 +20,6 @@ import {
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
-import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { TerminalPanel } from '../terminal';
 
 type LayoutMode = 'columns' | 'tree';
@@ -182,17 +181,6 @@ export function MainContent({
       lastValidWorktreePathRef.current = worktreePath;
     }
   }, [repoPath, worktreePath]);
-
-  // 监听 code review 继续对话请求，切换到 chat tab
-  const shouldSwitchToChat = useCodeReviewContinueStore((s) => s.shouldSwitchToChat);
-  const clearTabSwitch = useCodeReviewContinueStore((s) => s.clearTabSwitch);
-
-  useEffect(() => {
-    if (shouldSwitchToChat) {
-      onTabChange('chat');
-      clearTabSwitch();
-    }
-  }, [shouldSwitchToChat, onTabChange, clearTabSwitch]);
 
   // Use current values if available, otherwise use last valid values
   const effectiveRepoPath = repoPath || lastValidRepoPathRef.current;
