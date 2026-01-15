@@ -113,10 +113,8 @@ const electronAPI = {
         model: string;
         reviewId: string;
         language?: string;
-        continueConversation?: boolean;
-        sessionId?: string;
       }
-    ): Promise<{ success: boolean; error?: string; sessionId?: string }> =>
+    ): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CODE_REVIEW_START, workdir, options),
     stopCodeReview: (reviewId: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CODE_REVIEW_STOP, reviewId),
