@@ -368,7 +368,7 @@ export function registerGitHandlers(): void {
           }
 
           try {
-            // 清理 ANSI 转义码（与 StreamJsonParser 保持一致）
+            // 清理 ANSI 转义码
             // biome-ignore lint/complexity/useRegexLiterals: Using RegExp constructor to avoid control character lint error
             const ansiRegex = new RegExp(
               '[\\u001b\\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]',
