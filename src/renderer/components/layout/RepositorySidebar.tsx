@@ -1,3 +1,4 @@
+import { LayoutGroup, motion } from 'framer-motion';
 import {
   FolderGit2,
   FolderMinus,
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/empty';
 import { useI18n } from '@/i18n';
 import { hexToRgba } from '@/lib/colors';
+import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { RunningProjectsPopover } from './RunningProjectsPopover';
 
@@ -280,11 +282,13 @@ export function RepositorySidebar({
             </Button>
           </Empty>
         ) : (
-          <div className="space-y-1">
+          <LayoutGroup>
+            <div className="space-y-1">
             {filteredRepos.map(({ repo, originalIndex }) => {
               const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
               const tagBg = group ? hexToRgba(group.color, 0.12) : null;
               const tagBorder = group ? hexToRgba(group.color, 0.35) : null;
+              const isSelected = selectedRepo === repo.path;
 
               return (
                 <div key={repo.path} className="relative">
@@ -305,27 +309,41 @@ export function RepositorySidebar({
                     onClick={() => onSelectRepo(repo.path)}
                     onContextMenu={(e) => handleContextMenu(e, repo)}
                     className={cn(
-                      'group flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
-                      selectedRepo === repo.path
-                        ? 'bg-accent text-accent-foreground'
-                        : 'hover:bg-accent/50',
+                      'group relative flex w-full flex-col items-start gap-1 rounded-xl p-3 text-left',
                       draggedIndexRef.current === originalIndex && 'opacity-50'
                     )}
                   >
+                    {/* Sliding highlight background */}
+                    {isSelected && (
+                      <motion.div
+                        layoutId="repo-sidebar-highlight"
+                        className="absolute inset-0 rounded-xl bg-accent/60 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]"
+                        transition={springFast}
+                      />
+                    )}
                     {/* Repo name */}
-                    <div className="flex w-full items-center gap-2">
+                    <div className="relative z-10 flex w-full items-center gap-2">
                       <FolderGit2
                         className={cn(
-                          'h-4 w-4 shrink-0',
-                          selectedRepo === repo.path
-                            ? 'text-accent-foreground'
-                            : 'text-muted-foreground'
+                          'h-4 w-4 shrink-0 transition-colors duration-200',
+                          isSelected
+                            ? 'text-primary'
+                            : 'text-muted-foreground group-hover:text-foreground'
                         )}
                       />
-                      <span className="truncate font-medium flex-1">{repo.name}</span>
+                      <span
+                        className={cn(
+                          'truncate font-medium flex-1 transition-colors duration-200',
+                          isSelected
+                            ? 'text-foreground'
+                            : 'text-muted-foreground group-hover:text-foreground'
+                        )}
+                      >
+                        {repo.name}
+                      </span>
                       <button
                         type="button"
-                        className="shrink-0 p-1 rounded hover:bg-muted"
+                        className="shrink-0 p-1 rounded hover:bg-muted/50"
                         onClick={(e) => {
                           e.stopPropagation();
                           setRepoSettingsTarget(repo);
@@ -339,7 +357,7 @@ export function RepositorySidebar({
 
                     {/* Tags (Group) */}
                     {group && (
-                      <div className="flex w-full items-center gap-1 pl-6">
+                      <div className="relative z-10 flex w-full items-center gap-1 pl-6">
                         <span
                           className="inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
                           style={{
@@ -358,10 +376,10 @@ export function RepositorySidebar({
                     {/* Path */}
                     <div
                       className={cn(
-                        'w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [direction:rtl] [text-align:left]',
-                        selectedRepo === repo.path
-                          ? 'text-accent-foreground/70'
-                          : 'text-muted-foreground'
+                        'relative z-10 w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [direction:rtl] [text-align:left] transition-colors duration-200',
+                        isSelected
+                          ? 'text-muted-foreground'
+                          : 'text-muted-foreground/70'
                       )}
                       title={repo.path}
                     >
@@ -377,7 +395,8 @@ export function RepositorySidebar({
                 </div>
               );
             })}
-          </div>
+            </div>
+          </LayoutGroup>
         )}
       </div>
 

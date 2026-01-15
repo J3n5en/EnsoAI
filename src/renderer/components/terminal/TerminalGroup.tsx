@@ -1,7 +1,9 @@
+import { motion } from 'framer-motion';
 import { List, Plus, Terminal, X } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/i18n';
+import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import type { TerminalGroup as TerminalGroupType, TerminalTab } from './types';
 import { getNextTabName } from './types';
@@ -339,7 +341,11 @@ export function TerminalGroup({
                     <X className="h-3.5 w-3.5" />
                   </button>
                   {isTabActive && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                    <motion.div
+                      layoutId={`terminal-tab-indicator-${group.id}`}
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                      transition={springFast}
+                    />
                   )}
                 </div>
               );

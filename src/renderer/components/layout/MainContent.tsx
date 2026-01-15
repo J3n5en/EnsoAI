@@ -18,6 +18,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { useI18n } from '@/i18n';
+import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { TerminalPanel } from '../terminal';
@@ -261,6 +262,7 @@ export function MainContent({
           {tabs.map((tab, index) => {
             const isDropTarget = dropTargetIndex === index;
             const isDragging = draggedIndex === index;
+            const isActive = activeTab === tab.id;
             return (
               <div
                 key={tab.id}
@@ -283,21 +285,29 @@ export function MainContent({
                   <motion.div
                     layoutId="tab-drop-indicator"
                     className="absolute -top-0.5 left-0 right-0 h-0.5 bg-primary rounded-full"
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    transition={springFast}
                   />
                 )}
                 <button
                   type="button"
                   onClick={() => onTabChange(tab.id)}
                   className={cn(
-                    'flex h-8 items-center gap-1.5 rounded-md px-3 text-sm transition-colors',
-                    activeTab === tab.id
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                    'relative flex h-8 items-center gap-1.5 rounded-full px-3.5 text-sm transition-all duration-200',
+                    isActive
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
-                  <tab.icon className="h-4 w-4" />
-                  {tab.label}
+                  {/* Glow highlight background */}
+                  {isActive && (
+                    <motion.div
+                      layoutId="main-tab-highlight"
+                      className="absolute inset-0 rounded-full bg-gradient-to-b from-accent/80 to-accent shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.1)]"
+                      transition={springFast}
+                    />
+                  )}
+                  <tab.icon className="relative z-10 h-4 w-4" />
+                  <span className="relative z-10">{tab.label}</span>
                 </button>
               </div>
             );

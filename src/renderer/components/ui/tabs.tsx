@@ -70,7 +70,14 @@ function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
 function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
-      className={cn('flex-1 outline-none', className)}
+      className={cn(
+        'flex-1 outline-none',
+        // 动画：使用 CSS transition 实现淡入效果
+        'transition-opacity duration-150 ease-out',
+        'data-[hidden]:opacity-0 data-[hidden]:pointer-events-none',
+        'not-data-[hidden]:opacity-100',
+        className
+      )}
       data-slot="tabs-content"
       {...props}
     />

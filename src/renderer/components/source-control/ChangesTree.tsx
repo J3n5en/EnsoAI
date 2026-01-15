@@ -17,6 +17,7 @@ import {
 import { useCallback, useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useI18n } from '@/i18n';
+import { heightVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSourceControlStore } from '@/stores/sourceControl';
 
@@ -211,10 +212,11 @@ function FileTreeNode({
         <AnimatePresence initial={false}>
           {isExpanded && node.children && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              variants={heightVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={springFast}
               className="overflow-hidden"
             >
               {node.children.map((child) => (

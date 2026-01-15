@@ -34,6 +34,7 @@ import { useGitPull, useGitPush, useGitStatus } from '@/hooks/useGit';
 import { useCommitDiff, useCommitFiles, useGitHistoryInfinite } from '@/hooks/useGitHistory';
 import { useFileChanges, useGitFetch } from '@/hooks/useSourceControl';
 import { useI18n } from '@/i18n';
+import { heightVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSourceControlStore } from '@/stores/sourceControl';
 import { ChangesList } from './ChangesList';
@@ -372,7 +373,7 @@ export function SourceControlPanel({
               {/* Changes Section (Collapsible) */}
               <div
                 className={cn(
-                  'flex flex-col border-b',
+                  'flex flex-col border-b transition-all duration-200 ease-out',
                   changesExpanded ? 'flex-1 min-h-0' : 'shrink-0'
                 )}
               >
@@ -401,52 +402,68 @@ export function SourceControlPanel({
                   </button>
                 </div>
 
-                {changesExpanded && (
-                  <>
-                    {/* Warning for skipped directories */}
-                    {skippedDirs && skippedDirs.length > 0 && (
-                      <div className="mx-2 mt-2 rounded-md bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400">
-                        <span className="font-medium">{t('Performance warning')}:</span>{' '}
-                        {t('Skipped {{dirs}} (not in .gitignore)', {
-                          dirs: skippedDirs.join(', '),
-                        })}
+                {/* Collapsible content with AnimatePresence for proper unmounting */}
+                <AnimatePresence initial={false}>
+                  {changesExpanded && (
+                    <motion.div
+                      key="changes-content"
+                      variants={heightVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={springFast}
+                      className="flex flex-col flex-1 min-h-0 overflow-hidden"
+                    >
+                      {/* Warning for skipped directories */}
+                      {skippedDirs && skippedDirs.length > 0 && (
+                        <div className="mx-2 mt-2 rounded-md bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400">
+                          <span className="font-medium">{t('Performance warning')}:</span>{' '}
+                          {t('Skipped {{dirs}} (not in .gitignore)', {
+                            dirs: skippedDirs.join(', '),
+                          })}
+                        </div>
+                      )}
+                      <div className="flex-1 overflow-hidden min-h-0">
+                        <ChangesList
+                          staged={staged}
+                          unstaged={unstaged}
+                          selectedFile={selectedFile}
+                          onFileClick={handleFileClick}
+                          onStage={handleStage}
+                          onUnstage={handleUnstage}
+                          onDiscard={handleDiscard}
+                          onDeleteUntracked={handleDeleteUntracked}
+                          onRefresh={async () => {
+                            if (rootPath) {
+                              await fetchMutation.mutateAsync({ workdir: rootPath });
+                            }
+                            refetch();
+                            refetchCommits();
+                            refetchStatus();
+                          }}
+                          isRefreshing={isFetching || fetchMutation.isPending}
+                          repoPath={rootPath}
+                        />
                       </div>
-                    )}
-                    <div className="flex-1 overflow-hidden min-h-0">
-                      <ChangesList
-                        staged={staged}
-                        unstaged={unstaged}
-                        selectedFile={selectedFile}
-                        onFileClick={handleFileClick}
-                        onStage={handleStage}
-                        onUnstage={handleUnstage}
-                        onDiscard={handleDiscard}
-                        onDeleteUntracked={handleDeleteUntracked}
-                        onRefresh={async () => {
-                          if (rootPath) {
-                            await fetchMutation.mutateAsync({ workdir: rootPath });
-                          }
-                          refetch();
-                          refetchCommits();
-                          refetchStatus();
-                        }}
-                        isRefreshing={isFetching || fetchMutation.isPending}
-                        repoPath={rootPath}
+                      {/* Commit Box */}
+                      <CommitBox
+                        stagedCount={staged.length}
+                        onCommit={handleCommit}
+                        isCommitting={isCommitting}
+                        rootPath={rootPath}
                       />
-                    </div>
-                    {/* Commit Box */}
-                    <CommitBox
-                      stagedCount={staged.length}
-                      onCommit={handleCommit}
-                      isCommitting={isCommitting}
-                      rootPath={rootPath}
-                    />
-                  </>
-                )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* History Section (Collapsible) */}
-              <div className={cn('flex flex-col', historyExpanded ? 'flex-1 min-h-0' : 'shrink-0')}>
+              <div
+                className={cn(
+                  'flex flex-col transition-all duration-200 ease-out',
+                  historyExpanded ? 'flex-1 min-h-0' : 'shrink-0'
+                )}
+              >
                 <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors">
                   <button
                     type="button"
@@ -520,28 +537,41 @@ export function SourceControlPanel({
                   )}
                 </div>
 
-                {historyExpanded && (
-                  <div className="h-full flex-1 overflow-hidden min-h-0">
-                    <CommitHistoryList
-                      commits={commits}
-                      selectedHash={selectedCommitHash}
-                      onCommitClick={handleCommitClick}
-                      isLoading={commitsLoading}
-                      isFetchingNextPage={isFetchingNextPage}
-                      hasNextPage={hasNextPage}
-                      onLoadMore={() => {
-                        if (hasNextPage && !isFetchingNextPage) {
-                          fetchNextPage();
-                        }
-                      }}
-                      expandedCommitHash={expandedCommitHash}
-                      commitFiles={commitFiles}
-                      commitFilesLoading={commitFilesLoading}
-                      selectedFile={selectedCommitFile}
-                      onFileClick={handleCommitFileClick}
-                    />
-                  </div>
-                )}
+                {/* Collapsible content with AnimatePresence for proper unmounting */}
+                <AnimatePresence initial={false}>
+                  {historyExpanded && (
+                    <motion.div
+                      key="history-content"
+                      variants={heightVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={springFast}
+                      className="flex-1 min-h-0 overflow-hidden"
+                    >
+                      <div className="h-full">
+                        <CommitHistoryList
+                          commits={commits}
+                          selectedHash={selectedCommitHash}
+                          onCommitClick={handleCommitClick}
+                          isLoading={commitsLoading}
+                          isFetchingNextPage={isFetchingNextPage}
+                          hasNextPage={hasNextPage}
+                          onLoadMore={() => {
+                            if (hasNextPage && !isFetchingNextPage) {
+                              fetchNextPage();
+                            }
+                          }}
+                          expandedCommitHash={expandedCommitHash}
+                          commitFiles={commitFiles}
+                          commitFilesLoading={commitFilesLoading}
+                          selectedFile={selectedCommitFile}
+                          onFileClick={handleCommitFileClick}
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           )}

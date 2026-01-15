@@ -1,5 +1,5 @@
 import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
   ChevronRight,
   Copy,
@@ -50,6 +50,7 @@ import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog
 import { useWorktreeListMultiple } from '@/hooks/useWorktree';
 import { useI18n } from '@/i18n';
 import { hexToRgba } from '@/lib/colors';
+import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { RunningProjectsPopover } from './RunningProjectsPopover';
@@ -546,7 +547,8 @@ export function TreeSidebar({
             </EmptyHeader>
           </Empty>
         ) : (
-          <div className="space-y-1">
+          <LayoutGroup>
+            <div className="space-y-1">
             {filteredRepos.map((repo, index) => {
               const isSelected = selectedRepo === repo.path;
               const isExpanded = expandedRepos.has(repo.path);
@@ -586,13 +588,20 @@ export function TreeSidebar({
                         }
                       }}
                       className={cn(
-                        'group flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer',
-                        isSelected ? 'bg-accent/50 text-accent-foreground' : 'hover:bg-accent/30',
+                        'group relative flex w-full flex-col gap-1 rounded-xl px-2 py-2 text-left cursor-pointer',
                         draggedRepoIndexRef.current === index && 'opacity-50'
                       )}
                     >
+                      {/* Sliding highlight background */}
+                      {isSelected && (
+                        <motion.div
+                          layoutId="repo-highlight"
+                          className="absolute inset-0 rounded-xl bg-accent/60 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]"
+                          transition={springFast}
+                        />
+                      )}
                       {/* Row 1: Chevron + Icon + Name + Actions (vertically centered) */}
-                      <div className="flex w-full items-center gap-1">
+                      <div className="relative z-10 flex w-full items-center gap-1">
                         <span className="shrink-0 w-5 h-5 flex items-center justify-center">
                           <ChevronRight
                             className={cn(
@@ -603,16 +612,23 @@ export function TreeSidebar({
                         </span>
                         <FolderGit2
                           className={cn(
-                            'h-4 w-4 shrink-0',
-                            isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
+                            'h-4 w-4 shrink-0 transition-colors duration-200',
+                            isSelected ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
                           )}
                         />
-                        <span className="min-w-0 flex-1 truncate font-medium text-sm text-left">
+                        <span
+                          className={cn(
+                            'min-w-0 flex-1 truncate font-medium text-sm text-left transition-colors duration-200',
+                            isSelected
+                              ? 'text-foreground'
+                              : 'text-muted-foreground group-hover:text-foreground'
+                          )}
+                        >
                           {repo.name}
                         </span>
                         <button
                           type="button"
-                          className="shrink-0 p-1 rounded hover:bg-muted"
+                          className="shrink-0 p-1 rounded hover:bg-muted/50"
                           onClick={(e) => {
                             e.stopPropagation();
                             setRepoSettingsTarget(repo);
@@ -632,7 +648,7 @@ export function TreeSidebar({
                         const bg = hexToRgba(group.color, 0.12);
                         const border = hexToRgba(group.color, 0.35);
                         return (
-                          <div className="flex items-center gap-1 pl-6">
+                          <div className="relative z-10 flex items-center gap-1 pl-6">
                             <span
                               className="inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
                               style={{
@@ -652,7 +668,7 @@ export function TreeSidebar({
 
                       {/* Row 3: Path */}
                       <span
-                        className="pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
+                        className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
                         title={repo.path}
                       >
                         {repo.path}
@@ -750,7 +766,8 @@ export function TreeSidebar({
                 </div>
               );
             })}
-          </div>
+            </div>
+          </LayoutGroup>
         )}
       </div>
 
@@ -1156,22 +1173,33 @@ function WorktreeTreeItem({
           onClick={onClick}
           onContextMenu={handleContextMenu}
           className={cn(
-            'flex w-full items-center gap-2 rounded-lg pl-5 pr-2 py-1.5 text-left transition-colors text-sm',
-            isPrunable && 'opacity-50',
-            isActive ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+            'group relative flex w-full items-center gap-2 rounded-xl pl-5 pr-2 py-2 text-left text-sm',
+            'transition-all duration-200 ease-out',
+            isActive
+              ? 'bg-accent/60 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]'
+              : 'bg-transparent shadow-none hover:bg-accent/30',
+            isPrunable && 'opacity-50'
           )}
         >
           <GitBranch
             className={cn(
-              'h-3.5 w-3.5 shrink-0',
+              'h-3.5 w-3.5 shrink-0 transition-colors duration-200',
               isPrunable
                 ? 'text-destructive'
                 : isActive
-                  ? 'text-accent-foreground'
-                  : 'text-muted-foreground'
+                  ? 'text-primary'
+                  : 'text-muted-foreground group-hover:text-foreground'
             )}
           />
-          <span className={cn('min-w-0 flex-1 truncate', isPrunable && 'line-through')}>
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate transition-colors duration-200',
+              isPrunable && 'line-through',
+              isActive
+                ? 'text-foreground'
+                : 'text-muted-foreground group-hover:text-foreground'
+            )}
+          >
             {branchDisplay}
           </span>
           {isPrunable ? (

@@ -354,3 +354,135 @@ className="min-w-0 flex-1 truncate"
 ```
 
 `min-w-0` 是关键 - 允许 flex 子元素收缩到内容尺寸以下。
+
+## Animation System
+
+本项目使用 **Framer Motion** 作为动画库，配置集中在 `src/renderer/lib/motion.ts`。
+
+### 设计原则
+
+- **快速响应**：动画时长控制在 150-200ms，保持操作效率
+- **Spring 物理**：使用 Spring 弹性动画，带来自然的物理感
+- **GPU 加速**：优先使用 `transform`、`opacity` 属性，启用硬件加速
+
+### Spring 配置
+
+| 名称 | 参数 | 适用场景 |
+|------|------|----------|
+| `springFast` | stiffness: 500, damping: 30 | Dialog、Menu 等弹出层 |
+| `springStandard` | stiffness: 400, damping: 30 | 面板伸缩、布局动画 |
+| `springGentle` | stiffness: 300, damping: 25 | Tooltip、微交互 |
+
+### 通用 Variants
+
+```tsx
+import {
+  fadeVariants,
+  scaleInVariants,
+  slideUpVariants,
+  heightVariants,
+  springFast
+} from '@/lib/motion';
+
+// 弹出层（Dialog、Menu）
+<motion.div
+  variants={scaleInVariants}
+  initial="initial"
+  animate="animate"
+  exit="exit"
+  transition={springFast}
+>
+
+// 高度展开（Accordion、列表）
+<motion.div
+  variants={heightVariants}
+  initial="initial"
+  animate="animate"
+  exit="exit"
+  transition={springStandard}
+>
+
+// Toast 通知
+<motion.div
+  variants={slideUpVariants}
+  initial="initial"
+  animate="animate"
+  exit="exit"
+>
+```
+
+### 微交互
+
+```tsx
+import { tapScale, hoverScale } from '@/lib/motion';
+import { motion } from 'framer-motion';
+
+// 按钮点击反馈
+<motion.button whileTap={tapScale}>
+  Click me
+</motion.button>
+
+// 悬浮放大
+<motion.div whileHover={hoverScale}>
+  Hover me
+</motion.div>
+```
+
+### AnimatePresence 使用
+
+所有条件渲染的动画元素必须用 `AnimatePresence` 包裹：
+
+```tsx
+import { AnimatePresence, motion } from 'framer-motion';
+
+<AnimatePresence mode="wait">
+  {isOpen && (
+    <motion.div
+      key="content"
+      variants={fadeVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      Content
+    </motion.div>
+  )}
+</AnimatePresence>
+```
+
+### Layout 动画
+
+使用 `layout` 属性实现元素位置/尺寸的平滑过渡：
+
+```tsx
+// Tab 指示器滑动
+<motion.div
+  layoutId="tab-indicator"
+  className="absolute bottom-0 h-0.5 bg-primary"
+/>
+
+// 列表项排序
+<motion.div layout>
+  {item.name}
+</motion.div>
+```
+
+### 列表 Stagger 动画
+
+```tsx
+import { listContainerVariants, listItemVariants } from '@/lib/motion';
+
+<motion.ul variants={listContainerVariants} initial="initial" animate="animate">
+  {items.map((item) => (
+    <motion.li key={item.id} variants={listItemVariants}>
+      {item.name}
+    </motion.li>
+  ))}
+</motion.ul>
+```
+
+### 性能注意事项
+
+1. **避免频繁的 `height: 'auto'`**：对大列表使用虚拟化
+2. **使用 `will-change` 谨慎**：仅在必要时添加
+3. **避免同时动画多个属性**：优先使用 `transform` 系属性
