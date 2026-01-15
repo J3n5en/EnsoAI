@@ -53,7 +53,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from './components/ui/dialog';
-import { toastManager } from './components/ui/toast';
+import { addToast, toastManager } from './components/ui/toast';
 import { MergeEditor, MergeWorktreeDialog } from './components/worktree';
 import { useEditor } from './hooks/useEditor';
 import { useGitBranches, useGitInit } from './hooks/useGit';
@@ -816,7 +816,7 @@ export default function App() {
     if (result.success) {
       // Show warnings if any (combined into a single toast)
       if (result.warnings && result.warnings.length > 0) {
-        toastManager.add({
+        addToast({
           type: 'warning',
           title: t('Merge completed with warnings'),
           description: result.warnings.join('\n'),

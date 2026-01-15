@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { toastManager } from '@/components/ui/toast';
+import { addToast } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
 
 interface MergeWorktreeDialogProps {
@@ -106,7 +106,7 @@ export function MergeWorktreeDialog({
       if (result.success && result.merged) {
         // Show warnings if any (combined into a single toast)
         if (result.warnings && result.warnings.length > 0) {
-          toastManager.add({
+          addToast({
             type: 'warning',
             title: t('Merge completed with warnings'),
             description: result.warnings.join('\n'),
