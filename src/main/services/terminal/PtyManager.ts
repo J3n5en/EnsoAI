@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import type { TerminalCreateOptions } from '@shared/types';
@@ -220,13 +220,29 @@ export function getEnhancedPath(): string {
 
   const currentPath = process.env.PATH || '';
 
+  // Get all nvm node version bin paths
+  const nvmNodePaths: string[] = [];
+  const nvmVersionsDir = join(home, '.nvm', 'versions', 'node');
+  if (existsSync(nvmVersionsDir)) {
+    try {
+      const versions = readdirSync(nvmVersionsDir);
+      for (const version of versions) {
+        if (version.startsWith('v')) {
+          nvmNodePaths.push(join(nvmVersionsDir, version, 'bin'));
+        }
+      }
+    } catch {
+      // Ignore errors reading nvm versions
+    }
+  }
+
   // Unix: Add common paths
   const additionalPaths = [
     '/usr/local/bin',
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
-    // Node.js version managers
-    join(home, '.nvm', 'versions', 'node', 'current', 'bin'),
+    // Node.js version managers - nvm
+    ...nvmNodePaths,
     join(home, '.npm-global', 'bin'),
     // Package managers
     join(home, 'Library', 'pnpm'),
