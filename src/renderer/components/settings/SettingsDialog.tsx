@@ -18,12 +18,32 @@ interface SettingsDialogProps {
   trigger?: React.ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Initial category to show when dialog opens */
+  initialCategory?: SettingsCategory;
+  /** Scroll to Claude Provider section (only works with integration category) */
+  scrollToProvider?: boolean;
 }
 
-export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({
+  trigger,
+  open,
+  onOpenChange,
+  initialCategory,
+  scrollToProvider,
+}: SettingsDialogProps) {
   const { t } = useI18n();
-  const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>('general');
+  const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>(
+    initialCategory ?? 'general'
+  );
   const [internalOpen, setInternalOpen] = React.useState(false);
+
+  // Update active category when initialCategory changes and dialog opens
+  React.useEffect(() => {
+    if (open && initialCategory) {
+      setActiveCategory(initialCategory);
+    }
+  }, [open, initialCategory]);
+
   const categories: Array<{ id: SettingsCategory; icon: React.ElementType; label: string }> = [
     { id: 'general', icon: Settings, label: t('General') },
     { id: 'appearance', icon: Palette, label: t('Appearance') },
@@ -101,7 +121,9 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
             {activeCategory === 'editor' && <EditorSettings />}
             {activeCategory === 'keybindings' && <KeybindingsSettings />}
             {activeCategory === 'agent' && <AgentSettings />}
-            {activeCategory === 'integration' && <IntegrationSettings />}
+            {activeCategory === 'integration' && (
+              <IntegrationSettings scrollToProvider={scrollToProvider} />
+            )}
             {activeCategory === 'hapi' && <HapiSettings />}
           </div>
         </div>

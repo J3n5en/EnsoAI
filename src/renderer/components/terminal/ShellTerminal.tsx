@@ -1,4 +1,6 @@
+import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
 import { matchesKeybinding } from '@/lib/keybinding';
@@ -27,7 +29,6 @@ export function ShellTerminal({
   onMerge,
 }: ShellTerminalProps) {
   const { t } = useI18n();
-  console.log('[ShellTerminal] render:', { cwd, isActive, initialCommand });
 
   const {
     containerRef,
@@ -52,6 +53,7 @@ export function ShellTerminal({
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
   const xtermKeybindings = useSettingsStore((state) => state.xtermKeybindings);
+  const { showScrollToBottom, handleScrollToBottom } = useTerminalScrollToBottom(terminal);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -156,6 +158,16 @@ export function ShellTerminal({
         onClearSearch={clearSearch}
         theme={settings.theme}
       />
+      {showScrollToBottom && (
+        <button
+          type="button"
+          onClick={handleScrollToBottom}
+          className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition-all hover:bg-primary hover:scale-105 active:scale-95"
+          title={t('Scroll to bottom')}
+        >
+          <ArrowDown className="h-4 w-4" />
+        </button>
+      )}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">

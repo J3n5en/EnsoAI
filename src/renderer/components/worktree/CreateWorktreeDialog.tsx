@@ -86,6 +86,8 @@ export function CreateWorktreeDialog({
   );
   const [mode, setMode] = React.useState<CreateMode>('branch');
   const [baseBranch, setBaseBranch] = React.useState<string>('');
+  const [baseBranchQuery, setBaseBranchQuery] = React.useState('');
+  const [baseBranchOpen, setBaseBranchOpen] = React.useState(false);
   const [newBranchName, setNewBranchName] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [generatingBranchName, setGeneratingBranchName] = React.useState(false);
@@ -147,21 +149,31 @@ export function CreateWorktreeDialog({
 
   // Use current branch as default base
   const currentBranch = branches.find((b) => b.current);
-  const defaultBranchItem = React.useMemo(() => {
-    if (!currentBranch) return null;
-    for (const group of branchGroups) {
-      const found = group.items.find((item) => item.value === currentBranch.name);
-      if (found) return found;
-    }
-    return null;
-  }, [branchGroups, currentBranch]);
+  const getBranchLabel = React.useCallback(
+    (branchName: string | null | undefined) => {
+      if (!branchName) return '';
+      const matched = branches.find((b) => b.name === branchName);
+      const displayName = getBranchDisplayName(branchName);
+      return matched?.current ? `${displayName} (${t('Current')})` : displayName;
+    },
+    [branches, t]
+  );
 
   // Initialize baseBranch state when dialog opens
   React.useEffect(() => {
     if (open && currentBranch && !baseBranch) {
-      setBaseBranch(currentBranch.name);
+      const branchName = currentBranch.name;
+      setBaseBranch(branchName);
+      setBaseBranchQuery(getBranchLabel(branchName));
     }
-  }, [open, currentBranch, baseBranch]);
+  }, [open, currentBranch, baseBranch, getBranchLabel]);
+
+  // Keep input value in sync when dropdown is closed
+  React.useEffect(() => {
+    if (!baseBranchOpen) {
+      setBaseBranchQuery(getBranchLabel(baseBranch || currentBranch?.name));
+    }
+  }, [baseBranch, currentBranch, baseBranchOpen, getBranchLabel]);
 
   const loadPullRequests = React.useCallback(async () => {
     setPrsLoading(true);
@@ -286,7 +298,9 @@ export function CreateWorktreeDialog({
   };
 
   const resetForm = () => {
-    setBaseBranch(currentBranch?.name || '');
+    const branchName = currentBranch?.name || '';
+    setBaseBranch(branchName);
+    setBaseBranchQuery(getBranchLabel(branchName));
     setNewBranchName('');
     setSelectedPr(null);
     setError(null);
@@ -420,10 +434,18 @@ export function CreateWorktreeDialog({
                 {/* Base Branch Selection with Search */}
                 <Field>
                   <FieldLabel>{t('Base branch')}</FieldLabel>
-                  <Combobox
+                  <Combobox<string>
                     items={branchGroups}
-                    defaultValue={defaultBranchItem}
-                    onValueChange={(item: BranchItem | null) => setBaseBranch(item?.value || '')}
+                    value={baseBranch || null}
+                    onValueChange={(value: string | null) => {
+                      const nextValue = value || '';
+                      setBaseBranch(nextValue);
+                      setBaseBranchQuery(getBranchLabel(nextValue));
+                    }}
+                    inputValue={baseBranchQuery}
+                    onInputValueChange={setBaseBranchQuery}
+                    open={baseBranchOpen}
+                    onOpenChange={setBaseBranchOpen}
                   >
                     <ComboboxInput
                       placeholder={t('Search branches...')}
@@ -439,7 +461,7 @@ export function CreateWorktreeDialog({
                               <ComboboxGroupLabel>{group.label}</ComboboxGroupLabel>
                               <ComboboxCollection>
                                 {(item: BranchItem) => (
-                                  <ComboboxItem key={item.id} value={item}>
+                                  <ComboboxItem key={item.id} value={item.value}>
                                     {item.label}
                                   </ComboboxItem>
                                 )}

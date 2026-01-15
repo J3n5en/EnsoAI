@@ -1,5 +1,5 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { Eye, EyeOff, FileCode, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, FileCode, MessageSquare } from 'lucide-react';
 import type * as monaco from 'monaco-editor';
 import {
   forwardRef,
@@ -26,14 +26,14 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import { toastManager } from '@/components/ui/toast';
 import { useDebouncedSave } from '@/hooks/useDebouncedSave';
 import { useI18n } from '@/i18n';
 import type { EditorTab, PendingCursor } from '@/stores/editor';
 import { useEditorStore } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
+import { CommentForm, useEditorLineComment } from './EditorLineComment';
 import { EditorTabs } from './EditorTabs';
-import { buildMonacoKeybinding } from './keyBindings';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CUSTOM_THEME_NAME, defineMonacoTheme } from './monacoTheme';
 // Import for side effects (Monaco setup)
@@ -57,6 +57,7 @@ interface EditorAreaProps {
   activeTabPath: string | null;
   pendingCursor: PendingCursor | null;
   rootPath?: string;
+  sessionId?: string | null;
   onTabClick: (path: string) => void;
   onTabClose: (path: string) => void | Promise<void>;
   onCloseOthers?: (keepPath: string) => void | Promise<void>;
@@ -79,6 +80,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     activeTabPath,
     pendingCursor,
     rootPath,
+    sessionId,
     onTabClick,
     onTabClose,
     onCloseOthers,
@@ -98,7 +100,13 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const { t } = useI18n();
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
-  const { terminalTheme, editorSettings, claudeCodeIntegration } = useSettingsStore();
+  const [editorInstance, setEditorInstance] = useState<monaco.editor.IStandaloneCodeEditor | null>(
+    null
+  );
+  const [monacoInstance, setMonacoInstance] = useState<Monaco | null>(null);
+  const { terminalTheme, editorSettings } = useSettingsStore();
+  const write = useTerminalWriteStore((state) => state.write);
+  const focus = useTerminalWriteStore((state) => state.focus);
 
   useImperativeHandle(
     ref,
@@ -125,7 +133,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const isSyncingScrollRef = useRef(false); // Prevent scroll loop
   const setCurrentCursorLine = useEditorStore((state) => state.setCurrentCursorLine);
   const themeDefinedRef = useRef(false);
-  const selectionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionWidgetRef = useRef<monaco.editor.IContentWidget | null>(null);
   const widgetRootRef = useRef<Root | null>(null);
   const widgetPositionRef = useRef<monaco.IPosition | null>(null);
@@ -134,6 +141,16 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const activeTabPathRef = useRef<string | null>(null);
   const pendingCursorRef = useRef<PendingCursor | null>(null);
   const editorForPathRef = useRef<string | null>(null);
+
+  // Line comment feature
+  useEditorLineComment({
+    editor: editorInstance,
+    monacoInstance: monacoInstance,
+    filePath: activeTabPath,
+    rootPath: rootPath ?? null,
+    sessionId: sessionId ?? null,
+    enabled: editorReady && !!sessionId,
+  });
 
   // Calculate breadcrumb segments from active file path
   const breadcrumbSegments = useMemo(() => {
@@ -298,6 +315,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     (editor, m) => {
       editorRef.current = editor;
       monacoRef.current = m;
+      setEditorInstance(editor);
+      setMonacoInstance(m);
       editorForPathRef.current = activeTabPath;
       setEditorReady(true);
 
@@ -316,32 +335,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             : (editor.getModel()?.getValueInRange(selection) ?? '');
         onGlobalSearch?.(selectedText);
       });
-
-      // Add configurable shortcut to mention selection in Claude
-      if (claudeCodeIntegration.enabled) {
-        const keybinding = buildMonacoKeybinding(m, claudeCodeIntegration.atMentionedKeybinding);
-        editor.addCommand(keybinding, () => {
-          if (!activeTabPath) return;
-          const selection = editor.getSelection();
-          if (!selection) return;
-
-          const lineCount = selection.endLineNumber - selection.startLineNumber + 1;
-          const fileName = activeTabPath.split('/').pop() || activeTabPath;
-
-          window.electronAPI.mcp.sendAtMentioned({
-            filePath: activeTabPath,
-            lineStart: selection.startLineNumber,
-            lineEnd: selection.endLineNumber,
-          });
-
-          toastManager.add({
-            type: 'success',
-            timeout: 1200,
-            title: t('Sent to Claude Code'),
-            description: `${fileName}:${selection.startLineNumber}-${selection.endLineNumber} (${lineCount} ${t('lines')})`,
-          });
-        });
-      }
 
       // Restore view state if available
       if (activeTab?.viewState) {
@@ -393,19 +386,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         });
       });
     },
-    [
-      activeTab?.viewState,
-      activeTabPath,
-      onSave,
-      onGlobalSearch,
-      claudeCodeIntegration.enabled,
-      claudeCodeIntegration.atMentionedKeybinding,
-      t,
-      onClearPendingCursor,
-    ]
+    [activeTab?.viewState, activeTabPath, onSave, onGlobalSearch, onClearPendingCursor]
   );
 
-  // Claude Code Integration: Selection widget and notifications (dynamic based on settings)
+  // Selection comment widget and cursor tracking
   useEffect(() => {
     if (!editorReady) return;
     const editor = editorRef.current;
@@ -417,8 +401,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       setCurrentCursorLine(e.selection.startLineNumber);
     });
 
-    if (!claudeCodeIntegration.enabled) {
-      // Clean up any existing widget when disabled
+    // If no sessionId, only track cursor line
+    if (!sessionId) {
       if (selectionWidgetRef.current) {
         editor.removeContentWidget(selectionWidgetRef.current);
         selectionWidgetRef.current = null;
@@ -439,41 +423,103 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       widgetPositionRef.current = null;
     }
 
-    // Create selection action widget
+    // Create selection action widget (button)
     const widgetDomNode = document.createElement('div');
     widgetDomNode.className = 'monaco-selection-widget';
-    // Ensure widget is visible above other Monaco overlays
     widgetDomNode.style.zIndex = '100';
 
-    const sendToClaudeHandler = () => {
+    // Create comment form widget
+    const commentWidgetDomNode = document.createElement('div');
+    commentWidgetDomNode.className = 'monaco-selection-comment-widget';
+    commentWidgetDomNode.style.cssText = 'z-index: 100; width: 320px;';
+
+    let commentWidgetRoot: Root | null = null;
+    let commentWidgetInstance: monaco.editor.IContentWidget | null = null;
+
+    const showCommentForm = () => {
       const selection = editor.getSelection();
       if (!selection || selection.isEmpty() || !activeTabPath) return;
 
-      const lineCount = selection.endLineNumber - selection.startLineNumber + 1;
-      const fileName = activeTabPath.split('/').pop() || activeTabPath;
-
-      window.electronAPI.mcp.sendAtMentioned({
-        filePath: activeTabPath,
-        lineStart: selection.startLineNumber,
-        lineEnd: selection.endLineNumber,
-      });
-
-      toastManager.add({
-        type: 'success',
-        timeout: 1200,
-        title: t('Sent to Claude Code'),
-        description: `${fileName}:${selection.startLineNumber}-${selection.endLineNumber} (${lineCount} ${t('lines')})`,
-      });
-
-      // Hide widget after sending
+      // Hide button widget
       if (selectionWidgetRef.current) {
         editor.removeContentWidget(selectionWidgetRef.current);
         selectionWidgetRef.current = null;
-        widgetPositionRef.current = null;
       }
+
+      // Convert to relative path
+      let displayPath = activeTabPath;
+      if (rootPath && activeTabPath.startsWith(rootPath)) {
+        displayPath = activeTabPath.slice(rootPath.length).replace(/^\//, '');
+      }
+
+      // Create comment widget
+      const commentWidget: monaco.editor.IContentWidget = {
+        getId: () => 'selection.comment.widget',
+        getDomNode: () => commentWidgetDomNode,
+        getPosition: () => ({
+          position: {
+            // Use actual cursor position (not selection end)
+            lineNumber: selection.positionLineNumber,
+            column: selection.positionColumn,
+          },
+          preference: [m.editor.ContentWidgetPositionPreference.BELOW],
+        }),
+      };
+
+      commentWidgetInstance = commentWidget;
+
+      // Render comment form
+      if (commentWidgetRoot) {
+        commentWidgetRoot.unmount();
+      }
+      commentWidgetRoot = createRoot(commentWidgetDomNode);
+      commentWidgetRoot.render(
+        <CommentForm
+          lineNumber={selection.startLineNumber}
+          endLineNumber={selection.endLineNumber}
+          filePath={displayPath}
+          onSubmit={(text) => {
+            // Verify terminal writer exists
+            const writer = useTerminalWriteStore.getState().writers.get(sessionId);
+            if (!writer) {
+              console.warn('Terminal writer not found for session:', sessionId);
+              return;
+            }
+
+            // Format: @path#L1-L10 or @path#L5
+            const lineRef =
+              selection.startLineNumber === selection.endLineNumber
+                ? `L${selection.startLineNumber}`
+                : `L${selection.startLineNumber}-L${selection.endLineNumber}`;
+            const message = text
+              ? `@${displayPath}#${lineRef}\nUser comment: "${text}"`
+              : `@${displayPath}#${lineRef}`;
+            write(sessionId, `${message}\r`);
+
+            // Close comment widget
+            if (commentWidgetInstance) {
+              editor.removeContentWidget(commentWidgetInstance);
+              commentWidgetInstance = null;
+            }
+
+            // Focus terminal after short delay
+            setTimeout(() => {
+              focus(sessionId);
+            }, 100);
+          }}
+          onCancel={() => {
+            if (commentWidgetInstance) {
+              editor.removeContentWidget(commentWidgetInstance);
+              commentWidgetInstance = null;
+            }
+          }}
+        />
+      );
+
+      editor.addContentWidget(commentWidget);
     };
 
-    // Render React button into widget
+    // Render the button
     if (widgetRootRef.current) {
       widgetRootRef.current.unmount();
     }
@@ -481,12 +527,12 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     widgetRootRef.current.render(
       <button
         type="button"
-        className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
-        onClick={sendToClaudeHandler}
+        className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
+        onClick={showCommentForm}
         onMouseDown={(e) => e.preventDefault()}
       >
-        <Sparkles className="h-3 w-3" />
-        {t('Send to Claude')}
+        <MessageSquare className="h-3.5 w-3.5" />
+        {t('Add comment')}
       </button>
     );
 
@@ -514,9 +560,14 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
       const selectedText = model.getValueInRange(selection);
 
-      // Show/hide selection widget
+      // Hide comment widget if selection changes
+      if (commentWidgetInstance) {
+        editor.removeContentWidget(commentWidgetInstance);
+        commentWidgetInstance = null;
+      }
+
+      // Show/hide selection button widget
       if (!selection.isEmpty() && selectedText.trim().length > 0) {
-        // Use positionLineNumber/positionColumn for actual cursor position
         widgetPositionRef.current = {
           lineNumber: selection.positionLineNumber,
           column: selection.positionColumn,
@@ -525,7 +576,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
           selectionWidgetRef.current = selectionWidget;
           editor.addContentWidget(selectionWidget);
         } else {
-          // Widget already exists, just update layout
           editor.layoutContentWidget(selectionWidgetRef.current);
         }
       } else {
@@ -535,37 +585,11 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
           widgetPositionRef.current = null;
         }
       }
-
-      // Clear previous debounce timer
-      if (selectionDebounceRef.current) {
-        clearTimeout(selectionDebounceRef.current);
-      }
-
-      // Debounce selection notifications using settings value
-      selectionDebounceRef.current = setTimeout(() => {
-        window.electronAPI.mcp.sendSelectionChanged({
-          text: selectedText,
-          filePath: activeTabPath,
-          fileUrl: `file://${activeTabPath}`,
-          selection: {
-            start: {
-              line: selection.startLineNumber,
-              character: selection.startColumn,
-            },
-            end: {
-              line: selection.endLineNumber,
-              character: selection.endColumn,
-            },
-            isEmpty: selection.isEmpty(),
-          },
-        });
-      }, claudeCodeIntegration.selectionChangedDebounce);
     });
 
     return () => {
       cursorDisposable.dispose();
       selectionDisposable.dispose();
-      // Use ref to get current editor instance, as the closure's editor may be stale
       const currentEditor = editorRef.current;
       if (selectionWidgetRef.current && currentEditor) {
         try {
@@ -576,22 +600,22 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         selectionWidgetRef.current = null;
         widgetPositionRef.current = null;
       }
+      if (commentWidgetInstance && currentEditor) {
+        try {
+          currentEditor.removeContentWidget(commentWidgetInstance);
+        } catch {
+          // Ignore
+        }
+      }
       if (widgetRootRef.current) {
         widgetRootRef.current.unmount();
         widgetRootRef.current = null;
       }
-      if (selectionDebounceRef.current) {
-        clearTimeout(selectionDebounceRef.current);
+      if (commentWidgetRoot) {
+        commentWidgetRoot.unmount();
       }
     };
-  }, [
-    editorReady,
-    claudeCodeIntegration.enabled,
-    claudeCodeIntegration.selectionChangedDebounce,
-    activeTabPath,
-    t,
-    setCurrentCursorLine,
-  ]);
+  }, [editorReady, sessionId, activeTabPath, rootPath, t, setCurrentCursorLine, write, focus]);
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {

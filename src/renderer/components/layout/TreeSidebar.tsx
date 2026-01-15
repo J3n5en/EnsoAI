@@ -565,8 +565,9 @@ export function TreeSidebar({
                       draggedRepoIndexRef.current > index && (
                         <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
                       )}
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       draggable={!searchQuery && !!onReorderRepositories}
                       onDragStart={(e) => handleRepoDragStart(e, index, repo)}
                       onDragEnd={handleRepoDragEnd}
@@ -577,6 +578,12 @@ export function TreeSidebar({
                       onClick={() => {
                         // Only toggle expand/collapse, don't auto-activate worktree
                         toggleRepoExpanded(repo.path);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleRepoExpanded(repo.path);
+                        }
                       }}
                       className={cn(
                         'group flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer',
@@ -650,7 +657,7 @@ export function TreeSidebar({
                       >
                         {repo.path}
                       </span>
-                    </button>
+                    </div>
                     {/* Drop indicator - bottom */}
                     {dropRepoTargetIndex === index &&
                       draggedRepoIndexRef.current !== null &&

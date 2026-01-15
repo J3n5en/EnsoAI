@@ -50,6 +50,7 @@ interface SourceControlPanelProps {
   isActive?: boolean;
   onExpandWorktree?: () => void;
   worktreeCollapsed?: boolean;
+  sessionId?: string | null;
 }
 
 export function SourceControlPanel({
@@ -57,6 +58,7 @@ export function SourceControlPanel({
   isActive = false,
   onExpandWorktree,
   worktreeCollapsed,
+  sessionId,
 }: SourceControlPanelProps) {
   const { t, tNode } = useI18n();
 
@@ -218,7 +220,8 @@ export function SourceControlPanel({
     handleDeleteUntracked,
     handleCommit,
     confirmAction,
-    setConfirmAction,
+    dialogOpen,
+    handleDialogOpenChange,
     handleConfirmAction,
     isCommitting,
   } = useSourceControlActions({ rootPath, stagedCount: staged.length });
@@ -570,6 +573,7 @@ export function SourceControlPanel({
                 onNextFile={handleNextCommitFile}
                 hasPrevFile={currentCommitFileIndex > 0}
                 hasNextFile={currentCommitFileIndex < commitFiles.length - 1}
+                sessionId={sessionId}
               />
             </div>
           ) : (
@@ -581,6 +585,7 @@ export function SourceControlPanel({
                 onNextFile={handleNextFile}
                 hasPrevFile={currentFileIndex > 0}
                 hasNextFile={currentFileIndex < allFiles.length - 1}
+                sessionId={sessionId}
               />
             </div>
           )}
@@ -588,7 +593,7 @@ export function SourceControlPanel({
       </div>
 
       {/* Discard/Delete Confirmation Dialog */}
-      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+      <AlertDialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>

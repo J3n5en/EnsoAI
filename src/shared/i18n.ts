@@ -701,6 +701,21 @@ export const zhTranslations: Record<string, string> = {
     '主 worktree 有未提交的更改，请先提交或暂存',
   'There are still unresolved conflicts': '仍有未解决的冲突',
   'Merge completed with warnings': '合并完成但有警告',
+  'Stash pop had conflicts. Please resolve manually.': '恢复暂存时发生冲突，请手动解决',
+  'Stash pop conflict in main worktree: {{path}}': '主工作区恢复暂存时发生冲突: {{path}}',
+  'Stash pop conflict in worktree: {{path}}': '工作区恢复暂存时发生冲突: {{path}}',
+  'Worktree stash pending - resolve main conflict first, then run "git stash pop" in: {{path}}':
+    '工作区暂存待恢复 - 请先解决主工作区冲突，然后在以下目录运行 "git stash pop": {{path}}',
+  'Changes were automatically stashed and restored after merge': '更改已自动暂存并在合并后恢复',
+  'Your uncommitted changes were stashed. After resolving conflicts, run "git stash pop" to restore them.':
+    '您未提交的更改已被暂存。解决冲突后，请运行 "git stash pop" 恢复更改。',
+  'Main worktree changes were stashed': '主工作区的更改已被暂存',
+  'Worktree changes were stashed': '工作区的更改已被暂存',
+  'Auto stash uncommitted changes': '自动暂存未提交的更改',
+  'Automatically stash and restore uncommitted changes': '合并前自动暂存更改，完成后自动恢复',
+  'Changes stashed': '更改已暂存',
+  'Your uncommitted changes were stashed. After resolving conflicts, run "git stash pop" in:':
+    '您未提交的更改已被暂存。解决冲突后，请在以下目录运行 "git stash pop":',
   // Global Search
   'Search file name...': '搜索文件名...',
   'Search in files...': '在文件中搜索...',
@@ -810,6 +825,9 @@ export const zhTranslations: Record<string, string> = {
   'Opus Model': 'Opus 模型',
   'Haiku Model': 'Haiku 模型',
   'Provider switched': '已切换 Provider',
+  'New provider detected': '检测到新配置',
+  'Click to save this config': '点击保存此配置',
+  'Open Settings': '打开设置',
   // MCP Servers
   'MCP Servers': 'MCP 服务器',
   'No MCP servers configured': '暂无 MCP 服务器',
@@ -911,6 +929,25 @@ export const zhTranslations: Record<string, string> = {
     '无法连接到远程仓库，请检查网络',
   'Invalid Git URL format. Please enter a valid HTTPS or SSH URL.':
     'Git URL 格式无效，请输入有效的 HTTPS 或 SSH URL',
+  // Clone Tasks
+  'Clone Tasks': '克隆任务',
+  'No clone tasks': '暂无克隆任务',
+  'Preparing...': '准备中...',
+  Completed: '已完成',
+  tasks: '个任务',
+  'and {{count}} more...': '还有 {{count}} 个...',
+  // Diff Review Modal
+  'Diff Review': '差异审查',
+  'Leave a comment...': '留下评论...',
+  'Reply...': '回复...',
+  'Add reply...': '添加回复...',
+  comments: '条评论',
+  'Changed Files': '更改的文件',
+  'Select a file to view diff': '选择文件以查看差异',
+  'Hover over line numbers and click + to add comments': '悬停行号并点击 + 添加评论',
+  Send: '发送',
+  You: '你',
+  'Add comment': '添加评论',
 };
 
 export function normalizeLocale(input?: string): Locale {

@@ -34,11 +34,12 @@ function matchesKeybinding(e: KeyboardEvent, binding: TerminalKeybinding): boole
 interface FilePanelProps {
   rootPath: string | undefined;
   isActive?: boolean;
+  sessionId?: string | null;
 }
 
 type NewItemType = 'file' | 'directory' | null;
 
-export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
+export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelProps) {
   const {
     tree,
     isLoading,
@@ -347,6 +348,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           activeTabPath={activeTab?.path ?? null}
           pendingCursor={pendingCursor}
           rootPath={rootPath}
+          sessionId={sessionId}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
           onCloseOthers={closeOtherFiles}

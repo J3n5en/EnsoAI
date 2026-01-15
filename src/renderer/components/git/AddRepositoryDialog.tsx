@@ -1,5 +1,5 @@
 import type { CloneProgress } from '@shared/types';
-import { FolderOpen, Globe, Loader2 } from 'lucide-react';
+import { FolderOpen, Globe, Loader2, Minus } from 'lucide-react';
 import * as React from 'react';
 import type { RepositoryGroup } from '@/App/constants';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/i18n';
+import { useCloneTasksStore } from '@/stores/cloneTasks';
 
 type AddMode = 'local' | 'remote';
 
@@ -97,6 +98,17 @@ export function AddRepositoryDialog({
   // Clone progress state
   const [isCloning, setIsCloning] = React.useState(false);
   const [cloneProgress, setCloneProgress] = React.useState<CloneProgress | null>(null);
+  const [cloneTaskId, setCloneTaskId] = React.useState<string | null>(null);
+
+  // Clone tasks store
+  const addCloneTask = useCloneTasksStore((s) => s.addTask);
+  const completeCloneTask = useCloneTasksStore((s) => s.completeTask);
+  const failCloneTask = useCloneTasksStore((s) => s.failTask);
+  const activeTaskProgress = useCloneTasksStore((s) => {
+    if (!cloneTaskId) return null;
+    const task = s.tasks.find((t) => t.id === cloneTaskId);
+    return task?.progress ?? null;
+  });
 
   // Error state
   const [error, setError] = React.useState<string | null>(null);
@@ -126,16 +138,12 @@ export function AddRepositoryDialog({
     return () => clearTimeout(timer);
   }, [remoteUrl]);
 
-  // Listen for clone progress updates
+  // Sync progress from store to local state for UI display
   React.useEffect(() => {
-    if (!isCloning) return;
-
-    const cleanup = window.electronAPI.git.onCloneProgress((progress) => {
-      setCloneProgress(progress);
-    });
-
-    return cleanup;
-  }, [isCloning]);
+    if (activeTaskProgress) {
+      setCloneProgress(activeTaskProgress);
+    }
+  }, [activeTaskProgress]);
 
   const handleSelectLocalPath = async () => {
     try {
@@ -193,22 +201,36 @@ export function AddRepositoryDialog({
       const pathSep = isWindows ? '\\' : '/';
       const fullPath = `${targetDir}${pathSep}${repoName.trim()}`;
 
+      // Create a task in the store for background tracking
+      const taskId = addCloneTask({
+        remoteUrl: remoteUrl.trim(),
+        targetPath: fullPath,
+        repoName: repoName.trim(),
+        groupId: groupIdToSave,
+      });
+      setCloneTaskId(taskId);
+
       setIsCloning(true);
       setCloneProgress(null);
 
       try {
         const result = await window.electronAPI.git.clone(remoteUrl.trim(), fullPath);
         if (result.success) {
+          completeCloneTask(taskId);
           onCloneComplete(result.path, groupIdToSave);
           handleClose();
         } else {
+          failCloneTask(taskId, result.error || t('Clone failed'));
           handleCloneError(result.error || t('Clone failed'));
         }
       } catch (err) {
-        handleCloneError(err instanceof Error ? err.message : t('Clone failed'));
+        const errorMessage = err instanceof Error ? err.message : t('Clone failed');
+        failCloneTask(taskId, errorMessage);
+        handleCloneError(errorMessage);
       } finally {
         setIsCloning(false);
         setCloneProgress(null);
+        setCloneTaskId(null);
       }
     }
   };
@@ -236,7 +258,15 @@ export function AddRepositoryDialog({
   };
 
   const handleClose = () => {
-    if (isCloning) return; // Prevent closing while cloning
+    if (isCloning) return; // Prevent closing while cloning (use minimize instead)
+    resetForm();
+    onOpenChange(false);
+  };
+
+  // Minimize the dialog while clone continues in background
+  const handleMinimize = () => {
+    // Clone will continue in background via the store
+    // Reset ALL form state including isCloning since the task is now managed by the store
     resetForm();
     onOpenChange(false);
   };
@@ -256,7 +286,11 @@ export function AddRepositoryDialog({
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen && isCloning) return; // Prevent closing while cloning
+    if (!newOpen && isCloning) {
+      // When closing while cloning, minimize instead of blocking
+      handleMinimize();
+      return;
+    }
     if (!newOpen) resetForm();
     onOpenChange(newOpen);
   };
@@ -453,13 +487,14 @@ export function AddRepositoryDialog({
           </DialogPanel>
 
           <DialogFooter variant="bare">
-            <DialogClose
-              render={
-                <Button variant="outline" disabled={isCloning}>
-                  {t('Cancel')}
-                </Button>
-              }
-            />
+            {isCloning ? (
+              <Button type="button" variant="outline" onClick={handleMinimize}>
+                <Minus className="mr-2 h-4 w-4" />
+                {t('Minimize')}
+              </Button>
+            ) : (
+              <DialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            )}
             <Button type="submit" disabled={isSubmitDisabled()}>
               {isCloning ? (
                 <>

@@ -1,11 +1,14 @@
+import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   TerminalSearchBar,
   type TerminalSearchBarRef,
 } from '@/components/terminal/TerminalSearchBar';
+import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
 
 interface AgentTerminalProps {
   cwd?: string;
@@ -405,6 +408,7 @@ export function AgentTerminal({
     terminal,
     clear,
     refreshRenderer,
+    write,
   } = useXterm({
     cwd,
     command,
@@ -420,6 +424,16 @@ export function AgentTerminal({
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
+  const { showScrollToBottom, handleScrollToBottom } = useTerminalScrollToBottom(terminal);
+
+  // Register write and focus functions to global store for external access
+  const { register, unregister } = useTerminalWriteStore();
+  useEffect(() => {
+    if (!sessionId || !write) return;
+
+    register(sessionId, write, () => terminal?.focus());
+    return () => unregister(sessionId);
+  }, [sessionId, write, terminal, register, unregister]);
 
   // Handle Cmd+F / Ctrl+F
   const handleKeyDown = useCallback(
@@ -537,6 +551,16 @@ export function AgentTerminal({
         onClearSearch={clearSearch}
         theme={settings.theme}
       />
+      {showScrollToBottom && (
+        <button
+          type="button"
+          onClick={handleScrollToBottom}
+          className="absolute bottom-12 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-primary/80 text-primary-foreground shadow-lg transition-all hover:bg-primary hover:scale-105 active:scale-95"
+          title={t('Scroll to bottom')}
+        >
+          <ArrowDown className="h-4 w-4" />
+        </button>
+      )}
       {(isLoading ||
         !resolvedShell ||
         (environment === 'hapi' && hapiGlobalInstalled === null)) && (

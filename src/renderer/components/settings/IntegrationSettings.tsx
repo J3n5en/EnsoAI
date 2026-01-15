@@ -16,8 +16,14 @@ import { McpSection } from './mcp';
 import { PluginsSection } from './plugins';
 import { PromptsSection } from './prompts';
 
-export function IntegrationSettings() {
+interface IntegrationSettingsProps {
+  /** Scroll to Claude Provider section on mount */
+  scrollToProvider?: boolean;
+}
+
+export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsProps) {
   const { t } = useI18n();
+  const providerRef = React.useRef<HTMLDivElement>(null);
   const {
     claudeCodeIntegration,
     setClaudeCodeIntegration,
@@ -49,6 +55,17 @@ export function IntegrationSettings() {
       setBridgePort(null);
     }
   }, [claudeCodeIntegration.enabled]);
+
+  // Scroll to provider section when requested
+  React.useEffect(() => {
+    if (scrollToProvider && providerRef.current) {
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => {
+        providerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [scrollToProvider]);
 
   const handleEnabledChange = (checked: boolean) => {
     // Just update the settings - App.tsx useEffect will handle the bridge
@@ -336,7 +353,7 @@ export function IntegrationSettings() {
           )}
 
           {/* Claude Provider */}
-          <div className="mt-4 border-t pt-4">
+          <div ref={providerRef} className="mt-4 border-t pt-4">
             <div className="mb-3">
               <span className="text-sm font-medium">{t('Claude Provider')}</span>
               <p className="text-xs text-muted-foreground">
