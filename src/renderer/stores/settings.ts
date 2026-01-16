@@ -269,14 +269,12 @@ export interface CodeReviewSettings {
   enabled: boolean;
   model: CodeReviewModel;
   language: string;
-  continueConversation: boolean;
 }
 
 export const defaultCodeReviewSettings: CodeReviewSettings = {
   enabled: true,
   model: 'haiku',
   language: '中文',
-  continueConversation: true,
 };
 
 export type BranchNameModel = 'default' | 'opus' | 'sonnet' | 'haiku';

@@ -7,6 +7,7 @@ export type SettingsCategory =
   | 'editor'
   | 'keybindings'
   | 'agent'
+  | 'ai'
   | 'integration'
   | 'hapi';
 

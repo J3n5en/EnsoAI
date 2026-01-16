@@ -1,4 +1,4 @@
-import { Bot, FileCode, Keyboard, Link, Palette, Settings, Share2 } from 'lucide-react';
+import { Bot, FileCode, Keyboard, Link, Palette, Settings, Share2, Sparkles } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogPopup, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -6,6 +6,7 @@ import { useKeybindingInterceptor } from '@/hooks/useKeybindingInterceptor';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { AgentSettings } from './AgentSettings';
+import { AISettings } from './AISettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import type { SettingsCategory } from './constants';
 import { EditorSettings } from './EditorSettings';
@@ -50,6 +51,7 @@ export function SettingsDialog({
     { id: 'editor', icon: FileCode, label: t('Editor') },
     { id: 'keybindings', icon: Keyboard, label: t('Keybindings') },
     { id: 'agent', icon: Bot, label: t('Agent') },
+    { id: 'ai', icon: Sparkles, label: t('AI') },
     { id: 'integration', icon: Link, label: t('Claude Integration') },
     { id: 'hapi', icon: Share2, label: t('Remote Sharing') },
   ];
@@ -121,6 +123,7 @@ export function SettingsDialog({
             {activeCategory === 'editor' && <EditorSettings />}
             {activeCategory === 'keybindings' && <KeybindingsSettings />}
             {activeCategory === 'agent' && <AgentSettings />}
+            {activeCategory === 'ai' && <AISettings />}
             {activeCategory === 'integration' && (
               <IntegrationSettings scrollToProvider={scrollToProvider} />
             )}
