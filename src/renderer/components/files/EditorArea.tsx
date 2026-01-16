@@ -43,6 +43,7 @@ type Monaco = typeof monaco;
 
 export interface EditorAreaRef {
   getSelectedText: () => string;
+  requestCloseTab: (path: string) => void;
 }
 
 function isMarkdownFile(path: string | null): boolean {
@@ -107,20 +108,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const { terminalTheme, editorSettings } = useSettingsStore();
   const write = useTerminalWriteStore((state) => state.write);
   const focus = useTerminalWriteStore((state) => state.focus);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      getSelectedText: () => {
-        const editor = editorRef.current;
-        if (!editor) return '';
-        const selection = editor.getSelection();
-        if (!selection || selection.isEmpty()) return '';
-        return editor.getModel()?.getValueInRange(selection) ?? '';
-      },
-    }),
-    []
-  );
 
   // Markdown preview state
   const isMarkdown = isMarkdownFile(activeTabPath);
@@ -646,8 +633,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   );
 
   const handleTabClose = useCallback(
-    async (path: string, e: React.MouseEvent) => {
-      e.stopPropagation();
+    async (path: string, e?: React.MouseEvent) => {
+      e?.stopPropagation();
 
       // Auto-save before closing based on mode (VS Code behavior):
       // - afterDelay: save (debounced save may still be pending)
@@ -694,6 +681,23 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       onContentChange,
       tabs,
     ]
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getSelectedText: () => {
+        const editor = editorRef.current;
+        if (!editor) return '';
+        const selection = editor.getSelection();
+        if (!selection || selection.isEmpty()) return '';
+        return editor.getModel()?.getValueInRange(selection) ?? '';
+      },
+      requestCloseTab: (path: string) => {
+        void handleTabClose(path);
+      },
+    }),
+    [handleTabClose]
   );
 
   // Save view state when switching tabs

@@ -267,13 +267,29 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.APP_UPDATE_AVAILABLE, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_UPDATE_AVAILABLE, handler);
     },
-    onCloseRequest: (callback: () => void): (() => void) => {
-      const handler = () => callback();
+    onCloseRequest: (callback: (requestId: string) => void): (() => void) => {
+      const handler = (_: unknown, requestId: string) => callback(requestId);
       ipcRenderer.on(IPC_CHANNELS.APP_CLOSE_REQUEST, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_CLOSE_REQUEST, handler);
     },
     confirmClose: (confirmed: boolean): void => {
       ipcRenderer.send(IPC_CHANNELS.APP_CLOSE_CONFIRM, confirmed);
+    },
+    respondCloseRequest: (requestId: string, payload: { dirtyPaths: string[] }): void => {
+      ipcRenderer.send(IPC_CHANNELS.APP_CLOSE_RESPONSE, requestId, payload);
+    },
+    onCloseSaveRequest: (
+      callback: (requestId: string, path: string) => void | Promise<void>
+    ): (() => void) => {
+      const handler = (_: unknown, requestId: string, path: string) => callback(requestId, path);
+      ipcRenderer.on(IPC_CHANNELS.APP_CLOSE_SAVE_REQUEST, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.APP_CLOSE_SAVE_REQUEST, handler);
+    },
+    respondCloseSaveRequest: (
+      requestId: string,
+      payload: { ok: boolean; error?: string }
+    ): void => {
+      ipcRenderer.send(IPC_CHANNELS.APP_CLOSE_SAVE_RESPONSE, requestId, payload);
     },
     onOpenPath: (callback: (path: string) => void): (() => void) => {
       const handler = (_: unknown, path: string) => callback(path);

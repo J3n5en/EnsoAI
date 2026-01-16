@@ -36,6 +36,7 @@ import {
 } from './App/storage';
 import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
 import { usePanelResize } from './App/usePanelResize';
+import { UnsavedPromptHost } from './components/files/UnsavedPromptHost';
 import { AddRepositoryDialog } from './components/git';
 import { CloneProgressFloat } from './components/git/CloneProgressFloat';
 import { ActionPanel } from './components/layout/ActionPanel';
@@ -74,6 +75,7 @@ import { useEditorStore } from './stores/editor';
 import { useInitScriptStore } from './stores/initScript';
 import { useNavigationStore } from './stores/navigation';
 import { useSettingsStore } from './stores/settings';
+import { requestUnsavedChoice } from './stores/unsavedPrompt';
 import { useWorktreeStore } from './stores/worktree';
 
 // Initialize global clone progress listener
@@ -119,7 +121,7 @@ export default function App() {
   // Action panel state
   const [actionPanelOpen, setActionPanelOpen] = useState(false);
 
-  // Close confirmation dialog state
+  // Close confirmation dialog state (legacy)
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
 
   // Merge dialog state
@@ -135,6 +137,7 @@ export default function App() {
   // Layout mode from settings
   const layoutMode = useSettingsStore((s) => s.layoutMode);
   const autoUpdateEnabled = useSettingsStore((s) => s.autoUpdateEnabled);
+  const editorSettings = useSettingsStore((s) => s.editorSettings);
 
   // Panel resize hook
   const { repositoryWidth, worktreeWidth, treeSidebarWidth, resizing, handleResizeStart } =
@@ -207,10 +210,53 @@ export default function App() {
     return cleanup;
   }, []);
 
-  // Listen for close request from main process
+  // Listen for close request from main process (native dialogs are shown in main)
   useEffect(() => {
-    const cleanup = window.electronAPI.app.onCloseRequest(() => {
-      setCloseDialogOpen(true);
+    const cleanup = window.electronAPI.app.onCloseRequest((requestId) => {
+      const state = useEditorStore.getState();
+      const editorSettings = useSettingsStore.getState().editorSettings;
+
+      const allTabs = [
+        ...state.tabs,
+        ...Object.values(state.worktreeStates).flatMap((s) => s.tabs),
+      ];
+
+      const dirtyPaths =
+        editorSettings.autoSave === 'off'
+          ? Array.from(new Set(allTabs.filter((t) => t.isDirty).map((t) => t.path)))
+          : [];
+
+      window.electronAPI.app.respondCloseRequest(requestId, { dirtyPaths });
+    });
+    return cleanup;
+  }, []);
+
+  // Main process asks renderer to save a specific dirty file before closing.
+  useEffect(() => {
+    const cleanup = window.electronAPI.app.onCloseSaveRequest(async (requestId, path) => {
+      try {
+        const state = useEditorStore.getState();
+        const allTabs = [
+          ...state.tabs,
+          ...Object.values(state.worktreeStates).flatMap((s) => s.tabs),
+        ];
+        const tab = allTabs.find((t) => t.path === path);
+        if (!tab) {
+          window.electronAPI.app.respondCloseSaveRequest(requestId, {
+            ok: false,
+            error: 'File not found in editor tabs',
+          });
+          return;
+        }
+
+        await window.electronAPI.file.write(path, tab.content, tab.encoding);
+        useEditorStore.getState().markFileSaved(path);
+
+        window.electronAPI.app.respondCloseSaveRequest(requestId, { ok: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        window.electronAPI.app.respondCloseSaveRequest(requestId, { ok: false, error: message });
+      }
     });
     return cleanup;
   }, []);
@@ -647,7 +693,49 @@ export default function App() {
   };
 
   const handleSelectWorktree = useCallback(
-    (worktree: GitWorktree) => {
+    async (worktree: GitWorktree) => {
+      if (editorSettings.autoSave === 'off') {
+        const editorState = useEditorStore.getState();
+        const dirtyTabs = editorState.tabs.filter((tab) => tab.isDirty);
+
+        for (const tab of dirtyTabs) {
+          const fileName = tab.path.split(/[/\\\\]/).pop() ?? tab.path;
+          const choice = await requestUnsavedChoice(fileName);
+
+          if (choice === 'cancel') {
+            return;
+          }
+
+          if (choice === 'save') {
+            try {
+              await window.electronAPI.file.write(tab.path, tab.content, tab.encoding);
+              useEditorStore.getState().markFileSaved(tab.path);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              toastManager.add({
+                type: 'error',
+                title: t('Save failed'),
+                description: message,
+              });
+              return;
+            }
+          } else {
+            try {
+              const { content } = await window.electronAPI.file.read(tab.path);
+              useEditorStore.getState().updateFileContent(tab.path, content, false);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              toastManager.add({
+                type: 'error',
+                title: t('File read failed'),
+                description: message,
+              });
+              return;
+            }
+          }
+        }
+      }
+
       // Save current worktree's tab state before switching
       if (activeWorktree?.path) {
         setWorktreeTabMap((prev) => ({
@@ -663,7 +751,7 @@ export default function App() {
       const savedTab = worktreeTabMap[worktree.path] || 'chat';
       setActiveTab(savedTab);
     },
-    [activeWorktree, activeTab, worktreeTabMap]
+    [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t]
   );
 
   const handleSwitchWorktreePath = useCallback(
@@ -919,82 +1007,40 @@ export default function App() {
       {/* Main Layout */}
       <div className={`flex flex-1 overflow-hidden ${resizing ? 'select-none' : ''}`}>
         {layoutMode === 'tree' ? (
-        // Tree Layout: Single sidebar with repos as root nodes and worktrees as children
-        <AnimatePresence initial={false}>
-          {!repositoryCollapsed && (
-            <motion.div
-              key="tree-sidebar"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: treeSidebarWidth, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={panelTransition}
-              className="relative h-full shrink-0 overflow-hidden"
-            >
-              <TreeSidebar
-                repositories={repositories}
-                selectedRepo={selectedRepo}
-                activeWorktree={activeWorktree}
-                worktrees={sortedWorktrees}
-                branches={branches}
-                isLoading={worktreesLoading}
-                isCreating={createWorktreeMutation.isPending}
-                error={worktreeError}
-                onSelectRepo={handleSelectRepo}
-                onSelectWorktree={handleSelectWorktree}
-                onAddRepository={handleAddRepository}
-                onRemoveRepository={handleRemoveRepository}
-                onCreateWorktree={handleCreateWorktree}
-                onRemoveWorktree={handleRemoveWorktree}
-                onMergeWorktree={handleOpenMergeDialog}
-                onReorderRepositories={handleReorderRepositories}
-                onReorderWorktrees={handleReorderWorktrees}
-                onRefresh={() => {
-                  refetch();
-                  refetchBranches();
-                }}
-                onInitGit={handleInitGit}
-                onOpenSettings={() => setSettingsOpen(true)}
-                collapsed={false}
-                onCollapse={() => setRepositoryCollapsed(true)}
-                groups={sortedGroups}
-                activeGroupId={activeGroupId}
-                onSwitchGroup={handleSwitchGroup}
-                onCreateGroup={handleCreateGroup}
-                onUpdateGroup={handleUpdateGroup}
-                onDeleteGroup={handleDeleteGroup}
-                onMoveToGroup={handleMoveToGroup}
-                onSwitchTab={setActiveTab}
-                onSwitchWorktreeByPath={handleSwitchWorktreePath}
-              />
-              {/* Resize handle */}
-              <div
-                className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
-                onMouseDown={handleResizeStart('repository')}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      ) : (
-        // Columns Layout: Separate repo sidebar and worktree panel
-        <>
-          {/* Column 1: Repository Sidebar */}
+          // Tree Layout: Single sidebar with repos as root nodes and worktrees as children
           <AnimatePresence initial={false}>
             {!repositoryCollapsed && (
               <motion.div
-                key="repository"
+                key="tree-sidebar"
                 initial={{ width: 0, opacity: 0 }}
-                animate={{ width: repositoryWidth, opacity: 1 }}
+                animate={{ width: treeSidebarWidth, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
                 transition={panelTransition}
                 className="relative h-full shrink-0 overflow-hidden"
               >
-                <RepositorySidebar
+                <TreeSidebar
                   repositories={repositories}
                   selectedRepo={selectedRepo}
+                  activeWorktree={activeWorktree}
+                  worktrees={sortedWorktrees}
+                  branches={branches}
+                  isLoading={worktreesLoading}
+                  isCreating={createWorktreeMutation.isPending}
+                  error={worktreeError}
                   onSelectRepo={handleSelectRepo}
+                  onSelectWorktree={handleSelectWorktree}
                   onAddRepository={handleAddRepository}
                   onRemoveRepository={handleRemoveRepository}
+                  onCreateWorktree={handleCreateWorktree}
+                  onRemoveWorktree={handleRemoveWorktree}
+                  onMergeWorktree={handleOpenMergeDialog}
                   onReorderRepositories={handleReorderRepositories}
+                  onReorderWorktrees={handleReorderWorktrees}
+                  onRefresh={() => {
+                    refetch();
+                    refetchBranches();
+                  }}
+                  onInitGit={handleInitGit}
                   onOpenSettings={() => setSettingsOpen(true)}
                   collapsed={false}
                   onCollapse={() => setRepositoryCollapsed(true)}
@@ -1016,196 +1062,241 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+        ) : (
+          // Columns Layout: Separate repo sidebar and worktree panel
+          <>
+            {/* Column 1: Repository Sidebar */}
+            <AnimatePresence initial={false}>
+              {!repositoryCollapsed && (
+                <motion.div
+                  key="repository"
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: repositoryWidth, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={panelTransition}
+                  className="relative h-full shrink-0 overflow-hidden"
+                >
+                  <RepositorySidebar
+                    repositories={repositories}
+                    selectedRepo={selectedRepo}
+                    onSelectRepo={handleSelectRepo}
+                    onAddRepository={handleAddRepository}
+                    onRemoveRepository={handleRemoveRepository}
+                    onReorderRepositories={handleReorderRepositories}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    collapsed={false}
+                    onCollapse={() => setRepositoryCollapsed(true)}
+                    groups={sortedGroups}
+                    activeGroupId={activeGroupId}
+                    onSwitchGroup={handleSwitchGroup}
+                    onCreateGroup={handleCreateGroup}
+                    onUpdateGroup={handleUpdateGroup}
+                    onDeleteGroup={handleDeleteGroup}
+                    onMoveToGroup={handleMoveToGroup}
+                    onSwitchTab={setActiveTab}
+                    onSwitchWorktreeByPath={handleSwitchWorktreePath}
+                  />
+                  {/* Resize handle */}
+                  <div
+                    className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+                    onMouseDown={handleResizeStart('repository')}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-          {/* Column 2: Worktree Panel */}
-          <AnimatePresence initial={false}>
-            {!worktreeCollapsed && (
-              <motion.div
-                key="worktree"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: worktreeWidth, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={panelTransition}
-                className="relative h-full shrink-0 overflow-hidden"
-              >
-                <WorktreePanel
-                  worktrees={sortedWorktrees}
-                  activeWorktree={activeWorktree}
-                  branches={branches}
-                  projectName={selectedRepo?.split(/[\\/]/).pop() || ''}
-                  isLoading={worktreesLoading}
-                  isCreating={createWorktreeMutation.isPending}
-                  error={worktreeError}
-                  onSelectWorktree={handleSelectWorktree}
-                  onCreateWorktree={handleCreateWorktree}
-                  onRemoveWorktree={handleRemoveWorktree}
-                  onMergeWorktree={handleOpenMergeDialog}
-                  onReorderWorktrees={handleReorderWorktrees}
-                  onInitGit={handleInitGit}
-                  onRefresh={() => {
-                    refetch();
-                    refetchBranches();
-                  }}
-                  width={worktreeWidth}
-                  collapsed={false}
-                  onCollapse={() => setWorktreeCollapsed(true)}
-                  repositoryCollapsed={repositoryCollapsed}
-                  onExpandRepository={() => setRepositoryCollapsed(false)}
-                />
-                {/* Resize handle */}
-                <div
-                  className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
-                  onMouseDown={handleResizeStart('worktree')}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </>
-      )}
+            {/* Column 2: Worktree Panel */}
+            <AnimatePresence initial={false}>
+              {!worktreeCollapsed && (
+                <motion.div
+                  key="worktree"
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: worktreeWidth, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={panelTransition}
+                  className="relative h-full shrink-0 overflow-hidden"
+                >
+                  <WorktreePanel
+                    worktrees={sortedWorktrees}
+                    activeWorktree={activeWorktree}
+                    branches={branches}
+                    projectName={selectedRepo?.split(/[\\/]/).pop() || ''}
+                    isLoading={worktreesLoading}
+                    isCreating={createWorktreeMutation.isPending}
+                    error={worktreeError}
+                    onSelectWorktree={handleSelectWorktree}
+                    onCreateWorktree={handleCreateWorktree}
+                    onRemoveWorktree={handleRemoveWorktree}
+                    onMergeWorktree={handleOpenMergeDialog}
+                    onReorderWorktrees={handleReorderWorktrees}
+                    onInitGit={handleInitGit}
+                    onRefresh={() => {
+                      refetch();
+                      refetchBranches();
+                    }}
+                    width={worktreeWidth}
+                    collapsed={false}
+                    onCollapse={() => setWorktreeCollapsed(true)}
+                    repositoryCollapsed={repositoryCollapsed}
+                    onExpandRepository={() => setRepositoryCollapsed(false)}
+                  />
+                  {/* Resize handle */}
+                  <div
+                    className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+                    onMouseDown={handleResizeStart('worktree')}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
 
-      {/* Main Content */}
-      <MainContent
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        tabOrder={tabOrder}
-        onTabReorder={handleReorderTabs}
-        repoPath={selectedRepo || undefined}
-        worktreePath={activeWorktree?.path}
-        repositoryCollapsed={repositoryCollapsed}
-        worktreeCollapsed={layoutMode === 'tree' ? repositoryCollapsed : worktreeCollapsed}
-        layoutMode={layoutMode}
-        onExpandRepository={() => setRepositoryCollapsed(false)}
-        onExpandWorktree={
-          layoutMode === 'tree'
-            ? () => setRepositoryCollapsed(false)
-            : () => setWorktreeCollapsed(false)
-        }
-        onSwitchWorktree={handleSwitchWorktreePath}
-        onSwitchTab={handleTabChange}
-      />
-
-      {/* Global Settings Dialog */}
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={(open) => {
-          setSettingsOpen(open);
-          if (!open) {
-            // Reset scroll flag when dialog closes
-            setScrollToProvider(false);
+        {/* Main Content */}
+        <MainContent
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          tabOrder={tabOrder}
+          onTabReorder={handleReorderTabs}
+          repoPath={selectedRepo || undefined}
+          worktreePath={activeWorktree?.path}
+          repositoryCollapsed={repositoryCollapsed}
+          worktreeCollapsed={layoutMode === 'tree' ? repositoryCollapsed : worktreeCollapsed}
+          layoutMode={layoutMode}
+          onExpandRepository={() => setRepositoryCollapsed(false)}
+          onExpandWorktree={
+            layoutMode === 'tree'
+              ? () => setRepositoryCollapsed(false)
+              : () => setWorktreeCollapsed(false)
           }
-        }}
-        initialCategory={settingsCategory}
-        scrollToProvider={scrollToProvider}
-      />
-
-      {/* Add Repository Dialog */}
-      <AddRepositoryDialog
-        open={addRepoDialogOpen}
-        onOpenChange={setAddRepoDialogOpen}
-        groups={sortedGroups}
-        defaultGroupId={activeGroupId === ALL_GROUP_ID ? null : activeGroupId}
-        onAddLocal={handleAddLocalRepository}
-        onCloneComplete={handleCloneRepository}
-      />
-
-      {/* Action Panel */}
-      <ActionPanel
-        open={actionPanelOpen}
-        onOpenChange={setActionPanelOpen}
-        repositoryCollapsed={repositoryCollapsed}
-        worktreeCollapsed={worktreeCollapsed}
-        projectPath={activeWorktree?.path || selectedRepo || undefined}
-        repositories={repositories}
-        selectedRepoPath={selectedRepo ?? undefined}
-        worktrees={worktrees}
-        activeWorktreePath={activeWorktree?.path}
-        onToggleRepository={() => setRepositoryCollapsed((prev) => !prev)}
-        onToggleWorktree={() => setWorktreeCollapsed((prev) => !prev)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onSwitchRepo={handleSelectRepo}
-        onSwitchWorktree={handleSelectWorktree}
-      />
-
-      {/* Update Notification */}
-      <UpdateNotification autoUpdateEnabled={autoUpdateEnabled} />
-
-      {/* Close Confirmation Dialog */}
-      <Dialog
-        open={closeDialogOpen}
-        onOpenChange={(open) => {
-          setCloseDialogOpen(open);
-          if (!open) {
-            window.electronAPI.app.confirmClose(false);
-          }
-        }}
-      >
-        <DialogPopup className="sm:max-w-sm" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>{t('Confirm exit')}</DialogTitle>
-            <DialogDescription>{t('Are you sure you want to exit the app?')}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter variant="bare">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCloseDialogOpen(false);
-                window.electronAPI.app.confirmClose(false);
-              }}
-            >
-              {t('Cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setCloseDialogOpen(false);
-                window.electronAPI.app.confirmClose(true);
-              }}
-            >
-              {t('Exit')}
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
-
-      {/* Merge Worktree Dialog */}
-      {mergeWorktree && (
-        <MergeWorktreeDialog
-          open={mergeDialogOpen}
-          onOpenChange={setMergeDialogOpen}
-          worktree={mergeWorktree}
-          branches={branches}
-          isLoading={mergeMutation.isPending}
-          onMerge={handleMerge}
-          onConflicts={handleMergeConflicts}
-          onSuccess={({ deletedWorktree }) => {
-            if (deletedWorktree && mergeWorktree) {
-              clearEditorWorktreeState(mergeWorktree.path);
-              if (activeWorktree?.path === mergeWorktree.path) {
-                setActiveWorktree(null);
-              }
-            }
-            refetch();
-            refetchBranches();
-          }}
+          onSwitchWorktree={handleSwitchWorktreePath}
+          onSwitchTab={handleTabChange}
         />
-      )}
 
-      {/* Merge Conflict Editor */}
-      {mergeConflicts?.conflicts && mergeConflicts.conflicts.length > 0 && (
-        <Dialog open={true} onOpenChange={() => {}}>
-          <DialogPopup className="h-[90vh] max-w-[95vw] p-0" showCloseButton={false}>
-            <MergeEditor
-              conflicts={mergeConflicts.conflicts}
-              workdir={selectedRepo || ''}
-              sourceBranch={mergeWorktree?.branch || undefined}
-              onResolve={handleResolveConflict}
-              onComplete={handleCompleteMerge}
-              onAbort={handleAbortMerge}
-              getConflictContent={getConflictContent}
-            />
+        {/* Global Settings Dialog */}
+        <SettingsDialog
+          open={settingsOpen}
+          onOpenChange={(open) => {
+            setSettingsOpen(open);
+            if (!open) {
+              // Reset scroll flag when dialog closes
+              setScrollToProvider(false);
+            }
+          }}
+          initialCategory={settingsCategory}
+          scrollToProvider={scrollToProvider}
+        />
+
+        {/* Add Repository Dialog */}
+        <AddRepositoryDialog
+          open={addRepoDialogOpen}
+          onOpenChange={setAddRepoDialogOpen}
+          groups={sortedGroups}
+          defaultGroupId={activeGroupId === ALL_GROUP_ID ? null : activeGroupId}
+          onAddLocal={handleAddLocalRepository}
+          onCloneComplete={handleCloneRepository}
+        />
+
+        {/* Action Panel */}
+        <ActionPanel
+          open={actionPanelOpen}
+          onOpenChange={setActionPanelOpen}
+          repositoryCollapsed={repositoryCollapsed}
+          worktreeCollapsed={worktreeCollapsed}
+          projectPath={activeWorktree?.path || selectedRepo || undefined}
+          repositories={repositories}
+          selectedRepoPath={selectedRepo ?? undefined}
+          worktrees={worktrees}
+          activeWorktreePath={activeWorktree?.path}
+          onToggleRepository={() => setRepositoryCollapsed((prev) => !prev)}
+          onToggleWorktree={() => setWorktreeCollapsed((prev) => !prev)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onSwitchRepo={handleSelectRepo}
+          onSwitchWorktree={handleSelectWorktree}
+        />
+
+        {/* Update Notification */}
+        <UpdateNotification autoUpdateEnabled={autoUpdateEnabled} />
+
+        {/* Unsaved Prompt Host */}
+        <UnsavedPromptHost />
+
+        {/* Close Confirmation Dialog */}
+        <Dialog
+          open={closeDialogOpen}
+          onOpenChange={(open) => {
+            setCloseDialogOpen(open);
+            if (!open) {
+              window.electronAPI.app.confirmClose(false);
+            }
+          }}
+        >
+          <DialogPopup className="sm:max-w-sm" showCloseButton={false}>
+            <DialogHeader>
+              <DialogTitle>{t('Confirm exit')}</DialogTitle>
+              <DialogDescription>{t('Are you sure you want to exit the app?')}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter variant="bare">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCloseDialogOpen(false);
+                  window.electronAPI.app.confirmClose(false);
+                }}
+              >
+                {t('Cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setCloseDialogOpen(false);
+                  window.electronAPI.app.confirmClose(true);
+                }}
+              >
+                {t('Exit')}
+              </Button>
+            </DialogFooter>
           </DialogPopup>
         </Dialog>
-      )}
+
+        {/* Merge Worktree Dialog */}
+        {mergeWorktree && (
+          <MergeWorktreeDialog
+            open={mergeDialogOpen}
+            onOpenChange={setMergeDialogOpen}
+            worktree={mergeWorktree}
+            branches={branches}
+            isLoading={mergeMutation.isPending}
+            onMerge={handleMerge}
+            onConflicts={handleMergeConflicts}
+            onSuccess={({ deletedWorktree }) => {
+              if (deletedWorktree && mergeWorktree) {
+                clearEditorWorktreeState(mergeWorktree.path);
+                if (activeWorktree?.path === mergeWorktree.path) {
+                  setActiveWorktree(null);
+                }
+              }
+              refetch();
+              refetchBranches();
+            }}
+          />
+        )}
+
+        {/* Merge Conflict Editor */}
+        {mergeConflicts?.conflicts && mergeConflicts.conflicts.length > 0 && (
+          <Dialog open={true} onOpenChange={() => {}}>
+            <DialogPopup className="h-[90vh] max-w-[95vw] p-0" showCloseButton={false}>
+              <MergeEditor
+                conflicts={mergeConflicts.conflicts}
+                workdir={selectedRepo || ''}
+                sourceBranch={mergeWorktree?.branch || undefined}
+                onResolve={handleResolveConflict}
+                onComplete={handleCompleteMerge}
+                onAbort={handleAbortMerge}
+                getConflictContent={getConflictContent}
+              />
+            </DialogPopup>
+          </Dialog>
+        )}
 
         {/* Clone Progress Float - shows clone progress in bottom right corner */}
         <CloneProgressFloat onCloneComplete={handleCloneRepository} />

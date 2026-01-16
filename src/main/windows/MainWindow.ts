@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
 import { IPC_CHANNELS } from '@shared/types';
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { autoUpdaterService } from '../services/updater/AutoUpdater';
 
 interface WindowState {
@@ -103,15 +104,120 @@ export function createMainWindow(): BrowserWindow {
   });
 
   win.on('close', (e) => {
-    // Skip confirmation if force close, dev mode, or quitting for update
-    if (forceClose || is.dev || autoUpdaterService.isQuittingForUpdate()) {
+    // Skip confirmation if force close, or quitting for update
+    if (forceClose || autoUpdaterService.isQuittingForUpdate()) {
       saveWindowState(win);
       return;
     }
 
     e.preventDefault();
-    // Send close request to renderer for custom dialog
-    win.webContents.send(IPC_CHANNELS.APP_CLOSE_REQUEST);
+
+    const requestId = randomUUID();
+
+    const waitFor = <T>(
+      channel: string,
+      predicate: (event: Electron.IpcMainEvent, ...args: any[]) => T | null
+    ) =>
+      new Promise<T | null>((resolve) => {
+        const timeout = setTimeout(() => {
+          ipcMain.removeListener(channel, handler);
+          resolve(null);
+        }, 2000);
+
+        const handler = (event: Electron.IpcMainEvent, ...args: any[]) => {
+          const match = predicate(event, ...args);
+          if (match === null) return;
+          clearTimeout(timeout);
+          ipcMain.removeListener(channel, handler);
+          resolve(match);
+        };
+
+        ipcMain.on(channel, handler);
+      });
+
+    const runCloseFlow = async () => {
+      win.webContents.send(IPC_CHANNELS.APP_CLOSE_REQUEST, requestId);
+
+      const response = await waitFor<{ dirtyPaths: string[] }>(
+        IPC_CHANNELS.APP_CLOSE_RESPONSE,
+        (event, respRequestId: string, payload: { dirtyPaths: string[] }) => {
+          if (event.sender !== win.webContents) return null;
+          if (respRequestId !== requestId) return null;
+          return payload;
+        }
+      );
+
+      // If renderer doesn't respond, fall back to a simple confirm dialog to avoid blocking close.
+      if (!response) {
+        const { response: buttonIndex } = await dialog.showMessageBox(win, {
+          type: 'question',
+          buttons: ['Exit', 'Cancel'],
+          defaultId: 1,
+          cancelId: 1,
+          message: 'Are you sure you want to exit the app?',
+        });
+        if (buttonIndex !== 0) return;
+        forceClose = true;
+        win.hide();
+        win.close();
+        return;
+      }
+
+      const dirtyPaths = response.dirtyPaths ?? [];
+      if (dirtyPaths.length === 0) {
+        forceClose = true;
+        win.hide();
+        win.close();
+        return;
+      }
+
+      for (const filePath of dirtyPaths) {
+        const fileName = filePath.split(/[/\\\\]/).pop() || filePath;
+        const { response: buttonIndex } = await dialog.showMessageBox(win, {
+          type: 'warning',
+          buttons: ['Save', "Don't Save", 'Cancel'],
+          defaultId: 0,
+          cancelId: 2,
+          message: `Do you want to save the changes you made to ${fileName}?`,
+          detail: "Your changes will be lost if you don't save them.",
+        });
+
+        if (buttonIndex === 2) {
+          return;
+        }
+
+        if (buttonIndex === 0) {
+          const saveRequestId = `${requestId}:${filePath}`;
+          win.webContents.send(IPC_CHANNELS.APP_CLOSE_SAVE_REQUEST, saveRequestId, filePath);
+
+          const saveResult = await waitFor<{ ok: boolean; error?: string }>(
+            IPC_CHANNELS.APP_CLOSE_SAVE_RESPONSE,
+            (event, respSaveRequestId: string, payload: { ok: boolean; error?: string }) => {
+              if (event.sender !== win.webContents) return null;
+              if (respSaveRequestId !== saveRequestId) return null;
+              return payload;
+            }
+          );
+
+          if (!saveResult?.ok) {
+            await dialog.showMessageBox(win, {
+              type: 'error',
+              buttons: ['OK'],
+              defaultId: 0,
+              message: 'Save failed',
+              detail: saveResult?.error || 'Unknown error',
+            });
+            return;
+          }
+        }
+      }
+
+      forceClose = true;
+      win.hide();
+      win.close();
+    };
+
+    void runCloseFlow();
   });
 
   // Open external links in browser

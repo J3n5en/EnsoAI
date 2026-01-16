@@ -8,7 +8,9 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
+import { requestUnsavedChoice } from '@/stores/unsavedPrompt';
 
 // Global ref for passing selected text to search dialog
 declare global {
@@ -23,6 +25,7 @@ import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
 import { EditorArea, type EditorAreaRef } from './EditorArea';
 import { FileTree } from './FileTree';
 import { NewItemDialog } from './NewItemDialog';
+import type { UnsavedChangesChoice } from './UnsavedChangesDialog';
 
 // Panel size constraints
 const PANEL_MIN_WIDTH = 180;
@@ -69,10 +72,6 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
     loadFile,
     saveFile,
     closeFile,
-    closeOtherFiles,
-    closeFilesToLeft,
-    closeFilesToRight,
-    closeAllFiles,
     setActiveFile,
     updateFileContent,
     setTabViewState,
@@ -131,6 +130,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
 
   // Get search keybindings from settings
   const searchKeybindings = useSettingsStore((s) => s.searchKeybindings);
+  const editorSettings = useSettingsStore((s) => s.editorSettings);
 
   // Helper to open search dialog with current selection
   const openSearch = useCallback((mode: SearchMode, selectedText?: string) => {
@@ -165,7 +165,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
       if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
         e.preventDefault();
         if (activeTab) {
-          closeFile(activeTab.path);
+          editorAreaRef.current?.requestCloseTab(activeTab.path);
         }
       }
       if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
@@ -178,7 +178,78 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, tabs, activeTab, closeFile, setActiveFile, searchKeybindings, openSearch]);
+  }, [isActive, tabs, activeTab, setActiveFile, searchKeybindings, openSearch]);
+
+  const shouldPromptUnsaved = useCallback(
+    (path: string) => {
+      const tab = tabs.find((t) => t.path === path);
+      if (!tab) return false;
+      const autoSaveOff = editorSettings.autoSave === 'off';
+      return autoSaveOff && tab.isDirty;
+    },
+    [tabs, editorSettings.autoSave]
+  );
+
+  const promptUnsaved = useCallback(
+    async (path: string): Promise<UnsavedChangesChoice> => {
+      if (!shouldPromptUnsaved(path)) return 'dontSave';
+      const fileName = path.split(/[/\\\\]/).pop() ?? path;
+      return requestUnsavedChoice(fileName);
+    },
+    [shouldPromptUnsaved]
+  );
+
+  const requestCloseTab = useCallback(
+    async (path: string) => {
+      const choice = await promptUnsaved(path);
+      if (choice === 'cancel') return;
+
+      if (choice === 'save') {
+        try {
+          await saveFile.mutateAsync(path);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          toastManager.add({
+            type: 'error',
+            title: t('Save failed'),
+            description: message,
+          });
+          return;
+        }
+      }
+
+      closeFile(path);
+    },
+    [promptUnsaved, saveFile, closeFile, t]
+  );
+
+  const requestCloseTabs = useCallback(
+    async (paths: string[]) => {
+      for (const path of paths) {
+        const tab = tabs.find((t) => t.path === path);
+        if (!tab) continue;
+        const choice = await promptUnsaved(path);
+        if (choice === 'cancel') return;
+
+        if (choice === 'save') {
+          try {
+            await saveFile.mutateAsync(path);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            toastManager.add({
+              type: 'error',
+              title: t('Save failed'),
+              description: message,
+            });
+            return;
+          }
+        }
+
+        closeFile(path);
+      }
+    },
+    [tabs, promptUnsaved, saveFile, closeFile, t]
+  );
 
   // Handle file click (single click = open in editor)
   const handleFileClick = useCallback(
@@ -204,9 +275,9 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   // Handle tab close
   const handleTabClose = useCallback(
     (path: string) => {
-      closeFile(path);
+      requestCloseTab(path);
     },
-    [closeFile]
+    [requestCloseTab]
   );
 
   // Handle save
@@ -367,10 +438,26 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
           sessionId={sessionId}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
-          onCloseOthers={closeOtherFiles}
-          onCloseAll={closeAllFiles}
-          onCloseLeft={closeFilesToLeft}
-          onCloseRight={closeFilesToRight}
+          onCloseOthers={async (keepPath) => {
+            const paths = tabs.filter((t) => t.path !== keepPath).map((t) => t.path);
+            await requestCloseTabs(paths);
+          }}
+          onCloseAll={async () => {
+            const paths = tabs.map((t) => t.path);
+            await requestCloseTabs(paths);
+          }}
+          onCloseLeft={async (path) => {
+            const index = tabs.findIndex((t) => t.path === path);
+            if (index <= 0) return;
+            const paths = tabs.slice(0, index).map((t) => t.path);
+            await requestCloseTabs(paths);
+          }}
+          onCloseRight={async (path) => {
+            const index = tabs.findIndex((t) => t.path === path);
+            if (index < 0 || index >= tabs.length - 1) return;
+            const paths = tabs.slice(index + 1).map((t) => t.path);
+            await requestCloseTabs(paths);
+          }}
           onTabReorder={reorderTabs}
           onContentChange={updateFileContent}
           onViewStateChange={setTabViewState}

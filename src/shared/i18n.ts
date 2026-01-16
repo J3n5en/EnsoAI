@@ -376,6 +376,11 @@ export const zhTranslations: Record<string, string> = {
   Preview: '预览',
   'Remote branches': '远程分支',
   Save: '保存',
+  "Don't Save": '不保存',
+  'Save failed': '保存失败',
+  'File read failed': '读取文件失败',
+  'Do you want to save the changes you made to {{file}}?': '要保存对 {{file}} 的更改吗？',
+  "Your changes will be lost if you don't save them.": '如果不保存，你的更改将丢失。',
   'Set global main tab shortcuts (Cmd on macOS, Win on Windows)':
     '设置全局主标签切换快捷键 (macOS 上是 Cmd,Windows 上是 Win 键)',
   'Short description': '简短描述',
