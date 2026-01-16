@@ -1,10 +1,12 @@
 import { execSync } from 'node:child_process';
 import { streamText } from 'ai';
-import { getModel, type ModelId } from './providers';
+import { type AIProvider, getModel, type ModelId, type ReasoningEffort } from './providers';
 
 export interface CodeReviewOptions {
   workdir: string;
+  provider: AIProvider;
   model: ModelId;
+  reasoningEffort?: ReasoningEffort;
   language: string;
   reviewId: string;
   onChunk: (chunk: string) => void;
@@ -59,7 +61,17 @@ ${gitLog || '(No commit history available)'}`;
 }
 
 export async function startCodeReview(options: CodeReviewOptions): Promise<void> {
-  const { workdir, model, language, reviewId, onChunk, onComplete, onError } = options;
+  const {
+    workdir,
+    provider,
+    model,
+    reasoningEffort,
+    language,
+    reviewId,
+    onChunk,
+    onComplete,
+    onError,
+  } = options;
 
   const gitDiff = runGit('git --no-pager diff HEAD', workdir);
   const defaultBranch =
@@ -82,7 +94,7 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
 
   try {
     const result = streamText({
-      model: getModel(model),
+      model: getModel(model, { provider, reasoningEffort }),
       prompt: buildPrompt(gitDiff, gitLog, language),
       abortSignal: controller.signal,
     });

@@ -8,7 +8,52 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/i18n';
-import { defaultBranchNameGeneratorSettings, useSettingsStore } from '@/stores/settings';
+import {
+  type AIProvider,
+  defaultBranchNameGeneratorSettings,
+  type ReasoningEffort,
+  useSettingsStore,
+} from '@/stores/settings';
+
+// Provider options
+const PROVIDERS: { value: AIProvider; label: string }[] = [
+  { value: 'claude-code', label: 'Claude Code' },
+  { value: 'codex-cli', label: 'Codex CLI' },
+  { value: 'gemini-cli', label: 'Gemini CLI' },
+];
+
+// Model options per provider
+const MODELS_BY_PROVIDER: Record<AIProvider, { value: string; label: string }[]> = {
+  'claude-code': [
+    { value: 'haiku', label: 'Haiku' },
+    { value: 'sonnet', label: 'Sonnet' },
+    { value: 'opus', label: 'Opus' },
+  ],
+  'codex-cli': [
+    { value: 'gpt-5.2', label: 'GPT-5.2' },
+    { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
+  ],
+  'gemini-cli': [
+    { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+  ],
+};
+
+// Reasoning effort options for Codex CLI
+const REASONING_EFFORTS: { value: string; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'xHigh' },
+];
+
+// Get default model for provider
+function getDefaultModel(provider: AIProvider): string {
+  const models = MODELS_BY_PROVIDER[provider];
+  return models[0]?.value ?? 'haiku';
+}
 
 export function AISettings() {
   const { t } = useI18n();
@@ -20,6 +65,28 @@ export function AISettings() {
     branchNameGenerator,
     setBranchNameGenerator,
   } = useSettingsStore();
+
+  // Handle provider change with model reset
+  const handleCommitProviderChange = (provider: AIProvider) => {
+    setCommitMessageGenerator({
+      provider,
+      model: getDefaultModel(provider),
+    });
+  };
+
+  const handleCodeReviewProviderChange = (provider: AIProvider) => {
+    setCodeReview({
+      provider,
+      model: getDefaultModel(provider),
+    });
+  };
+
+  const handleBranchProviderChange = (provider: AIProvider) => {
+    setBranchNameGenerator({
+      provider,
+      model: getDefaultModel(provider),
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -35,7 +102,7 @@ export function AISettings() {
         <div>
           <h4 className="text-base font-medium">{t('Commit Message Generator')}</h4>
           <p className="text-sm text-muted-foreground">
-            {t('Auto-generate commit messages using Claude')}
+            {t('Auto-generate commit messages using AI')}
           </p>
         </div>
 
@@ -54,6 +121,96 @@ export function AISettings() {
 
         {commitMessageGenerator.enabled && (
           <div className="mt-4 space-y-4 border-t pt-4">
+            {/* Provider */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Provider')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={commitMessageGenerator.provider ?? 'claude-code'}
+                  onValueChange={(v) => handleCommitProviderChange(v as AIProvider)}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue>
+                      {PROVIDERS.find((p) => p.value === commitMessageGenerator.provider)?.label ??
+                        'Claude Code'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {PROVIDERS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('AI provider to use')}</p>
+              </div>
+            </div>
+
+            {/* Model */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Model')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={commitMessageGenerator.model}
+                  onValueChange={(v) => v && setCommitMessageGenerator({ model: v })}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue>
+                      {MODELS_BY_PROVIDER[commitMessageGenerator.provider ?? 'claude-code']?.find(
+                        (m) => m.value === commitMessageGenerator.model
+                      )?.label ?? commitMessageGenerator.model}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {MODELS_BY_PROVIDER[commitMessageGenerator.provider ?? 'claude-code']?.map(
+                      (m) => (
+                        <SelectItem key={m.value} value={m.value}>
+                          {m.label}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('Model for generating commit messages')}
+                </p>
+              </div>
+            </div>
+
+            {/* Reasoning Level - Only for Codex CLI */}
+            {commitMessageGenerator.provider === 'codex-cli' && (
+              <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                <span className="text-sm font-medium">{t('Reasoning Level')}</span>
+                <div className="space-y-1.5">
+                  <Select
+                    value={commitMessageGenerator.reasoningEffort ?? 'medium'}
+                    onValueChange={(v) =>
+                      v && setCommitMessageGenerator({ reasoningEffort: v as ReasoningEffort })
+                    }
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue>
+                        {REASONING_EFFORTS.find(
+                          (r) => r.value === (commitMessageGenerator.reasoningEffort ?? 'medium')
+                        )?.label ?? 'Medium'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup>
+                      {REASONING_EFFORTS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t('Reasoning depth for Codex CLI')}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Max Diff Lines */}
             <div className="grid grid-cols-[140px_1fr] items-center gap-4">
               <span className="text-sm font-medium">{t('Max Diff Lines')}</span>
@@ -96,39 +253,6 @@ export function AISettings() {
                 <p className="text-xs text-muted-foreground">{t('Timeout in seconds')}</p>
               </div>
             </div>
-
-            {/* Model */}
-            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
-              <span className="text-sm font-medium">{t('Model')}</span>
-              <div className="space-y-1.5">
-                <Select
-                  value={commitMessageGenerator.model ?? 'haiku'}
-                  onValueChange={(v) =>
-                    setCommitMessageGenerator({
-                      model: v as 'default' | 'opus' | 'sonnet' | 'haiku',
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue>
-                      {(commitMessageGenerator.model ?? 'haiku') === 'default'
-                        ? t('Default')
-                        : (commitMessageGenerator.model ?? 'haiku').charAt(0).toUpperCase() +
-                          (commitMessageGenerator.model ?? 'haiku').slice(1)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectPopup>
-                    <SelectItem value="haiku">Haiku</SelectItem>
-                    <SelectItem value="sonnet">Sonnet</SelectItem>
-                    <SelectItem value="opus">Opus</SelectItem>
-                    <SelectItem value="default">{t('Default')}</SelectItem>
-                  </SelectPopup>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t('Claude model for generating commit messages')}
-                </p>
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -157,28 +281,91 @@ export function AISettings() {
 
         {codeReview.enabled && (
           <div className="mt-4 space-y-4 border-t pt-4">
+            {/* Provider */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Provider')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={codeReview.provider ?? 'claude-code'}
+                  onValueChange={(v) => handleCodeReviewProviderChange(v as AIProvider)}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue>
+                      {PROVIDERS.find((p) => p.value === codeReview.provider)?.label ??
+                        'Claude Code'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {PROVIDERS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('AI provider to use')}</p>
+              </div>
+            </div>
+
             {/* Model */}
             <div className="grid grid-cols-[140px_1fr] items-center gap-4">
               <span className="text-sm font-medium">{t('Model')}</span>
               <div className="space-y-1.5">
                 <Select
                   value={codeReview.model}
-                  onValueChange={(v) => setCodeReview({ model: v as 'opus' | 'sonnet' | 'haiku' })}
+                  onValueChange={(v) => v && setCodeReview({ model: v })}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-40">
                     <SelectValue>
-                      {codeReview.model.charAt(0).toUpperCase() + codeReview.model.slice(1)}
+                      {MODELS_BY_PROVIDER[codeReview.provider ?? 'claude-code']?.find(
+                        (m) => m.value === codeReview.model
+                      )?.label ?? codeReview.model}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectPopup>
-                    <SelectItem value="haiku">Haiku</SelectItem>
-                    <SelectItem value="sonnet">Sonnet</SelectItem>
-                    <SelectItem value="opus">Opus</SelectItem>
+                    {MODELS_BY_PROVIDER[codeReview.provider ?? 'claude-code']?.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
                   </SelectPopup>
                 </Select>
-                <p className="text-xs text-muted-foreground">{t('Claude model for code review')}</p>
+                <p className="text-xs text-muted-foreground">{t('Model for code review')}</p>
               </div>
             </div>
+
+            {/* Reasoning Level - Only for Codex CLI */}
+            {codeReview.provider === 'codex-cli' && (
+              <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                <span className="text-sm font-medium">{t('Reasoning Level')}</span>
+                <div className="space-y-1.5">
+                  <Select
+                    value={codeReview.reasoningEffort ?? 'medium'}
+                    onValueChange={(v) =>
+                      v && setCodeReview({ reasoningEffort: v as ReasoningEffort })
+                    }
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue>
+                        {REASONING_EFFORTS.find(
+                          (r) => r.value === (codeReview.reasoningEffort ?? 'medium')
+                        )?.label ?? 'Medium'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup>
+                      {REASONING_EFFORTS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t('Reasoning depth for Codex CLI')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Language */}
             <div className="grid grid-cols-[140px_1fr] items-center gap-4">
@@ -204,7 +391,7 @@ export function AISettings() {
         <div>
           <h4 className="text-base font-medium">{t('Branch Name Generator')}</h4>
           <p className="text-sm text-muted-foreground">
-            {t('Auto-generate branch names using Claude')}
+            {t('Auto-generate branch names using AI')}
           </p>
         </div>
 
@@ -223,37 +410,93 @@ export function AISettings() {
 
         {branchNameGenerator.enabled && (
           <div className="mt-4 space-y-4 border-t pt-4">
+            {/* Provider */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Provider')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={branchNameGenerator.provider ?? 'claude-code'}
+                  onValueChange={(v) => handleBranchProviderChange(v as AIProvider)}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue>
+                      {PROVIDERS.find((p) => p.value === branchNameGenerator.provider)?.label ??
+                        'Claude Code'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {PROVIDERS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('AI provider to use')}</p>
+              </div>
+            </div>
+
+            {/* Model */}
             <div className="grid grid-cols-[140px_1fr] items-center gap-4">
               <span className="text-sm font-medium">{t('Model')}</span>
               <div className="space-y-1.5">
                 <Select
-                  value={branchNameGenerator.model ?? 'haiku'}
-                  onValueChange={(v) =>
-                    setBranchNameGenerator({
-                      model: v as 'default' | 'opus' | 'sonnet' | 'haiku',
-                    })
-                  }
+                  value={branchNameGenerator.model}
+                  onValueChange={(v) => v && setBranchNameGenerator({ model: v })}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-40">
                     <SelectValue>
-                      {(branchNameGenerator.model ?? 'haiku') === 'default'
-                        ? t('Default')
-                        : (branchNameGenerator.model ?? 'haiku').charAt(0).toUpperCase() +
-                          (branchNameGenerator.model ?? 'haiku').slice(1)}
+                      {MODELS_BY_PROVIDER[branchNameGenerator.provider ?? 'claude-code']?.find(
+                        (m) => m.value === branchNameGenerator.model
+                      )?.label ?? branchNameGenerator.model}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectPopup>
-                    <SelectItem value="haiku">Haiku</SelectItem>
-                    <SelectItem value="sonnet">Sonnet</SelectItem>
-                    <SelectItem value="opus">Opus</SelectItem>
-                    <SelectItem value="default">{t('Default')}</SelectItem>
+                    {MODELS_BY_PROVIDER[branchNameGenerator.provider ?? 'claude-code']?.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
                   </SelectPopup>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {t('Claude model for generating branch names')}
+                  {t('Model for generating branch names')}
                 </p>
               </div>
             </div>
+
+            {/* Reasoning Level - Only for Codex CLI */}
+            {branchNameGenerator.provider === 'codex-cli' && (
+              <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                <span className="text-sm font-medium">{t('Reasoning Level')}</span>
+                <div className="space-y-1.5">
+                  <Select
+                    value={branchNameGenerator.reasoningEffort ?? 'medium'}
+                    onValueChange={(v) =>
+                      v && setBranchNameGenerator({ reasoningEffort: v as ReasoningEffort })
+                    }
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue>
+                        {REASONING_EFFORTS.find(
+                          (r) => r.value === (branchNameGenerator.reasoningEffort ?? 'medium')
+                        )?.label ?? 'Medium'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup>
+                      {REASONING_EFFORTS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t('Reasoning depth for Codex CLI')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <span className="text-sm font-medium">{t('Prompt')}</span>

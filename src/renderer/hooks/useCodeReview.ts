@@ -28,10 +28,18 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
     if (!repoPath) return;
 
     await startCodeReview(repoPath, {
+      provider: codeReviewSettings.provider,
       model: codeReviewSettings.model,
+      reasoningEffort: codeReviewSettings.reasoningEffort,
       language: codeReviewSettings.language ?? '中文',
     });
-  }, [repoPath, codeReviewSettings.model, codeReviewSettings.language]);
+  }, [
+    repoPath,
+    codeReviewSettings.provider,
+    codeReviewSettings.model,
+    codeReviewSettings.reasoningEffort,
+    codeReviewSettings.language,
+  ]);
 
   return {
     content: review.content,

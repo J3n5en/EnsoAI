@@ -1,12 +1,14 @@
 import { execSync } from 'node:child_process';
 import { generateText } from 'ai';
-import { getModel, type ModelId } from './providers';
+import { type AIProvider, getModel, type ModelId, type ReasoningEffort } from './providers';
 
 export interface CommitMessageOptions {
   workdir: string;
   maxDiffLines: number;
   timeout: number;
+  provider: AIProvider;
   model: ModelId;
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface CommitMessageResult {
@@ -26,7 +28,7 @@ function runGit(cmd: string, cwd: string): string {
 export async function generateCommitMessage(
   options: CommitMessageOptions
 ): Promise<CommitMessageResult> {
-  const { workdir, maxDiffLines, timeout, model } = options;
+  const { workdir, maxDiffLines, timeout, provider, model, reasoningEffort } = options;
 
   const recentCommits = runGit('git --no-pager log -5 --format="%s"', workdir);
   const stagedStat = runGit('git --no-pager diff --cached --stat', workdir);
@@ -48,7 +50,7 @@ ${truncatedDiff}`;
 
   try {
     const { text } = await generateText({
-      model: getModel(model),
+      model: getModel(model, { provider, reasoningEffort }),
       prompt,
       abortSignal: AbortSignal.timeout(timeout * 1000),
     });

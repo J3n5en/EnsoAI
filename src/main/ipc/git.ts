@@ -1,18 +1,17 @@
-import type { ChildProcess } from 'node:child_process';
-import { execSync, spawn } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { type FileChangeStatus, IPC_CHANNELS } from '@shared/types';
 import { ipcMain } from 'electron';
 import {
+  type AIProvider,
+  generateBranchName,
   generateCommitMessage,
   type ModelId,
+  type ReasoningEffort,
   startCodeReview as startCodeReviewService,
   stopCodeReview as stopCodeReviewService,
 } from '../services/ai';
 import { GitService } from '../services/git/GitService';
-import { getProxyEnvVars } from '../services/proxy/ProxyConfig';
-import { getEnvForCommand, getShellForCommand, killProcessTree } from '../utils/shell';
 
 const gitServices = new Map<string, GitService>();
 
@@ -203,14 +202,22 @@ export function registerGitHandlers(): void {
     async (
       _,
       workdir: string,
-      options: { maxDiffLines: number; timeout: number; model: string }
+      options: {
+        maxDiffLines: number;
+        timeout: number;
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      }
     ): Promise<{ success: boolean; message?: string; error?: string }> => {
       const resolved = validateWorkdir(workdir);
       return generateCommitMessage({
         workdir: resolved,
         maxDiffLines: options.maxDiffLines,
         timeout: options.timeout,
+        provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
+        reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
       });
     }
   );
@@ -222,7 +229,9 @@ export function registerGitHandlers(): void {
       event,
       workdir: string,
       options: {
+        provider: string;
         model: string;
+        reasoningEffort?: string;
         language?: string;
         reviewId: string;
       }
@@ -232,7 +241,9 @@ export function registerGitHandlers(): void {
 
       startCodeReviewService({
         workdir: resolved,
+        provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
+        reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
         language: options.language ?? '中文',
         reviewId: options.reviewId,
         onChunk: (chunk) => {
@@ -311,103 +322,20 @@ export function registerGitHandlers(): void {
     async (
       _,
       workdir: string,
-      options: { prompt: string; model: string }
+      options: {
+        prompt: string;
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      }
     ): Promise<{ success: boolean; branchName?: string; error?: string }> => {
       const resolved = validateWorkdir(workdir);
-
-      return new Promise((resolve) => {
-        const { shell, args: shellArgs } = getShellForCommand();
-        const claudeArgs = [
-          '-p',
-          '--output-format',
-          'json',
-          '--no-session-persistence',
-          '--tools',
-          '',
-          '--model',
-          options.model || 'haiku',
-        ];
-        const command = `claude ${claudeArgs.join(' ')}`;
-
-        const proc = spawn(shell, [...shellArgs, command], {
-          cwd: resolved,
-          env: { ...getEnvForCommand(), ...getProxyEnvVars() },
-        });
-
-        proc.stdin.on('error', (err) => {
-          if ((err as NodeJS.ErrnoException).code !== 'EPIPE') {
-            console.error('[GenerateBranchName] stdin error:', err.message);
-          }
-        });
-
-        proc.stdin.write(options.prompt);
-        proc.stdin.end();
-
-        let stdout = '';
-        let stderr = '';
-
-        const timer = setTimeout(() => {
-          killProcessTree(proc);
-          resolve({ success: false, error: 'timeout' });
-        }, 60000);
-
-        proc.stdout.on('data', (data) => {
-          stdout += data.toString();
-        });
-
-        proc.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        proc.on('close', (code) => {
-          clearTimeout(timer);
-
-          if (code !== 0) {
-            resolve({ success: false, error: stderr || `Exit code: ${code}` });
-            return;
-          }
-
-          try {
-            // 清理 ANSI 转义码
-            // biome-ignore lint/complexity/useRegexLiterals: Using RegExp constructor to avoid control character lint error
-            const ansiRegex = new RegExp(
-              '[\\u001b\\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]',
-              'g'
-            );
-            let jsonStr = stdout.replace(ansiRegex, '').trim();
-
-            const jsonStart = jsonStr.indexOf('{');
-            const jsonEnd = jsonStr.lastIndexOf('}');
-
-            if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-              jsonStr = jsonStr.slice(jsonStart, jsonEnd + 1);
-            }
-
-            const result = JSON.parse(jsonStr);
-
-            console.log('[GenerateBranchName] Parsed result:', JSON.stringify(result, null, 2));
-
-            if (result.type === 'result' && result.subtype === 'success' && result.result) {
-              resolve({ success: true, branchName: result.result });
-            } else {
-              console.error('[GenerateBranchName] Unexpected result format:', result);
-              resolve({
-                success: false,
-                error: result.error || 'Unknown error',
-              });
-            }
-          } catch (err) {
-            console.error('[GenerateBranchName] Failed to parse stdout:', stdout);
-            console.error('[GenerateBranchName] Parse error:', err);
-            console.error('[GenerateBranchName] stderr:', stderr);
-            resolve({ success: false, error: 'Failed to parse response' });
-          }
-        });
-
-        proc.on('error', (err) => {
-          clearTimeout(timer);
-          resolve({ success: false, error: err.message });
-        });
+      return generateBranchName({
+        workdir: resolved,
+        prompt: options.prompt,
+        provider: (options.provider ?? 'claude-code') as AIProvider,
+        model: options.model as ModelId,
+        reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
       });
     }
   );

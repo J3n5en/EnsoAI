@@ -65,7 +65,9 @@ let cleanupFn: (() => void) | null = null;
 export async function startCodeReview(
   repoPath: string,
   settings: {
+    provider: string;
     model: string;
+    reasoningEffort?: string;
     language: string;
   }
 ): Promise<void> {
@@ -118,7 +120,9 @@ export async function startCodeReview(
 
   try {
     const result = await window.electronAPI.git.startCodeReview(repoPath, {
+      provider: settings.provider,
       model: settings.model,
+      reasoningEffort: settings.reasoningEffort,
       language: settings.language ?? '中文',
       reviewId,
     });

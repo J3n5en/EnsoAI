@@ -21,6 +21,7 @@ import { toastManager } from '@/components/ui/toast';
 import { useCodeReview } from '@/hooks/useCodeReview';
 import { useI18n } from '@/i18n';
 import { stopCodeReview, useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
+import { useSettingsStore } from '@/stores/settings';
 
 const markdownComponents: Components = {
   pre: ({ children }) => <>{children}</>,
@@ -114,6 +115,7 @@ interface CodeReviewModalProps {
 export function CodeReviewModal({ open, onOpenChange, repoPath }: CodeReviewModalProps) {
   const { t } = useI18n();
   const { content, status, error, startReview, reset } = useCodeReview({ repoPath });
+  const codeReviewSettings = useSettingsStore((s) => s.codeReview);
 
   const reviewRepoPath = useCodeReviewContinueStore((s) => s.review.repoPath);
   const minimize = useCodeReviewContinueStore((s) => s.minimize);
@@ -228,7 +230,12 @@ export function CodeReviewModal({ open, onOpenChange, repoPath }: CodeReviewModa
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <StatusIcon />
-            <span>{t('Code Review')}</span>
+            <span>
+              {t('Code Review')}
+              <span className="text-muted-foreground font-normal">
+                ({codeReviewSettings.provider}/{codeReviewSettings.model})
+              </span>
+            </span>
           </DialogTitle>
           <DialogDescription>{statusText()}</DialogDescription>
         </DialogHeader>

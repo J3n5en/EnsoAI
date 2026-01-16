@@ -99,18 +99,26 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_STATS, workdir),
     generateCommitMessage: (
       workdir: string,
-      options: { maxDiffLines: number; timeout: number; model: string }
+      options: {
+        maxDiffLines: number;
+        timeout: number;
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      }
     ): Promise<{ success: boolean; message?: string; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_GENERATE_COMMIT_MSG, workdir, options),
     generateBranchName: (
       workdir: string,
-      options: { prompt: string; model: string }
+      options: { prompt: string; provider: string; model: string; reasoningEffort?: string }
     ): Promise<{ success: boolean; branchName?: string; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_GENERATE_BRANCH_NAME, workdir, options),
     startCodeReview: (
       workdir: string,
       options: {
+        provider: string;
         model: string;
+        reasoningEffort?: string;
         reviewId: string;
         language?: string;
       }
