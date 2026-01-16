@@ -1,11 +1,13 @@
 import type { Locale } from '@shared/i18n';
 import { normalizeLocale } from '@shared/i18n';
 import type {
+  AIProvider,
   BuiltinAgentId,
   CustomAgent,
   McpServer,
   PromptPreset,
   ProxySettings,
+  ReasoningEffort,
   ShellConfig,
 } from '@shared/types';
 import { create } from 'zustand';
@@ -245,16 +247,7 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   providers: [],
 };
 
-// AI Provider types
-export type AIProvider = 'claude-code' | 'codex-cli' | 'gemini-cli';
-
-export type ClaudeModelId = 'haiku' | 'sonnet' | 'opus';
-export type CodexModelId = 'gpt-5.2' | 'gpt-5.2-codex';
-export type GeminiModelId = 'gemini-3-pro-preview' | 'gemini-3-flash-preview';
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-
-// Commit message generator settings
-export type CommitMessageModel = 'default' | 'opus' | 'sonnet' | 'haiku';
+export type { AIProvider, ReasoningEffort } from '@shared/types';
 
 export interface CommitMessageGeneratorSettings {
   enabled: boolean;
@@ -273,9 +266,6 @@ export const defaultCommitMessageGeneratorSettings: CommitMessageGeneratorSettin
   model: 'haiku',
 };
 
-// Code review settings
-export type CodeReviewModel = 'opus' | 'sonnet' | 'haiku';
-
 export interface CodeReviewSettings {
   enabled: boolean;
   provider: AIProvider;
@@ -290,8 +280,6 @@ export const defaultCodeReviewSettings: CodeReviewSettings = {
   model: 'haiku',
   language: '中文',
 };
-
-export type BranchNameModel = 'default' | 'opus' | 'sonnet' | 'haiku';
 
 export interface BranchNameGeneratorSettings {
   enabled: boolean;

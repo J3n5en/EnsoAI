@@ -1,16 +1,17 @@
+import type {
+  AIProvider,
+  ClaudeModelId,
+  CodexModelId,
+  GeminiModelId,
+  ModelId,
+  ReasoningEffort,
+} from '@shared/types';
 import type { LanguageModel } from 'ai';
 import { createClaudeCode } from 'ai-sdk-provider-claude-code';
 import { createCodexCli } from 'ai-sdk-provider-codex-cli';
 import { createGeminiCli } from 'ai-sdk-provider-gemini-cli-agentic';
 
-export type AIProvider = 'claude-code' | 'codex-cli' | 'gemini-cli';
-
-export type ClaudeModelId = 'haiku' | 'sonnet' | 'opus';
-export type CodexModelId = 'gpt-5.2' | 'gpt-5.2-codex';
-export type GeminiModelId = 'gemini-3-pro-preview' | 'gemini-3-flash-preview';
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-
-export type ModelId = ClaudeModelId | CodexModelId | GeminiModelId;
+export type { AIProvider, ModelId, ReasoningEffort } from '@shared/types';
 
 // Claude Code provider with read-only permissions
 const claudeCodeProvider = createClaudeCode({
