@@ -6,6 +6,7 @@ import iconv from 'iconv-lite';
 import jschardet from 'jschardet';
 import simpleGit from 'simple-git';
 import { FileWatcher } from '../services/files/FileWatcher';
+import { registerAllowedLocalFileRoot } from '../services/files/LocalFileAccess';
 
 /**
  * Normalize encoding name to a consistent format
@@ -139,6 +140,10 @@ export function registerFileHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.FILE_LIST,
     async (_, dirPath: string, gitRoot?: string): Promise<FileEntry[]> => {
+      if (gitRoot) {
+        registerAllowedLocalFileRoot(gitRoot);
+      }
+
       const entries = await readdir(dirPath);
       const result: FileEntry[] = [];
 

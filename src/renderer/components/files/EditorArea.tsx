@@ -907,7 +907,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                 >
                   <MarkdownPreview
                     content={activeTab.content}
-                    basePath={activeTab.path.substring(0, activeTab.path.lastIndexOf('/'))}
+                    filePath={activeTab.path}
+                    rootPath={rootPath}
                   />
                 </div>
               </>

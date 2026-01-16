@@ -1,36 +1,97 @@
 import { useMemo } from 'react';
 import type { Components } from 'react-markdown';
 import Markdown from 'react-markdown';
-import rehypeRaw from 'rehype-raw';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/ui/code-block';
 import { MermaidRenderer } from '@/components/ui/mermaid-renderer';
 
-function resolveImageSrc(src: string | undefined, basePath: string): string | undefined {
-  if (!src) return src;
-  // Already absolute URL or data URI
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
-    return src;
+const URL_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+
+function normalizeForUrlPath(path: string): string {
+  let normalized = path.replace(/\\/g, '/');
+
+  // Windows drive path (C:/...) needs a leading slash in URL pathname (/C:/...)
+  if (/^[a-zA-Z]:\//.test(normalized)) {
+    normalized = `/${normalized}`;
+  } else if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
   }
-  // Already local-file:// URL
-  if (src.startsWith('local-file://')) {
-    return src;
-  }
-  // file:// URL - convert to local-file://
-  if (src.startsWith('file://')) {
-    return `local-file://${src.slice('file://'.length)}`;
-  }
-  // Relative path - resolve against basePath
-  if (src.startsWith('/')) {
-    // Absolute path on filesystem
-    return `local-file://${src}`;
-  }
-  // Relative path
-  return `local-file://${basePath}/${src}`;
+
+  return normalized;
 }
 
-function createMarkdownComponents(basePath: string): Components {
+function getDirname(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const idx = normalized.lastIndexOf('/');
+  if (idx === -1) return '';
+  return idx === 0 ? '/' : normalized.slice(0, idx);
+}
+
+function toLocalFileBaseUrl(absPath: string): URL {
+  const url = new URL('local-file://');
+  url.pathname = `${normalizeForUrlPath(absPath).replace(/\/+$/, '')}/`;
+  return url;
+}
+
+function normalizePathnameForCompare(pathname: string): string {
+  const platform = window.electronAPI.env.platform;
+  const normalized = pathname.replace(/\/+$/, '');
+  if (platform === 'win32' || platform === 'darwin') return normalized.toLowerCase();
+  return normalized;
+}
+
+function resolveImageSrc(
+  src: string | undefined,
+  markdownFilePath: string,
+  rootPath?: string
+): string | undefined {
+  if (!src) return undefined;
+
+  const raw = src.trim();
+  if (!raw) return undefined;
+
+  // External images / data URIs are allowed.
+  if (
+    raw.startsWith('http://') ||
+    raw.startsWith('https://') ||
+    raw.startsWith('data:') ||
+    raw.startsWith('blob:')
+  ) {
+    return raw;
+  }
+
+  // Protocol-relative URL (//example.com/img.png) → default to https.
+  if (raw.startsWith('//')) {
+    return `https:${raw}`;
+  }
+
+  // Disallow explicit schemes like file:, local-file:, javascript:, etc.
+  if (URL_SCHEME_REGEX.test(raw)) {
+    return undefined;
+  }
+
+  if (!rootPath) return undefined;
+
+  const rootBaseUrl = toLocalFileBaseUrl(rootPath);
+  const fileDirBaseUrl = toLocalFileBaseUrl(getDirname(markdownFilePath));
+
+  const normalizedSrc = raw.replace(/\\/g, '/');
+  const resolvedUrl = normalizedSrc.startsWith('/')
+    ? new URL(normalizedSrc.slice(1), rootBaseUrl)
+    : new URL(normalizedSrc, fileDirBaseUrl);
+
+  const rootPathname = normalizePathnameForCompare(rootBaseUrl.pathname);
+  const resolvedPathname = normalizePathnameForCompare(resolvedUrl.pathname);
+
+  if (resolvedPathname !== rootPathname && !resolvedPathname.startsWith(`${rootPathname}/`)) {
+    return undefined;
+  }
+
+  return resolvedUrl.toString();
+}
+
+function createMarkdownComponents(markdownFilePath: string, rootPath?: string): Components {
   return {
     pre: ({ children }) => <>{children}</>,
     code: ({ className, children }) => {
@@ -147,7 +208,7 @@ function createMarkdownComponents(basePath: string): Components {
     img: ({ src, alt, ...props }) => (
       <img
         className="my-4 max-w-full rounded-md"
-        src={resolveImageSrc(src, basePath)}
+        src={resolveImageSrc(src, markdownFilePath, rootPath)}
         alt={alt}
         loading="lazy"
         {...props}
@@ -158,19 +219,19 @@ function createMarkdownComponents(basePath: string): Components {
 
 interface MarkdownPreviewProps {
   content: string;
-  basePath: string;
+  filePath: string;
+  rootPath?: string;
 }
 
-export function MarkdownPreview({ content, basePath }: MarkdownPreviewProps) {
-  const components = useMemo(() => createMarkdownComponents(basePath), [basePath]);
+export function MarkdownPreview({ content, filePath, rootPath }: MarkdownPreviewProps) {
+  const components = useMemo(
+    () => createMarkdownComponents(filePath, rootPath),
+    [filePath, rootPath]
+  );
 
   return (
     <div className="p-4 text-sm text-foreground">
-      <Markdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeRaw]}
-        components={components}
-      >
+      <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
         {content}
       </Markdown>
     </div>

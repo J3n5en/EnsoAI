@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
 import { IPC_CHANNELS } from '@shared/types';
@@ -11,13 +12,14 @@ import {
   registerIpcHandlers,
 } from './ipc';
 import { initClaudeProviderWatcher } from './ipc/claudeProvider';
+import { registerWindowHandlers } from './ipc/window';
 import { registerClaudeBridgeIpcHandlers } from './services/claude/ClaudeIdeBridge';
 import { unwatchClaudeSettings } from './services/claude/ClaudeProviderManager';
+import { isAllowedLocalFilePath } from './services/files/LocalFileAccess';
 import { checkGitInstalled } from './services/git/checkGit';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
 import { createMainWindow } from './windows/MainWindow';
-import { registerWindowHandlers } from './ipc/window';
 
 let mainWindow: BrowserWindow | null = null;
 let pendingOpenPath: string | null = null;
@@ -185,8 +187,18 @@ app.whenReady().then(async () => {
 
   // Register protocol to handle local file:// URLs for markdown images
   protocol.handle('local-file', (request) => {
-    const filePath = decodeURIComponent(request.url.slice('local-file://'.length));
-    return net.fetch(`file://${filePath}`);
+    try {
+      const fileUrl = new URL(request.url.replace(/^local-file:/, 'file:'));
+      const filePath = fileURLToPath(fileUrl);
+
+      if (!isAllowedLocalFilePath(filePath)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      return net.fetch(fileUrl.toString());
+    } catch {
+      return new Response('Bad Request', { status: 400 });
+    }
   });
 
   // Default open or close DevTools by F12 in development
