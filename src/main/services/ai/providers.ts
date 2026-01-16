@@ -33,7 +33,6 @@ const geminiCliProvider = createGeminiCli({
   defaultSettings: {
     allowedTools: ['read_file', 'list_directory', 'search_files'],
     approvalMode: 'yolo',
-    sandbox: true,
   },
 });
 

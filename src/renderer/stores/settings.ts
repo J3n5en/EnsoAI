@@ -268,7 +268,7 @@ export interface CommitMessageGeneratorSettings {
 export const defaultCommitMessageGeneratorSettings: CommitMessageGeneratorSettings = {
   enabled: true,
   maxDiffLines: 1000,
-  timeout: 60,
+  timeout: 120,
   provider: 'claude-code',
   model: 'haiku',
 };

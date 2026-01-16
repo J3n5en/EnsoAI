@@ -17,7 +17,7 @@ export interface BranchNameResult {
 }
 
 export async function generateBranchName(options: BranchNameOptions): Promise<BranchNameResult> {
-  const { prompt, provider, model, reasoningEffort, timeout = 60 } = options;
+  const { prompt, provider, model, reasoningEffort, timeout = 120 } = options;
 
   try {
     const { text } = await generateText({
