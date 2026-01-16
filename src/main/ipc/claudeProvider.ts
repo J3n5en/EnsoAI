@@ -1,10 +1,11 @@
 import type { ClaudeProvider } from '@shared/types';
 import { IPC_CHANNELS } from '@shared/types';
-import { ipcMain } from 'electron';
+import { type BrowserWindow, ipcMain } from 'electron';
 import {
   applyProvider,
   extractProviderFromSettings,
   readClaudeSettings,
+  watchClaudeSettings,
 } from '../services/claude/ClaudeProviderManager';
 
 export function registerClaudeProviderHandlers(): void {
@@ -19,4 +20,11 @@ export function registerClaudeProviderHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.CLAUDE_PROVIDER_APPLY, (_, provider: ClaudeProvider) => {
     return applyProvider(provider);
   });
+}
+
+/**
+ * 初始化 Provider 监听
+ */
+export function initClaudeProviderWatcher(window: BrowserWindow): void {
+  watchClaudeSettings(window);
 }

@@ -610,6 +610,20 @@ export const zhTranslations: Record<string, string> = {
   // Code Review
   'Code Review': '代码审查',
   'AI-powered code review for staged changes': 'AI 驱动的代码审查',
+  // AI Settings
+  AI: 'AI',
+  'AI Features': 'AI 功能',
+  'Configure AI-powered features for code generation and review':
+    '配置 AI 功能，包括代码生成和审查',
+  Provider: '服务提供商',
+  'AI provider to use': '使用的 AI 服务提供商',
+  'Auto-generate commit messages using AI': '使用 AI 自动生成提交信息',
+  'Model for generating commit messages': '生成提交信息使用的模型',
+  'Model for code review': '代码审查使用的模型',
+  'Auto-generate branch names using AI': '使用 AI 自动生成分支名',
+  'Model for generating branch names': '生成分支名使用的模型',
+  'Reasoning Level': '推理深度',
+  'Reasoning depth for Codex CLI': 'Codex CLI 的推理深度',
   'Enable Code Review': '启用代码审查',
   'Show code review button in source control': '在版本控制中显示代码审查按钮',
   'Claude model for code review': '用于代码审查的 Claude 模型',
@@ -825,6 +839,9 @@ export const zhTranslations: Record<string, string> = {
   'Opus Model': 'Opus 模型',
   'Haiku Model': 'Haiku 模型',
   'Provider switched': '已切换 Provider',
+  'New provider detected': '检测到新配置',
+  'Click to save this config': '点击保存此配置',
+  'Open Settings': '打开设置',
   // MCP Servers
   'MCP Servers': 'MCP 服务器',
   'No MCP servers configured': '暂无 MCP 服务器',

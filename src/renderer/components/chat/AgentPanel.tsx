@@ -7,7 +7,6 @@ import { useI18n } from '@/i18n';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { initAgentStatusListener } from '@/stores/agentStatus';
-import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
@@ -440,59 +439,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     const unsubscribe = initAgentStatusListener();
     return unsubscribe;
   }, []);
-
-  // 监听 code review 继续对话请求
-  const pendingSessionId = useCodeReviewContinueStore((s) => s.pendingSessionId);
-  const clearContinueRequest = useCodeReviewContinueStore((s) => s.clearRequest);
-
-  useEffect(() => {
-    if (pendingSessionId && cwd) {
-      // 创建新 session 继续 code review 对话
-      const newSession: Session = {
-        id: pendingSessionId, // 使用 code review 的 sessionId
-        name: 'Code Review',
-        agentId: 'claude',
-        agentCommand: 'claude',
-        initialized: true, // 已初始化，使用 --resume
-        repoPath,
-        cwd,
-        environment: 'native',
-      };
-      addSession(newSession);
-
-      // Add to active group or create new group
-      updateCurrentGroupState((state) => {
-        const groupId = state.activeGroupId || state.groups[0]?.id;
-        if (!groupId) {
-          const newGroup: AgentGroupType = {
-            id: crypto.randomUUID(),
-            sessionIds: [pendingSessionId],
-            activeSessionId: pendingSessionId,
-          };
-          return {
-            groups: [newGroup],
-            activeGroupId: newGroup.id,
-            flexPercents: [100],
-          };
-        }
-
-        return {
-          ...state,
-          groups: state.groups.map((g) =>
-            g.id === groupId
-              ? {
-                  ...g,
-                  sessionIds: [...g.sessionIds, pendingSessionId],
-                  activeSessionId: pendingSessionId,
-                }
-              : g
-          ),
-        };
-      });
-
-      clearContinueRequest();
-    }
-  }, [pendingSessionId, cwd, repoPath, addSession, updateCurrentGroupState, clearContinueRequest]);
 
   const handleNextSession = useCallback(() => {
     const activeGroup = groups.find((g) => g.id === activeGroupId);

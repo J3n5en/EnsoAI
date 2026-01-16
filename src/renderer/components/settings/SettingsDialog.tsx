@@ -1,4 +1,4 @@
-import { Bot, FileCode, Keyboard, Link, Palette, Settings, Share2 } from 'lucide-react';
+import { Bot, FileCode, Keyboard, Link, Palette, Settings, Share2, Sparkles } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogPopup, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -6,6 +6,7 @@ import { useKeybindingInterceptor } from '@/hooks/useKeybindingInterceptor';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { AgentSettings } from './AgentSettings';
+import { AISettings } from './AISettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import type { SettingsCategory } from './constants';
 import { EditorSettings } from './EditorSettings';
@@ -18,18 +19,39 @@ interface SettingsDialogProps {
   trigger?: React.ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Initial category to show when dialog opens */
+  initialCategory?: SettingsCategory;
+  /** Scroll to Claude Provider section (only works with integration category) */
+  scrollToProvider?: boolean;
 }
 
-export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({
+  trigger,
+  open,
+  onOpenChange,
+  initialCategory,
+  scrollToProvider,
+}: SettingsDialogProps) {
   const { t } = useI18n();
-  const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>('general');
+  const [activeCategory, setActiveCategory] = React.useState<SettingsCategory>(
+    initialCategory ?? 'general'
+  );
   const [internalOpen, setInternalOpen] = React.useState(false);
+
+  // Update active category when initialCategory changes and dialog opens
+  React.useEffect(() => {
+    if (open && initialCategory) {
+      setActiveCategory(initialCategory);
+    }
+  }, [open, initialCategory]);
+
   const categories: Array<{ id: SettingsCategory; icon: React.ElementType; label: string }> = [
     { id: 'general', icon: Settings, label: t('General') },
     { id: 'appearance', icon: Palette, label: t('Appearance') },
     { id: 'editor', icon: FileCode, label: t('Editor') },
     { id: 'keybindings', icon: Keyboard, label: t('Keybindings') },
     { id: 'agent', icon: Bot, label: t('Agent') },
+    { id: 'ai', icon: Sparkles, label: t('AI') },
     { id: 'integration', icon: Link, label: t('Claude Integration') },
     { id: 'hapi', icon: Share2, label: t('Remote Sharing') },
   ];
@@ -101,7 +123,10 @@ export function SettingsDialog({ trigger, open, onOpenChange }: SettingsDialogPr
             {activeCategory === 'editor' && <EditorSettings />}
             {activeCategory === 'keybindings' && <KeybindingsSettings />}
             {activeCategory === 'agent' && <AgentSettings />}
-            {activeCategory === 'integration' && <IntegrationSettings />}
+            {activeCategory === 'ai' && <AISettings />}
+            {activeCategory === 'integration' && (
+              <IntegrationSettings scrollToProvider={scrollToProvider} />
+            )}
             {activeCategory === 'hapi' && <HapiSettings />}
           </div>
         </div>

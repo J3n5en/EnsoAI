@@ -14,10 +14,6 @@ interface UseCodeReviewReturn {
   content: string;
   status: 'idle' | 'initializing' | 'streaming' | 'complete' | 'error';
   error: string | null;
-  cost: number | null;
-  model: string | null;
-  sessionId: string | null;
-  canContinue: boolean;
   startReview: () => Promise<void>;
   stopReview: () => void;
   reset: () => void;
@@ -32,27 +28,23 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
     if (!repoPath) return;
 
     await startCodeReview(repoPath, {
+      provider: codeReviewSettings.provider,
       model: codeReviewSettings.model,
+      reasoningEffort: codeReviewSettings.reasoningEffort,
       language: codeReviewSettings.language ?? '中文',
-      continueConversation: codeReviewSettings.continueConversation ?? true,
     });
   }, [
     repoPath,
+    codeReviewSettings.provider,
     codeReviewSettings.model,
+    codeReviewSettings.reasoningEffort,
     codeReviewSettings.language,
-    codeReviewSettings.continueConversation,
   ]);
-
-  const continueConversation = codeReviewSettings.continueConversation ?? true;
 
   return {
     content: review.content,
     status: review.status,
     error: review.error,
-    cost: review.cost,
-    model: review.model,
-    sessionId: review.sessionId,
-    canContinue: continueConversation && review.sessionId !== null,
     startReview,
     stopReview: stopCodeReview,
     reset: resetReview,

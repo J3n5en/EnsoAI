@@ -1,27 +1,18 @@
 import { create } from 'zustand';
-import { type ReviewStatus, type StreamEvent, StreamJsonParser } from '@/lib/stream-json-parser';
+
+export type ReviewStatus = 'idle' | 'initializing' | 'streaming' | 'complete' | 'error';
 
 interface CodeReviewState {
   content: string;
   status: ReviewStatus;
   error: string | null;
-  cost: number | null;
-  model: string | null;
-  sessionId: string | null;
   repoPath: string | null;
   reviewId: string | null;
 }
 
 interface CodeReviewContinueState {
-  pendingSessionId: string | null;
-  shouldSwitchToChat: boolean;
   isMinimized: boolean;
-
   review: CodeReviewState;
-
-  requestContinue: (sessionId: string) => void;
-  clearRequest: () => void;
-  clearTabSwitch: () => void;
 
   minimize: () => void;
   restore: () => void;
@@ -36,22 +27,13 @@ const initialReviewState: CodeReviewState = {
   content: '',
   status: 'idle',
   error: null,
-  cost: null,
-  model: null,
-  sessionId: null,
   repoPath: null,
   reviewId: null,
 };
 
-export const useCodeReviewContinueStore = create<CodeReviewContinueState>((set, get) => ({
-  pendingSessionId: null,
-  shouldSwitchToChat: false,
+export const useCodeReviewContinueStore = create<CodeReviewContinueState>((set) => ({
   isMinimized: false,
   review: { ...initialReviewState },
-
-  requestContinue: (sessionId) => set({ pendingSessionId: sessionId, shouldSwitchToChat: true }),
-  clearRequest: () => set({ pendingSessionId: null }),
-  clearTabSwitch: () => set({ shouldSwitchToChat: false }),
 
   minimize: () => set({ isMinimized: true }),
   restore: () => set({ isMinimized: false }),
@@ -78,50 +60,15 @@ export const useCodeReviewContinueStore = create<CodeReviewContinueState>((set, 
     })),
 }));
 
-const parserInstance = new StreamJsonParser();
 let cleanupFn: (() => void) | null = null;
-
-function handleEvent(event: StreamEvent) {
-  const store = useCodeReviewContinueStore.getState();
-
-  if (StreamJsonParser.isInitEvent(event)) {
-    store.updateReview({ status: 'streaming' });
-    return;
-  }
-
-  const text = StreamJsonParser.extractTextDelta(event);
-  if (text) {
-    store.appendContent(text);
-  }
-
-  if (StreamJsonParser.isMessageEndEvent(event)) {
-    store.appendContent('\n\n');
-  }
-
-  if (StreamJsonParser.isResultEvent(event)) {
-    const totalCost = StreamJsonParser.extractCost(event);
-    const modelName = StreamJsonParser.extractModel(event);
-    store.updateReview({
-      status: 'complete',
-      cost: totalCost,
-      model: modelName,
-    });
-  }
-
-  if (StreamJsonParser.isErrorEvent(event)) {
-    store.updateReview({
-      status: 'error',
-      error: event.message?.toString() || 'Unknown error',
-    });
-  }
-}
 
 export async function startCodeReview(
   repoPath: string,
   settings: {
+    provider: string;
     model: string;
+    reasoningEffort?: string;
     language: string;
-    continueConversation: boolean;
   }
 ): Promise<void> {
   const store = useCodeReviewContinueStore.getState();
@@ -130,12 +77,8 @@ export async function startCodeReview(
     content: '',
     status: 'initializing',
     error: null,
-    cost: null,
-    model: null,
-    sessionId: null,
     repoPath,
   });
-  parserInstance.reset();
 
   if (cleanupFn) {
     cleanupFn();
@@ -145,9 +88,6 @@ export async function startCodeReview(
   const reviewId = `review-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   store.setReviewId(reviewId);
 
-  const shouldContinue = settings.continueConversation ?? true;
-  const claudeSessionId = shouldContinue ? crypto.randomUUID() : undefined;
-
   const onDataCleanup = window.electronAPI.git.onCodeReviewData((event) => {
     if (event.reviewId !== reviewId) return;
 
@@ -155,12 +95,14 @@ export async function startCodeReview(
     if (currentReviewId !== reviewId) return;
 
     if (event.type === 'data' && event.data) {
-      const events = parserInstance.parse(event.data);
-      for (const e of events) {
-        handleEvent(e);
-      }
+      store.updateReview({ status: 'streaming' });
+      store.appendContent(event.data);
     } else if (event.type === 'error' && event.data) {
-      console.warn('[CodeReview stderr]', event.data);
+      store.updateReview({
+        status: 'error',
+        error: event.data,
+      });
+      store.setReviewId(null);
     } else if (event.type === 'exit') {
       const currentStatus = useCodeReviewContinueStore.getState().review.status;
       if (event.exitCode !== 0 && currentStatus !== 'complete') {
@@ -178,10 +120,10 @@ export async function startCodeReview(
 
   try {
     const result = await window.electronAPI.git.startCodeReview(repoPath, {
+      provider: settings.provider,
       model: settings.model,
+      reasoningEffort: settings.reasoningEffort,
       language: settings.language ?? '中文',
-      continueConversation: shouldContinue,
-      sessionId: claudeSessionId,
       reviewId,
     });
 
@@ -191,8 +133,6 @@ export async function startCodeReview(
         error: result.error || 'Failed to start review',
       });
       stopCodeReview();
-    } else if (result.sessionId) {
-      store.updateReview({ sessionId: result.sessionId });
     }
   } catch (err) {
     store.updateReview({

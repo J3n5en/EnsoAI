@@ -10,7 +10,9 @@ import {
   cleanupAllResourcesSync,
   registerIpcHandlers,
 } from './ipc';
+import { initClaudeProviderWatcher } from './ipc/claudeProvider';
 import { registerClaudeBridgeIpcHandlers } from './services/claude/ClaudeIdeBridge';
+import { unwatchClaudeSettings } from './services/claude/ClaudeProviderManager';
 import { checkGitInstalled } from './services/git/checkGit';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
@@ -212,6 +214,8 @@ app.whenReady().then(async () => {
     }
     mainWindow = null;
   });
+  // Initialize Claude Provider Watcher
+  initClaudeProviderWatcher(mainWindow);
 
   // IMPORTANT: Set up did-finish-load handler BEFORE handling command line args
   // to avoid race condition where page loads before handler is registered
@@ -260,6 +264,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', (event) => {
   event.preventDefault();
   console.log('[app] Will quit, cleaning up...');
+  unwatchClaudeSettings();
   cleanupAllResources()
     .catch((err) => console.error('[app] Cleanup error:', err))
     .finally(() => {
@@ -284,6 +289,7 @@ process.on('unhandledRejection', (reason) => {
 function handleShutdownSignal(signal: string): void {
   console.log(`[app] Received ${signal}, exiting...`);
   // Sync cleanup: kill child processes immediately
+  unwatchClaudeSettings();
   cleanupAllResourcesSync();
   // Use app.exit() to bypass will-quit handler (already cleaned up)
   app.exit(0);

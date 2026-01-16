@@ -44,6 +44,10 @@
     "@xterm/addon-web-links": "^0.13.0-beta.91",
     "@xterm/addon-webgl": "^0.20.0-beta.90",
     "@xterm/xterm": "^6.1.0-beta.91",
+    "ai": "^6.0.37",
+    "ai-sdk-provider-claude-code": "^3.2.1",
+    "ai-sdk-provider-codex-cli": "^1.0.4",
+    "ai-sdk-provider-gemini-cli-agentic": "^0.1.1",
     "class-variance-authority": "^0.7.1",
     "cloudflared": "^0.7.1",
     "clsx": "^2.1.1",
@@ -66,6 +70,7 @@
     "simple-git": "^3.30.0",
     "tailwind-merge": "^3.4.0",
     "ws": "^8.18.3",
+    "zod": "^4.3.5",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

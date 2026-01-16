@@ -2,6 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ClaudeProvider, ClaudeSettings } from '@shared/types';
+import { IPC_CHANNELS } from '@shared/types';
+import type { BrowserWindow } from 'electron';
 
 function getClaudeConfigDir(): string {
   if (process.env.CLAUDE_CONFIG_DIR) {
@@ -12,6 +14,91 @@ function getClaudeConfigDir(): string {
 
 function getClaudeSettingsPath(): string {
   return path.join(getClaudeConfigDir(), 'settings.json');
+}
+
+let settingsWatcher: fs.FSWatcher | null = null;
+let debounceTimer: NodeJS.Timeout | null = null;
+
+/**
+ * 监听 ~/.claude/settings.json 的变化
+ */
+export function watchClaudeSettings(window: BrowserWindow): void {
+  // 防止重复监听
+  if (settingsWatcher) {
+    settingsWatcher.close();
+  }
+
+  const settingsPath = getClaudeSettingsPath();
+  const configDir = getClaudeConfigDir();
+
+  // 确保目录存在，否则无法监听
+  if (!fs.existsSync(configDir)) {
+    try {
+      fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    } catch (err) {
+      console.error('[ClaudeProviderManager] Failed to create config dir for watching:', err);
+      return;
+    }
+  }
+
+  // 监听目录而不是文件，因为很多编辑器保存时会先删除文件再新建
+  try {
+    settingsWatcher = fs.watch(configDir, (eventType, filename) => {
+      // filename 在某些平台上可能为 null，需要做健壮性检查
+      if (filename && filename === 'settings.json') {
+        console.log(`[ClaudeProviderManager] Detected ${filename} change (${eventType})`);
+
+        // 防抖处理：合并短时间内的多次事件
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+
+        debounceTimer = setTimeout(() => {
+          // 检查窗口是否已销毁
+          if (window.isDestroyed()) {
+            console.log('[ClaudeProviderManager] Window destroyed, skipping notification');
+            return;
+          }
+
+          // 读取新配置并推送到前端
+          try {
+            const settings = readClaudeSettings();
+            const extracted = extractProviderFromSettings();
+
+            window.webContents.send(IPC_CHANNELS.CLAUDE_PROVIDER_SETTINGS_CHANGED, {
+              settings,
+              extracted,
+            });
+          } catch (err) {
+            console.warn('[ClaudeProviderManager] Failed to read settings after change:', err);
+          }
+        }, 150); // 150ms 防抖延迟
+      }
+    });
+
+    // 监听 watcher 错误事件
+    settingsWatcher.on('error', (err) => {
+      console.error('[ClaudeProviderManager] Watcher error:', err);
+    });
+
+    console.log(`[ClaudeProviderManager] Started watching ${settingsPath}`);
+  } catch (err) {
+    console.error('[ClaudeProviderManager] Failed to start watcher:', err);
+  }
+}
+
+/**
+ * 停止监听
+ */
+export function unwatchClaudeSettings(): void {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  if (settingsWatcher) {
+    settingsWatcher.close();
+    settingsWatcher = null;
+  }
 }
 
 /**

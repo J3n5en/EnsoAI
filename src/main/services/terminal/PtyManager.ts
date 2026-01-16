@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import type { TerminalCreateOptions } from '@shared/types';
@@ -16,12 +16,16 @@ let cachedWindowsPath: string | null = null;
 // Cache for Windows registry environment variables
 let cachedRegistryEnvVars: Record<string, string> | null = null;
 
+// Cache for Unix nvm node paths (read once)
+let cachedNvmNodePaths: string[] | null = null;
+
 /**
  * Clear cached PATH and environment variables (useful for debugging or after env changes)
  */
 export function clearPathCache(): void {
   cachedWindowsPath = null;
   cachedRegistryEnvVars = null;
+  cachedNvmNodePaths = null;
   console.log('[PtyManager] PATH cache cleared');
 }
 
@@ -220,13 +224,56 @@ export function getEnhancedPath(): string {
 
   const currentPath = process.env.PATH || '';
 
+  // Get nvm node version bin paths (cached)
+  if (cachedNvmNodePaths === null) {
+    cachedNvmNodePaths = [];
+    const nvmVersionsDir = join(home, '.nvm', 'versions', 'node');
+
+    // Add 'current' symlink first if it exists (highest priority)
+    // Note: Official nvm uses ~/.nvm/alias for version aliases, but some setups
+    // or custom configurations may create a 'current' symlink here
+    const currentLink = join(nvmVersionsDir, 'current', 'bin');
+    if (existsSync(currentLink)) {
+      cachedNvmNodePaths.push(currentLink);
+    }
+
+    // Parse semver version string, supporting incomplete versions like 'v20' or 'v20.10'
+    const parseVersion = (v: string): [number, number, number] => {
+      const match = v.match(/^v(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+      if (!match) return [0, 0, 0];
+      return [parseInt(match[1]) || 0, parseInt(match[2]) || 0, parseInt(match[3]) || 0];
+    };
+
+    // Add versioned paths, sorted by semver descending (newer versions first)
+    if (existsSync(nvmVersionsDir)) {
+      try {
+        const versions = readdirSync(nvmVersionsDir)
+          .filter((v) => v.startsWith('v'))
+          .sort((a, b) => {
+            const [aMajor, aMinor, aPatch] = parseVersion(a);
+            const [bMajor, bMinor, bPatch] = parseVersion(b);
+            // Sort descending (newer versions first)
+            if (bMajor !== aMajor) return bMajor - aMajor;
+            if (bMinor !== aMinor) return bMinor - aMinor;
+            return bPatch - aPatch;
+          });
+
+        for (const version of versions) {
+          cachedNvmNodePaths.push(join(nvmVersionsDir, version, 'bin'));
+        }
+      } catch {
+        // Ignore errors reading nvm versions
+      }
+    }
+  }
+
   // Unix: Add common paths
   const additionalPaths = [
     '/usr/local/bin',
     '/opt/homebrew/bin',
     '/opt/homebrew/sbin',
-    // Node.js version managers
-    join(home, '.nvm', 'versions', 'node', 'current', 'bin'),
+    // Node.js version managers - nvm (cached, with 'current' first, then sorted by version)
+    ...cachedNvmNodePaths,
     join(home, '.npm-global', 'bin'),
     // Package managers
     join(home, 'Library', 'pnpm'),

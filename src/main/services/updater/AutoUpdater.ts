@@ -64,6 +64,11 @@ class AutoUpdaterService {
 
     autoUpdater.on('update-downloaded', (info) => {
       this.updateDownloaded = true;
+      // Stop all future update checks to prevent race conditions
+      if (this.checkIntervalId) {
+        clearInterval(this.checkIntervalId);
+        this.checkIntervalId = null;
+      }
       this.sendStatus({ status: 'downloaded', info });
     });
 
@@ -111,6 +116,10 @@ class AutoUpdaterService {
   }
 
   async checkForUpdates(): Promise<void> {
+    // Skip if update already downloaded to prevent race conditions
+    if (this.updateDownloaded) {
+      return;
+    }
     try {
       this.lastCheckTime = Date.now();
       await autoUpdater.checkForUpdates();

@@ -220,7 +220,8 @@ export function SourceControlPanel({
     handleDeleteUntracked,
     handleCommit,
     confirmAction,
-    setConfirmAction,
+    dialogOpen,
+    handleDialogOpenChange,
     handleConfirmAction,
     isCommitting,
   } = useSourceControlActions({ rootPath, stagedCount: staged.length });
@@ -592,7 +593,7 @@ export function SourceControlPanel({
       </div>
 
       {/* Discard/Delete Confirmation Dialog */}
-      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+      <AlertDialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <AlertDialogPopup>
           <AlertDialogHeader>
             <AlertDialogTitle>

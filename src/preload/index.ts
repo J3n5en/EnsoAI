@@ -99,24 +99,30 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_STATS, workdir),
     generateCommitMessage: (
       workdir: string,
-      options: { maxDiffLines: number; timeout: number; model: string }
+      options: {
+        maxDiffLines: number;
+        timeout: number;
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      }
     ): Promise<{ success: boolean; message?: string; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_GENERATE_COMMIT_MSG, workdir, options),
     generateBranchName: (
       workdir: string,
-      options: { prompt: string; model: string }
+      options: { prompt: string; provider: string; model: string; reasoningEffort?: string }
     ): Promise<{ success: boolean; branchName?: string; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_GENERATE_BRANCH_NAME, workdir, options),
     startCodeReview: (
       workdir: string,
       options: {
+        provider: string;
         model: string;
+        reasoningEffort?: string;
         reviewId: string;
         language?: string;
-        continueConversation?: boolean;
-        sessionId?: string;
       }
-    ): Promise<{ success: boolean; error?: string; sessionId?: string }> =>
+    ): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CODE_REVIEW_START, workdir, options),
     stopCodeReview: (reviewId: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CODE_REVIEW_STOP, reviewId),
@@ -515,6 +521,16 @@ const electronAPI = {
     }> => ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_READ_SETTINGS),
     apply: (provider: import('@shared/types').ClaudeProvider): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_APPLY, provider),
+    onSettingsChanged: (
+      callback: (data: {
+        settings: import('@shared/types').ClaudeSettings | null;
+        extracted: Partial<import('@shared/types').ClaudeProvider> | null;
+      }) => void
+    ): (() => void) => {
+      const handler = (_: unknown, data: Parameters<typeof callback>[0]) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.CLAUDE_PROVIDER_SETTINGS_CHANGED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.CLAUDE_PROVIDER_SETTINGS_CHANGED, handler);
+    },
   },
 
   // Claude Config (MCP, Prompts, Plugins)
