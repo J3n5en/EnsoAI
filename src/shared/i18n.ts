@@ -610,6 +610,11 @@ export const zhTranslations: Record<string, string> = {
   // Code Review
   'Code Review': '代码审查',
   'AI-powered code review for staged changes': 'AI 驱动的代码审查',
+  // AI Settings
+  AI: 'AI',
+  'AI Features': 'AI 功能',
+  'Configure AI-powered features for code generation and review':
+    '配置 AI 功能，包括代码生成和审查',
   'Enable Code Review': '启用代码审查',
   'Show code review button in source control': '在版本控制中显示代码审查按钮',
   'Claude model for code review': '用于代码审查的 Claude 模型',
