@@ -47,7 +47,7 @@
     "ai": "^6.0.37",
     "ai-sdk-provider-claude-code": "^3.2.1",
     "ai-sdk-provider-codex-cli": "^1.0.4",
-    "ai-sdk-provider-gemini-cli-agentic": "^0.1.0",
+    "ai-sdk-provider-gemini-cli-agentic": "^0.1.1",
     "class-variance-authority": "^0.7.1",
     "cloudflared": "^0.7.1",
     "clsx": "^2.1.1",
