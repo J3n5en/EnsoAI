@@ -485,6 +485,8 @@ interface SettingsState {
   defaultWorktreePath: string; // Default path for creating worktrees
   proxySettings: ProxySettings;
   autoCreateSessionOnActivate: boolean; // Auto-create agent/terminal session when worktree becomes active
+  // Beta features
+  glowEffectEnabled: boolean; // Enable glow animation effect for AI output states (Beta)
   // MCP, Prompts management
   mcpServers: McpServer[];
   promptPresets: PromptPreset[];
@@ -538,6 +540,8 @@ interface SettingsState {
   setDefaultWorktreePath: (path: string) => void;
   setProxySettings: (settings: Partial<ProxySettings>) => void;
   setAutoCreateSessionOnActivate: (enabled: boolean) => void;
+  // Beta features
+  setGlowEffectEnabled: (enabled: boolean) => void;
   // MCP management
   addMcpServer: (server: McpServer) => void;
   updateMcpServer: (id: string, updates: Partial<McpServer>) => void;
@@ -605,6 +609,8 @@ export const useSettingsStore = create<SettingsState>()(
       defaultWorktreePath: '', // Empty means use default ~/ensoai/workspaces
       proxySettings: defaultProxySettings,
       autoCreateSessionOnActivate: false, // Default: don't auto-create sessions
+      // Beta features
+      glowEffectEnabled: false, // Default: disabled, use classic dot indicator
       // MCP, Prompts defaults
       mcpServers: [],
       promptPresets: [],
@@ -794,6 +800,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setAutoCreateSessionOnActivate: (autoCreateSessionOnActivate) =>
         set({ autoCreateSessionOnActivate }),
+      // Beta features
+      setGlowEffectEnabled: (glowEffectEnabled) => set({ glowEffectEnabled }),
       // MCP management
       addMcpServer: (server) =>
         set((state) => ({

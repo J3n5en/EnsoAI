@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Monitor, Moon, Sun, Terminal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Monitor, Moon, Sparkles, Sun, Terminal } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,6 +9,7 @@ import {
   ComboboxPopup,
 } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectItem,
@@ -167,6 +168,8 @@ export function AppearanceSettings() {
     setTerminalFontWeight,
     terminalFontWeightBold,
     setTerminalFontWeightBold,
+    glowEffectEnabled,
+    setGlowEffectEnabled,
   } = useSettingsStore();
   const { t } = useI18n();
 
@@ -285,6 +288,28 @@ export function AppearanceSettings() {
             <span className="text-sm font-medium">{option.label}</span>
           </button>
         ))}
+      </div>
+
+      {/* Beta Features Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Beta Features')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Experimental features')}</p>
+      </div>
+
+      {/* Glow Effect Toggle */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-green-500/20 to-amber-500/20">
+            <Sparkles className="h-4 w-4 text-green-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">{t('Glow Effect')}</p>
+            <p className="text-xs text-muted-foreground">
+              {t('Animated glow border for AI output states')}
+            </p>
+          </div>
+        </div>
+        <Switch checked={glowEffectEnabled} onCheckedChange={setGlowEffectEnabled} />
       </div>
 
       {/* Terminal Section */}

@@ -1,5 +1,7 @@
 import { GripVertical, Plus, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { GlowCard, useGlowEffectEnabled } from '@/components/ui/glow-card';
+import { useSessionOutputState } from '@/hooks/useOutputState';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -59,6 +61,187 @@ const AGENT_INFO: Record<string, { name: string; command: string }> = {
   cursor: { name: 'Cursor', command: 'cursor-agent' },
   opencode: { name: 'OpenCode', command: 'opencode' },
 };
+
+// Session tab with glow effect
+interface SessionTabProps {
+  session: Session;
+  index: number;
+  isActive: boolean;
+  isEditing: boolean;
+  editingName: string;
+  isDragging: boolean;
+  dropTargetIndex: number | null;
+  draggedTabIndex: number | null;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onSelect: () => void;
+  onClose: () => void;
+  onStartEdit: () => void;
+  onEditingNameChange: (name: string) => void;
+  onFinishEdit: () => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+}
+
+function SessionTab({
+  session,
+  index,
+  isActive,
+  isEditing,
+  editingName,
+  isDragging,
+  dropTargetIndex,
+  draggedTabIndex,
+  inputRef,
+  onSelect,
+  onClose,
+  onStartEdit,
+  onEditingNameChange,
+  onFinishEdit,
+  onKeyDown,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: SessionTabProps) {
+  const outputState = useSessionOutputState(session.id);
+  const glowEnabled = useGlowEffectEnabled();
+
+  // When glow effect is disabled, use simple button with indicator dot
+  if (!glowEnabled) {
+    return (
+      <div className="relative flex items-center">
+        {/* Drop indicator - left side */}
+        {dropTargetIndex === index && draggedTabIndex !== null && draggedTabIndex > index && (
+          <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
+        )}
+        <button
+          type="button"
+          className={cn(
+            'group flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors cursor-pointer',
+            isActive
+              ? 'bg-accent text-accent-foreground'
+              : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+            isDragging && 'opacity-50'
+          )}
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={onSelect}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onStartEdit();
+          }}
+        >
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={editingName}
+              onChange={(e) => onEditingNameChange(e.target.value)}
+              onBlur={onFinishEdit}
+              onKeyDown={onKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              className="w-20 bg-transparent outline-none border-b border-current"
+            />
+          ) : (
+            <span>{session.name}</span>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className={cn(
+              'flex h-4 w-4 items-center justify-center rounded-full transition-colors',
+              'hover:bg-destructive/20 hover:text-destructive',
+              !isActive && 'opacity-0 group-hover:opacity-100'
+            )}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </button>
+        {/* Drop indicator - right side */}
+        {dropTargetIndex === index && draggedTabIndex !== null && draggedTabIndex < index && (
+          <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
+        )}
+      </div>
+    );
+  }
+
+  // Glow effect enabled - use GlowCard
+  return (
+    <div className="relative flex items-center">
+      {/* Drop indicator - left side */}
+      {dropTargetIndex === index && draggedTabIndex !== null && draggedTabIndex > index && (
+        <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
+      )}
+      <GlowCard
+        state={outputState}
+        as="button"
+        className={cn(
+          'group flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors cursor-pointer',
+          isActive
+            ? 'bg-accent text-accent-foreground'
+            : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+          isDragging && 'opacity-50'
+        )}
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onClick={onSelect}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onStartEdit();
+        }}
+      >
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editingName}
+            onChange={(e) => onEditingNameChange(e.target.value)}
+            onBlur={onFinishEdit}
+            onKeyDown={onKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 w-20 bg-transparent outline-none border-b border-current"
+          />
+        ) : (
+          <span className="relative z-10">{session.name}</span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className={cn(
+            'relative z-10 flex h-4 w-4 items-center justify-center rounded-full transition-colors',
+            'hover:bg-destructive/20 hover:text-destructive',
+            !isActive && 'opacity-0 group-hover:opacity-100'
+          )}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </GlowCard>
+      {/* Drop indicator - right side */}
+      {dropTargetIndex === index && draggedTabIndex !== null && draggedTabIndex < index && (
+        <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
+      )}
+    </div>
+  );
+}
 
 export function SessionBar({
   sessions,
@@ -370,72 +553,29 @@ export function SessionBar({
             </div>
 
             {sessions.map((session, index) => (
-              <div key={session.id} className="relative flex items-center">
-                {/* Drop indicator - left side */}
-                {dropTargetIndex === index &&
-                  draggedTabIndexRef.current !== null &&
-                  draggedTabIndexRef.current > index && (
-                    <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
-                  )}
-                <div
-                  draggable
-                  onDragStart={(e) => handleTabDragStart(e, index)}
-                  onDragEnd={handleTabDragEnd}
-                  onDragOver={(e) => handleTabDragOver(e, index)}
-                  onDragLeave={handleTabDragLeave}
-                  onDrop={(e) => handleTabDrop(e, index)}
-                  onClick={() => onSelectSession(session.id)}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    handleStartEdit(session);
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && onSelectSession(session.id)}
-                  role="button"
-                  tabIndex={0}
-                  className={cn(
-                    'group flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors cursor-pointer',
-                    activeSessionId === session.id
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-                    draggedTabIndexRef.current === index && 'opacity-50'
-                  )}
-                >
-                  {editingId === session.id ? (
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={handleFinishEdit}
-                      onKeyDown={handleKeyDown}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-20 bg-transparent outline-none border-b border-current"
-                    />
-                  ) : (
-                    <span>{session.name}</span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCloseSession(session.id);
-                    }}
-                    className={cn(
-                      'flex h-4 w-4 items-center justify-center rounded-full transition-colors',
-                      'hover:bg-destructive/20 hover:text-destructive',
-                      activeSessionId !== session.id && 'opacity-0 group-hover:opacity-100'
-                    )}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-                {/* Drop indicator - right side */}
-                {dropTargetIndex === index &&
-                  draggedTabIndexRef.current !== null &&
-                  draggedTabIndexRef.current < index && (
-                    <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
-                  )}
-              </div>
+              <SessionTab
+                key={session.id}
+                session={session}
+                index={index}
+                isActive={activeSessionId === session.id}
+                isEditing={editingId === session.id}
+                editingName={editingName}
+                isDragging={draggedTabIndexRef.current === index}
+                dropTargetIndex={dropTargetIndex}
+                draggedTabIndex={draggedTabIndexRef.current}
+                inputRef={inputRef}
+                onSelect={() => onSelectSession(session.id)}
+                onClose={() => onCloseSession(session.id)}
+                onStartEdit={() => handleStartEdit(session)}
+                onEditingNameChange={setEditingName}
+                onFinishEdit={handleFinishEdit}
+                onKeyDown={handleKeyDown}
+                onDragStart={(e) => handleTabDragStart(e, index)}
+                onDragEnd={handleTabDragEnd}
+                onDragOver={(e) => handleTabDragOver(e, index)}
+                onDragLeave={handleTabDragLeave}
+                onDrop={(e) => handleTabDrop(e, index)}
+              />
             ))}
 
             <div className="mx-1 h-4 w-px bg-border" />

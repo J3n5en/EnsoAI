@@ -32,10 +32,12 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { toastManager } from '@/components/ui/toast';
+import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/ui/glow-card';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
+import { useWorktreeOutputState } from '@/hooks/useOutputState';
 
 interface WorktreePanelProps {
   worktrees: GitWorktree[];
@@ -507,6 +509,7 @@ function WorktreeItem({
     worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
   const branchDisplay = worktree.branch || t('Detached');
   const isPrunable = worktree.prunable;
+  const glowEnabled = useGlowEffectEnabled();
 
   // Subscribe to activity store
   const activities = useWorktreeActivityStore((s) => s.activities);
@@ -517,6 +520,9 @@ function WorktreeItem({
   const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
   const hasDiffStats = diffStats.insertions > 0 || diffStats.deletions > 0;
+
+  // Check if any session in this worktree has outputting or unread state
+  const outputState = useWorktreeOutputState(worktree.path);
 
   const handleCopyPath = useCallback(async () => {
     try {
@@ -573,109 +579,113 @@ function WorktreeItem({
     }
   }, [menuOpen, menuPosition]);
 
+  // Common worktree item content
+  const worktreeItemContent = (
+    <>
+      {/* Drop indicator - top */}
+      {showDropIndicator && dropDirection === 'top' && (
+        <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+      )}
+      <button
+        type="button"
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onClick={onClick}
+        onContextMenu={handleContextMenu}
+        className={cn(
+          'flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
+          isPrunable && 'opacity-50',
+          isActive ? 'bg-accent/80 text-accent-foreground' : 'hover:bg-accent/50'
+        )}
+      >
+        {/* Branch name */}
+        <div className="flex w-full items-center gap-2">
+          <GitBranch
+            className={cn(
+              'h-4 w-4 shrink-0',
+              isPrunable
+                ? 'text-destructive'
+                : isActive
+                  ? 'text-accent-foreground'
+                  : 'text-muted-foreground'
+            )}
+          />
+          <span className={cn('truncate font-medium', isPrunable && 'line-through')}>
+            {branchDisplay}
+          </span>
+          {isPrunable ? (
+            <span className="shrink-0 rounded bg-destructive/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-destructive">
+              {t('Deleted')}
+            </span>
+          ) : isMain ? (
+            <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
+              {t('Main')}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Path - use rtl direction to show ellipsis at start, keeping end visible */}
+        <div
+          className={cn(
+            'w-full overflow-hidden whitespace-nowrap text-ellipsis pl-6 text-xs [direction:rtl] [text-align:left] [unicode-bidi:plaintext]',
+            isPrunable && 'line-through',
+            isActive ? 'text-accent-foreground/70' : 'text-muted-foreground'
+          )}
+          title={worktree.path}
+        >
+          {worktree.path}
+        </div>
+
+        {/* Activity counts and diff stats (only shown when has active sessions) */}
+        {hasActivity && (
+          <div className="flex items-center gap-3 pl-6 text-xs text-muted-foreground">
+            {activity.agentCount > 0 && (
+              <span className="flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                {activity.agentCount}
+              </span>
+            )}
+            {activity.terminalCount > 0 && (
+              <span className="flex items-center gap-1">
+                <Terminal className="h-3 w-3" />
+                {activity.terminalCount}
+              </span>
+            )}
+            {hasDiffStats && (
+              <span className="flex items-center gap-1.5">
+                {diffStats.insertions > 0 && (
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{diffStats.insertions}
+                  </span>
+                )}
+                {diffStats.deletions > 0 && (
+                  <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+      </button>
+      {/* Drop indicator - bottom */}
+      {showDropIndicator && dropDirection === 'bottom' && (
+        <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+      )}
+    </>
+  );
+
   return (
     <>
-      <div className="relative">
-        {/* Drop indicator - top */}
-        {showDropIndicator && dropDirection === 'top' && (
-          <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
-        )}
-        <button
-          type="button"
-          draggable={draggable}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={onClick}
-          onContextMenu={handleContextMenu}
-          className={cn(
-            'flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
-            isPrunable && 'opacity-50',
-            isActive ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-          )}
-        >
-          {/* Branch name */}
-          <div className="flex w-full items-center gap-2">
-            <GitBranch
-              className={cn(
-                'h-4 w-4 shrink-0',
-                isPrunable
-                  ? 'text-destructive'
-                  : isActive
-                    ? 'text-accent-foreground'
-                    : 'text-muted-foreground'
-              )}
-            />
-            <span className={cn('truncate font-medium', isPrunable && 'line-through')}>
-              {branchDisplay}
-            </span>
-            {isPrunable ? (
-              <span className="shrink-0 rounded bg-destructive/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-destructive">
-                {t('Deleted')}
-              </span>
-            ) : isMain ? (
-              <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-                {t('Main')}
-              </span>
-            ) : null}
-            {/* Activity indicator - green dot */}
-            {hasActivity && (
-              <span
-                className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse"
-                title={t('Active sessions')}
-              />
-            )}
-          </div>
-
-          {/* Path - use rtl direction to show ellipsis at start, keeping end visible */}
-          <div
-            className={cn(
-              'w-full overflow-hidden whitespace-nowrap text-ellipsis pl-6 text-xs [direction:rtl] [text-align:left] [unicode-bidi:plaintext]',
-              isPrunable && 'line-through',
-              isActive ? 'text-accent-foreground/70' : 'text-muted-foreground'
-            )}
-            title={worktree.path}
-          >
-            {worktree.path}
-          </div>
-
-          {/* Activity counts and diff stats (only shown when has active sessions) */}
-          {hasActivity && (
-            <div className="flex items-center gap-3 pl-6 text-xs text-muted-foreground">
-              {activity.agentCount > 0 && (
-                <span className="flex items-center gap-1">
-                  <Sparkles className="h-3 w-3" />
-                  {activity.agentCount}
-                </span>
-              )}
-              {activity.terminalCount > 0 && (
-                <span className="flex items-center gap-1">
-                  <Terminal className="h-3 w-3" />
-                  {activity.terminalCount}
-                </span>
-              )}
-              {hasDiffStats && (
-                <span className="flex items-center gap-1.5">
-                  {diffStats.insertions > 0 && (
-                    <span className="text-emerald-600 dark:text-emerald-400">
-                      +{diffStats.insertions}
-                    </span>
-                  )}
-                  {diffStats.deletions > 0 && (
-                    <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
-                  )}
-                </span>
-              )}
-            </div>
-          )}
-        </button>
-        {/* Drop indicator - bottom */}
-        {showDropIndicator && dropDirection === 'bottom' && (
-          <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
-        )}
-      </div>
+      {glowEnabled ? (
+        <GlowBorder state={outputState as GlowState} className="rounded-lg">
+          {worktreeItemContent}
+        </GlowBorder>
+      ) : (
+        <div className="relative rounded-lg">{worktreeItemContent}</div>
+      )}
 
       {/* Context Menu */}
       {menuOpen && (

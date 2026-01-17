@@ -239,6 +239,8 @@ const electronAPI = {
     resize: (id: string, size: TerminalResizeOptions): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_RESIZE, id, size),
     destroy: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_DESTROY, id),
+    getActivity: (id: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_ACTIVITY, id),
     onData: (callback: (event: { id: string; data: string }) => void): (() => void) => {
       const handler = (_: unknown, event: { id: string; data: string }) => callback(event);
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_DATA, handler);

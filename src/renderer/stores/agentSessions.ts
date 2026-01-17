@@ -8,6 +8,22 @@ import { createInitialGroupState } from '@/components/chat/types';
 // Global storage key for all sessions across all repos
 const SESSIONS_STORAGE_KEY = 'enso-agent-sessions';
 
+// Runtime output state for each session (not persisted)
+export type OutputState = 'idle' | 'outputting' | 'unread';
+
+export interface SessionRuntimeState {
+  outputState: OutputState;
+  lastActivityAt: number;
+  wasActiveWhenOutputting: boolean; // Track if user was viewing this session during output
+}
+
+// Aggregated state for UI display
+export interface AggregatedOutputState {
+  total: number;
+  outputting: number;
+  unread: number;
+}
+
 // Check if an agent command supports session persistence
 function isResumableAgent(agentCommand: string): boolean {
   return agentCommand?.startsWith('claude') ?? false;
@@ -20,6 +36,7 @@ interface AgentSessionsState {
   sessions: Session[];
   activeIds: Record<string, string | null>; // key = cwd (worktree path)
   groupStates: WorktreeGroupStates; // Group states per worktree (not persisted)
+  runtimeStates: Record<string, SessionRuntimeState>; // Runtime output states (not persisted)
 
   // Actions
   addSession: (session: Session) => void;
@@ -35,6 +52,19 @@ interface AgentSessionsState {
   setGroupState: (cwd: string, state: AgentGroupState) => void;
   updateGroupState: (cwd: string, updater: (state: AgentGroupState) => AgentGroupState) => void;
   removeGroupState: (cwd: string) => void;
+
+  // Runtime state actions
+  setOutputState: (sessionId: string, outputState: OutputState, isActive?: boolean) => void;
+  markAsRead: (sessionId: string) => void;
+  markSessionActive: (sessionId: string) => void; // Call when user views a session
+  getOutputState: (sessionId: string) => OutputState;
+  getRuntimeState: (sessionId: string) => SessionRuntimeState | undefined;
+  clearRuntimeState: (sessionId: string) => void;
+
+  // Aggregated state selectors
+  getAggregatedByWorktree: (cwd: string) => AggregatedOutputState;
+  getAggregatedByRepo: (repoPath: string) => AggregatedOutputState;
+  getAggregatedGlobal: () => AggregatedOutputState;
 }
 
 function loadFromStorage(): { sessions: Session[]; activeIds: Record<string, string | null> } {
@@ -76,11 +106,51 @@ function saveToStorage(sessions: Session[], activeIds: Record<string, string | n
 
 const initialState = loadFromStorage();
 
+/**
+ * Compute aggregated output state counts from sessions.
+ * Returns counts for total, outputting, and unread sessions.
+ */
+export function computeAggregatedState(
+  sessions: { id: string }[],
+  runtimeStates: Record<string, { outputState?: OutputState }>
+): AggregatedOutputState {
+  let outputting = 0;
+  let unread = 0;
+  for (const session of sessions) {
+    const state = runtimeStates[session.id]?.outputState ?? 'idle';
+    if (state === 'outputting') outputting++;
+    else if (state === 'unread') unread++;
+  }
+  return { total: sessions.length, outputting, unread };
+}
+
+/**
+ * Compute the highest priority output state from sessions.
+ * Priority: outputting > unread > idle
+ * Used for UI glow effects.
+ */
+export function computeHighestOutputState(
+  sessions: { id: string }[],
+  runtimeStates: Record<string, { outputState?: OutputState }>
+): OutputState {
+  let hasOutputting = false;
+  let hasUnread = false;
+  for (const session of sessions) {
+    const state = runtimeStates[session.id]?.outputState ?? 'idle';
+    if (state === 'outputting') hasOutputting = true;
+    else if (state === 'unread') hasUnread = true;
+  }
+  if (hasOutputting) return 'outputting';
+  if (hasUnread) return 'unread';
+  return 'idle';
+}
+
 export const useAgentSessionsStore = create<AgentSessionsState>()(
   subscribeWithSelector((set, get) => ({
     sessions: initialState.sessions,
     activeIds: initialState.activeIds,
     groupStates: {}, // Not persisted - will be recreated from sessions on mount
+    runtimeStates: {}, // Not persisted - runtime output states
 
     addSession: (session) =>
       set((state) => {
@@ -200,6 +270,151 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
         delete newStates[normalized];
         return { groupStates: newStates };
       }),
+
+    // Runtime state actions
+    setOutputState: (sessionId, outputState, isActive = false) =>
+      set((prev) => {
+        const currentState = prev.runtimeStates[sessionId];
+
+        // Handle state transitions
+        if (outputState === 'outputting') {
+          // Starting to output: just track the state
+          return {
+            runtimeStates: {
+              ...prev.runtimeStates,
+              [sessionId]: {
+                outputState: 'outputting',
+                lastActivityAt: Date.now(),
+                wasActiveWhenOutputting: isActive,
+              },
+            },
+          };
+        }
+
+        if (outputState === 'idle') {
+          // If already unread, don't override to idle (preserve unread state)
+          // This prevents process activity polling from overriding Stop Hook result
+          if (currentState?.outputState === 'unread') {
+            return prev;
+          }
+
+          // Transitioning to idle: check if we need to mark as unread
+          const wasOutputting = currentState?.outputState === 'outputting';
+          // Only check if user is CURRENTLY viewing the session
+          // If user is not viewing when AI finishes, mark as unread
+          const shouldMarkUnread = wasOutputting && !isActive;
+
+          return {
+            runtimeStates: {
+              ...prev.runtimeStates,
+              [sessionId]: {
+                outputState: shouldMarkUnread ? 'unread' : 'idle',
+                lastActivityAt: Date.now(),
+                wasActiveWhenOutputting: false,
+              },
+            },
+          };
+        }
+
+        // For other states (unread), just set directly
+        if (currentState?.outputState === outputState) {
+          return prev;
+        }
+        return {
+          runtimeStates: {
+            ...prev.runtimeStates,
+            [sessionId]: {
+              outputState,
+              lastActivityAt: Date.now(),
+              wasActiveWhenOutputting: false,
+            },
+          },
+        };
+      }),
+
+    markAsRead: (sessionId) =>
+      set((prev) => {
+        const currentState = prev.runtimeStates[sessionId];
+        if (!currentState || currentState.outputState !== 'unread') {
+          return prev;
+        }
+        return {
+          runtimeStates: {
+            ...prev.runtimeStates,
+            [sessionId]: {
+              ...currentState,
+              outputState: 'idle',
+            },
+          },
+        };
+      }),
+
+    markSessionActive: (sessionId) =>
+      set((prev) => {
+        const currentState = prev.runtimeStates[sessionId];
+        if (!currentState) {
+          return prev;
+        }
+        // If currently outputting, mark that user is now viewing
+        // If unread, mark as read
+        if (currentState.outputState === 'outputting') {
+          return {
+            runtimeStates: {
+              ...prev.runtimeStates,
+              [sessionId]: {
+                ...currentState,
+                wasActiveWhenOutputting: true,
+              },
+            },
+          };
+        }
+        if (currentState.outputState === 'unread') {
+          return {
+            runtimeStates: {
+              ...prev.runtimeStates,
+              [sessionId]: {
+                ...currentState,
+                outputState: 'idle',
+              },
+            },
+          };
+        }
+        return prev;
+      }),
+
+    getOutputState: (sessionId) => {
+      return get().runtimeStates[sessionId]?.outputState ?? 'idle';
+    },
+
+    getRuntimeState: (sessionId) => {
+      return get().runtimeStates[sessionId];
+    },
+
+    clearRuntimeState: (sessionId) =>
+      set((prev) => {
+        const newStates = { ...prev.runtimeStates };
+        delete newStates[sessionId];
+        return { runtimeStates: newStates };
+      }),
+
+    // Aggregated state selectors
+    getAggregatedByWorktree: (cwd) => {
+      const state = get();
+      const normalizedCwd = normalizePath(cwd);
+      const worktreeSessions = state.sessions.filter((s) => normalizePath(s.cwd) === normalizedCwd);
+      return computeAggregatedState(worktreeSessions, state.runtimeStates);
+    },
+
+    getAggregatedByRepo: (repoPath) => {
+      const state = get();
+      const repoSessions = state.sessions.filter((s) => s.repoPath === repoPath);
+      return computeAggregatedState(repoSessions, state.runtimeStates);
+    },
+
+    getAggregatedGlobal: () => {
+      const state = get();
+      return computeAggregatedState(state.sessions, state.runtimeStates);
+    },
   }))
 );
 

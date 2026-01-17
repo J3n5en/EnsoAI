@@ -11,9 +11,11 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { GlowCard, useGlowEffectEnabled } from '@/components/ui/glow-card';
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useWorktreeOutputState } from '@/hooks/useOutputState';
 
 interface WorktreeCardProps {
   worktree: GitWorktree;
@@ -53,24 +55,14 @@ export function WorktreeCard({
   const changedFilesCount = status
     ? status.staged.length + status.modified.length + status.untracked.length
     : 0;
+  const outputState = useWorktreeOutputState(worktree.path);
+  const glowEnabled = useGlowEffectEnabled();
 
-  return (
-    <button
-      type="button"
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      className={cn(
-        'group relative w-full text-left rounded-lg border bg-card p-4 transition-all hover:shadow-md',
-        isActive && 'border-primary ring-1 ring-primary/20',
-        worktree.isLocked && 'opacity-75'
-      )}
-      onClick={() => onSelect?.(worktree)}
-    >
+  // Common card content
+  const cardContent = (
+    <>
       {/* Active indicator */}
-      {isActive && <div className="absolute left-0 top-0 h-full w-1 rounded-l-lg bg-primary" />}
+      {isActive && <div className="absolute left-0 top-0 h-full w-1 rounded-l-lg bg-primary z-20" />}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
@@ -194,6 +186,49 @@ export function WorktreeCard({
           </span>
         )}
       </div>
-    </button>
+    </>
+  );
+
+  // When glow effect is disabled, use plain button
+  if (!glowEnabled) {
+    return (
+      <button
+        type="button"
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        className={cn(
+          'group relative w-full text-left rounded-lg border bg-card p-4 transition-all hover:shadow-md',
+          isActive && 'border-primary ring-1 ring-primary/20',
+          worktree.isLocked && 'opacity-75'
+        )}
+        onClick={() => onSelect?.(worktree)}
+      >
+        {cardContent}
+      </button>
+    );
+  }
+
+  // Glow effect enabled
+  return (
+    <GlowCard
+      state={outputState}
+      as="button"
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className={cn(
+        'group relative w-full text-left rounded-lg border bg-card p-4 transition-all hover:shadow-md',
+        isActive && 'border-primary ring-1 ring-primary/20',
+        worktree.isLocked && 'opacity-75'
+      )}
+      onClick={() => onSelect?.(worktree)}
+    >
+      {cardContent}
+    </GlowCard>
   );
 }

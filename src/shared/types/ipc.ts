@@ -67,6 +67,7 @@ export const IPC_CHANNELS = {
   TERMINAL_DESTROY: 'terminal:destroy',
   TERMINAL_DATA: 'terminal:data',
   TERMINAL_EXIT: 'terminal:exit',
+  TERMINAL_GET_ACTIVITY: 'terminal:getActivity',
 
   // Agent
   AGENT_LIST: 'agent:list',
