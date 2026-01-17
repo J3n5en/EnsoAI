@@ -113,6 +113,7 @@ linux:
       arch: [x64]
     - target: deb
       arch: [x64]
+  executableName: enso-ai
   maintainer: EnsoAI Team <crolin-zhang@users.noreply.github.com>
   category: Development
   # Register enso:// URL scheme
