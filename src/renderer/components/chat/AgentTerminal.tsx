@@ -7,6 +7,7 @@ import {
 import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
+import { useAgentSessionsStore, type OutputState } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
 
@@ -32,6 +33,10 @@ interface AgentTerminalProps {
 
 const MIN_RUNTIME_FOR_AUTO_CLOSE = 10000; // 10 seconds
 const MIN_OUTPUT_FOR_NOTIFICATION = 100; // Minimum chars to consider agent is doing work
+const MIN_OUTPUT_FOR_INDICATOR = 200; // Minimum chars to show "outputting" indicator (higher to avoid noise)
+const ACTIVITY_POLL_INTERVAL_MS = 500; // Poll process activity every 500ms
+const IDLE_CONFIRMATION_COUNT = 4; // Require 4 consecutive idle polls (2 seconds) before marking as idle
+const RECENT_OUTPUT_TIMEOUT_MS = 3000; // If output received within this time, consider still active
 
 export function AgentTerminal({
   cwd,
@@ -94,6 +99,111 @@ export function AgentTerminal({
   const pendingIdleMonitorRef = useRef(false); // Pending idle monitor; enabled after Enter.
   const dataSinceEnterRef = useRef(0); // Track output volume since last Enter.
   const currentTitleRef = useRef<string>(''); // Terminal title from OSC escape sequence.
+
+  // Output state tracking for global store
+  const outputStateRef = useRef<OutputState>('idle');
+  const isMonitoringOutputRef = useRef(false); // Only monitor after user presses Enter
+  const outputSinceEnterRef = useRef(0); // Track output volume since Enter for indicator
+  const lastOutputTimeRef = useRef(0); // Track last output timestamp for idle detection
+  const activityPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const consecutiveIdleCountRef = useRef(0); // Count consecutive idle polls
+  const ptyIdRef = useRef<string | null>(null); // Store PTY ID for activity checks
+  const isActiveRef = useRef(isActive); // Track latest isActive value for interval callback
+  const setOutputState = useAgentSessionsStore((s) => s.setOutputState);
+  const markSessionActive = useAgentSessionsStore((s) => s.markSessionActive);
+  const clearRuntimeState = useAgentSessionsStore((s) => s.clearRuntimeState);
+
+  // Keep isActiveRef in sync with isActive prop
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
+
+  // Helper to update output state (with ref tracking to avoid unnecessary store updates)
+  const updateOutputState = useCallback(
+    (newState: OutputState) => {
+      if (!sessionId) return;
+      if (outputStateRef.current === newState) return;
+      outputStateRef.current = newState;
+      // Use isActiveRef.current to get latest value (important for interval callbacks)
+      setOutputState(sessionId, newState, isActiveRef.current);
+    },
+    [sessionId, setOutputState]
+  );
+
+  // Mark session as active when user is viewing it
+  useEffect(() => {
+    if (isActive && sessionId) {
+      markSessionActive(sessionId);
+    }
+  }, [isActive, sessionId, markSessionActive]);
+
+  // Start polling for process activity
+  const startActivityPolling = useCallback(() => {
+    // Clear any existing interval
+    if (activityPollIntervalRef.current) {
+      clearInterval(activityPollIntervalRef.current);
+    }
+    consecutiveIdleCountRef.current = 0;
+
+    activityPollIntervalRef.current = setInterval(async () => {
+      if (!ptyIdRef.current || !isMonitoringOutputRef.current) {
+        // Stop polling if no PTY or not monitoring
+        if (activityPollIntervalRef.current) {
+          clearInterval(activityPollIntervalRef.current);
+          activityPollIntervalRef.current = null;
+        }
+        return;
+      }
+
+      try {
+        const hasProcessActivity = await window.electronAPI.terminal.getActivity(ptyIdRef.current);
+        const now = Date.now();
+        const hasRecentOutput = now - lastOutputTimeRef.current < RECENT_OUTPUT_TIMEOUT_MS;
+
+        if (hasProcessActivity || hasRecentOutput) {
+          // Process is active OR has recent output, reset idle counter
+          consecutiveIdleCountRef.current = 0;
+          // If we have enough output, show the indicator
+          if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
+            updateOutputState('outputting');
+          }
+        } else {
+          // Process is idle AND no recent output
+          consecutiveIdleCountRef.current++;
+          // Only mark as idle after several consecutive idle polls
+          if (consecutiveIdleCountRef.current >= IDLE_CONFIRMATION_COUNT) {
+            updateOutputState('idle');
+            isMonitoringOutputRef.current = false;
+            // Stop polling when confirmed idle
+            if (activityPollIntervalRef.current) {
+              clearInterval(activityPollIntervalRef.current);
+              activityPollIntervalRef.current = null;
+            }
+          }
+        }
+      } catch {
+        // Error checking activity, ignore
+      }
+    }, ACTIVITY_POLL_INTERVAL_MS);
+  }, [updateOutputState]);
+
+  // Stop polling for process activity
+  const stopActivityPolling = useCallback(() => {
+    if (activityPollIntervalRef.current) {
+      clearInterval(activityPollIntervalRef.current);
+      activityPollIntervalRef.current = null;
+    }
+  }, []);
+
+  // Cleanup runtime state on unmount
+  useEffect(() => {
+    return () => {
+      if (sessionId) {
+        clearRuntimeState(sessionId);
+      }
+      stopActivityPolling();
+    };
+  }, [sessionId, clearRuntimeState, stopActivityPolling]);
 
   // Build command with session args
   const { command, env } = useMemo(() => {
@@ -252,6 +362,20 @@ export function AgentTerminal({
       // Track output volume since last Enter
       dataSinceEnterRef.current += data.length;
 
+      // === Output state tracking for UI indicator ===
+      // Only track when we're monitoring (after user pressed Enter)
+      if (isMonitoringOutputRef.current) {
+        outputSinceEnterRef.current += data.length;
+        lastOutputTimeRef.current = Date.now(); // Track last output time for idle detection
+
+        // Update to 'outputting' once we have substantial output after Enter
+        if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
+          updateOutputState('outputting');
+        }
+        // Note: The transition to 'idle' is handled by process activity polling
+        // (startActivityPolling), not by a simple timeout
+      }
+
       // Only arm idle monitoring after receiving substantial output
       // This prevents notifications from simple prompt echoes
       if (
@@ -301,6 +425,7 @@ export function AgentTerminal({
       claudeCodeIntegration.stopHookEnabled,
       sessionId,
       t,
+      updateOutputState,
     ]
   );
 
@@ -344,6 +469,13 @@ export function AgentTerminal({
         }
         // Reset output counter.
         dataSinceEnterRef.current = 0;
+
+        // Start monitoring for AI output (only track after user presses Enter)
+        isMonitoringOutputRef.current = true;
+        outputSinceEnterRef.current = 0;
+        ptyIdRef.current = ptyId; // Store PTY ID for activity polling
+        startActivityPolling(); // Start polling for process activity
+
         // Clear any existing enter delay timer.
         if (enterDelayTimerRef.current) {
           clearTimeout(enterDelayTimerRef.current);
@@ -384,7 +516,7 @@ export function AgentTerminal({
 
       return true;
     },
-    [activated, onActivated, agentNotificationEnterDelay]
+    [activated, onActivated, agentNotificationEnterDelay, startActivityPolling]
   );
 
   // Wait for shell config and hapi check to complete before activating terminal

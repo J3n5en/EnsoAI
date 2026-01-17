@@ -4,6 +4,8 @@ import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import type { TerminalCreateOptions } from '@shared/types';
 import * as pty from 'node-pty';
+import pidtree from 'pidtree';
+import pidusage from 'pidusage';
 import { killProcessTree } from '../../utils/processUtils';
 import { getProxyEnvVars } from '../proxy/ProxyConfig';
 import { detectShell, shellDetector } from './ShellDetector';
@@ -505,6 +507,46 @@ export class PtyManager {
       ) {
         this.destroy(id);
       }
+    }
+  }
+
+  /**
+   * Check if a PTY process tree is actively using CPU.
+   * Returns true if any process in the tree has CPU activity (> 1%), false otherwise.
+   * This detects if an AI agent (running as child process) is working.
+   */
+  async getProcessActivity(id: string): Promise<boolean> {
+    const session = this.sessions.get(id);
+    if (!session) {
+      return false;
+    }
+
+    const pid = session.pty.pid;
+    if (!pid) {
+      return false;
+    }
+
+    try {
+      // Get entire process tree (shell + all child processes like Claude Code)
+      const pids = await pidtree(pid, { root: true });
+
+      if (pids.length === 0) {
+        return false;
+      }
+
+      // Get CPU usage for all processes in the tree
+      const stats = await pidusage(pids);
+
+      // Check if any process has significant CPU activity
+      for (const procPid of Object.keys(stats)) {
+        if (stats[procPid]?.cpu > 1) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      // Process may have exited or error getting stats
+      return false;
     }
   }
 }

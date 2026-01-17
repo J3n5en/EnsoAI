@@ -22,7 +22,9 @@ export const zhTranslations: Record<string, string> = {
   'Are you sure you want to remove {{name}} from the workspace?':
     '确定要从工作区移除 {{name}} 吗？',
   'Also delete branch {{name}}': '同时删除分支 {{name}}',
+  'Animated glow border for AI output states': 'AI 输出状态的动态发光边框',
   Background: '背景',
+  'Beta Features': 'Beta 功能',
   Branch: '分支',
   'Branch already exists. Choose a different name.': '该分支已存在，请使用其他分支名',
   'Branch name': '新分支名',
@@ -134,6 +136,7 @@ export const zhTranslations: Record<string, string> = {
   Git: 'Git',
   'Git not initialized': '不是 Git 仓库',
   Global: '全局',
+  'Glow Effect': '发光效果',
   'Go to download': '前往下载',
   Head: '头',
   Help: '帮助',
@@ -422,6 +425,7 @@ export const zhTranslations: Record<string, string> = {
   'Describe your changes...': '描述你的更改...',
   'Diff navigation shortcuts': '设置 Diff 导航快捷键',
   Exit: '退出',
+  'Experimental features': '实验性功能',
   'Generate with AI': 'AI 生成',
   'Generating...': '生成中...',
   'History lines in the terminal. Higher values use more memory.':

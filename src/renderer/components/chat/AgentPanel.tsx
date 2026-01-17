@@ -422,11 +422,23 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     return unsubscribe;
   }, [handleSelectSession, allSessions, cwd, onSwitchWorktree]);
 
-  // 监听 Claude stop hook 通知，发送精确的完成通知
+  // 监听 Claude stop hook 通知，精确更新 output state 并发送完成通知
+  const setOutputState = useAgentSessionsStore((s) => s.setOutputState);
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onAgentStop(({ sessionId }) => {
       const session = allSessions.find((s) => s.id === sessionId);
       if (session) {
+        // Check if user is currently viewing this session
+        const activeGroup = groups.find((g) => g.id === activeGroupId);
+        const isViewingSession =
+          activeGroup?.activeSessionId === sessionId &&
+          pathsEqual(session.cwd, cwd) &&
+          isActive;
+
+        // Update output state to idle (will become 'unread' if user is not viewing)
+        setOutputState(sessionId, 'idle', isViewingSession);
+
+        // Send system notification
         const projectName = session.cwd.split('/').pop() || 'Unknown';
         const agentName = AGENT_INFO[session.agentId]?.name || session.agentCommand;
         // Use terminal title as body, fall back to project name
@@ -439,7 +451,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       }
     });
     return unsubscribe;
-  }, [allSessions, t]);
+  }, [allSessions, t, groups, activeGroupId, cwd, isActive, setOutputState]);
 
   // 监听 Claude status line 更新
   useEffect(() => {

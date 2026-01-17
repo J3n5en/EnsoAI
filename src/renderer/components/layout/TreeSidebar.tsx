@@ -45,8 +45,11 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/ui/glow-card';
+import { RepoItemWithGlow } from '@/components/ui/glow-wrappers';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useWorktreeListMultiple } from '@/hooks/useWorktree';
 import { useI18n } from '@/i18n';
 import { hexToRgba } from '@/lib/colors';
@@ -549,223 +552,226 @@ export function TreeSidebar({
         ) : (
           <LayoutGroup>
             <div className="space-y-1">
-            {filteredRepos.map((repo, index) => {
-              const isSelected = selectedRepo === repo.path;
-              const isExpanded = expandedRepos.has(repo.path);
-              const repoWorktrees = getFilteredWorktrees(repo.path);
-              const repoError = errorsMap[repo.path];
-              // Show loading if repo is expanded but not yet in the query results
-              const repoLoading = loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
+              {filteredRepos.map((repo, index) => {
+                const isSelected = selectedRepo === repo.path;
+                const isExpanded = expandedRepos.has(repo.path);
+                const repoWorktrees = getFilteredWorktrees(repo.path);
+                const repoError = errorsMap[repo.path];
+                // Show loading if repo is expanded but not yet in the query results
+                const repoLoading =
+                  loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
 
-              return (
-                <div key={repo.path}>
-                  {/* Repository row */}
-                  <div className="relative">
-                    {/* Drop indicator - top */}
-                    {dropRepoTargetIndex === index &&
-                      draggedRepoIndexRef.current !== null &&
-                      draggedRepoIndexRef.current > index && (
-                        <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
-                      )}
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      draggable={!searchQuery && !!onReorderRepositories}
-                      onDragStart={(e) => handleRepoDragStart(e, index, repo)}
-                      onDragEnd={handleRepoDragEnd}
-                      onDragOver={(e) => handleRepoDragOver(e, index)}
-                      onDragLeave={handleRepoDragLeave}
-                      onDrop={(e) => handleRepoDrop(e, index)}
-                      onContextMenu={(e) => handleRepoContextMenu(e, repo)}
-                      onClick={() => {
-                        // Only toggle expand/collapse, don't auto-activate worktree
-                        toggleRepoExpanded(repo.path);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
+                return (
+                  <div key={repo.path}>
+                    {/* Repository row */}
+                    <RepoItemWithGlow repoPath={repo.path}>
+                      {/* Drop indicator - top */}
+                      {dropRepoTargetIndex === index &&
+                        draggedRepoIndexRef.current !== null &&
+                        draggedRepoIndexRef.current > index && (
+                          <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+                        )}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        draggable={!searchQuery && !!onReorderRepositories}
+                        onDragStart={(e) => handleRepoDragStart(e, index, repo)}
+                        onDragEnd={handleRepoDragEnd}
+                        onDragOver={(e) => handleRepoDragOver(e, index)}
+                        onDragLeave={handleRepoDragLeave}
+                        onDrop={(e) => handleRepoDrop(e, index)}
+                        onContextMenu={(e) => handleRepoContextMenu(e, repo)}
+                        onClick={() => {
+                          // Only toggle expand/collapse, don't auto-activate worktree
                           toggleRepoExpanded(repo.path);
-                        }
-                      }}
-                      className={cn(
-                        'group relative flex w-full flex-col gap-1 rounded-xl px-2 py-2 text-left cursor-pointer',
-                        draggedRepoIndexRef.current === index && 'opacity-50'
-                      )}
-                    >
-                      {/* Sliding highlight background */}
-                      {isSelected && (
-                        <motion.div
-                          layoutId="repo-highlight"
-                          className="absolute inset-0 rounded-xl bg-accent/60 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]"
-                          transition={springFast}
-                        />
-                      )}
-                      {/* Row 1: Chevron + Icon + Name + Actions (vertically centered) */}
-                      <div className="relative z-10 flex w-full items-center gap-1">
-                        <span className="shrink-0 w-5 h-5 flex items-center justify-center">
-                          <ChevronRight
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            toggleRepoExpanded(repo.path);
+                          }
+                        }}
+                        className={cn(
+                          'group relative flex w-full flex-col gap-1 rounded-xl px-2 py-2 text-left cursor-pointer',
+                          draggedRepoIndexRef.current === index && 'opacity-50'
+                        )}
+                      >
+                        {/* Sliding highlight background */}
+                        {isSelected && (
+                          <motion.div
+                            layoutId="repo-highlight"
+                            className="absolute inset-0 rounded-xl bg-accent/60 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]"
+                            transition={springFast}
+                          />
+                        )}
+                        {/* Row 1: Chevron + Icon + Name + Actions (vertically centered) */}
+                        <div className="relative z-10 flex w-full items-center gap-1">
+                          <span className="shrink-0 w-5 h-5 flex items-center justify-center">
+                            <ChevronRight
+                              className={cn(
+                                'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
+                                isExpanded && 'rotate-90'
+                              )}
+                            />
+                          </span>
+                          <FolderGit2
                             className={cn(
-                              'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
-                              isExpanded && 'rotate-90'
+                              'h-4 w-4 shrink-0 transition-colors duration-200',
+                              isSelected
+                                ? 'text-primary'
+                                : 'text-muted-foreground group-hover:text-foreground'
                             )}
                           />
-                        </span>
-                        <FolderGit2
-                          className={cn(
-                            'h-4 w-4 shrink-0 transition-colors duration-200',
-                            isSelected ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
-                          )}
-                        />
-                        <span
-                          className={cn(
-                            'min-w-0 flex-1 truncate font-medium text-sm text-left transition-colors duration-200',
-                            isSelected
-                              ? 'text-foreground'
-                              : 'text-muted-foreground group-hover:text-foreground'
-                          )}
-                        >
-                          {repo.name}
-                        </span>
-                        <button
-                          type="button"
-                          className="shrink-0 p-1 rounded hover:bg-muted/50"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRepoSettingsTarget(repo);
-                            setRepoSettingsOpen(true);
-                          }}
-                          title={t('Repository Settings')}
-                        >
-                          <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
-                      </div>
-
-                      {/* Row 2: Tags */}
-                      {(() => {
-                        const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
-                        if (!group) return null;
-
-                        const bg = hexToRgba(group.color, 0.12);
-                        const border = hexToRgba(group.color, 0.35);
-                        return (
-                          <div className="relative z-10 flex items-center gap-1 pl-6">
-                            <span
-                              className="inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
-                              style={{
-                                backgroundColor: bg ?? undefined,
-                                borderColor: border ?? undefined,
-                                color: group.color,
-                              }}
-                            >
-                              {group.emoji && (
-                                <span className="text-[0.9em] opacity-90">{group.emoji}</span>
-                              )}
-                              <span className="truncate">{group.name}</span>
-                            </span>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Row 3: Path */}
-                      <span
-                        className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
-                        title={repo.path}
-                      >
-                        {repo.path}
-                      </span>
-                    </div>
-                    {/* Drop indicator - bottom */}
-                    {dropRepoTargetIndex === index &&
-                      draggedRepoIndexRef.current !== null &&
-                      draggedRepoIndexRef.current < index && (
-                        <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
-                      )}
-                  </div>
-
-                  {/* Worktrees under this repo */}
-                  <AnimatePresence initial={false}>
-                    {isExpanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: 'easeInOut' }}
-                        className="ml-4 mt-1 space-y-0.5 overflow-hidden"
-                      >
-                        {repoError ? (
-                          <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
-                            <span className="text-destructive">{t('Not a Git repository')}</span>
-                            {onInitGit && isSelected && (
-                              <Button
-                                onClick={async () => {
-                                  await onInitGit();
-                                  refetchExpandedWorktrees();
-                                }}
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 text-xs w-fit"
-                              >
-                                <GitBranch className="mr-1 h-3 w-3" />
-                                {t('Init')}
-                              </Button>
+                          <span
+                            className={cn(
+                              'min-w-0 flex-1 truncate font-medium text-sm text-left transition-colors duration-200',
+                              isSelected
+                                ? 'text-foreground'
+                                : 'text-muted-foreground group-hover:text-foreground'
                             )}
-                          </div>
-                        ) : repoLoading ? (
-                          <div className="space-y-1">
-                            {[0, 1].map((i) => (
-                              <div
-                                key={`skeleton-${i}`}
-                                className="h-8 animate-pulse rounded-lg bg-muted"
-                              />
-                            ))}
-                          </div>
-                        ) : repoWorktrees.length === 0 ? (
-                          <div className="py-2 px-2 text-xs text-muted-foreground">
-                            {searchQuery
-                              ? t('No matching worktrees')
-                              : t('No worktrees. Create one to get started.')}
-                          </div>
-                        ) : (
-                          repoWorktrees.map((worktree, wtIndex) => (
-                            <WorktreeTreeItem
-                              key={worktree.path}
-                              worktree={worktree}
-                              isActive={activeWorktree?.path === worktree.path}
-                              onClick={() => {
-                                // Select repo if not already selected
-                                if (!isSelected) {
-                                  onSelectRepo(repo.path);
-                                }
-                                onSelectWorktree(worktree);
-                              }}
-                              onDelete={() => setWorktreeToDelete(worktree)}
-                              onMerge={
-                                onMergeWorktree ? () => onMergeWorktree(worktree) : undefined
-                              }
-                              draggable={!searchQuery && !!onReorderWorktrees && isSelected}
-                              onDragStart={(e) => handleWorktreeDragStart(e, wtIndex, worktree)}
-                              onDragEnd={handleWorktreeDragEnd}
-                              onDragOver={(e) => handleWorktreeDragOver(e, wtIndex)}
-                              onDragLeave={handleWorktreeDragLeave}
-                              onDrop={(e) => handleWorktreeDrop(e, wtIndex)}
-                              showDropIndicator={dropWorktreeTargetIndex === wtIndex}
-                              dropDirection={
-                                dropWorktreeTargetIndex === wtIndex &&
-                                draggedWorktreeIndexRef.current !== null
-                                  ? draggedWorktreeIndexRef.current > wtIndex
-                                    ? 'top'
-                                    : 'bottom'
-                                  : null
-                              }
-                            />
-                          ))
+                          >
+                            {repo.name}
+                          </span>
+                          <button
+                            type="button"
+                            className="shrink-0 p-1 rounded hover:bg-muted/50"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRepoSettingsTarget(repo);
+                              setRepoSettingsOpen(true);
+                            }}
+                            title={t('Repository Settings')}
+                          >
+                            <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                        </div>
+
+                        {/* Row 2: Tags */}
+                        {(() => {
+                          const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
+                          if (!group) return null;
+
+                          const bg = hexToRgba(group.color, 0.12);
+                          const border = hexToRgba(group.color, 0.35);
+                          return (
+                            <div className="relative z-10 flex items-center gap-1 pl-6">
+                              <span
+                                className="inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
+                                style={{
+                                  backgroundColor: bg ?? undefined,
+                                  borderColor: border ?? undefined,
+                                  color: group.color,
+                                }}
+                              >
+                                {group.emoji && (
+                                  <span className="text-[0.9em] opacity-90">{group.emoji}</span>
+                                )}
+                                <span className="truncate">{group.name}</span>
+                              </span>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Row 3: Path */}
+                        <span
+                          className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
+                          title={repo.path}
+                        >
+                          {repo.path}
+                        </span>
+                      </div>
+                      {/* Drop indicator - bottom */}
+                      {dropRepoTargetIndex === index &&
+                        draggedRepoIndexRef.current !== null &&
+                        draggedRepoIndexRef.current < index && (
+                          <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
                         )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              );
-            })}
+                    </RepoItemWithGlow>
+
+                    {/* Worktrees under this repo */}
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeInOut' }}
+                          className="ml-4 mt-1 space-y-0.5 overflow-hidden"
+                        >
+                          {repoError ? (
+                            <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
+                              <span className="text-destructive">{t('Not a Git repository')}</span>
+                              {onInitGit && isSelected && (
+                                <Button
+                                  onClick={async () => {
+                                    await onInitGit();
+                                    refetchExpandedWorktrees();
+                                  }}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 text-xs w-fit"
+                                >
+                                  <GitBranch className="mr-1 h-3 w-3" />
+                                  {t('Init')}
+                                </Button>
+                              )}
+                            </div>
+                          ) : repoLoading ? (
+                            <div className="space-y-1">
+                              {[0, 1].map((i) => (
+                                <div
+                                  key={`skeleton-${i}`}
+                                  className="h-8 animate-pulse rounded-lg bg-muted"
+                                />
+                              ))}
+                            </div>
+                          ) : repoWorktrees.length === 0 ? (
+                            <div className="py-2 px-2 text-xs text-muted-foreground">
+                              {searchQuery
+                                ? t('No matching worktrees')
+                                : t('No worktrees. Create one to get started.')}
+                            </div>
+                          ) : (
+                            repoWorktrees.map((worktree, wtIndex) => (
+                              <WorktreeTreeItem
+                                key={worktree.path}
+                                worktree={worktree}
+                                isActive={activeWorktree?.path === worktree.path}
+                                onClick={() => {
+                                  // Select repo if not already selected
+                                  if (!isSelected) {
+                                    onSelectRepo(repo.path);
+                                  }
+                                  onSelectWorktree(worktree);
+                                }}
+                                onDelete={() => setWorktreeToDelete(worktree)}
+                                onMerge={
+                                  onMergeWorktree ? () => onMergeWorktree(worktree) : undefined
+                                }
+                                draggable={!searchQuery && !!onReorderWorktrees && isSelected}
+                                onDragStart={(e) => handleWorktreeDragStart(e, wtIndex, worktree)}
+                                onDragEnd={handleWorktreeDragEnd}
+                                onDragOver={(e) => handleWorktreeDragOver(e, wtIndex)}
+                                onDragLeave={handleWorktreeDragLeave}
+                                onDrop={(e) => handleWorktreeDrop(e, wtIndex)}
+                                showDropIndicator={dropWorktreeTargetIndex === wtIndex}
+                                dropDirection={
+                                  dropWorktreeTargetIndex === wtIndex &&
+                                  draggedWorktreeIndexRef.current !== null
+                                    ? draggedWorktreeIndexRef.current > wtIndex
+                                      ? 'top'
+                                      : 'bottom'
+                                    : null
+                                }
+                              />
+                            ))
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
             </div>
           </LayoutGroup>
         )}
@@ -1093,6 +1099,7 @@ function WorktreeTreeItem({
     worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
   const branchDisplay = worktree.branch || t('Detached');
   const isPrunable = worktree.prunable;
+  const glowEnabled = useGlowEffectEnabled();
 
   // Subscribe to activity store
   const activities = useWorktreeActivityStore((s) => s.activities);
@@ -1103,6 +1110,9 @@ function WorktreeTreeItem({
   const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
   const hasDiffStats = diffStats.insertions > 0 || diffStats.deletions > 0;
+
+  // Check if any session in this worktree has outputting or unread state
+  const outputState = useWorktreeOutputState(worktree.path);
 
   const handleCopyPath = useCallback(async () => {
     try {
@@ -1155,97 +1165,106 @@ function WorktreeTreeItem({
     }
   }, [menuOpen, menuPosition]);
 
-  return (
+  // Common worktree item content
+  const worktreeItemContent = (
     <>
-      <div className="relative">
-        {/* Drop indicator - top */}
-        {showDropIndicator && dropDirection === 'top' && (
-          <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+      {/* Drop indicator - top */}
+      {showDropIndicator && dropDirection === 'top' && (
+        <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+      )}
+      <button
+        type="button"
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onClick={onClick}
+        onContextMenu={handleContextMenu}
+        className={cn(
+          'group relative flex w-full items-center gap-2 rounded-xl pl-5 pr-2 py-2 text-left text-sm',
+          'transition-all duration-200 ease-out',
+          isActive
+            ? 'bg-accent/60 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]'
+            : 'bg-transparent shadow-none hover:bg-accent/30',
+          isPrunable && 'opacity-50'
         )}
-        <button
-          type="button"
-          draggable={draggable}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={onClick}
-          onContextMenu={handleContextMenu}
+      >
+        <GitBranch
           className={cn(
-            'group relative flex w-full items-center gap-2 rounded-xl pl-5 pr-2 py-2 text-left text-sm',
-            'transition-all duration-200 ease-out',
-            isActive
-              ? 'bg-accent/60 shadow-[0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]'
-              : 'bg-transparent shadow-none hover:bg-accent/30',
-            isPrunable && 'opacity-50'
+            'h-3.5 w-3.5 shrink-0 transition-colors duration-200',
+            isPrunable
+              ? 'text-destructive'
+              : isActive
+                ? 'text-primary'
+                : 'text-muted-foreground group-hover:text-foreground'
+          )}
+        />
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate transition-colors duration-200',
+            isPrunable && 'line-through',
+            isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
           )}
         >
-          <GitBranch
-            className={cn(
-              'h-3.5 w-3.5 shrink-0 transition-colors duration-200',
-              isPrunable
-                ? 'text-destructive'
-                : isActive
-                  ? 'text-primary'
-                  : 'text-muted-foreground group-hover:text-foreground'
-            )}
-          />
-          <span
-            className={cn(
-              'min-w-0 flex-1 truncate transition-colors duration-200',
-              isPrunable && 'line-through',
-              isActive
-                ? 'text-foreground'
-                : 'text-muted-foreground group-hover:text-foreground'
-            )}
-          >
-            {branchDisplay}
+          {branchDisplay}
+        </span>
+        {isPrunable ? (
+          <span className="shrink-0 rounded bg-destructive/20 px-1 py-0.5 text-[9px] font-medium uppercase text-destructive">
+            {t('Deleted')}
           </span>
-          {isPrunable ? (
-            <span className="shrink-0 rounded bg-destructive/20 px-1 py-0.5 text-[9px] font-medium uppercase text-destructive">
-              {t('Deleted')}
-            </span>
-          ) : isMain ? (
-            <span className="shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-              {t('Main')}
-            </span>
-          ) : null}
-          {/* Activity counts and diff stats */}
-          {hasActivity && (
-            <div className="flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
-              {activity.agentCount > 0 && (
-                <span className="flex items-center gap-0.5">
-                  <Sparkles className="h-3 w-3" />
-                  {activity.agentCount}
-                </span>
-              )}
-              {activity.terminalCount > 0 && (
-                <span className="flex items-center gap-0.5">
-                  <Terminal className="h-3 w-3" />
-                  {activity.terminalCount}
-                </span>
-              )}
-              {hasDiffStats && (
-                <span className="flex items-center gap-0.5">
-                  {diffStats.insertions > 0 && (
-                    <span className="text-emerald-600 dark:text-emerald-400">
-                      +{diffStats.insertions}
-                    </span>
-                  )}
-                  {diffStats.deletions > 0 && (
-                    <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
-                  )}
-                </span>
-              )}
-            </div>
-          )}
-        </button>
-        {/* Drop indicator - bottom */}
-        {showDropIndicator && dropDirection === 'bottom' && (
-          <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+        ) : isMain ? (
+          <span className="shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
+            {t('Main')}
+          </span>
+        ) : null}
+        {/* Activity counts and diff stats */}
+        {hasActivity && (
+          <div className="flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+            {activity.agentCount > 0 && (
+              <span className="flex items-center gap-0.5">
+                <Sparkles className="h-3 w-3" />
+                {activity.agentCount}
+              </span>
+            )}
+            {activity.terminalCount > 0 && (
+              <span className="flex items-center gap-0.5">
+                <Terminal className="h-3 w-3" />
+                {activity.terminalCount}
+              </span>
+            )}
+            {hasDiffStats && (
+              <span className="flex items-center gap-0.5">
+                {diffStats.insertions > 0 && (
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{diffStats.insertions}
+                  </span>
+                )}
+                {diffStats.deletions > 0 && (
+                  <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
+                )}
+              </span>
+            )}
+          </div>
         )}
-      </div>
+      </button>
+      {/* Drop indicator - bottom */}
+      {showDropIndicator && dropDirection === 'bottom' && (
+        <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+      )}
+    </>
+  );
+
+  return (
+    <>
+      {glowEnabled ? (
+        <GlowBorder state={outputState as GlowState} className="rounded-xl">
+          {worktreeItemContent}
+        </GlowBorder>
+      ) : (
+        <div className="relative rounded-xl">{worktreeItemContent}</div>
+      )}
 
       {/* Context Menu */}
       {menuOpen && (
