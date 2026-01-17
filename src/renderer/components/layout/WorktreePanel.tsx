@@ -599,7 +599,7 @@ function WorktreeItem({
         className={cn(
           'flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
           isPrunable && 'opacity-50',
-          isActive ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+          isActive ? 'bg-accent/80 text-accent-foreground' : 'hover:bg-accent/50'
         )}
       >
         {/* Branch name */}
