@@ -94,68 +94,37 @@ export const GlowCard = forwardRef<HTMLDivElement, GlowCardProps>(
 GlowCard.displayName = 'GlowCard';
 
 /**
- * Animated flowing glow effect for "outputting" state
- * Creates a border glow that flows around the card
+ * Animated glow effect for "outputting" state
+ * Soft breathing glow with subtle edge highlight
  */
 function OutputtingGlow() {
   return (
     <>
-      {/* Animated gradient border */}
+      {/* Soft radial glow from center - behind content */}
       <motion.div
         className="absolute inset-0 rounded-[inherit]"
         style={{
           background:
-            'linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.6), rgba(34, 197, 94, 0.8), rgba(34, 197, 94, 0.6), transparent)',
-          backgroundSize: '200% 100%',
-        }}
-        animate={{
-          backgroundPosition: ['200% 0%', '-200% 0%'],
-        }}
-        transition={{
-          duration: 2,
-          repeat: Number.POSITIVE_INFINITY,
-          ease: 'linear',
-        }}
-      />
-      {/* Inner mask to create border effect */}
-      <div className="absolute inset-[1px] rounded-[inherit] bg-background z-[1]" />
-      {/* Outer glow */}
-      <motion.div
-        className="absolute -inset-[2px] rounded-[inherit] opacity-50"
-        style={{
-          background:
-            'linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.4), rgba(34, 197, 94, 0.6), rgba(34, 197, 94, 0.4), transparent)',
-          backgroundSize: '200% 100%',
-          filter: 'blur(4px)',
-        }}
-        animate={{
-          backgroundPosition: ['200% 0%', '-200% 0%'],
-        }}
-        transition={{
-          duration: 2,
-          repeat: Number.POSITIVE_INFINITY,
-          ease: 'linear',
-        }}
-      />
-    </>
-  );
-}
-
-/**
- * Static pulse glow effect for "unread" state
- * Creates a subtle pulsing amber/yellow glow
- */
-function UnreadGlow() {
-  return (
-    <>
-      {/* Pulsing border */}
-      <motion.div
-        className="absolute inset-0 rounded-[inherit]"
-        style={{
-          background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.6), rgba(245, 158, 11, 0.6))',
+            'radial-gradient(ellipse at 50% 50%, rgba(34, 197, 94, 0.18) 0%, transparent 70%)',
         }}
         animate={{
           opacity: [0.6, 1, 0.6],
+        }}
+        transition={{
+          duration: 3,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: 'easeInOut',
+        }}
+      />
+      {/* Top edge highlight - above content to show through selected state */}
+      <motion.div
+        className="absolute inset-x-0 top-0 h-[1px] rounded-t-[inherit] z-20"
+        style={{
+          background:
+            'linear-gradient(90deg, transparent 5%, rgba(34, 197, 94, 0.8) 50%, transparent 95%)',
+        }}
+        animate={{
+          opacity: [0.5, 1, 0.5],
         }}
         transition={{
           duration: 2,
@@ -163,20 +132,75 @@ function UnreadGlow() {
           ease: 'easeInOut',
         }}
       />
-      {/* Inner mask */}
-      <div className="absolute inset-[1px] rounded-[inherit] bg-background z-[1]" />
-      {/* Outer glow */}
+      {/* Outer soft glow */}
       <motion.div
-        className="absolute -inset-[2px] rounded-[inherit]"
+        className="absolute -inset-[2px] rounded-[inherit] -z-10"
         style={{
-          background: 'rgba(251, 191, 36, 0.3)',
-          filter: 'blur(6px)',
+          boxShadow: '0 0 25px rgba(34, 197, 94, 0.35)',
         }}
         animate={{
-          opacity: [0.3, 0.6, 0.3],
+          opacity: [0.5, 1, 0.5],
         }}
         transition={{
-          duration: 2,
+          duration: 3,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: 'easeInOut',
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Glow effect for "unread" state
+ * Warm ambient glow with subtle pulse
+ */
+function UnreadGlow() {
+  return (
+    <>
+      {/* Soft radial glow - behind content */}
+      <motion.div
+        className="absolute inset-0 rounded-[inherit]"
+        style={{
+          background:
+            'radial-gradient(ellipse at 50% 50%, rgba(251, 191, 36, 0.15) 0%, transparent 70%)',
+        }}
+        animate={{
+          opacity: [0.6, 1, 0.6],
+        }}
+        transition={{
+          duration: 3.5,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: 'easeInOut',
+        }}
+      />
+      {/* Top edge warm highlight - above content */}
+      <motion.div
+        className="absolute inset-x-0 top-0 h-[1px] rounded-t-[inherit] z-20"
+        style={{
+          background:
+            'linear-gradient(90deg, transparent 5%, rgba(251, 191, 36, 0.7) 50%, transparent 95%)',
+        }}
+        animate={{
+          opacity: [0.5, 0.9, 0.5],
+        }}
+        transition={{
+          duration: 2.5,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: 'easeInOut',
+        }}
+      />
+      {/* Outer warm glow */}
+      <motion.div
+        className="absolute -inset-[2px] rounded-[inherit] -z-10"
+        style={{
+          boxShadow: '0 0 20px rgba(251, 191, 36, 0.25)',
+        }}
+        animate={{
+          opacity: [0.5, 0.9, 0.5],
+        }}
+        transition={{
+          duration: 3.5,
           repeat: Number.POSITIVE_INFINITY,
           ease: 'easeInOut',
         }}
@@ -240,8 +264,8 @@ export function GlowIndicator({
 }
 
 /**
- * Lightweight glow border effect for tree items and list rows
- * Uses the same animated gradient border as GlowCard for consistency
+ * Lightweight glow effect for tree items and list rows
+ * Uses the same animated glow as GlowCard for consistency
  */
 export function GlowBorder({
   state,
@@ -262,7 +286,7 @@ export function GlowBorder({
       {state === 'outputting' && <OutputtingGlow />}
       {state === 'unread' && <UnreadGlow />}
 
-      {/* Content - must be above the glow inner mask (z-[1]) */}
+      {/* Content - above glow background */}
       <div className="relative z-10">{children}</div>
     </div>
   );
