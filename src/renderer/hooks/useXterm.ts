@@ -300,6 +300,26 @@ export function useXterm({
           textarea.value = '';
         }, 0);
       });
+
+      // 图片粘贴支持：检测剪贴板内容，如果是图片则发送 Ctrl+V 控制字符让 agent 处理
+      // gemini-cli 等 agent 通过监听 Ctrl+V (0x16) 来触发图片粘贴逻辑
+      textarea.addEventListener(
+        'paste',
+        (event) => {
+          const items = event.clipboardData?.items;
+          const hasImage =
+            items && Array.from(items).some((item) => item.type.startsWith('image/'));
+
+          if (hasImage && ptyIdRef.current) {
+            // 剪贴板有图片：阻止默认粘贴，发送 Ctrl+V 控制字符
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            window.electronAPI.terminal.write(ptyIdRef.current, '\x16');
+          }
+          // 否则：正常文本粘贴，xterm 默认行为
+        },
+        { capture: true }
+      );
     }
 
     // Listen for title changes (OSC escape sequences)
@@ -427,18 +447,12 @@ export function useXterm({
         return false;
       }
 
-      // Handle copy - paste is NOT intercepted to allow image paste in agents
+      // Handle copy (paste is handled via paste event listener for image support)
       const platform = window.electronAPI.env.platform;
       const isMac = platform === 'darwin';
       const modKey = isMac ? event.metaKey : event.ctrlKey;
 
       if (event.type === 'keydown' && modKey && !event.altKey) {
-        // Paste: DO NOT intercept - let browser/agent handle it naturally
-        // This allows Claude Code and other agents to receive image paste events
-        if (event.key === 'v' || event.key === 'V') {
-          return false; // Let event bubble up
-        }
-
         // Copy: Cmd+C (mac) or Ctrl+C (win/linux)
         if (event.key === 'c' || event.key === 'C') {
           if (terminal.hasSelection()) {
