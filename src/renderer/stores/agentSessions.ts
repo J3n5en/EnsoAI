@@ -300,10 +300,9 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
 
           // Transitioning to idle: check if we need to mark as unread
           const wasOutputting = currentState?.outputState === 'outputting';
-          // Check both: current isActive param AND stored wasActiveWhenOutputting flag
-          // If user was viewing at any point during output, don't mark as unread
-          const userWasViewing = isActive || currentState?.wasActiveWhenOutputting;
-          const shouldMarkUnread = wasOutputting && !userWasViewing;
+          // Only check if user is CURRENTLY viewing the session
+          // If user is not viewing when AI finishes, mark as unread
+          const shouldMarkUnread = wasOutputting && !isActive;
 
           return {
             runtimeStates: {
