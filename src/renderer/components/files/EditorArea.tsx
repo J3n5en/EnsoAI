@@ -864,8 +864,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                   // Font
                   fontSize: editorSettings.fontSize,
                   fontFamily: editorSettings.fontFamily,
-                  fontLigatures: true,
-                  lineHeight: 20,
+                  fontLigatures: editorSettings.fontLigatures,
+                  lineHeight: editorSettings.lineHeight,
                   // Indentation
                   tabSize: editorSettings.tabSize,
                   insertSpaces: editorSettings.insertSpaces,
@@ -883,7 +883,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                   autoClosingBrackets: editorSettings.autoClosingBrackets,
                   autoClosingQuotes: editorSettings.autoClosingQuotes,
                   // Fixed options
-                  padding: { top: 12, bottom: 12 },
+                  padding: { top: editorSettings.paddingTop, bottom: editorSettings.paddingBottom },
                   scrollBeyondLastLine: false,
                   automaticLayout: true,
                   fixedOverflowWidgets: true,

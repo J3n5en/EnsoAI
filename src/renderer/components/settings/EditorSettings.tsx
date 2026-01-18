@@ -31,6 +31,9 @@ export function EditorSettings() {
   // Local state for font inputs
   const [localFontSize, setLocalFontSize] = React.useState(editorSettings.fontSize);
   const [localFontFamily, setLocalFontFamily] = React.useState(editorSettings.fontFamily);
+  const [localLineHeight, setLocalLineHeight] = React.useState(editorSettings.lineHeight);
+  const [localPaddingTop, setLocalPaddingTop] = React.useState(editorSettings.paddingTop);
+  const [localPaddingBottom, setLocalPaddingBottom] = React.useState(editorSettings.paddingBottom);
   const [localAutoSaveDelay, setLocalAutoSaveDelay] = React.useState(editorSettings.autoSaveDelay);
 
   React.useEffect(() => {
@@ -40,6 +43,18 @@ export function EditorSettings() {
   React.useEffect(() => {
     setLocalFontFamily(editorSettings.fontFamily);
   }, [editorSettings.fontFamily]);
+
+  React.useEffect(() => {
+    setLocalLineHeight(editorSettings.lineHeight);
+  }, [editorSettings.lineHeight]);
+
+  React.useEffect(() => {
+    setLocalPaddingTop(editorSettings.paddingTop);
+  }, [editorSettings.paddingTop]);
+
+  React.useEffect(() => {
+    setLocalPaddingBottom(editorSettings.paddingBottom);
+  }, [editorSettings.paddingBottom]);
 
   React.useEffect(() => {
     setLocalAutoSaveDelay(editorSettings.autoSaveDelay);
@@ -57,6 +72,26 @@ export function EditorSettings() {
     if (validFontFamily !== editorSettings.fontFamily)
       setEditorSettings({ fontFamily: validFontFamily });
   }, [localFontFamily, editorSettings.fontFamily, setEditorSettings]);
+
+  const applyLineHeightChange = React.useCallback(() => {
+    const validLineHeight = Math.max(12, Math.min(60, localLineHeight || 20));
+    if (validLineHeight !== localLineHeight) setLocalLineHeight(validLineHeight);
+    if (validLineHeight !== editorSettings.lineHeight)
+      setEditorSettings({ lineHeight: validLineHeight });
+  }, [localLineHeight, editorSettings.lineHeight, setEditorSettings]);
+
+  const applyPaddingTopChange = React.useCallback(() => {
+    const validPadding = Math.max(0, Math.min(50, localPaddingTop || 12));
+    if (validPadding !== localPaddingTop) setLocalPaddingTop(validPadding);
+    if (validPadding !== editorSettings.paddingTop) setEditorSettings({ paddingTop: validPadding });
+  }, [localPaddingTop, editorSettings.paddingTop, setEditorSettings]);
+
+  const applyPaddingBottomChange = React.useCallback(() => {
+    const validPadding = Math.max(0, Math.min(50, localPaddingBottom || 12));
+    if (validPadding !== localPaddingBottom) setLocalPaddingBottom(validPadding);
+    if (validPadding !== editorSettings.paddingBottom)
+      setEditorSettings({ paddingBottom: validPadding });
+  }, [localPaddingBottom, editorSettings.paddingBottom, setEditorSettings]);
 
   const applyAutoSaveDelayChange = React.useCallback(() => {
     const rawVal = Number(localAutoSaveDelay);
@@ -196,6 +231,93 @@ export function EditorSettings() {
             }}
             min={8}
             max={32}
+            className="w-20"
+          />
+          <span className="text-sm text-muted-foreground">px</span>
+        </div>
+      </div>
+
+      {/* Line Height */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Line height')}</span>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            value={localLineHeight}
+            onChange={(e) => setLocalLineHeight(Number(e.target.value))}
+            onBlur={applyLineHeightChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                applyLineHeightChange();
+                e.currentTarget.blur();
+              }
+            }}
+            min={12}
+            max={60}
+            className="w-20"
+          />
+          <span className="text-sm text-muted-foreground">px</span>
+        </div>
+      </div>
+
+      {/* Font Ligatures */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Font ligatures')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{t('Enable font ligatures')}</p>
+          <Switch
+            checked={editorSettings.fontLigatures}
+            onCheckedChange={(checked) => setEditorSettings({ fontLigatures: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Spacing Section */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Spacing')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Editor padding settings')}</p>
+      </div>
+
+      {/* Padding Top */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Padding top')}</span>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            value={localPaddingTop}
+            onChange={(e) => setLocalPaddingTop(Number(e.target.value))}
+            onBlur={applyPaddingTopChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                applyPaddingTopChange();
+                e.currentTarget.blur();
+              }
+            }}
+            min={0}
+            max={50}
+            className="w-20"
+          />
+          <span className="text-sm text-muted-foreground">px</span>
+        </div>
+      </div>
+
+      {/* Padding Bottom */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Padding bottom')}</span>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            value={localPaddingBottom}
+            onChange={(e) => setLocalPaddingBottom(Number(e.target.value))}
+            onBlur={applyPaddingBottomChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                applyPaddingBottomChange();
+                e.currentTarget.blur();
+              }
+            }}
+            min={0}
+            max={50}
             className="w-20"
           />
           <span className="text-sm text-muted-foreground">px</span>

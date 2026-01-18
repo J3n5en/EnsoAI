@@ -370,6 +370,11 @@ export interface EditorSettings {
   // Font
   fontSize: number;
   fontFamily: string;
+  lineHeight: number;
+  fontLigatures: boolean;
+  // Padding
+  paddingTop: number;
+  paddingBottom: number;
   // Indentation
   tabSize: number;
   insertSpaces: boolean;
@@ -402,6 +407,11 @@ export const defaultEditorSettings: EditorSettings = {
   // Font
   fontSize: 13,
   fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+  lineHeight: 20,
+  fontLigatures: true,
+  // Padding
+  paddingTop: 12,
+  paddingBottom: 12,
   // Indentation
   tabSize: 2,
   insertSpaces: true,
