@@ -137,16 +137,64 @@ export const defaultLightTheme: XtermTheme = {
   brightWhite: '#a5a5a5',
 };
 
-// Hex color utilities
+interface RGBA {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+function parseColorWithAlpha(color: string): RGBA | null {
+  const c = color.trim();
+
+  if (c === 'transparent') return null;
+
+  const hex6 = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(c);
+  if (hex6) {
+    return {
+      r: Number.parseInt(hex6[1], 16),
+      g: Number.parseInt(hex6[2], 16),
+      b: Number.parseInt(hex6[3], 16),
+      a: 1,
+    };
+  }
+
+  const hex3 = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(c);
+  if (hex3) {
+    return {
+      r: Number.parseInt(hex3[1] + hex3[1], 16),
+      g: Number.parseInt(hex3[2] + hex3[2], 16),
+      b: Number.parseInt(hex3[3] + hex3[3], 16),
+      a: 1,
+    };
+  }
+
+  const hex8 = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(c);
+  if (hex8) {
+    return {
+      r: Number.parseInt(hex8[1], 16),
+      g: Number.parseInt(hex8[2], 16),
+      b: Number.parseInt(hex8[3], 16),
+      a: Number.parseInt(hex8[4], 16) / 255,
+    };
+  }
+
+  const rgbaMatch = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/.exec(c);
+  if (rgbaMatch) {
+    return {
+      r: Number.parseInt(rgbaMatch[1], 10),
+      g: Number.parseInt(rgbaMatch[2], 10),
+      b: Number.parseInt(rgbaMatch[3], 10),
+      a: rgbaMatch[4] ? Number.parseFloat(rgbaMatch[4]) : 1,
+    };
+  }
+
+  return null;
+}
+
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? {
-        r: Number.parseInt(result[1], 16),
-        g: Number.parseInt(result[2], 16),
-        b: Number.parseInt(result[3], 16),
-      }
-    : null;
+  const rgba = parseColorWithAlpha(hex);
+  return rgba ? { r: rgba.r, g: rgba.g, b: rgba.b } : null;
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
@@ -159,6 +207,14 @@ function mixColors(color1: string, color2: string, weight: number): string {
   if (!c1 || !c2) return color1;
   const w = Math.max(0, Math.min(1, weight));
   return rgbToHex(c1.r * (1 - w) + c2.r * w, c1.g * (1 - w) + c2.g * w, c1.b * (1 - w) + c2.b * w);
+}
+
+export function hexToRgba(color: string, opacity: number): string {
+  const rgba = parseColorWithAlpha(color);
+  if (!rgba) return color;
+  const newAlpha = Math.max(0, Math.min(1, opacity / 100));
+  const finalAlpha = rgba.a * newAlpha;
+  return `rgba(${rgba.r}, ${rgba.g}, ${rgba.b}, ${finalAlpha})`;
 }
 
 function getLuminance(hex: string): number {

@@ -111,10 +111,16 @@
 
   html {
     font-size: var(--font-size-base);
+    background: transparent;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background: transparent;
+  }
+
+  body.bg-background {
+    @apply bg-background;
   }
 
   button:not(:disabled),

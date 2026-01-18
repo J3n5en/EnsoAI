@@ -732,15 +732,17 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
 
   if (!cwd) {
     return (
-      <Empty className="h-full">
-        <EmptyMedia variant="icon">
-          <Terminal className="h-4.5 w-4.5" />
-        </EmptyMedia>
-        <EmptyHeader>
-          <EmptyTitle>{t('Terminal')}</EmptyTitle>
-          <EmptyDescription>{t('Select a Worktree to open terminal')}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className="h-full bg-background flex items-center justify-center">
+        <Empty className="border-0">
+          <EmptyMedia variant="icon">
+            <Terminal className="h-4.5 w-4.5" />
+          </EmptyMedia>
+          <EmptyHeader>
+            <EmptyTitle>{t('Terminal')}</EmptyTitle>
+            <EmptyDescription>{t('Select a Worktree to open terminal')}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
     );
   }
 
@@ -813,7 +815,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
             }
           >
             {/* Tab bars row - flex layout */}
-            <div className="flex h-9 w-full">
+            <div className="flex h-9 w-full bg-background">
               {state.groups.map((group, index) => (
                 <div
                   key={group.id}

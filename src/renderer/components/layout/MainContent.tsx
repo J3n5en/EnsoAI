@@ -21,6 +21,7 @@ import { useI18n } from '@/i18n';
 import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
+import { useSettingsStore } from '@/stores/settings';
 import { TerminalPanel } from '../terminal';
 
 type LayoutMode = 'columns' | 'tree';
@@ -57,6 +58,8 @@ export function MainContent({
   onSwitchTab,
 }: MainContentProps) {
   const { t } = useI18n();
+  const terminalBackgroundOpacity = useSettingsStore((s) => s.terminalBackgroundOpacity);
+  const isTerminalTransparent = terminalBackgroundOpacity < 100;
 
   // Diff Review Modal state
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -191,11 +194,16 @@ export function MainContent({
   const hasActiveWorktree = Boolean(repoPath && worktreePath);
 
   return (
-    <main className="flex min-w-[535px] flex-1 flex-col overflow-hidden bg-background">
+    <main
+      className={cn(
+        'flex min-w-[535px] flex-1 flex-col overflow-hidden',
+        !isTerminalTransparent && 'bg-background'
+      )}
+    >
       {/* Header with tabs */}
       <header
         className={cn(
-          'flex h-12 shrink-0 items-center justify-between border-b px-4 drag-region',
+          'flex h-12 shrink-0 items-center justify-between border-b px-4 drag-region bg-background',
           needsTrafficLightPadding && 'pl-[80px]'
         )}
       >
@@ -336,7 +344,8 @@ export function MainContent({
         {/* Chat tab - ALWAYS keep AgentPanel mounted to preserve terminal sessions across repo switches */}
         <div
           className={cn(
-            'absolute inset-0 bg-background',
+            'absolute inset-0',
+            !isTerminalTransparent && 'bg-background',
             activeTab === 'chat' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
@@ -373,29 +382,32 @@ export function MainContent({
               )}
             </>
           ) : (
-            <Empty className="h-full border-0">
-              <EmptyMedia variant="icon">
-                <Sparkles className="h-4.5 w-4.5" />
-              </EmptyMedia>
-              <EmptyHeader>
-                <EmptyTitle>{t('Start using AI Agent')}</EmptyTitle>
-                <EmptyDescription>
-                  {t('Select a Worktree to start using AI coding assistant')}
-                </EmptyDescription>
-              </EmptyHeader>
-              {onExpandWorktree && worktreeCollapsed && (
-                <Button onClick={onExpandWorktree} variant="outline" className="mt-2">
-                  <GitBranch className="mr-2 h-4 w-4" />
-                  {t('Choose Worktree')}
-                </Button>
-              )}
-            </Empty>
+            <div className="h-full bg-background flex items-center justify-center">
+              <Empty className="border-0">
+                <EmptyMedia variant="icon">
+                  <Sparkles className="h-4.5 w-4.5" />
+                </EmptyMedia>
+                <EmptyHeader>
+                  <EmptyTitle>{t('Start using AI Agent')}</EmptyTitle>
+                  <EmptyDescription>
+                    {t('Select a Worktree to start using AI coding assistant')}
+                  </EmptyDescription>
+                </EmptyHeader>
+                {onExpandWorktree && worktreeCollapsed && (
+                  <Button onClick={onExpandWorktree} variant="outline" className="mt-2">
+                    <GitBranch className="mr-2 h-4 w-4" />
+                    {t('Choose Worktree')}
+                  </Button>
+                )}
+              </Empty>
+            </div>
           )}
         </div>
         {/* Terminal tab - keep mounted to preserve shell sessions */}
         <div
           className={cn(
-            'absolute inset-0 bg-background',
+            'absolute inset-0',
+            !isTerminalTransparent && 'bg-background',
             activeTab === 'terminal' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >

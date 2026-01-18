@@ -68,7 +68,7 @@ export function AgentGroup({
     return (
       // biome-ignore lint/a11y/useKeyWithClickEvents: click activates group
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-muted-foreground bg-background pointer-events-auto"
+        className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-muted-foreground pointer-events-auto bg-background"
         onClick={onGroupClick}
       >
         <Sparkles className="h-12 w-12 opacity-50" />

@@ -7,7 +7,7 @@ import {
 import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
-import { useAgentSessionsStore, type OutputState } from '@/stores/agentSessions';
+import { type OutputState, useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
 
@@ -673,7 +673,7 @@ export function AgentTerminal({
       style={{ backgroundColor: settings.theme.background, contain: 'strict' }}
       onClick={handleClick}
     >
-      <div ref={containerRef} className="h-full w-full px-[5px] py-[2px]" />
+      <div ref={containerRef} className="h-full w-full" />
       <TerminalSearchBar
         ref={searchBarRef}
         isOpen={isSearchOpen}

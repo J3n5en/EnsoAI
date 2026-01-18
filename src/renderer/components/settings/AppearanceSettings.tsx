@@ -9,7 +9,6 @@ import {
   ComboboxPopup,
 } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectItem,
@@ -17,6 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/i18n';
 import {
   defaultDarkTheme,
@@ -168,6 +169,8 @@ export function AppearanceSettings() {
     setTerminalFontWeight,
     terminalFontWeightBold,
     setTerminalFontWeightBold,
+    terminalBackgroundOpacity,
+    setTerminalBackgroundOpacity,
     glowEffectEnabled,
     setGlowEffectEnabled,
   } = useSettingsStore();
@@ -346,6 +349,28 @@ export function AppearanceSettings() {
           <Button variant="outline" size="icon" onClick={handleNextTheme}>
             <ChevronRight className="h-4 w-4" />
           </Button>
+        </div>
+      </div>
+
+      {/* Background Opacity */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Opacity')}</span>
+        <div className="flex items-center gap-3">
+          <Slider
+            value={[terminalBackgroundOpacity]}
+            onValueChange={(values) => {
+              const raw = Array.isArray(values) ? values[0] : values;
+              const v = Math.max(0, Math.min(100, raw ?? 100));
+              setTerminalBackgroundOpacity(v);
+            }}
+            min={0}
+            max={100}
+            step={1}
+            className="flex-1"
+          />
+          <span className="w-12 text-right text-sm text-muted-foreground">
+            {terminalBackgroundOpacity}%
+          </span>
         </div>
       </div>
 

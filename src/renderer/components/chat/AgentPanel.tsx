@@ -431,9 +431,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         // Check if user is currently viewing this session
         const activeGroup = groups.find((g) => g.id === activeGroupId);
         const isViewingSession =
-          activeGroup?.activeSessionId === sessionId &&
-          pathsEqual(session.cwd, cwd) &&
-          isActive;
+          activeGroup?.activeSessionId === sessionId && pathsEqual(session.cwd, cwd) && isActive;
 
         // Update output state to idle (will become 'unread' if user is not viewing)
         setOutputState(sessionId, 'idle', isViewingSession);

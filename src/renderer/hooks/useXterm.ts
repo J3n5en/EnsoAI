@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
+import { defaultDarkTheme, getXtermTheme, hexToRgba } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { useNavigationStore } from '@/stores/navigation';
 import { useSettingsStore } from '@/stores/settings';
@@ -82,15 +82,24 @@ function useTerminalSettings() {
     terminalFontWeight,
     terminalFontWeightBold,
     terminalScrollback,
+    terminalBackgroundOpacity,
     xtermKeybindings,
   } = useSettingsStore();
 
   const theme = useMemo(() => {
-    return getXtermTheme(terminalTheme) ?? defaultDarkTheme;
-  }, [terminalTheme]);
+    const baseTheme = getXtermTheme(terminalTheme) ?? defaultDarkTheme;
+    if (terminalBackgroundOpacity < 100) {
+      return {
+        ...baseTheme,
+        background: hexToRgba(baseTheme.background, terminalBackgroundOpacity),
+      };
+    }
+    return baseTheme;
+  }, [terminalTheme, terminalBackgroundOpacity]);
 
   return {
     theme,
+    backgroundOpacity: terminalBackgroundOpacity,
     fontSize: terminalFontSize,
     fontFamily: terminalFontFamily,
     fontWeight: terminalFontWeight,
@@ -271,7 +280,7 @@ export function useXterm({
       theme: settings.theme,
       scrollback: settings.scrollback,
       allowProposedApi: true,
-      allowTransparency: false,
+      allowTransparency: true,
       rescaleOverlappingGlyphs: true,
     });
 

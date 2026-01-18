@@ -173,6 +173,18 @@ export default function App() {
     onActionPanelToggle: useCallback(() => setActionPanelOpen((prev) => !prev), []),
   });
 
+  const terminalBackgroundOpacity = useSettingsStore((s) => s.terminalBackgroundOpacity);
+  useEffect(() => {
+    const body = document.body;
+    if (terminalBackgroundOpacity < 100) {
+      body.classList.remove('bg-background');
+      body.style.backgroundColor = 'transparent';
+    } else {
+      body.classList.add('bg-background');
+      body.style.backgroundColor = '';
+    }
+  }, [terminalBackgroundOpacity]);
+
   // Handle terminal file link navigation
   useEffect(() => {
     if (!pendingNavigation) return;

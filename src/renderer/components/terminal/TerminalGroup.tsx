@@ -268,7 +268,7 @@ export function TerminalGroup({
         <div
           className={cn(
             'flex h-9 items-center border-b border-border',
-            isGroupActive ? 'bg-background/50' : 'bg-muted/30',
+            isGroupActive ? 'bg-background' : 'bg-muted',
             isDropZoneActive && 'ring-2 ring-primary ring-inset'
           )}
           onDragOver={handleTabBarDragOver}
@@ -304,7 +304,7 @@ export function TerminalGroup({
                     'group relative flex h-9 min-w-[120px] max-w-[180px] items-center gap-2 border-r border-border px-3 text-sm transition-colors cursor-grab',
                     isTabActive
                       ? 'bg-background text-foreground'
-                      : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                      : 'bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground',
                     isDragging && 'opacity-50',
                     isDropTarget && 'ring-2 ring-primary ring-inset'
                   )}
