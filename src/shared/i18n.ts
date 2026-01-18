@@ -517,6 +517,14 @@ export const zhTranslations: Record<string, string> = {
   // Font section
   'Editor font settings': '编辑器字体设置',
   'Font family': '字体',
+  'Line height': '行高',
+  'Font ligatures': '字体连字',
+  'Enable font ligatures': '启用字体连字',
+  // Spacing section
+  Spacing: '间距',
+  'Editor padding settings': '编辑器内边距设置',
+  'Padding top': '顶部内边距',
+  'Padding bottom': '底部内边距',
   // Indentation section
   Indentation: '缩进',
   Init: '初始化',
