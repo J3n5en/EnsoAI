@@ -677,7 +677,7 @@ export function AgentTerminal({
     // biome-ignore lint/a11y/useKeyWithClickEvents: click is for focus activation
     <div
       className="relative h-full w-full"
-      style={{ backgroundColor: settings.theme.background }}
+      style={{ backgroundColor: settings.theme.background, contain: 'strict' }}
       onClick={handleClick}
     >
       <div ref={containerRef} className="h-full w-full" />
