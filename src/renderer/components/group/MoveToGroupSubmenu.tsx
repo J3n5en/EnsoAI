@@ -57,8 +57,13 @@ export function MoveToGroupSubmenu({
             <span className="w-4 h-4 flex items-center justify-center">
               {currentGroupId === group.id && <Check className="h-3.5 w-3.5" />}
             </span>
-            {group.emoji && <span>{group.emoji}</span>}
-            <span className="truncate">{group.name}</span>
+            {group.emoji && <span className="shrink-0 text-base">{group.emoji}</span>}
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full border"
+              style={{ backgroundColor: group.color }}
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
           </button>
         ))}
       </div>

@@ -1194,6 +1194,7 @@ export default function App() {
           defaultGroupId={activeGroupId === ALL_GROUP_ID ? null : activeGroupId}
           onAddLocal={handleAddLocalRepository}
           onCloneComplete={handleCloneRepository}
+          onCreateGroup={handleCreateGroup}
         />
 
         {/* Action Panel */}
