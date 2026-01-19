@@ -69,7 +69,9 @@ export function createMainWindow(): BrowserWindow {
     ...(isMac && { trafficLightPosition: { x: 16, y: 16 } }),
     // Windows 启用 thickFrame 以支持窗口边缘拖拽调整大小
     ...(isWindows && { thickFrame: true }),
-    transparent: true,
+    // macOS 使用 transparent，Windows 使用 backgroundMaterial (Win11 22H2+)
+    ...(isMac && { transparent: true }),
+    ...(isWindows && { backgroundMaterial: 'acrylic' as const }),
     backgroundColor: '#00000000',
     show: false,
     webPreferences: {
