@@ -85,6 +85,12 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
   // Toggle directory expansion
   const toggleExpand = useCallback(
     async (path: string) => {
+      // Special case: collapse all
+      if (path === '__COLLAPSE_ALL__') {
+        setExpandedPaths(new Set());
+        return;
+      }
+
       const newExpanded = new Set(expandedPaths);
 
       if (newExpanded.has(path)) {
@@ -354,15 +360,152 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
   );
 
   const refresh = useCallback(async () => {
+    console.log('[useFileTree] Refresh started');
+    // Force invalidate all cached queries first
+    queryClient.invalidateQueries({ queryKey: ['file', 'list'] });
+
     // Refetch root directory first
     await queryClient.refetchQueries({ queryKey: ['file', 'list', rootPath] });
+    console.log('[useFileTree] Root refetched');
 
     // Refetch all expanded directories in parallel
     const currentExpanded = Array.from(expandedPathsRef.current);
+    console.log('[useFileTree] Refetching expanded paths:', currentExpanded);
     await Promise.all(
       currentExpanded.filter((path) => path !== rootPath).map((path) => refreshNodeChildren(path))
     );
+    console.log('[useFileTree] Refresh completed');
   }, [queryClient, rootPath, refreshNodeChildren]);
+
+  // Handle external file drop
+  const handleExternalDrop = useCallback(
+    async (
+      files: FileList,
+      targetDir: string,
+      operation: 'copy' | 'move'
+    ): Promise<{
+      success: string[];
+      failed: Array<{ path: string; error: string }>;
+      conflicts?: Array<{
+        path: string;
+        name: string;
+        sourceSize: number;
+        targetSize: number;
+        sourceModified: number;
+        targetModified: number;
+      }>;
+    }> => {
+      console.log('[useFileTree] handleExternalDrop', {
+        filesCount: files.length,
+        targetDir,
+        operation,
+        rootPath,
+      });
+
+      if (!rootPath) {
+        console.warn('[useFileTree] No rootPath');
+        return { success: [], failed: [] };
+      }
+
+      // Convert FileList to array of paths
+      const sourcePaths: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        console.log('[useFileTree] Processing file:', {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        });
+        // Get the full path from the file using Electron's webUtils
+        try {
+          const filePath = window.electronAPI.utils.getPathForFile(file);
+          console.log('[useFileTree] File path:', filePath);
+          if (filePath) {
+            sourcePaths.push(filePath);
+          }
+        } catch (error) {
+          console.error('[useFileTree] Failed to get file path:', error);
+        }
+      }
+
+      console.log('[useFileTree] Source paths:', sourcePaths);
+
+      if (sourcePaths.length === 0) {
+        console.warn('[useFileTree] No valid source paths');
+        return { success: [], failed: [] };
+      }
+
+      // Check for conflicts
+      console.log('[useFileTree] Checking conflicts...');
+      const conflicts = await window.electronAPI.file.checkConflicts(sourcePaths, targetDir);
+      console.log('[useFileTree] Conflicts:', conflicts);
+
+      if (conflicts.length > 0) {
+        // Return conflicts to be handled by the UI
+        return { success: [], failed: [], conflicts };
+      }
+
+      // No conflicts, proceed with operation
+      try {
+        console.log('[useFileTree] Executing operation:', operation);
+        if (operation === 'copy') {
+          const result = await window.electronAPI.file.batchCopy(sourcePaths, targetDir, []);
+          console.log('[useFileTree] Copy result:', result);
+          await refresh();
+          return result;
+        }
+        const result = await window.electronAPI.file.batchMove(sourcePaths, targetDir, []);
+        console.log('[useFileTree] Move result:', result);
+        await refresh();
+        return result;
+      } catch (error) {
+        console.error('[useFileTree] Operation failed:', error);
+        return {
+          success: [],
+          failed: sourcePaths.map((path) => ({
+            path,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })),
+        };
+      }
+    },
+    [rootPath, refresh]
+  );
+
+  // Resolve conflicts and complete file operation
+  const resolveConflictsAndContinue = useCallback(
+    async (
+      sourcePaths: string[],
+      targetDir: string,
+      operation: 'copy' | 'move',
+      resolutions: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
+    ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> => {
+      try {
+        if (operation === 'copy') {
+          const result = await window.electronAPI.file.batchCopy(
+            sourcePaths,
+            targetDir,
+            resolutions
+          );
+          await refresh();
+          return result;
+        }
+        const result = await window.electronAPI.file.batchMove(sourcePaths, targetDir, resolutions);
+        await refresh();
+        return result;
+      } catch (error) {
+        console.error('Failed to resolve conflicts:', error);
+        return {
+          success: [],
+          failed: sourcePaths.map((path) => ({
+            path,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })),
+        };
+      }
+    },
+    [refresh]
+  );
 
   // Refresh when becoming active if changes occurred while inactive
   useEffect(() => {
@@ -382,6 +525,8 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     renameItem,
     deleteItem,
     refresh,
+    handleExternalDrop,
+    resolveConflictsAndContinue,
   };
 }
 

@@ -42,7 +42,7 @@ import type {
   WorktreeRemoveOptions,
 } from '@shared/types';
 import { IPC_CHANNELS } from '@shared/types';
-import { contextBridge, ipcRenderer, shell } from 'electron';
+import { contextBridge, ipcRenderer, shell, webUtils } from 'electron';
 import pkg from '../../package.json';
 
 const electronAPI = {
@@ -213,12 +213,41 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_RENAME, fromPath, toPath),
     move: (fromPath: string, toPath: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_MOVE, fromPath, toPath),
+    copy: (sourcePath: string, targetPath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_COPY, sourcePath, targetPath),
+    checkConflicts: (
+      sources: string[],
+      targetDir: string
+    ): Promise<
+      Array<{
+        path: string;
+        name: string;
+        sourceSize: number;
+        targetSize: number;
+        sourceModified: number;
+        targetModified: number;
+      }>
+    > => ipcRenderer.invoke(IPC_CHANNELS.FILE_CHECK_CONFLICTS, sources, targetDir),
+    batchCopy: (
+      sources: string[],
+      targetDir: string,
+      conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
+    ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_BATCH_COPY, sources, targetDir, conflicts),
+    batchMove: (
+      sources: string[],
+      targetDir: string,
+      conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
+    ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_BATCH_MOVE, sources, targetDir, conflicts),
     delete: (targetPath: string, options?: { recursive?: boolean }): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_DELETE, targetPath, options),
     list: (dirPath: string, gitRoot?: string): Promise<FileEntry[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, dirPath, gitRoot),
     exists: (filePath: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_EXISTS, filePath),
+    revealInFileManager: (filePath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_REVEAL_IN_FILE_MANAGER, filePath),
     watchStart: (dirPath: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_WATCH_START, dirPath),
     watchStop: (dirPath: string): Promise<void> =>
@@ -718,6 +747,13 @@ const electronAPI = {
       ) => callback(status);
       ipcRenderer.on(IPC_CHANNELS.CLOUDFLARED_STATUS_CHANGED, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.CLOUDFLARED_STATUS_CHANGED, handler);
+    },
+  },
+
+  // Utilities
+  utils: {
+    getPathForFile: (file: File): string => {
+      return webUtils.getPathForFile(file);
     },
   },
 };

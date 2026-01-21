@@ -5,7 +5,7 @@ import { useSettingsStore } from '@/stores/settings';
 export type TFunction = (key: string, params?: Record<string, string | number>) => string;
 type RichParams = Record<string, React.ReactNode>;
 
-function translateNodes(locale: Locale, key: string, params?: RichParams) {
+function translateNodes(locale: Locale, key: string, params?: RichParams): React.ReactNode {
   const template = getTranslation(locale, key);
   if (!params) return template;
 
@@ -29,7 +29,14 @@ function translateNodes(locale: Locale, key: string, params?: RichParams) {
     parts.push(template.slice(lastIndex));
   }
 
-  return parts.length > 0 ? parts : template;
+  // Return a single React element with keyed fragments to avoid key warnings
+  return parts.length > 0
+    ? React.createElement(
+        React.Fragment,
+        null,
+        ...parts.map((part, i) => React.createElement(React.Fragment, { key: i }, part))
+      )
+    : template;
 }
 
 export function useI18n() {

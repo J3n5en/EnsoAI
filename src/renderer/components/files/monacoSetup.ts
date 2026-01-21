@@ -126,15 +126,16 @@ monaco.typescript.javascriptDefaults.setCompilerOptions({
   noResolve: true,
 });
 
-// Disable semantic validation to avoid module resolution errors
+// Disable semantic and syntax validation to avoid module resolution errors
+// and prevent errors with inmemory:// virtual files used by diff editors
 monaco.typescript.typescriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: true,
-  noSyntaxValidation: false,
+  noSyntaxValidation: true,
 });
 
 monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: true,
-  noSyntaxValidation: false,
+  noSyntaxValidation: true,
 });
 
 export type Monaco = typeof monaco;

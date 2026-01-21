@@ -1,7 +1,7 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, relative } from 'node:path';
 import { type FileEntry, type FileReadResult, IPC_CHANNELS } from '@shared/types';
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, shell } from 'electron';
 import iconv from 'iconv-lite';
 import jschardet from 'jschardet';
 import simpleGit from 'simple-git';
@@ -138,6 +138,13 @@ export function registerFileHandlers(): void {
   });
 
   ipcMain.handle(
+    IPC_CHANNELS.FILE_REVEAL_IN_FILE_MANAGER,
+    async (_, filePath: string): Promise<void> => {
+      shell.showItemInFolder(filePath);
+    }
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.FILE_LIST,
     async (_, dirPath: string, gitRoot?: string): Promise<FileEntry[]> => {
       if (gitRoot) {
@@ -214,6 +221,204 @@ export function registerFileHandlers(): void {
       watchers.delete(dirPath);
     }
   });
+
+  // FILE_COPY: Copy a single file/directory
+  ipcMain.handle(IPC_CHANNELS.FILE_COPY, async (_, sourcePath: string, targetPath: string) => {
+    const sourceStats = await stat(sourcePath);
+
+    if (sourceStats.isDirectory()) {
+      // Recursively copy directory
+      await copyDirectory(sourcePath, targetPath);
+    } else {
+      // Copy single file
+      await mkdir(dirname(targetPath), { recursive: true });
+      await copyFile(sourcePath, targetPath);
+    }
+  });
+
+  // FILE_CHECK_CONFLICTS: Check which files already exist in target directory
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_CHECK_CONFLICTS,
+    async (
+      _,
+      sources: string[],
+      targetDir: string
+    ): Promise<
+      Array<{
+        path: string;
+        name: string;
+        sourceSize: number;
+        targetSize: number;
+        sourceModified: number;
+        targetModified: number;
+      }>
+    > => {
+      const conflicts = [];
+
+      for (const sourcePath of sources) {
+        const sourceStats = await stat(sourcePath);
+        const fileName = basename(sourcePath);
+        const targetPath = join(targetDir, fileName);
+
+        try {
+          const targetStats = await stat(targetPath);
+          conflicts.push({
+            path: sourcePath,
+            name: fileName,
+            sourceSize: sourceStats.size,
+            targetSize: targetStats.size,
+            sourceModified: sourceStats.mtimeMs,
+            targetModified: targetStats.mtimeMs,
+          });
+        } catch {
+          // Target doesn't exist, no conflict
+        }
+      }
+
+      return conflicts;
+    }
+  );
+
+  // FILE_BATCH_COPY: Copy multiple files/directories with conflict resolution
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_BATCH_COPY,
+    async (
+      _,
+      sources: string[],
+      targetDir: string,
+      conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
+    ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> => {
+      const success: string[] = [];
+      const failed: Array<{ path: string; error: string }> = [];
+
+      // Build conflict resolution map
+      const conflictMap = new Map(conflicts.map((c) => [c.path, c]));
+
+      for (const sourcePath of sources) {
+        try {
+          const fileName = basename(sourcePath);
+          let targetPath = join(targetDir, fileName);
+          const conflict = conflictMap.get(sourcePath);
+
+          if (conflict) {
+            if (conflict.action === 'skip') {
+              continue;
+            }
+            if (conflict.action === 'rename' && conflict.newName) {
+              targetPath = join(targetDir, conflict.newName);
+            }
+            // 'replace' action: just overwrite
+          }
+
+          const sourceStats = await stat(sourcePath);
+
+          if (sourceStats.isDirectory()) {
+            await copyDirectory(sourcePath, targetPath);
+          } else {
+            await mkdir(dirname(targetPath), { recursive: true });
+            await copyFile(sourcePath, targetPath);
+          }
+
+          success.push(sourcePath);
+        } catch (error) {
+          failed.push({
+            path: sourcePath,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      return { success, failed };
+    }
+  );
+
+  // FILE_BATCH_MOVE: Move multiple files/directories with conflict resolution
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_BATCH_MOVE,
+    async (
+      _,
+      sources: string[],
+      targetDir: string,
+      conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
+    ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> => {
+      const success: string[] = [];
+      const failed: Array<{ path: string; error: string }> = [];
+
+      const conflictMap = new Map(conflicts.map((c) => [c.path, c]));
+
+      for (const sourcePath of sources) {
+        try {
+          const fileName = basename(sourcePath);
+          let targetPath = join(targetDir, fileName);
+          const conflict = conflictMap.get(sourcePath);
+
+          if (conflict) {
+            if (conflict.action === 'skip') {
+              continue;
+            }
+            if (conflict.action === 'rename' && conflict.newName) {
+              targetPath = join(targetDir, conflict.newName);
+            }
+            // 'replace' action: delete existing first
+            if (conflict.action === 'replace') {
+              try {
+                await rm(targetPath, { recursive: true, force: true });
+              } catch {
+                // Ignore if target doesn't exist
+              }
+            }
+          }
+
+          try {
+            // Try rename first (works for same filesystem)
+            await rename(sourcePath, targetPath);
+          } catch {
+            // If rename fails (cross-filesystem), copy then delete
+            const sourceStats = await stat(sourcePath);
+
+            if (sourceStats.isDirectory()) {
+              await copyDirectory(sourcePath, targetPath);
+            } else {
+              await mkdir(dirname(targetPath), { recursive: true });
+              await copyFile(sourcePath, targetPath);
+            }
+
+            // Delete source after successful copy
+            await rm(sourcePath, { recursive: true, force: true });
+          }
+
+          success.push(sourcePath);
+        } catch (error) {
+          failed.push({
+            path: sourcePath,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      return { success, failed };
+    }
+  );
+}
+
+/**
+ * Recursively copy a directory
+ */
+async function copyDirectory(source: string, target: string): Promise<void> {
+  await mkdir(target, { recursive: true });
+
+  const entries = await readdir(source, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const sourcePath = join(source, entry.name);
+    const targetPath = join(target, entry.name);
+
+    if (entry.isDirectory()) {
+      await copyDirectory(sourcePath, targetPath);
+    } else {
+      await copyFile(sourcePath, targetPath);
+    }
+  }
 }
 
 export async function stopAllFileWatchers(): Promise<void> {
