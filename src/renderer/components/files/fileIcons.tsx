@@ -15,6 +15,9 @@ import {
   Terminal,
 } from 'lucide-react';
 
+// Image file extensions for preview
+const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'];
+
 const fileIconMap: Record<string, LucideIcon> = {
   // JavaScript/TypeScript
   ts: FileCode,
@@ -40,6 +43,7 @@ const fileIconMap: Record<string, LucideIcon> = {
   gif: FileImage,
   svg: FileImage,
   webp: FileImage,
+  bmp: FileImage,
   ico: FileImage,
   // Documents
   md: FileText,
@@ -125,4 +129,10 @@ export function getFileIconColor(name: string, isDirectory: boolean): string {
     default:
       return 'text-muted-foreground';
   }
+}
+
+export function isImageFile(path: string | null | undefined): boolean {
+  if (!path) return false;
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  return imageExtensions.includes(ext);
 }

@@ -34,6 +34,8 @@ import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { CommentForm, useEditorLineComment } from './EditorLineComment';
 import { EditorTabs } from './EditorTabs';
+import { isImageFile } from './fileIcons';
+import { ImagePreview } from './ImagePreview';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CUSTOM_THEME_NAME, defineMonacoTheme } from './monacoTheme';
 // Import for side effects (Monaco setup)
@@ -111,6 +113,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
   // Markdown preview state
   const isMarkdown = isMarkdownFile(activeTabPath);
+  const isImage = isImageFile(activeTabPath);
   const [showPreview, setShowPreview] = useState(true);
   const [editorReady, setEditorReady] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(50); // percentage
@@ -836,59 +839,66 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
               className="relative h-full overflow-hidden"
               style={{ width: isMarkdown && showPreview ? `${100 - previewWidth}%` : '100%' }}
             >
-              <Editor
-                key={activeTab.path}
-                width="100%"
-                height="100%"
-                path={activeTab.path}
-                value={activeTab.content}
-                theme={monacoTheme}
-                onChange={handleEditorChange}
-                onMount={handleEditorMount}
-                options={{
-                  // Display
-                  minimap: {
-                    enabled: isMarkdown && showPreview ? false : editorSettings.minimapEnabled,
-                    side: 'right',
-                    showSlider: 'mouseover',
-                    renderCharacters: false,
-                    maxColumn: 80,
-                  },
-                  lineNumbers: editorSettings.lineNumbers,
-                  wordWrap: editorSettings.wordWrap,
-                  renderWhitespace: editorSettings.renderWhitespace,
-                  renderLineHighlight: editorSettings.renderLineHighlight,
-                  folding: editorSettings.folding,
-                  links: editorSettings.links,
-                  smoothScrolling: editorSettings.smoothScrolling,
-                  // Font
-                  fontSize: editorSettings.fontSize,
-                  fontFamily: editorSettings.fontFamily,
-                  fontLigatures: editorSettings.fontLigatures,
-                  lineHeight: editorSettings.lineHeight,
-                  // Indentation
-                  tabSize: editorSettings.tabSize,
-                  insertSpaces: editorSettings.insertSpaces,
-                  // Cursor
-                  cursorStyle: editorSettings.cursorStyle,
-                  cursorBlinking: editorSettings.cursorBlinking,
-                  // Brackets
-                  bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
-                  matchBrackets: editorSettings.matchBrackets,
-                  guides: {
-                    bracketPairs: editorSettings.bracketPairGuides,
-                    indentation: editorSettings.indentationGuides,
-                  },
-                  // Editing
-                  autoClosingBrackets: editorSettings.autoClosingBrackets,
-                  autoClosingQuotes: editorSettings.autoClosingQuotes,
-                  // Fixed options
-                  padding: { top: editorSettings.paddingTop, bottom: editorSettings.paddingBottom },
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  fixedOverflowWidgets: true,
-                }}
-              />
+              {isImage ? (
+                <ImagePreview path={activeTab.path} sessionId={sessionId ?? undefined} />
+              ) : (
+                <Editor
+                  key={activeTab.path}
+                  width="100%"
+                  height="100%"
+                  path={activeTab.path}
+                  value={activeTab.content}
+                  theme={monacoTheme}
+                  onChange={handleEditorChange}
+                  onMount={handleEditorMount}
+                  options={{
+                    // Display
+                    minimap: {
+                      enabled: isMarkdown && showPreview ? false : editorSettings.minimapEnabled,
+                      side: 'right',
+                      showSlider: 'mouseover',
+                      renderCharacters: false,
+                      maxColumn: 80,
+                    },
+                    lineNumbers: editorSettings.lineNumbers,
+                    wordWrap: editorSettings.wordWrap,
+                    renderWhitespace: editorSettings.renderWhitespace,
+                    renderLineHighlight: editorSettings.renderLineHighlight,
+                    folding: editorSettings.folding,
+                    links: editorSettings.links,
+                    smoothScrolling: editorSettings.smoothScrolling,
+                    // Font
+                    fontSize: editorSettings.fontSize,
+                    fontFamily: editorSettings.fontFamily,
+                    fontLigatures: editorSettings.fontLigatures,
+                    lineHeight: editorSettings.lineHeight,
+                    // Indentation
+                    tabSize: editorSettings.tabSize,
+                    insertSpaces: editorSettings.insertSpaces,
+                    // Cursor
+                    cursorStyle: editorSettings.cursorStyle,
+                    cursorBlinking: editorSettings.cursorBlinking,
+                    // Brackets
+                    bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
+                    matchBrackets: editorSettings.matchBrackets,
+                    guides: {
+                      bracketPairs: editorSettings.bracketPairGuides,
+                      indentation: editorSettings.indentationGuides,
+                    },
+                    // Editing
+                    autoClosingBrackets: editorSettings.autoClosingBrackets,
+                    autoClosingQuotes: editorSettings.autoClosingQuotes,
+                    // Fixed options
+                    padding: {
+                      top: editorSettings.paddingTop,
+                      bottom: editorSettings.paddingBottom,
+                    },
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    fixedOverflowWidgets: true,
+                  }}
+                />
+              )}
             </div>
 
             {/* Resize Divider & Preview Panel (only for markdown with preview enabled) */}
