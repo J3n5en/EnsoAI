@@ -1,6 +1,6 @@
 import { Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { normalizePath } from '@/App/storage';
+import { cleanPath, normalizePath } from '@/App/storage';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -31,13 +31,17 @@ interface GroupState {
   activeGroupId: string | null;
   // Flex percentages for each group
   flexPercents: number[];
+  // Original path with correct case (used for terminal cwd)
+  // Optional in interface because updateCurrentState auto-fills it
+  originalPath?: string;
 }
 
-function createInitialGroupState(): GroupState {
+function createInitialGroupState(originalPath = ''): GroupState {
   return {
     groups: [],
     activeGroupId: null,
     flexPercents: [],
+    originalPath,
   };
 }
 
@@ -62,7 +66,12 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
   const currentState = useMemo(() => {
     if (!cwd) return createInitialGroupState();
     const normalizedCwd = normalizePath(cwd);
-    return worktreeStates[normalizedCwd] || createInitialGroupState();
+    const existingState = worktreeStates[normalizedCwd];
+    if (existingState) {
+      // Update originalPath if cwd has changed (in case of case difference)
+      return { ...existingState, originalPath: cleanPath(cwd) };
+    }
+    return createInitialGroupState(cleanPath(cwd));
   }, [cwd, worktreeStates]);
 
   const { groups, activeGroupId } = currentState;
@@ -131,10 +140,19 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
     (updater: (state: GroupState) => GroupState) => {
       if (!cwd) return;
       const normalizedCwd = normalizePath(cwd);
-      setWorktreeStates((prev) => ({
-        ...prev,
-        [normalizedCwd]: updater(prev[normalizedCwd] || createInitialGroupState()),
-      }));
+      const cleanedCwd = cleanPath(cwd);
+      setWorktreeStates((prev) => {
+        const currentState = prev[normalizedCwd] || createInitialGroupState(cleanedCwd);
+        const newState = updater(currentState);
+        // Ensure originalPath is always preserved
+        return {
+          ...prev,
+          [normalizedCwd]: {
+            ...newState,
+            originalPath: newState.originalPath || currentState.originalPath || cleanedCwd,
+          },
+        };
+      });
     },
     [cwd]
   );
@@ -824,7 +842,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
                 >
                   <TerminalGroup
                     group={group}
-                    cwd={worktreePath}
+                    cwd={state.originalPath || worktreePath}
                     isGroupActive={group.id === state.activeGroupId}
                     onTabsChange={handleTabsChange}
                     onGroupClick={() => handleGroupClick(group.id)}

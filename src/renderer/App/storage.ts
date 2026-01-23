@@ -150,6 +150,12 @@ export const normalizePath = (path: string): string => {
   return normalized;
 };
 
+// Clean path for storage (only removes trailing slashes, preserves case)
+// Use this when you need to store the original path but want consistent formatting
+export const cleanPath = (path: string): string => {
+  return path.replace(/[\\/]+$/, '');
+};
+
 // Check if two paths are equal (considering OS-specific rules)
 export const pathsEqual = (path1: string, path2: string): boolean => {
   return normalizePath(path1) === normalizePath(path2);
