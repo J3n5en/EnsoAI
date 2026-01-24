@@ -109,6 +109,9 @@ export default function App() {
     getStoredBoolean(STORAGE_KEYS.WORKTREE_COLLAPSED, false)
   );
 
+  // Ref to toggle selected repo expanded in tree layout
+  const toggleSelectedRepoExpandedRef = useRef<(() => void) | null>(null);
+
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<
@@ -172,6 +175,15 @@ export default function App() {
     activeWorktreePath: activeWorktree?.path,
     onTabSwitch: handleTabChange,
     onActionPanelToggle: useCallback(() => setActionPanelOpen((prev) => !prev), []),
+    onToggleWorktree: useCallback(() => {
+      // In tree layout, toggle selected repo expanded; in columns layout, toggle worktree panel
+      if (layoutMode === 'tree') {
+        toggleSelectedRepoExpandedRef.current?.();
+      } else {
+        setWorktreeCollapsed((prev) => !prev);
+      }
+    }, [layoutMode]),
+    onToggleRepository: useCallback(() => setRepositoryCollapsed((prev) => !prev), []),
   });
 
   // Handle terminal file link navigation
@@ -1066,6 +1078,7 @@ export default function App() {
                   onMoveToGroup={handleMoveToGroup}
                   onSwitchTab={setActiveTab}
                   onSwitchWorktreeByPath={handleSwitchWorktreePath}
+                  toggleSelectedRepoExpandedRef={toggleSelectedRepoExpandedRef}
                 />
                 {/* Resize handle */}
                 <div

@@ -106,6 +106,8 @@ export function KeybindingsSettings() {
     setGlobalKeybindings,
     terminalOptionIsMeta,
     setTerminalOptionIsMeta,
+    workspaceKeybindings,
+    setWorkspaceKeybindings,
   } = useSettingsStore();
   const { t } = useI18n();
 
@@ -124,6 +126,38 @@ export function KeybindingsSettings() {
                 setGlobalKeybindings({
                   ...globalKeybindings,
                   runningProjects: binding,
+                });
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Workspace */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-medium">{t('Workspace')}</h3>
+        <p className="text-sm text-muted-foreground mb-4">{t('Workspace panel shortcuts')}</p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+            <span className="text-sm">{t('Toggle Repository')}</span>
+            <KeybindingInput
+              value={workspaceKeybindings.toggleRepository}
+              onChange={(binding) => {
+                setWorkspaceKeybindings({
+                  ...workspaceKeybindings,
+                  toggleRepository: binding,
+                });
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+            <span className="text-sm">{t('Toggle Worktree')}</span>
+            <KeybindingInput
+              value={workspaceKeybindings.toggleWorktree}
+              onChange={(binding) => {
+                setWorkspaceKeybindings({
+                  ...workspaceKeybindings,
+                  toggleWorktree: binding,
                 });
               }}
             />
@@ -170,6 +204,18 @@ export function KeybindingsSettings() {
                 setMainTabKeybindings({
                   ...mainTabKeybindings,
                   switchToTerminal: binding,
+                });
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+            <span className="text-sm">{t('Switch to Version Control')}</span>
+            <KeybindingInput
+              value={mainTabKeybindings.switchToSourceControl}
+              onChange={(binding) => {
+                setMainTabKeybindings({
+                  ...mainTabKeybindings,
+                  switchToSourceControl: binding,
                 });
               }}
             />

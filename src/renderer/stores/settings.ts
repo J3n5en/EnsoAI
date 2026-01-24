@@ -163,6 +163,7 @@ export interface MainTabKeybindings {
   switchToAgent: TerminalKeybinding;
   switchToFile: TerminalKeybinding;
   switchToTerminal: TerminalKeybinding;
+  switchToSourceControl: TerminalKeybinding;
 }
 
 // Source control keybindings
@@ -179,6 +180,12 @@ export interface SearchKeybindings {
 
 export interface GlobalKeybindings {
   runningProjects: TerminalKeybinding;
+}
+
+// Workspace panel keybindings
+export interface WorkspaceKeybindings {
+  toggleWorktree: TerminalKeybinding;
+  toggleRepository: TerminalKeybinding;
 }
 
 // Unified xterm keybindings (for Terminal, Agent, and all xterm-based components)
@@ -445,6 +452,7 @@ export const defaultMainTabKeybindings: MainTabKeybindings = {
   switchToAgent: { key: '1', ctrl: true },
   switchToFile: { key: '2', ctrl: true },
   switchToTerminal: { key: '3', ctrl: true },
+  switchToSourceControl: { key: '4', ctrl: true },
 };
 
 export const defaultSourceControlKeybindings: SourceControlKeybindings = {
@@ -459,6 +467,11 @@ export const defaultSearchKeybindings: SearchKeybindings = {
 
 export const defaultGlobalKeybindings: GlobalKeybindings = {
   runningProjects: { key: 'l', meta: true },
+};
+
+export const defaultWorkspaceKeybindings: WorkspaceKeybindings = {
+  toggleWorktree: { key: 'w', meta: true, shift: true },
+  toggleRepository: { key: 'r', meta: true, shift: true },
 };
 
 interface SettingsState {
@@ -480,6 +493,7 @@ interface SettingsState {
   sourceControlKeybindings: SourceControlKeybindings;
   searchKeybindings: SearchKeybindings;
   globalKeybindings: GlobalKeybindings;
+  workspaceKeybindings: WorkspaceKeybindings;
   editorSettings: EditorSettings;
   agentSettings: AgentSettings;
   agentDetectionStatus: AgentDetectionStatus;
@@ -522,6 +536,7 @@ interface SettingsState {
   setSourceControlKeybindings: (keybindings: SourceControlKeybindings) => void;
   setSearchKeybindings: (keybindings: SearchKeybindings) => void;
   setGlobalKeybindings: (keybindings: GlobalKeybindings) => void;
+  setWorkspaceKeybindings: (keybindings: WorkspaceKeybindings) => void;
   setEditorSettings: (settings: Partial<EditorSettings>) => void;
   setAgentEnabled: (agentId: string, enabled: boolean) => void;
   setAgentDefault: (agentId: string) => void;
@@ -602,6 +617,7 @@ export const useSettingsStore = create<SettingsState>()(
       sourceControlKeybindings: defaultSourceControlKeybindings,
       searchKeybindings: defaultSearchKeybindings,
       globalKeybindings: defaultGlobalKeybindings,
+      workspaceKeybindings: defaultWorkspaceKeybindings,
       editorSettings: defaultEditorSettings,
       agentSettings: defaultAgentSettings,
       agentDetectionStatus: defaultAgentDetectionStatus,
@@ -672,6 +688,7 @@ export const useSettingsStore = create<SettingsState>()(
       setSourceControlKeybindings: (sourceControlKeybindings) => set({ sourceControlKeybindings }),
       setSearchKeybindings: (searchKeybindings) => set({ searchKeybindings }),
       setGlobalKeybindings: (globalKeybindings) => set({ globalKeybindings }),
+      setWorkspaceKeybindings: (workspaceKeybindings) => set({ workspaceKeybindings }),
       setEditorSettings: (settings) =>
         set((state) => ({
           editorSettings: { ...state.editorSettings, ...settings },
@@ -956,6 +973,10 @@ export const useSettingsStore = create<SettingsState>()(
           globalKeybindings: {
             ...currentState.globalKeybindings,
             ...persisted.globalKeybindings,
+          },
+          workspaceKeybindings: {
+            ...currentState.workspaceKeybindings,
+            ...persisted.workspaceKeybindings,
           },
           editorSettings: {
             ...currentState.editorSettings,

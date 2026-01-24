@@ -1,6 +1,11 @@
 import { translate } from '@shared/i18n';
-import { app, type BrowserWindow, Menu, shell } from 'electron';
+import { app, type BrowserWindow, globalShortcut, Menu, shell } from 'electron';
 import { getCurrentLocale } from './i18n';
+
+function handleZoomOut(window: BrowserWindow): void {
+  const currentZoom = window.webContents.getZoomLevel();
+  window.webContents.setZoomLevel(currentZoom - 0.5);
+}
 
 export type MenuAction = 'open-settings' | 'toggle-devtools' | 'open-action-panel';
 
@@ -100,9 +105,26 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
           click: () => mainWindow.webContents.toggleDevTools(),
         },
         { type: 'separator' as const },
-        { role: 'resetZoom' as const },
-        { role: 'zoomIn' as const },
-        { role: 'zoomOut' as const },
+        {
+          label: t('Reset Zoom'),
+          accelerator: 'CommandOrControl+0',
+          click: () => {
+            mainWindow.webContents.setZoomLevel(0);
+          },
+        },
+        {
+          label: t('Zoom In'),
+          accelerator: 'CommandOrControl+=',
+          click: () => {
+            const currentZoom = mainWindow.webContents.getZoomLevel();
+            mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+          },
+        },
+        {
+          label: t('Zoom Out'),
+          accelerator: 'CommandOrControl+Minus',
+          click: () => handleZoomOut(mainWindow),
+        },
         { type: 'separator' as const },
         { role: 'togglefullscreen' as const },
       ],
@@ -137,5 +159,14 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
     },
   ];
 
-  return Menu.buildFromTemplate(template);
+  const menu = Menu.buildFromTemplate(template);
+
+  // Register global shortcut for Zoom Out to bypass renderer process interception
+  // Unregister first to avoid conflicts
+  globalShortcut.unregister('CommandOrControl+-');
+  globalShortcut.register('CommandOrControl+-', () => {
+    handleZoomOut(mainWindow);
+  });
+
+  return menu;
 }

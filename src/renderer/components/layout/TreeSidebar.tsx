@@ -94,6 +94,8 @@ interface TreeSidebarProps {
   onMoveToGroup?: (repoPath: string, groupId: string | null) => void;
   onSwitchTab?: (tab: TabId) => void;
   onSwitchWorktreeByPath?: (path: string) => Promise<void> | void;
+  /** Ref callback to expose toggleSelectedRepoExpanded function */
+  toggleSelectedRepoExpandedRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export function TreeSidebar({
@@ -128,6 +130,7 @@ export function TreeSidebar({
   onMoveToGroup,
   onSwitchTab,
   onSwitchWorktreeByPath,
+  toggleSelectedRepoExpandedRef,
 }: TreeSidebarProps) {
   const { t, tNode } = useI18n();
   const [searchQuery, setSearchQuery] = useState('');
@@ -261,6 +264,20 @@ export function TreeSidebar({
       return [...prev, repoPath];
     });
   }, []);
+
+  // Expose toggle function for selected repo via ref
+  useEffect(() => {
+    if (toggleSelectedRepoExpandedRef) {
+      toggleSelectedRepoExpandedRef.current = selectedRepo
+        ? () => toggleRepoExpanded(selectedRepo)
+        : null;
+    }
+    return () => {
+      if (toggleSelectedRepoExpandedRef) {
+        toggleSelectedRepoExpandedRef.current = null;
+      }
+    };
+  }, [toggleSelectedRepoExpandedRef, selectedRepo, toggleRepoExpanded]);
 
   // Repository drag handlers
   const handleRepoDragStart = useCallback((e: React.DragEvent, index: number, repo: Repository) => {
