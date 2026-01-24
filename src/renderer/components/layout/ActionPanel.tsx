@@ -25,7 +25,18 @@ import { toastManager } from '@/components/ui/toast';
 import { useDetectedApps, useOpenWith } from '@/hooks/useAppDetector';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { useSettingsStore } from '@/stores/settings';
+import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
+
+// Format keybinding for display in ActionPanel
+function formatKeybindingDisplay(binding: TerminalKeybinding): string {
+  const parts: string[] = [];
+  if (binding.meta) parts.push('⌘');
+  if (binding.ctrl) parts.push('⌃');
+  if (binding.alt) parts.push('⌥');
+  if (binding.shift) parts.push('⇧');
+  parts.push(binding.key.toUpperCase());
+  return parts.join('');
+}
 
 function useCliInstallStatus() {
   return useQuery({
@@ -187,6 +198,9 @@ export function ActionPanel({
   const { data: detectedApps = [] } = useDetectedApps();
   const openWith = useOpenWith();
 
+  // Workspace keybindings for shortcut display
+  const workspaceKeybindings = useSettingsStore((s) => s.workspaceKeybindings);
+
   // CLI install status
   const { data: cliStatus } = useCliInstallStatus();
   const cliInstall = useCliInstall();
@@ -255,12 +269,14 @@ export function ActionPanel({
             id: 'toggle-repository',
             label: repositoryCollapsed ? t('Expand Repository') : t('Collapse Repository'),
             icon: repositoryCollapsed ? FolderOpen : PanelLeftClose,
+            shortcut: formatKeybindingDisplay(workspaceKeybindings.toggleRepository),
             action: onToggleRepository,
           },
           {
             id: 'toggle-worktree',
             label: worktreeCollapsed ? t('Expand Worktree') : t('Collapse Worktree'),
             icon: worktreeCollapsed ? GitBranch : PanelLeftOpen,
+            shortcut: formatKeybindingDisplay(workspaceKeybindings.toggleWorktree),
             action: onToggleWorktree,
           },
         ],
@@ -391,6 +407,7 @@ export function ActionPanel({
     detectedApps,
     cliStatus,
     recentIds,
+    workspaceKeybindings,
     onToggleRepository,
     onToggleWorktree,
     onOpenSettings,

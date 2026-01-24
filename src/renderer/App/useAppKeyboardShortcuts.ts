@@ -7,12 +7,16 @@ interface UseAppKeyboardShortcutsOptions {
   activeWorktreePath: string | undefined;
   onTabSwitch: (tab: TabId) => void;
   onActionPanelToggle: () => void;
+  onToggleWorktree: () => void;
+  onToggleRepository: () => void;
 }
 
 export function useAppKeyboardShortcuts({
   activeWorktreePath: _activeWorktreePath,
   onTabSwitch,
   onActionPanelToggle,
+  onToggleWorktree,
+  onToggleRepository,
 }: UseAppKeyboardShortcutsOptions) {
   // Listen for Action Panel keyboard shortcut (Shift+Cmd+P)
   useEffect(() => {
@@ -53,4 +57,26 @@ export function useAppKeyboardShortcuts({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onTabSwitch]);
+
+  // Listen for workspace panel toggle shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const bindings = useSettingsStore.getState().workspaceKeybindings;
+
+      if (matchesKeybinding(e, bindings.toggleWorktree)) {
+        e.preventDefault();
+        onToggleWorktree();
+        return;
+      }
+
+      if (matchesKeybinding(e, bindings.toggleRepository)) {
+        e.preventDefault();
+        onToggleRepository();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onToggleWorktree, onToggleRepository]);
 }

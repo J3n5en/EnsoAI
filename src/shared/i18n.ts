@@ -344,6 +344,7 @@ export const zhTranslations: Record<string, string> = {
   Workspace: '工作区',
   'Workspace clean': '工作区干净',
   'Workspace is not a Git repository': '当前目录还不是 Git 仓库，初始化后即可使用 Git 功能',
+  'Workspace panel shortcuts': '工作区面板快捷键',
   Worktrees: 'Worktree',
   'Worktree created': '创建 Worktree',
   'Worktree delete description prunable': '该目录已被删除，将清理 git 记录。',
@@ -355,6 +356,8 @@ export const zhTranslations: Record<string, string> = {
   'Worktree path already exists. Choose a different path or branch name.':
     '目录已存在，请选择其他路径或分支名',
   'Worktree search placeholder': '搜索 worktree...',
+  'Toggle Worktree': '折叠/展开 Worktree',
+  'Toggle Repository': '折叠/展开 Repository',
   'Yes, remove': '移除',
   'You have {{count}} changed files': '{{count}} 个文件已更改',
   'You have no worktrees yet': '暂无 Worktree',
