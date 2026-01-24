@@ -11,6 +11,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { useI18n } from '@/i18n';
+import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { initAgentStatusListener } from '@/stores/agentStatus';
@@ -118,7 +119,11 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     hapiSettings,
     autoCreateSessionOnActivate,
     claudeCodeIntegration,
+    terminalTheme,
   } = useSettingsStore();
+  const terminalBgColor = useMemo(() => {
+    return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
+  }, [terminalTheme]);
   const statusLineEnabled = claudeCodeIntegration.statusLineEnabled;
   const defaultAgentId = useMemo(() => getDefaultAgentId(agentSettings), [agentSettings]);
   const { setAgentCount, registerAgentCloseHandler } = useWorktreeActivityStore();
@@ -1020,7 +1025,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const currentGroupPositions = getGroupPositions(currentGroupState);
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full" style={{ backgroundColor: terminalBgColor }}>
       {/* Empty state overlay - shown when current worktree has no sessions */}
       {/* IMPORTANT: Don't use early return here - terminals must stay mounted to prevent PTY destruction */}
       {showEmptyState && (
@@ -1126,7 +1131,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       {/* This container is NOT inside any worktree-specific wrapper, ensuring stable mounting */}
       {/* All sessions across ALL repos are rendered here to keep them mounted */}
       {/* bottom is dynamically set based on StatusLine height */}
-      <div className="absolute top-0 left-0 right-0 z-0" style={{ bottom: statusLineHeight }}>
+      <div className="absolute top-2 left-2 right-2 z-0" style={{ bottom: statusLineHeight + 8 }}>
         {Array.from(globalSessionIds).map((sessionId) => {
           const session = allSessions.find((s) => s.id === sessionId);
           if (!session) return null;

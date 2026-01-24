@@ -10,6 +10,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { useI18n } from '@/i18n';
+import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { useInitScriptStore } from '@/stores/initScript';
 import { useSettingsStore } from '@/stores/settings';
@@ -57,6 +58,10 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
   const autoCreateSessionOnActivate = useSettingsStore(
     (state) => state.autoCreateSessionOnActivate
   );
+  const terminalTheme = useSettingsStore((state) => state.terminalTheme);
+  const terminalBgColor = useMemo(() => {
+    return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
+  }, [terminalTheme]);
   const { setTerminalCount, registerTerminalCloseHandler } = useWorktreeActivityStore();
   const syncTerminalSessions = useTerminalStore((s) => s.syncSessions);
   const { pendingScript, clearPendingScript } = useInitScriptStore();
@@ -798,7 +803,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
   };
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full" style={{ backgroundColor: terminalBgColor }}>
       {/* Empty state overlay - shown when current worktree has no terminals */}
       {/* IMPORTANT: Don't use early return here - terminals must stay mounted to prevent PTY destruction */}
       {showEmptyState && (
@@ -869,7 +874,7 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
             })}
 
             {/* All terminals - rendered in a single container with stable keys */}
-            <div className="absolute left-0 right-0 bottom-0 z-0" style={{ top: 36 }}>
+            <div className="absolute left-2 right-2 bottom-2 z-0" style={{ top: 44 }}>
               {Array.from(globalTerminalIds).map((tabId) => {
                 const info = findTabInfo(tabId);
                 if (!info) return null;
