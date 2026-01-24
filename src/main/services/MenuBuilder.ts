@@ -2,6 +2,11 @@ import { translate } from '@shared/i18n';
 import { app, type BrowserWindow, globalShortcut, Menu, shell } from 'electron';
 import { getCurrentLocale } from './i18n';
 
+function handleZoomOut(window: BrowserWindow): void {
+  const currentZoom = window.webContents.getZoomLevel();
+  window.webContents.setZoomLevel(currentZoom - 0.5);
+}
+
 export type MenuAction = 'open-settings' | 'toggle-devtools' | 'open-action-panel';
 
 interface MenuOptions {
@@ -104,7 +109,6 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
           label: t('Reset Zoom'),
           accelerator: 'CommandOrControl+0',
           click: () => {
-            console.log('[DEBUG] Reset Zoom clicked/triggered');
             mainWindow.webContents.setZoomLevel(0);
           },
         },
@@ -112,21 +116,14 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
           label: t('Zoom In'),
           accelerator: 'CommandOrControl+=',
           click: () => {
-            console.log('[DEBUG] Zoom In clicked/triggered');
             const currentZoom = mainWindow.webContents.getZoomLevel();
             mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
           },
         },
         {
           label: t('Zoom Out'),
-          accelerator: isMac ? 'Command+Minus' : 'Control+Minus',
-          click: () => {
-            console.log('[DEBUG] Zoom Out clicked/triggered');
-            const currentZoom = mainWindow.webContents.getZoomLevel();
-            console.log('[DEBUG] Current zoom level:', currentZoom);
-            mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
-            console.log('[DEBUG] New zoom level set to:', currentZoom - 0.5);
-          },
+          accelerator: 'CommandOrControl+Minus',
+          click: () => handleZoomOut(mainWindow),
         },
         { type: 'separator' as const },
         { role: 'togglefullscreen' as const },
@@ -168,11 +165,7 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
   // Unregister first to avoid conflicts
   globalShortcut.unregister('CommandOrControl+-');
   globalShortcut.register('CommandOrControl+-', () => {
-    console.log('[DEBUG] Global shortcut Zoom Out triggered');
-    const currentZoom = mainWindow.webContents.getZoomLevel();
-    console.log('[DEBUG] Current zoom level:', currentZoom);
-    mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
-    console.log('[DEBUG] New zoom level set to:', currentZoom - 0.5);
+    handleZoomOut(mainWindow);
   });
 
   return menu;
