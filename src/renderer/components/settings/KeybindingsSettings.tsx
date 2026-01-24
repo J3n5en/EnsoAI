@@ -171,6 +171,18 @@ export function KeybindingsSettings() {
               }}
             />
           </div>
+          <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+            <span className="text-sm">{t('Switch to Version Control')}</span>
+            <KeybindingInput
+              value={mainTabKeybindings.switchToSourceControl}
+              onChange={(binding) => {
+                setMainTabKeybindings({
+                  ...mainTabKeybindings,
+                  switchToSourceControl: binding,
+                });
+              }}
+            />
+          </div>
         </div>
       </div>
 

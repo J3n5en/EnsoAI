@@ -48,6 +48,12 @@ export function useAppKeyboardShortcuts({
         onTabSwitch('terminal');
         return;
       }
+
+      if (matchesKeybinding(e, bindings.switchToSourceControl)) {
+        e.preventDefault();
+        onTabSwitch('source-control');
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);

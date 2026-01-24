@@ -163,6 +163,7 @@ export interface MainTabKeybindings {
   switchToAgent: TerminalKeybinding;
   switchToFile: TerminalKeybinding;
   switchToTerminal: TerminalKeybinding;
+  switchToSourceControl: TerminalKeybinding;
 }
 
 // Source control keybindings
@@ -445,6 +446,7 @@ export const defaultMainTabKeybindings: MainTabKeybindings = {
   switchToAgent: { key: '1', ctrl: true },
   switchToFile: { key: '2', ctrl: true },
   switchToTerminal: { key: '3', ctrl: true },
+  switchToSourceControl: { key: '4', ctrl: true },
 };
 
 export const defaultSourceControlKeybindings: SourceControlKeybindings = {
