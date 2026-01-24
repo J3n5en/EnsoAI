@@ -1,6 +1,7 @@
 import { Keyboard, X } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/i18n';
 import { codeToKey } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
@@ -103,6 +104,8 @@ export function KeybindingsSettings() {
     setSearchKeybindings,
     globalKeybindings,
     setGlobalKeybindings,
+    terminalOptionIsMeta,
+    setTerminalOptionIsMeta,
   } = useSettingsStore();
   const { t } = useI18n();
 
@@ -276,6 +279,18 @@ export function KeybindingsSettings() {
               }}
             />
           </div>
+          {/* Option as Meta Key (macOS only) */}
+          {window.electronAPI?.env?.platform === 'darwin' && (
+            <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+              <span className="text-sm">{t('Option as Meta')}</span>
+              <div className="flex items-center gap-3">
+                <Switch checked={terminalOptionIsMeta} onCheckedChange={setTerminalOptionIsMeta} />
+                <span className="text-xs text-muted-foreground">
+                  {t('Use Option key as Meta instead of composing special characters')}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

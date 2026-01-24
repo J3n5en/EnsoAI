@@ -82,6 +82,7 @@ function useTerminalSettings() {
     terminalFontWeight,
     terminalFontWeightBold,
     terminalScrollback,
+    terminalOptionIsMeta,
     xtermKeybindings,
   } = useSettingsStore();
 
@@ -96,6 +97,7 @@ function useTerminalSettings() {
     fontWeight: terminalFontWeight,
     fontWeightBold: terminalFontWeightBold,
     scrollback: terminalScrollback,
+    optionIsMeta: terminalOptionIsMeta,
     xtermKeybindings,
   };
 }
@@ -270,6 +272,7 @@ export function useXterm({
       fontWeightBold: settings.fontWeightBold,
       theme: settings.theme,
       scrollback: settings.scrollback,
+      macOptionIsMeta: settings.optionIsMeta,
       allowProposedApi: true,
       allowTransparency: false,
       rescaleOverlappingGlyphs: true,

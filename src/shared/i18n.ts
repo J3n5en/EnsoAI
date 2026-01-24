@@ -58,6 +58,9 @@ export const zhTranslations: Record<string, string> = {
   'Split pane': '分屏',
   'Merge pane': '合并分屏',
   'Shortcuts for terminal and agent sessions': '终端和 Agent 会话快捷键',
+  'Option as Meta': 'Option 作为 Meta',
+  'Use Option key as Meta instead of composing special characters':
+    '将 Option 键作为 Meta 键使用，而非输入特殊字符（如 π）',
   'Click to load worktrees': '点击加载 worktrees',
   Close: '关闭',
   'Close Session': '关闭 Session',
