@@ -9,6 +9,7 @@ interface UseAppKeyboardShortcutsOptions {
   onActionPanelToggle: () => void;
   onToggleWorktree: () => void;
   onToggleRepository: () => void;
+  onSwitchActiveWorktree: () => void;
 }
 
 export function useAppKeyboardShortcuts({
@@ -17,6 +18,7 @@ export function useAppKeyboardShortcuts({
   onActionPanelToggle,
   onToggleWorktree,
   onToggleRepository,
+  onSwitchActiveWorktree,
 }: UseAppKeyboardShortcutsOptions) {
   // Listen for Action Panel keyboard shortcut (Shift+Cmd+P)
   useEffect(() => {
@@ -80,9 +82,16 @@ export function useAppKeyboardShortcuts({
         onToggleRepository();
         return;
       }
+
+      // 新增：切换活跃 worktree 焦点
+      if (matchesKeybinding(e, bindings.switchActiveWorktree)) {
+        e.preventDefault();
+        onSwitchActiveWorktree();
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onToggleWorktree, onToggleRepository]);
+  }, [onToggleWorktree, onToggleRepository, onSwitchActiveWorktree]);
 }

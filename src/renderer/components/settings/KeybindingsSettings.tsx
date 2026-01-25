@@ -162,6 +162,19 @@ export function KeybindingsSettings() {
               }}
             />
           </div>
+          {/* 新增：切换活跃 Worktree */}
+          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+            <span className="text-sm">{t('Switch Active Worktree')}</span>
+            <KeybindingInput
+              value={workspaceKeybindings.switchActiveWorktree}
+              onChange={(binding) => {
+                setWorkspaceKeybindings({
+                  ...workspaceKeybindings,
+                  switchActiveWorktree: binding,
+                });
+              }}
+            />
+          </div>
         </div>
       </div>
 
