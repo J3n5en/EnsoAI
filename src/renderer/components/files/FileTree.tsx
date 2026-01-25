@@ -913,26 +913,24 @@ export function FileTree({
     setDraggingNode(null);
   }, []);
 
+  // Ref for the FileTree container to check focus
+  const fileTreeContainerRef = useRef<HTMLDivElement>(null);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when focus is within the FileTree container
+      // This prevents intercepting copy/paste in Monaco editor and other inputs
+      const activeElement = document.activeElement;
+      if (!fileTreeContainerRef.current?.contains(activeElement)) {
+        return;
+      }
+
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const modKey = isMac ? e.metaKey : e.ctrlKey;
 
-      console.log('[FileTree] Keyboard event:', {
-        key: e.key,
-        modKey,
-        isMac,
-        metaKey: e.metaKey,
-        ctrlKey: e.ctrlKey,
-        selectedNode,
-        hasClipboard: !!clipboard,
-        editingPath,
-      });
-
       // Cmd/Ctrl + C - Copy
       if (modKey && e.key === 'c' && selectedNode && !editingPath) {
-        console.log('[FileTree] Copy shortcut triggered');
         e.preventDefault();
         handleCopy(
           selectedNode.path,
@@ -943,7 +941,6 @@ export function FileTree({
 
       // Cmd/Ctrl + X - Cut
       if (modKey && e.key === 'x' && selectedNode && !editingPath) {
-        console.log('[FileTree] Cut shortcut triggered');
         e.preventDefault();
         handleCut(
           selectedNode.path,
@@ -954,7 +951,6 @@ export function FileTree({
 
       // Cmd/Ctrl + V - Paste
       if (modKey && e.key === 'v' && clipboard && selectedNode && !editingPath) {
-        console.log('[FileTree] Paste shortcut triggered', { selectedNode, clipboard });
         e.preventDefault();
         // When a file is selected, paste to its parent directory (same level)
         // When a directory is selected, paste into that directory
@@ -962,29 +958,24 @@ export function FileTree({
           ? selectedNode.path
           : selectedNode.path.substring(0, selectedNode.path.lastIndexOf('/')) || rootPath || '';
         const targetIsDirectory = true; // Parent or selected dir is always a directory
-        console.log('[FileTree] Pasting to:', targetPath);
         handlePaste(targetPath, targetIsDirectory);
       }
 
       // Cmd/Ctrl + Z - Undo
       if (modKey && e.key === 'z' && !e.shiftKey && !editingPath) {
-        console.log('[FileTree] Undo shortcut triggered');
         e.preventDefault();
         handleUndo();
       }
 
       // Cmd/Ctrl + Shift + Z - Redo
       if (modKey && e.key === 'z' && e.shiftKey && !editingPath) {
-        console.log('[FileTree] Redo shortcut triggered');
         e.preventDefault();
         handleRedo();
       }
     };
 
-    console.log('[FileTree] Keyboard handler attached');
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      console.log('[FileTree] Keyboard handler detached');
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [
@@ -1098,8 +1089,10 @@ export function FileTree({
   return (
     <ScrollArea className="h-full">
       <div
+        ref={fileTreeContainerRef}
+        tabIndex={-1}
         className={cn(
-          'py-1 pb-20',
+          'py-1 pb-20 outline-none',
           // Highlight root folder when dragging over
           draggingOverFolderPath === rootPath && 'bg-primary/10'
         )}
