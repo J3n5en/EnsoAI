@@ -890,6 +890,8 @@ export const zhTranslations: Record<string, string> = {
   'Opus Model': 'Opus 模型',
   'Haiku Model': 'Haiku 模型',
   'Provider switched': '已切换 Provider',
+  'Select Provider': '选择 Claude Provider',
+  'Switch failed': '切换失败',
   'New provider detected': '检测到新配置',
   'Click to save this config': '点击保存此配置',
   'Open Settings': '打开设置',
