@@ -213,7 +213,7 @@ export default function App() {
     const cleanup = window.electronAPI.menu.onAction((action) => {
       switch (action) {
         case 'open-settings':
-          setSettingsOpen(true);
+          setSettingsOpen((prev) => !prev);
           break;
         case 'open-action-panel':
           setActionPanelOpen(true);
