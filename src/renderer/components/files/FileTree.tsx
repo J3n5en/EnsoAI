@@ -7,6 +7,7 @@ import {
   FilePlus,
   FolderPlus,
   Loader2,
+  PanelLeftClose,
   Pencil,
   RefreshCw,
   Scissors,
@@ -61,6 +62,8 @@ interface FileTreeProps {
   onSelectedPathChange?: (path: string | null) => void;
   onRecordOperations?: (addFn: (operations: FileOperation[]) => void) => void;
   onFileDeleted?: (path: string) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function FileTree({
@@ -81,6 +84,8 @@ export function FileTree({
   onSelectedPathChange,
   onRecordOperations,
   onFileDeleted,
+  isCollapsed,
+  onToggleCollapse,
 }: FileTreeProps) {
   const { t } = useI18n();
   const [editingPath, setEditingPath] = useState<string | null>(null);
@@ -1103,55 +1108,67 @@ export function FileTree({
         onContextMenu={handleRootContextMenu}
       >
         {/* Toolbar */}
-        <div className="flex items-center justify-end gap-1 pl-2 pr-3 pb-1">
-          <button
-            type="button"
-            onClick={() => {
-              const targetPath = getCreateTargetPath();
-              if (targetPath) onCreateFile(targetPath);
-            }}
-            className="p-1 text-muted-foreground hover:text-foreground rounded"
-            title={t('New File')}
-          >
-            <FilePlus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const targetPath = getCreateTargetPath();
-              if (targetPath) onCreateDirectory(targetPath);
-            }}
-            className="p-1 text-muted-foreground hover:text-foreground rounded"
-            title={t('New Folder')}
-          >
-            <FolderPlus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="p-1 text-muted-foreground hover:text-foreground rounded"
-            title={t('Refresh')}
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleCollapseAll}
-            className="p-1 text-muted-foreground hover:text-foreground rounded"
-            title={t('Collapse all folders')}
-          >
-            <SquareMinus className="h-4 w-4" />
-          </button>
-          {onOpenSearch && (
+        <div className="flex items-center justify-between gap-1 pl-2 pr-3 pb-1">
+          {onToggleCollapse && (
             <button
               type="button"
-              onClick={onOpenSearch}
-              className="p-1 text-muted-foreground hover:text-foreground rounded"
-              title={t('Search')}
+              onClick={onToggleCollapse}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              title={t('Collapse file tree')}
             >
-              <Search className="h-4 w-4" />
+              <PanelLeftClose className="h-4 w-4" />
             </button>
           )}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                const targetPath = getCreateTargetPath();
+                if (targetPath) onCreateFile(targetPath);
+              }}
+              className="p-1 text-muted-foreground hover:text-foreground rounded"
+              title={t('New File')}
+            >
+              <FilePlus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const targetPath = getCreateTargetPath();
+                if (targetPath) onCreateDirectory(targetPath);
+              }}
+              className="p-1 text-muted-foreground hover:text-foreground rounded"
+              title={t('New Folder')}
+            >
+              <FolderPlus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="p-1 text-muted-foreground hover:text-foreground rounded"
+              title={t('Refresh')}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleCollapseAll}
+              className="p-1 text-muted-foreground hover:text-foreground rounded"
+              title={t('Collapse all folders')}
+            >
+              <SquareMinus className="h-4 w-4" />
+            </button>
+            {onOpenSearch && (
+              <button
+                type="button"
+                onClick={onOpenSearch}
+                className="p-1 text-muted-foreground hover:text-foreground rounded"
+                title={t('Search')}
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
         {/* Tree nodes */}
         {tree.map((node) => (

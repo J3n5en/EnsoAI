@@ -1,6 +1,9 @@
-import { GripVertical, Plus, Sparkles, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ClaudeProvider } from '@shared/types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle, Circle, GripVertical, Plus, Sparkles, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GlowCard, useGlowEffectEnabled } from '@/components/ui/glow-card';
+import { toastManager } from '@/components/ui/toast';
 import { useSessionOutputState } from '@/hooks/useOutputState';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -263,8 +266,57 @@ export function SessionBar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [showAgentMenu, setShowAgentMenu] = useState(false);
+  const [showProviderMenu, setShowProviderMenu] = useState(false);
   const [installedAgents, setInstalledAgents] = useState<Set<string>>(new Set());
   const dragStart = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
+
+  // Provider 查询和切换逻辑
+  const queryClient = useQueryClient();
+  const providers = useSettingsStore((s) => s.claudeCodeIntegration.providers);
+
+  const { data: claudeData } = useQuery({
+    queryKey: ['claude-settings'],
+    queryFn: () => window.electronAPI.claudeProvider.readSettings(),
+    enabled: !state.collapsed, // 仅在展开状态查询
+    staleTime: 30000, // 30秒缓存避免频繁查询
+  });
+
+  // 计算当前激活的 Provider
+  const activeProvider = useMemo(() => {
+    const env = claudeData?.settings?.env;
+    if (!env) return null;
+    return (
+      providers.find(
+        (p) => p.baseUrl === env.ANTHROPIC_BASE_URL && p.authToken === env.ANTHROPIC_AUTH_TOKEN
+      ) ?? null
+    );
+  }, [providers, claudeData?.settings]);
+
+  // Provider 切换 mutation
+  const applyProvider = useMutation({
+    mutationFn: (provider: ClaudeProvider) => window.electronAPI.claudeProvider.apply(provider),
+    onSuccess: (_, provider) => {
+      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
+      toastManager.add({
+        type: 'success',
+        title: t('Provider switched'),
+        description: provider.name,
+      });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: 'error',
+        title: t('Switch failed'),
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+
+  // 截断 Provider 名称（最多 15 个字符）
+  const truncateProviderName = (name: string): string => {
+    if (name.length <= 15) return name;
+    return `${name.slice(0, 14)}...`;
+  };
 
   // Tab drag reorder
   const draggedTabIndexRef = useRef<number | null>(null);
@@ -529,9 +581,17 @@ export function SessionBar({
         style={{
           ...(state.collapsed && state.edge === 'right'
             ? { right: 0, left: 'auto' }
-            : { left: state.collapsed && state.edge === 'left' ? 0 : `${state.x}%` }),
+            : state.collapsed && state.edge === 'left'
+              ? { left: 0 }
+              : state.x > 90
+                ? { right: `${100 - state.x}%` }
+                : { left: `${state.x}%` }),
           top: state.y,
-          transform: state.collapsed ? 'none' : 'translateX(-50%)',
+          transform: state.collapsed
+            ? 'none'
+            : state.x > 90
+              ? 'translateX(50%)'
+              : 'translateX(-50%)',
         }}
       >
         {state.collapsed ? (
@@ -545,7 +605,7 @@ export function SessionBar({
             <Sparkles className="h-4 w-4 text-muted-foreground" />
           </div>
         ) : (
-          <div className="flex items-center gap-1 rounded-full border bg-background/80 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+          <div className="flex items-center gap-1 rounded-full border bg-background/80 px-2 py-1.5 shadow-lg backdrop-blur-sm min-w-fit">
             <div
               className="flex h-7 w-4 items-center justify-center text-muted-foreground/50 cursor-grab"
               onMouseDown={handleMouseDown}
@@ -652,6 +712,78 @@ export function SessionBar({
                 </div>
               )}
             </div>
+
+            {/* Provider Tag - 仅在展开且有 Provider 时显示 */}
+            {!state.collapsed && activeProvider && (
+              <>
+                <div className="mx-1 h-4 w-px bg-border" />
+
+                <div
+                  className="relative shrink-0"
+                  onMouseEnter={() => setShowProviderMenu(true)}
+                  onMouseLeave={() => setShowProviderMenu(false)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowProviderMenu(!showProviderMenu)}
+                    className="flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors whitespace-nowrap"
+                    title={activeProvider.name}
+                  >
+                    <span>{truncateProviderName(activeProvider.name)}</span>
+                  </button>
+
+                  {/* Provider 选择菜单 */}
+                  {showProviderMenu && providers.length > 0 && (
+                    <div
+                      className={cn(
+                        'absolute right-[-10px] z-50 min-w-40',
+                        // 根据工具栏位置决定菜单方向
+                        containerRef.current &&
+                          state.y > containerRef.current.getBoundingClientRect().height / 2
+                          ? 'bottom-full pb-1'
+                          : 'top-full pt-1'
+                      )}
+                    >
+                      <div className="rounded-lg border bg-popover p-1 shadow-lg">
+                        <div className="px-2 py-1 text-xs text-muted-foreground">
+                          {t('Select Provider')}
+                        </div>
+                        {providers.map((provider) => {
+                          const isActive = activeProvider?.id === provider.id;
+                          return (
+                            <button
+                              type="button"
+                              key={provider.id}
+                              onClick={() => {
+                                if (!isActive) {
+                                  applyProvider.mutate(provider);
+                                }
+                                setShowProviderMenu(false);
+                              }}
+                              disabled={applyProvider.isPending}
+                              className={cn(
+                                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors whitespace-nowrap',
+                                isActive
+                                  ? 'text-foreground'
+                                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                applyProvider.isPending && 'opacity-50 cursor-not-allowed'
+                              )}
+                            >
+                              {isActive ? (
+                                <CheckCircle className="h-4 w-4 shrink-0" />
+                              ) : (
+                                <Circle className="h-4 w-4 shrink-0" />
+                              )}
+                              <span className="flex-1 text-left">{provider.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
