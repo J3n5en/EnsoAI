@@ -118,8 +118,6 @@ export default function App() {
   // Ref for cross-repo worktree switching (defined later)
   const switchWorktreePathRef = useRef<((path: string) => void) | null>(null);
 
-  // Settings dialog state
-  const [settingsOpen, setSettingsOpen] = useState(false);
   // Settings page state (used in MainContent)
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
     try {
@@ -165,6 +163,9 @@ export default function App() {
 
   // Settings dialog state (for draggable-modal mode)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+
+  // Track previous settingsDisplayMode to detect actual changes (not just initialization)
+  const prevSettingsDisplayModeRef = useRef<typeof settingsDisplayMode | null>(null);
 
   // Close confirmation dialog state (legacy)
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
@@ -236,6 +237,20 @@ export default function App() {
   // Clean up settings state when display mode changes and open settings in new mode
   // biome-ignore lint/correctness/useExhaustiveDependencies: Only trigger on display mode change, not on activeTab/previousTab change
   useEffect(() => {
+    // Only trigger when settingsDisplayMode actually changes (not on initial mount or rehydration)
+    const prevMode = prevSettingsDisplayModeRef.current;
+    prevSettingsDisplayModeRef.current = settingsDisplayMode;
+
+    // Skip if this is the first run (prevMode is null) - no mode switch happened
+    if (prevMode === null) {
+      return;
+    }
+
+    // Skip if the mode hasn't actually changed
+    if (prevMode === settingsDisplayMode) {
+      return;
+    }
+
     if (settingsDisplayMode === 'tab') {
       // Switching to tab mode: close dialog and open settings tab
       setSettingsDialogOpen(false);
