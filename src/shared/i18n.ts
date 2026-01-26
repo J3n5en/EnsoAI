@@ -1013,6 +1013,9 @@ export const zhTranslations: Record<string, string> = {
   Send: '发送',
   You: '你',
   'Add comment': '添加评论',
+  'Show split preview': '显示分屏预览',
+  'Switch to fullscreen preview': '切换到全屏预览',
+  'Close preview': '关闭预览',
 };
 
 export function normalizeLocale(input?: string): Locale {

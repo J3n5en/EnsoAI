@@ -190,10 +190,10 @@ export default function App() {
   useEffect(() => {
     if (!pendingNavigation) return;
 
-    const { path, line, column } = pendingNavigation;
+    const { path, line, column, previewMode } = pendingNavigation;
 
-    // Open the file and set cursor position
-    navigateToFile(path, line, column);
+    // Open the file and set cursor position, passing previewMode for markdown files
+    navigateToFile(path, line, column, undefined, previewMode);
 
     // Switch to file tab and update worktree tab map
     setActiveTab('file');

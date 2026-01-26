@@ -45,7 +45,13 @@ export function useEditor() {
 
   // Load file and navigate to specific line/column
   const navigateToFile = useCallback(
-    async (path: string, line?: number, column?: number, matchLength?: number) => {
+    async (
+      path: string,
+      line?: number,
+      column?: number,
+      matchLength?: number,
+      previewMode?: 'off' | 'split' | 'fullscreen'
+    ) => {
       const existingTab = tabs.find((t) => t.path === path);
 
       if (existingTab) {
@@ -61,7 +67,7 @@ export function useEditor() {
 
       // Set pending cursor position if line is specified
       if (line !== undefined) {
-        setPendingCursor({ path, line, column, matchLength });
+        setPendingCursor({ path, line, column, matchLength, previewMode });
       }
     },
     [tabs, setActiveFile, openFile, setPendingCursor]

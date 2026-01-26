@@ -376,10 +376,14 @@ export function useXterm({
               const exists = await window.electronAPI.file.exists(absolutePath);
               if (!exists) return;
 
+              // Check if it's a Markdown file
+              const isMarkdown = absolutePath.toLowerCase().endsWith('.md');
+
               navigateToFile({
                 path: absolutePath,
                 line: lineNum,
                 column: colNum,
+                previewMode: isMarkdown ? 'fullscreen' : undefined,
               });
             },
           });
