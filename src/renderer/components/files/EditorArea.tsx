@@ -1,5 +1,5 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { ChevronRight, Eye, EyeOff, FileCode, MessageSquare } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileCode, Maximize2, MessageSquare } from 'lucide-react';
 import type * as monaco from 'monaco-editor';
 import {
   forwardRef,
@@ -42,6 +42,8 @@ import { CUSTOM_THEME_NAME, defineMonacoTheme } from './monacoTheme';
 import './monacoSetup';
 
 type Monaco = typeof monaco;
+
+type MarkdownPreviewMode = 'off' | 'split' | 'fullscreen';
 
 export interface EditorAreaRef {
   getSelectedText: () => string;
@@ -118,9 +120,16 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   // Markdown preview state
   const isMarkdown = isMarkdownFile(activeTabPath);
   const isImage = isImageFile(activeTabPath);
-  const [showPreview, setShowPreview] = useState(true);
+  const [previewMode, setPreviewMode] = useState<MarkdownPreviewMode>('off');
   const [editorReady, setEditorReady] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(50); // percentage
+
+  // Sync preview mode from pendingCursor
+  useEffect(() => {
+    if (pendingCursor?.previewMode && isMarkdown) {
+      setPreviewMode(pendingCursor.previewMode);
+    }
+  }, [pendingCursor?.previewMode, isMarkdown]);
   const resizingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -775,6 +784,15 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     });
   }, []);
 
+  // Cycle through preview modes: off -> split -> fullscreen -> off
+  const cyclePreviewMode = useCallback(() => {
+    setPreviewMode((current) => {
+      if (current === 'off') return 'split';
+      if (current === 'split') return 'fullscreen';
+      return 'off';
+    });
+  }, []);
+
   return (
     <div className="flex h-full flex-col">
       {/* Tabs */}
@@ -807,11 +825,23 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         {isMarkdown && (
           <button
             type="button"
-            onClick={() => setShowPreview(!showPreview)}
+            onClick={cyclePreviewMode}
             className="flex h-10 w-10 shrink-0 items-center justify-center border-b text-muted-foreground hover:text-foreground transition-colors"
-            title={showPreview ? t('Hide preview') : t('Show preview')}
+            title={
+              previewMode === 'off'
+                ? t('Show split preview')
+                : previewMode === 'split'
+                  ? t('Switch to fullscreen preview')
+                  : t('Close preview')
+            }
           >
-            {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {previewMode === 'off' ? (
+              <EyeOff className="h-4 w-4" />
+            ) : previewMode === 'split' ? (
+              <Eye className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
           </button>
         )}
       </div>
@@ -851,7 +881,14 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             {/* Editor Panel */}
             <div
               className="relative h-full overflow-hidden"
-              style={{ width: isMarkdown && showPreview ? `${100 - previewWidth}%` : '100%' }}
+              style={{
+                width:
+                  previewMode === 'off'
+                    ? '100%'
+                    : previewMode === 'split'
+                      ? `${100 - previewWidth}%`
+                      : 0,
+              }}
             >
               {isImage ? (
                 <ImagePreview path={activeTab.path} sessionId={sessionId ?? undefined} />
@@ -868,7 +905,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                   options={{
                     // Display
                     minimap: {
-                      enabled: isMarkdown && showPreview ? false : editorSettings.minimapEnabled,
+                      enabled:
+                        isMarkdown && previewMode !== 'off' ? false : editorSettings.minimapEnabled,
                       side: 'right',
                       showSlider: 'mouseover',
                       renderCharacters: false,
@@ -915,31 +953,30 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
               )}
             </div>
 
-            {/* Resize Divider & Preview Panel (only for markdown with preview enabled) */}
-            {isMarkdown && showPreview && (
-              <>
-                {/* Resize Divider */}
-                <div
-                  className="group relative w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 transition-colors"
-                  onMouseDown={handleResizeMouseDown}
-                >
-                  <div className="absolute inset-y-0 -left-1 -right-1" />
-                </div>
+            {/* Resize Divider (only for split mode) */}
+            {isMarkdown && previewMode === 'split' && (
+              <div
+                className="group relative w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 transition-colors"
+                onMouseDown={handleResizeMouseDown}
+              >
+                <div className="absolute inset-y-0 -left-1 -right-1" />
+              </div>
+            )}
 
-                {/* Preview Panel */}
-                <div
-                  ref={previewRef}
-                  className="min-h-0 overflow-auto border-l bg-background"
-                  style={{ width: `${previewWidth}%` }}
-                  onScroll={handlePreviewScroll}
-                >
-                  <MarkdownPreview
-                    content={activeTab.content}
-                    filePath={activeTab.path}
-                    rootPath={rootPath}
-                  />
-                </div>
-              </>
+            {/* Preview Panel (for split and fullscreen modes) */}
+            {isMarkdown && previewMode !== 'off' && (
+              <div
+                ref={previewRef}
+                className="min-h-0 overflow-auto border-l bg-background"
+                style={{ width: previewMode === 'split' ? `${previewWidth}%` : '100%' }}
+                onScroll={handlePreviewScroll}
+              >
+                <MarkdownPreview
+                  content={activeTab.content}
+                  filePath={activeTab.path}
+                  rootPath={rootPath}
+                />
+              </div>
             )}
           </>
         ) : (
