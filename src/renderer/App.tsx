@@ -45,7 +45,8 @@ import { RepositorySidebar } from './components/layout/RepositorySidebar';
 import { TreeSidebar } from './components/layout/TreeSidebar';
 import { WindowTitleBar } from './components/layout/WindowTitleBar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
-import { SettingsDialog } from './components/settings/SettingsDialog';
+import type { SettingsCategory } from './components/settings/constants';
+import { DraggableSettingsWindow } from './components/settings/DraggableSettingsWindow';
 import { UpdateNotification } from './components/UpdateNotification';
 import { Button } from './components/ui/button';
 import {
@@ -95,6 +96,7 @@ export default function App() {
   // Panel tab order: custom order of tabs
   const [tabOrder, setTabOrder] = useState<TabId[]>(getStoredTabOrder);
   const [activeTab, setActiveTab] = useState<TabId>('chat');
+  const [previousTab, setPreviousTab] = useState<TabId | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
   const [activeWorktree, setActiveWorktree] = useState<GitWorktree | null>(null);
@@ -112,18 +114,54 @@ export default function App() {
   // Ref to toggle selected repo expanded in tree layout
   const toggleSelectedRepoExpandedRef = useRef<(() => void) | null>(null);
 
-  // Settings dialog state
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsCategory, setSettingsCategory] = useState<
-    'general' | 'appearance' | 'editor' | 'keybindings' | 'agent' | 'integration' | 'hapi'
-  >('general');
+  // Settings page state (used in MainContent)
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
+    try {
+      const saved = localStorage.getItem('enso-settings-active-category');
+      const validCategories: SettingsCategory[] = [
+        'general',
+        'appearance',
+        'editor',
+        'keybindings',
+        'agent',
+        'ai',
+        'integration',
+        'hapi',
+      ];
+      return saved && validCategories.includes(saved as SettingsCategory)
+        ? (saved as SettingsCategory)
+        : 'general';
+    } catch {
+      return 'general';
+    }
+  });
   const [scrollToProvider, setScrollToProvider] = useState(false);
+
+  // 持久化状态变更
+  useEffect(() => {
+    try {
+      localStorage.setItem('enso-settings-active-category', settingsCategory);
+    } catch (error) {
+      console.warn('Failed to save settings category:', error);
+    }
+  }, [settingsCategory]);
+
+  // 创建回调函数
+  const handleSettingsCategoryChange = useCallback((category: SettingsCategory) => {
+    setSettingsCategory(category);
+  }, []);
 
   // Add Repository dialog state
   const [addRepoDialogOpen, setAddRepoDialogOpen] = useState(false);
 
   // Action panel state
   const [actionPanelOpen, setActionPanelOpen] = useState(false);
+
+  // Settings dialog state (for draggable-modal mode)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+
+  // Track previous settingsDisplayMode to detect actual changes (not just initialization)
+  const prevSettingsDisplayModeRef = useRef<typeof settingsDisplayMode | null>(null);
 
   // Close confirmation dialog state (legacy)
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
@@ -142,6 +180,7 @@ export default function App() {
   const layoutMode = useSettingsStore((s) => s.layoutMode);
   const autoUpdateEnabled = useSettingsStore((s) => s.autoUpdateEnabled);
   const editorSettings = useSettingsStore((s) => s.editorSettings);
+  const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
 
   // Panel resize hook
   const { repositoryWidth, worktreeWidth, treeSidebarWidth, resizing, handleResizeStart } =
@@ -155,10 +194,31 @@ export default function App() {
   const { pendingNavigation, clearNavigation } = useNavigationStore();
   const { navigateToFile } = useEditor();
 
+  // Toggle settings page
+  const toggleSettings = useCallback(() => {
+    if (settingsDisplayMode === 'tab') {
+      // Tab mode: toggle between settings and previous tab
+      if (activeTab === 'settings') {
+        setActiveTab(previousTab || 'chat');
+        setPreviousTab(null);
+      } else {
+        setPreviousTab(activeTab);
+        setActiveTab('settings');
+      }
+    } else {
+      // Draggable-modal mode: toggle dialog
+      setSettingsDialogOpen((prev) => !prev);
+    }
+  }, [settingsDisplayMode, activeTab, previousTab]);
+
   // Handle tab change and persist to worktree tab map
   const handleTabChange = useCallback(
     (tab: TabId) => {
       setActiveTab(tab);
+      // Clear previousTab when switching away from settings via tab bar
+      if (activeTab === 'settings') {
+        setPreviousTab(null);
+      }
       // Save tab state for current worktree
       if (activeWorktree?.path) {
         setWorktreeTabMap((prev) => ({
@@ -167,8 +227,44 @@ export default function App() {
         }));
       }
     },
-    [activeWorktree]
+    [activeTab, activeWorktree]
   );
+
+  // Clean up settings state when display mode changes and open settings in new mode
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only trigger on display mode change, not on activeTab/previousTab change
+  useEffect(() => {
+    // Only trigger when settingsDisplayMode actually changes (not on initial mount or rehydration)
+    const prevMode = prevSettingsDisplayModeRef.current;
+    prevSettingsDisplayModeRef.current = settingsDisplayMode;
+
+    // Skip if this is the first run (prevMode is null) - no mode switch happened
+    if (prevMode === null) {
+      return;
+    }
+
+    // Skip if the mode hasn't actually changed
+    if (prevMode === settingsDisplayMode) {
+      return;
+    }
+
+    if (settingsDisplayMode === 'tab') {
+      // Switching to tab mode: close dialog and open settings tab
+      setSettingsDialogOpen(false);
+      // Open settings tab if not already active
+      if (activeTab !== 'settings') {
+        setPreviousTab(activeTab);
+        setActiveTab('settings');
+      }
+    } else {
+      // Switching to draggable-modal mode: exit settings tab and open modal
+      if (activeTab === 'settings') {
+        setActiveTab(previousTab || 'chat');
+        setPreviousTab(null);
+      }
+      // Open modal
+      setSettingsDialogOpen(true);
+    }
+  }, [settingsDisplayMode]);
 
   // Keyboard shortcuts
   useAppKeyboardShortcuts({
@@ -213,7 +309,7 @@ export default function App() {
     const cleanup = window.electronAPI.menu.onAction((action) => {
       switch (action) {
         case 'open-settings':
-          setSettingsOpen(true);
+          toggleSettings();
           break;
         case 'open-action-panel':
           setActionPanelOpen(true);
@@ -221,7 +317,7 @@ export default function App() {
       }
     });
     return cleanup;
-  }, []);
+  }, [toggleSettings]);
 
   // Listen for close request from main process (native dialogs are shown in main)
   useEffect(() => {
@@ -310,7 +406,7 @@ export default function App() {
             onClick: () => {
               setSettingsCategory('integration');
               setScrollToProvider(true);
-              setSettingsOpen(true);
+              toggleSettings();
             },
           },
         });
@@ -325,7 +421,7 @@ export default function App() {
       }
       cleanup();
     };
-  }, [claudeProviders, t]);
+  }, [claudeProviders, t, toggleSettings]);
 
   // Save collapsed states to localStorage
   useEffect(() => {
@@ -1027,7 +1123,7 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       {/* Custom Title Bar for Windows/Linux */}
-      <WindowTitleBar onOpenSettings={() => setSettingsOpen(true)} />
+      <WindowTitleBar onOpenSettings={toggleSettings} />
 
       {/* Main Layout */}
       <div className={`flex flex-1 overflow-hidden ${resizing ? 'select-none' : ''}`}>
@@ -1066,7 +1162,7 @@ export default function App() {
                     refetchBranches();
                   }}
                   onInitGit={handleInitGit}
-                  onOpenSettings={() => setSettingsOpen(true)}
+                  onOpenSettings={toggleSettings}
                   collapsed={false}
                   onCollapse={() => setRepositoryCollapsed(true)}
                   groups={sortedGroups}
@@ -1079,6 +1175,8 @@ export default function App() {
                   onSwitchTab={setActiveTab}
                   onSwitchWorktreeByPath={handleSwitchWorktreePath}
                   toggleSelectedRepoExpandedRef={toggleSelectedRepoExpandedRef}
+                  isSettingsActive={activeTab === 'settings'}
+                  onToggleSettings={toggleSettings}
                 />
                 {/* Resize handle */}
                 <div
@@ -1109,7 +1207,7 @@ export default function App() {
                     onAddRepository={handleAddRepository}
                     onRemoveRepository={handleRemoveRepository}
                     onReorderRepositories={handleReorderRepositories}
-                    onOpenSettings={() => setSettingsOpen(true)}
+                    onOpenSettings={toggleSettings}
                     collapsed={false}
                     onCollapse={() => setRepositoryCollapsed(true)}
                     groups={sortedGroups}
@@ -1121,6 +1219,8 @@ export default function App() {
                     onMoveToGroup={handleMoveToGroup}
                     onSwitchTab={setActiveTab}
                     onSwitchWorktreeByPath={handleSwitchWorktreePath}
+                    isSettingsActive={activeTab === 'settings'}
+                    onToggleSettings={toggleSettings}
                   />
                   {/* Resize handle */}
                   <div
@@ -1196,19 +1296,9 @@ export default function App() {
           }
           onSwitchWorktree={handleSwitchWorktreePath}
           onSwitchTab={handleTabChange}
-        />
-
-        {/* Global Settings Dialog */}
-        <SettingsDialog
-          open={settingsOpen}
-          onOpenChange={(open) => {
-            setSettingsOpen(open);
-            if (!open) {
-              // Reset scroll flag when dialog closes
-              setScrollToProvider(false);
-            }
-          }}
-          initialCategory={settingsCategory}
+          isSettingsActive={settingsDisplayMode === 'tab' && activeTab === 'settings'}
+          settingsCategory={settingsCategory}
+          onCategoryChange={handleSettingsCategoryChange}
           scrollToProvider={scrollToProvider}
         />
 
@@ -1236,7 +1326,7 @@ export default function App() {
           activeWorktreePath={activeWorktree?.path}
           onToggleRepository={() => setRepositoryCollapsed((prev) => !prev)}
           onToggleWorktree={() => setWorktreeCollapsed((prev) => !prev)}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={toggleSettings}
           onSwitchRepo={handleSelectRepo}
           onSwitchWorktree={handleSelectWorktree}
         />
@@ -1327,6 +1417,17 @@ export default function App() {
 
         {/* Clone Progress Float - shows clone progress in bottom right corner */}
         <CloneProgressFloat onCloneComplete={handleCloneRepository} />
+
+        {/* Draggable Settings Window (for draggable-modal mode) */}
+        {settingsDisplayMode === 'draggable-modal' && (
+          <DraggableSettingsWindow
+            open={settingsDialogOpen}
+            onOpenChange={setSettingsDialogOpen}
+            activeCategory={settingsCategory}
+            onCategoryChange={handleSettingsCategoryChange}
+            scrollToProvider={scrollToProvider}
+          />
+        )}
       </div>
     </div>
   );

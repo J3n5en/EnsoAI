@@ -39,6 +39,7 @@ import { useI18n } from '@/i18n';
 import { hexToRgba } from '@/lib/colors';
 import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
 import { RunningProjectsPopover } from './RunningProjectsPopover';
 
 interface Repository {
@@ -55,6 +56,8 @@ interface RepositorySidebarProps {
   onRemoveRepository?: (repoPath: string) => void;
   onReorderRepositories?: (fromIndex: number, toIndex: number) => void;
   onOpenSettings?: () => void;
+  isSettingsActive?: boolean;
+  onToggleSettings?: () => void;
   collapsed?: boolean;
   onCollapse?: () => void;
   groups: RepositoryGroup[];
@@ -76,6 +79,8 @@ export function RepositorySidebar({
   onRemoveRepository,
   onReorderRepositories,
   onOpenSettings,
+  isSettingsActive,
+  onToggleSettings,
   collapsed: _collapsed = false,
   onCollapse,
   groups,
@@ -89,6 +94,7 @@ export function RepositorySidebar({
   onSwitchWorktreeByPath,
 }: RepositorySidebarProps) {
   const { t, tNode } = useI18n();
+  const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
@@ -402,8 +408,13 @@ export function RepositorySidebar({
           </button>
           <button
             type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-            onClick={onOpenSettings}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
+              settingsDisplayMode === 'tab' && isSettingsActive
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+            )}
+            onClick={onToggleSettings || onOpenSettings}
           >
             <Settings className="h-4 w-4" />
           </button>
