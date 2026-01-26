@@ -79,6 +79,7 @@ import { useNavigationStore } from './stores/navigation';
 import { useSettingsStore } from './stores/settings';
 import { requestUnsavedChoice } from './stores/unsavedPrompt';
 import { useWorktreeStore } from './stores/worktree';
+import { useWorktreeActivityStore } from './stores/worktreeActivity';
 
 // Initialize global clone progress listener
 initCloneProgressListener();
@@ -114,6 +115,11 @@ export default function App() {
   // Ref to toggle selected repo expanded in tree layout
   const toggleSelectedRepoExpandedRef = useRef<(() => void) | null>(null);
 
+  // Ref for cross-repo worktree switching (defined later)
+  const switchWorktreePathRef = useRef<((path: string) => void) | null>(null);
+
+  // Settings dialog state
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Settings page state (used in MainContent)
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
     try {
@@ -263,6 +269,31 @@ export default function App() {
       }
     }, [layoutMode]),
     onToggleRepository: useCallback(() => setRepositoryCollapsed((prev) => !prev), []),
+    onSwitchActiveWorktree: useCallback(() => {
+      const activities = useWorktreeActivityStore.getState().activities;
+
+      // 获取所有有活跃 agent 会话的 worktree 路径（跨所有仓库）
+      const activeWorktreePaths = Object.entries(activities)
+        .filter(([, activity]) => activity.agentCount > 0)
+        .map(([path]) => path)
+        .sort(); // 确保顺序稳定
+
+      // 边界检查：少于 2 个活跃 worktree 时无需切换
+      if (activeWorktreePaths.length < 2) {
+        return;
+      }
+
+      // 找到当前 worktree 在列表中的位置
+      const currentPath = activeWorktree?.path ?? '';
+      const currentIndex = activeWorktreePaths.indexOf(currentPath);
+
+      // 计算下一个索引（循环）
+      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % activeWorktreePaths.length;
+
+      // 切换到下一个 worktree（使用 ref 调用跨仓库切换函数）
+      const nextWorktreePath = activeWorktreePaths[nextIndex];
+      switchWorktreePathRef.current?.(nextWorktreePath);
+    }, [activeWorktree?.path]),
   });
 
   // Handle terminal file link navigation
@@ -882,6 +913,9 @@ export default function App() {
     },
     [worktrees, repositories, worktreeTabMap, handleSelectWorktree]
   );
+
+  // Assign to ref for use in keyboard shortcut callback
+  switchWorktreePathRef.current = handleSwitchWorktreePath;
 
   // Open add repository dialog
   const handleAddRepository = () => {

@@ -123,8 +123,9 @@ function SessionTab({
         {dropTargetIndex === index && draggedTabIndex !== null && draggedTabIndex > index && (
           <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
         )}
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           className={cn(
             'group flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors cursor-pointer',
             isActive
@@ -139,6 +140,12 @@ function SessionTab({
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           onClick={onSelect}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect();
+            }
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
             onStartEdit();
@@ -172,7 +179,7 @@ function SessionTab({
           >
             <X className="h-3 w-3" />
           </button>
-        </button>
+        </div>
         {/* Drop indicator - right side */}
         {dropTargetIndex === index && draggedTabIndex !== null && draggedTabIndex < index && (
           <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-full" />
@@ -190,7 +197,9 @@ function SessionTab({
       )}
       <GlowCard
         state={outputState}
-        as="button"
+        as="div"
+        role="button"
+        tabIndex={0}
         className={cn(
           'group flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors cursor-pointer',
           isActive
@@ -205,7 +214,13 @@ function SessionTab({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onClick={onSelect}
-        onContextMenu={(e) => {
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+        onContextMenu={(e: React.MouseEvent) => {
           e.preventDefault();
           onStartEdit();
         }}

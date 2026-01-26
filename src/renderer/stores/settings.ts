@@ -188,6 +188,7 @@ export interface GlobalKeybindings {
 export interface WorkspaceKeybindings {
   toggleWorktree: TerminalKeybinding;
   toggleRepository: TerminalKeybinding;
+  switchActiveWorktree: TerminalKeybinding;
 }
 
 // Unified xterm keybindings (for Terminal, Agent, and all xterm-based components)
@@ -474,6 +475,7 @@ export const defaultGlobalKeybindings: GlobalKeybindings = {
 export const defaultWorkspaceKeybindings: WorkspaceKeybindings = {
   toggleWorktree: { key: 'w', meta: true, shift: true },
   toggleRepository: { key: 'r', meta: true, shift: true },
+  switchActiveWorktree: { key: 'CapsLock', ctrl: true },
 };
 
 interface SettingsState {
