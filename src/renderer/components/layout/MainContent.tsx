@@ -1,5 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { FileCode, FolderOpen, GitBranch, MessageSquare, Sparkles, Terminal } from 'lucide-react';
+import {
+  FileCode,
+  FolderOpen,
+  GitBranch,
+  MessageSquare,
+  RectangleEllipsis,
+  Sparkles,
+  Terminal,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_TAB_ORDER, type TabId } from '@/App/constants';
 import { normalizePath } from '@/App/storage';
@@ -7,6 +15,8 @@ import { OpenInMenu } from '@/components/app/OpenInMenu';
 import { AgentPanel } from '@/components/chat/AgentPanel';
 import { FilePanel } from '@/components/files';
 import { RunningProjectsPopover } from '@/components/layout/RunningProjectsPopover';
+import { SettingsContent } from '@/components/settings';
+import type { SettingsCategory } from '@/components/settings/constants';
 import { SourceControlPanel } from '@/components/source-control';
 import { DiffReviewModal } from '@/components/source-control/DiffReviewModal';
 import { Button } from '@/components/ui/button';
@@ -21,6 +31,7 @@ import { useI18n } from '@/i18n';
 import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
+import { useSettingsStore } from '@/stores/settings';
 import { TerminalPanel } from '../terminal';
 
 type LayoutMode = 'columns' | 'tree';
@@ -39,6 +50,10 @@ interface MainContentProps {
   onExpandWorktree?: () => void;
   onSwitchWorktree?: (worktreePath: string) => void;
   onSwitchTab?: (tab: TabId) => void;
+  isSettingsActive?: boolean;
+  settingsCategory?: SettingsCategory;
+  onCategoryChange?: (category: SettingsCategory) => void;
+  scrollToProvider?: boolean;
 }
 
 export function MainContent({
@@ -55,8 +70,13 @@ export function MainContent({
   onExpandWorktree,
   onSwitchWorktree,
   onSwitchTab,
+  isSettingsActive = false,
+  settingsCategory,
+  onCategoryChange,
+  scrollToProvider,
 }: MainContentProps) {
   const { t } = useI18n();
+  const setSettingsDisplayMode = useSettingsStore((s) => s.setSettingsDisplayMode);
 
   // Diff Review Modal state
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -76,18 +96,28 @@ export function MainContent({
     return firstSession?.id ?? null;
   }, [repoPath, worktreePath, sessions, activeIds]);
 
-  // Tab metadata configuration
-  const tabConfigMap: Record<TabId, { icon: React.ElementType; label: string }> = {
+  // Tab metadata configuration (excludes 'settings' as it's not shown in the tab bar)
+  const tabConfigMap: Record<
+    Exclude<TabId, 'settings'>,
+    { icon: React.ElementType; label: string }
+  > = {
     chat: { icon: Sparkles, label: t('Agent') },
     file: { icon: FileCode, label: t('File') },
     terminal: { icon: Terminal, label: t('Terminal') },
     'source-control': { icon: GitBranch, label: t('Version Control') },
   };
 
-  // Generate tabs array based on tabOrder
-  const tabs = tabOrder.map(
-    (id) => ({ id, ...tabConfigMap[id] }) as { id: TabId; icon: React.ElementType; label: string }
-  );
+  // Generate tabs array based on tabOrder (filter out 'settings' tab)
+  const tabs = tabOrder
+    .filter((id): id is Exclude<TabId, 'settings'> => id !== 'settings')
+    .map(
+      (id) =>
+        ({ id, ...tabConfigMap[id] }) as {
+          id: Exclude<TabId, 'settings'>;
+          icon: React.ElementType;
+          label: string;
+        }
+    );
 
   // Drag reorder state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -293,13 +323,15 @@ export function MainContent({
                   onClick={() => onTabChange(tab.id)}
                   className={cn(
                     'relative flex h-8 items-center gap-1.5 rounded-md px-3 text-sm transition-colors',
-                    isActive
-                      ? 'text-accent-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                    isSettingsActive
+                      ? 'text-muted-foreground/60'
+                      : isActive
+                        ? 'text-accent-foreground'
+                        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                   )}
                 >
                   {/* Active highlight background */}
-                  {isActive && (
+                  {isActive && !isSettingsActive && (
                     <motion.div
                       layoutId="main-tab-highlight"
                       className="absolute inset-0 rounded-md bg-accent"
@@ -433,6 +465,35 @@ export function MainContent({
             worktreeCollapsed={worktreeCollapsed}
             sessionId={activeSessionId}
           />
+        </div>
+        {/* Settings tab */}
+        <div
+          className={cn(
+            'absolute inset-0 bg-background',
+            activeTab === 'settings' ? 'z-10' : 'invisible pointer-events-none z-0'
+          )}
+        >
+          <div className="h-full flex flex-col">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h1 className="text-lg font-medium">{t('Settings')}</h1>
+              <button
+                type="button"
+                onClick={() => setSettingsDisplayMode('draggable-modal')}
+                className="flex h-6 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                title="将设置窗口切换为浮动窗口模式"
+              >
+                <RectangleEllipsis className="h-3.5 w-3.5" />
+                切换为浮动模式
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <SettingsContent
+                activeCategory={settingsCategory}
+                onCategoryChange={onCategoryChange}
+                scrollToProvider={scrollToProvider}
+              />
+            </div>
+          </div>
         </div>
       </div>
 

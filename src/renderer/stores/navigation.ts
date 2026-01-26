@@ -4,6 +4,7 @@ export interface FileNavigationRequest {
   path: string;
   line?: number;
   column?: number;
+  previewMode?: 'off' | 'split' | 'fullscreen';
 }
 
 interface NavigationState {

@@ -81,6 +81,8 @@ export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
 
 export type LayoutMode = 'columns' | 'tree';
 
+export type SettingsDisplayMode = 'tab' | 'draggable-modal';
+
 // Apply app theme (dark/light mode)
 function applyAppTheme(theme: Theme, terminalTheme: string) {
   const root = document.documentElement;
@@ -519,6 +521,9 @@ interface SettingsState {
   promptPresets: PromptPreset[];
   // Branch name generator
   branchNameGenerator: BranchNameGeneratorSettings;
+  // Settings display mode
+  settingsDisplayMode: SettingsDisplayMode;
+  settingsModalPosition: { x: number; y: number } | null;
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -583,6 +588,9 @@ interface SettingsState {
   setPromptPresetEnabled: (id: string) => void;
   // Branch name generator
   setBranchNameGenerator: (settings: Partial<BranchNameGeneratorSettings>) => void;
+  // Settings display mode
+  setSettingsDisplayMode: (mode: SettingsDisplayMode) => void;
+  setSettingsModalPosition: (position: { x: number; y: number } | null) => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -646,6 +654,9 @@ export const useSettingsStore = create<SettingsState>()(
       mcpServers: [],
       promptPresets: [],
       branchNameGenerator: defaultBranchNameGeneratorSettings,
+      // Settings display mode
+      settingsDisplayMode: 'tab', // 默认使用 Tab 模式（保持向后兼容）
+      settingsModalPosition: null, // 首次打开居中
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -882,6 +893,13 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           branchNameGenerator: { ...state.branchNameGenerator, ...settings },
         })),
+      // Settings display mode
+      setSettingsDisplayMode: (mode) => {
+        set({ settingsDisplayMode: mode });
+      },
+      setSettingsModalPosition: (position) => {
+        set({ settingsModalPosition: position });
+      },
     }),
     {
       name: 'enso-settings',

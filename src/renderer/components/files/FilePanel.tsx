@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { FileCode } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GlobalSearchDialog, type SearchMode } from '@/components/search';
@@ -125,6 +126,22 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   });
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // File tree collapse state
+  const [isFileTreeCollapsed, setIsFileTreeCollapsed] = useState(() => {
+    const saved = localStorage.getItem('enso-file-tree-collapsed');
+    return saved === 'true';
+  });
+
+  // Persist file tree collapse state
+  useEffect(() => {
+    localStorage.setItem('enso-file-tree-collapsed', String(isFileTreeCollapsed));
+  }, [isFileTreeCollapsed]);
+
+  // Toggle file tree collapse
+  const handleToggleFileTree = useCallback(() => {
+    setIsFileTreeCollapsed((prev) => !prev);
+  }, []);
 
   // Panel resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -613,36 +630,50 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
 
   return (
     <div ref={containerRef} className={`flex h-full ${isResizing ? 'select-none' : ''}`}>
-      {/* File Tree - left panel */}
-      <div className="relative shrink-0 border-r" style={{ width: panelWidth }}>
-        <FileTree
-          tree={tree}
-          expandedPaths={expandedPaths}
-          onToggleExpand={toggleExpand}
-          onFileClick={handleFileClick}
-          selectedPath={selectedFilePath}
-          onSelectedPathChange={setSelectedFilePath}
-          onCreateFile={handleCreateFile}
-          onCreateDirectory={handleCreateDirectory}
-          onRename={handleRename}
-          onDelete={handleDelete}
-          onRefresh={refresh}
-          onOpenSearch={() => {
-            const selectedText = editorAreaRef.current?.getSelectedText() ?? '';
-            openSearch('content', selectedText);
-          }}
-          onExternalDrop={handleExternalFileDrop}
-          onRecordOperations={handleRecordOperations}
-          onFileDeleted={handleFileDeleted}
-          isLoading={isLoading}
-          rootPath={rootPath}
-        />
-        {/* Resize handle */}
-        <div
-          className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
-          onMouseDown={handleResizeStart}
-        />
-      </div>
+      {/* File Tree - left panel - conditionally rendered */}
+      <AnimatePresence initial={false}>
+        {!isFileTreeCollapsed && (
+          <motion.div
+            key="file-tree"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: panelWidth, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            className="relative shrink-0 border-r overflow-hidden"
+            style={{ width: panelWidth }}
+          >
+            <FileTree
+              tree={tree}
+              expandedPaths={expandedPaths}
+              onToggleExpand={toggleExpand}
+              onFileClick={handleFileClick}
+              selectedPath={selectedFilePath}
+              onSelectedPathChange={setSelectedFilePath}
+              onCreateFile={handleCreateFile}
+              onCreateDirectory={handleCreateDirectory}
+              onRename={handleRename}
+              onDelete={handleDelete}
+              onRefresh={refresh}
+              onOpenSearch={() => {
+                const selectedText = editorAreaRef.current?.getSelectedText() ?? '';
+                openSearch('content', selectedText);
+              }}
+              onExternalDrop={handleExternalFileDrop}
+              onRecordOperations={handleRecordOperations}
+              onFileDeleted={handleFileDeleted}
+              isLoading={isLoading}
+              rootPath={rootPath}
+              isCollapsed={isFileTreeCollapsed}
+              onToggleCollapse={handleToggleFileTree}
+            />
+            {/* Resize handle */}
+            <div
+              className="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+              onMouseDown={handleResizeStart}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Editor Area - right panel */}
       <div className="flex-1 overflow-hidden">
@@ -683,6 +714,8 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
           onClearPendingCursor={handleClearPendingCursor}
           onBreadcrumbClick={handleBreadcrumbClick}
           onGlobalSearch={handleGlobalSearch}
+          isFileTreeCollapsed={isFileTreeCollapsed}
+          onToggleFileTree={handleToggleFileTree}
         />
       </div>
 

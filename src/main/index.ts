@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
 import { IPC_CHANNELS } from '@shared/types';
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, net, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, net, protocol } from 'electron';
 
 // Fix environment for packaged app (macOS GUI apps don't inherit shell env)
 if (process.platform === 'darwin') {
@@ -213,8 +213,20 @@ app.whenReady().then(async () => {
   });
 
   // Default open or close DevTools by F12 in development
+  // Also intercept Cmd+- for all windows to bypass Monaco Editor interception
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
+
+    // Intercept Cmd+- before renderer process to bypass Monaco Editor interception
+    window.webContents.on('before-input-event', (event, input) => {
+      const isMac = process.platform === 'darwin';
+      const modKey = isMac ? input.meta : input.control;
+      if (modKey && input.key === '-') {
+        event.preventDefault();
+        const currentZoom = window.webContents.getZoomLevel();
+        window.webContents.setZoomLevel(currentZoom - 0.5);
+      }
+    });
   });
 
   await init();
@@ -290,7 +302,6 @@ app.on('will-quit', (event) => {
   event.preventDefault();
   console.log('[app] Will quit, cleaning up...');
   unwatchClaudeSettings();
-  globalShortcut.unregisterAll();
   cleanupAllResources()
     .catch((err) => console.error('[app] Cleanup error:', err))
     .finally(() => {
@@ -316,7 +327,6 @@ function handleShutdownSignal(signal: string): void {
   console.log(`[app] Received ${signal}, exiting...`);
   // Sync cleanup: kill child processes immediately
   unwatchClaudeSettings();
-  globalShortcut.unregisterAll();
   cleanupAllResourcesSync();
   // Use app.exit() to bypass will-quit handler (already cleaned up)
   app.exit(0);

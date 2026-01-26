@@ -2,7 +2,7 @@
 export const panelTransition = { type: 'spring' as const, stiffness: 400, damping: 30 };
 
 // Tab types
-export type TabId = 'chat' | 'file' | 'terminal' | 'source-control';
+export type TabId = 'chat' | 'file' | 'terminal' | 'source-control' | 'settings';
 
 // Tab metadata configuration
 export interface TabConfig {

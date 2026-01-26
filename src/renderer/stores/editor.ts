@@ -14,6 +14,7 @@ export interface PendingCursor {
   line: number;
   column?: number;
   matchLength?: number;
+  previewMode?: 'off' | 'split' | 'fullscreen';
 }
 
 interface WorktreeEditorState {
