@@ -1,5 +1,5 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { ChevronRight, Eye, EyeOff, FileCode, Maximize2， MessageSquare } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileCode, Maximize2, MessageSquare } from 'lucide-react';
 import type * as monaco from 'monaco-editor';
 import {
   forwardRef,
