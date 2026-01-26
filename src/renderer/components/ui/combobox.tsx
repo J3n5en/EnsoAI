@@ -124,9 +124,11 @@ function ComboboxPopup({
   className,
   children,
   sideOffset = 4,
+  zIndex,
   ...props
 }: ComboboxPrimitive.Popup.Props & {
   sideOffset?: number;
+  zIndex?: number;
 }) {
   const { chipsRef } = React.useContext(ComboboxContext);
 
@@ -134,7 +136,8 @@ function ComboboxPopup({
     <ComboboxPrimitive.Portal>
       <ComboboxPrimitive.Positioner
         anchor={chipsRef}
-        className="z-[55] select-none"
+        className="select-none"
+        style={{ zIndex: zIndex ?? 200 }}
         data-slot="combobox-positioner"
         sideOffset={sideOffset}
       >
