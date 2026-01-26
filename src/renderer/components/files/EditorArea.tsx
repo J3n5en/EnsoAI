@@ -1,5 +1,5 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { Eye, EyeOff, FileCode, MessageSquare } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileCode, MessageSquare } from 'lucide-react';
 import type * as monaco from 'monaco-editor';
 import {
   forwardRef,
@@ -74,6 +74,8 @@ interface EditorAreaProps {
   onClearPendingCursor: () => void;
   onBreadcrumbClick?: (path: string) => void;
   onGlobalSearch?: (selectedText: string) => void;
+  isFileTreeCollapsed?: boolean;
+  onToggleFileTree?: () => void;
 }
 
 export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function EditorArea(
@@ -97,6 +99,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     onClearPendingCursor,
     onBreadcrumbClick,
     onGlobalSearch,
+    isFileTreeCollapsed,
+    onToggleFileTree,
   }: EditorAreaProps,
   ref: React.Ref<EditorAreaRef>
 ) {
@@ -775,6 +779,16 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     <div className="flex h-full flex-col">
       {/* Tabs */}
       <div className="flex items-center">
+        {isFileTreeCollapsed && onToggleFileTree && (
+          <button
+            type="button"
+            onClick={onToggleFileTree}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            title={t('Show file tree')}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <EditorTabs
             tabs={tabs}
