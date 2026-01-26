@@ -342,6 +342,22 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
             </div>
           )}
 
+          {/* Provider Switcher in SessionBar */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">{t('Provider Switcher')}</span>
+              <p className="text-xs text-muted-foreground">
+                {t('Show provider switcher in SessionBar for quick switching')}
+              </p>
+            </div>
+            <Switch
+              checked={claudeCodeIntegration.showProviderSwitcher ?? true}
+              onCheckedChange={(checked) =>
+                setClaudeCodeIntegration({ showProviderSwitcher: checked })
+              }
+            />
+          </div>
+
           {/* Claude Provider */}
           <div ref={providerRef} className="mt-4 border-t pt-4">
             <div className="mb-3">

@@ -288,6 +288,9 @@ export function SessionBar({
   // Provider 查询和切换逻辑
   const queryClient = useQueryClient();
   const providers = useSettingsStore((s) => s.claudeCodeIntegration.providers);
+  const showProviderSwitcher = useSettingsStore(
+    (s) => s.claudeCodeIntegration.showProviderSwitcher ?? true
+  );
 
   const { data: claudeData } = useQuery({
     queryKey: ['claude-settings'],
@@ -728,8 +731,8 @@ export function SessionBar({
               )}
             </div>
 
-            {/* Provider Tag - 仅在展开且有 Provider 时显示 */}
-            {!state.collapsed && activeProvider && (
+            {/* Provider Tag - 仅在展开、有 Provider 且设置启用时显示 */}
+            {!state.collapsed && showProviderSwitcher && activeProvider && (
               <>
                 <div className="mx-1 h-4 w-px bg-border" />
 

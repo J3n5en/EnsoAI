@@ -896,6 +896,9 @@ export const zhTranslations: Record<string, string> = {
   'Opus Model': 'Opus 模型',
   'Haiku Model': 'Haiku 模型',
   'Provider switched': '已切换 Provider',
+  'Provider Switcher': 'Provider 切换器',
+  'Show provider switcher in SessionBar for quick switching':
+    '在 SessionBar 上显示 Provider 切换器，方便快速切换',
   'Select Provider': '选择 Claude Provider',
   'Switch failed': '切换失败',
   'New provider detected': '检测到新配置',

@@ -244,6 +244,7 @@ export interface ClaudeCodeIntegrationSettings {
   stopHookEnabled: boolean; // Enable Stop hook for precise agent completion notifications
   statusLineEnabled: boolean; // Enable Status Line hook for displaying agent status
   statusLineFields: StatusLineFieldSettings; // Which fields to display in status line
+  showProviderSwitcher: boolean; // Show provider switcher in SessionBar
   providers: import('@shared/types').ClaudeProvider[];
 }
 
@@ -254,6 +255,7 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   stopHookEnabled: true, // Enable Stop hook for precise agent completion notifications
   statusLineEnabled: false, // Disable Status Line hook by default
   statusLineFields: defaultStatusLineFieldSettings,
+  showProviderSwitcher: true,
   providers: [],
 };
 
