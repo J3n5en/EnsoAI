@@ -42,10 +42,12 @@ export function AgentGroup({
   const { t } = useI18n();
   const [showAgentMenu, setShowAgentMenu] = useState(false);
 
-  // Filter sessions belonging to this group
+  // Get sessions belonging to this group, preserving group.sessionIds order (for drag reorder)
   const groupSessions = useMemo(() => {
-    const sessionIdSet = new Set(group.sessionIds);
-    return sessions.filter((s) => sessionIdSet.has(s.id));
+    const sessionMap = new Map(sessions.map((s) => [s.id, s]));
+    return group.sessionIds
+      .map((id) => sessionMap.get(id))
+      .filter((s): s is Session => s !== undefined);
   }, [sessions, group.sessionIds]);
 
   const activeSessionId = group.activeSessionId;

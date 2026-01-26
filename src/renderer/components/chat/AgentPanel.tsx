@@ -591,18 +591,27 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   const handleReorderSessions = useCallback(
     (groupId: string, fromIndex: number, toIndex: number) => {
+      const group = groups.find((g) => g.id === groupId);
+      if (!group) return;
+
+      const newSessionIds = [...group.sessionIds];
+      const [removed] = newSessionIds.splice(fromIndex, 1);
+      newSessionIds.splice(toIndex, 0, removed);
+
+      // Update group.sessionIds order (immediate visual)
       updateCurrentGroupState((state) => ({
         ...state,
-        groups: state.groups.map((g) => {
-          if (g.id !== groupId) return g;
-          const newSessionIds = [...g.sessionIds];
-          const [removed] = newSessionIds.splice(fromIndex, 1);
-          newSessionIds.splice(toIndex, 0, removed);
-          return { ...g, sessionIds: newSessionIds };
-        }),
+        groups: state.groups.map((g) =>
+          g.id === groupId ? { ...g, sessionIds: newSessionIds } : g
+        ),
       }));
+
+      // Update displayOrder in store for persistence
+      for (let i = 0; i < newSessionIds.length; i++) {
+        updateSession(newSessionIds[i], { displayOrder: i });
+      }
     },
-    [updateCurrentGroupState]
+    [groups, updateCurrentGroupState, updateSession]
   );
 
   const handleNewSessionWithAgent = useCallback(
