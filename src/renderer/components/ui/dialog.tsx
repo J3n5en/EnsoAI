@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { XIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Z_INDEX } from '@/lib/z-index';
 
 const Dialog = DialogPrimitive.Root;
 
@@ -50,22 +51,32 @@ function DialogPopup({
   showCloseButton = true,
   bottomStickOnMobile = true,
   disableNestedTransform = false,
+  showBackdrop = true,
+  zIndexLevel = 'base',
   style,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   bottomStickOnMobile?: boolean;
   disableNestedTransform?: boolean;
+  showBackdrop?: boolean;
+  zIndexLevel?: 'base' | 'nested';
 }) {
   const mergedStyle = disableNestedTransform
     ? ({ ...(style ?? {}), ['--nested-dialogs']: 0 } as React.CSSProperties)
     : style;
 
+  const contentZIndex =
+    zIndexLevel === 'base' ? Z_INDEX.MODAL_CONTENT : Z_INDEX.NESTED_MODAL_CONTENT;
+  const backdropZIndex =
+    zIndexLevel === 'base' ? Z_INDEX.MODAL_BACKDROP : Z_INDEX.NESTED_MODAL_BACKDROP;
+
   return (
     <DialogPortal>
-      <DialogBackdrop />
+      {showBackdrop && <DialogBackdrop style={{ zIndex: backdropZIndex }} />}
       <DialogViewport
         className={cn(bottomStickOnMobile && 'max-sm:grid-rows-[1fr_auto] max-sm:pt-12')}
+        style={{ zIndex: contentZIndex }}
       >
         <DialogPrimitive.Popup
           className={cn(

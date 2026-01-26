@@ -269,7 +269,7 @@ export function McpServerDialog({ open, onOpenChange, server, onSave }: McpServe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup>
+      <DialogPopup zIndexLevel="nested">
         <DialogHeader>
           <DialogTitle>{isEditing ? t('Edit MCP Server') : t('Add MCP Server')}</DialogTitle>
           <DialogDescription>{t('Configure MCP server connection settings')}</DialogDescription>

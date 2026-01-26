@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useI18n } from '@/i18n';
 import { scaleInVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { Z_INDEX } from '@/lib/z-index';
 import { useSettingsStore } from '@/stores/settings';
 import type { SettingsCategory } from './constants';
 import { SettingsContent } from './SettingsContent';
@@ -30,6 +31,10 @@ export function DraggableSettingsWindow({
   const setSettingsDisplayMode = useSettingsStore((s) => s.setSettingsDisplayMode);
 
   // 拖动状态
+  // TODO: 优化拖拽动画的流畅度，当前拖动设置窗口时存在以下问题：
+  // 1. 拖拽过程不够流畅，存在轻微卡顿
+  // 2. Provider List 组件跟随窗口移动时有明显滞后感
+  // 建议：考虑使用 CSS transform 替代 position，或优化 motion 动画配置
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState(savedPosition || { x: 0, y: 0 });
   const dragStartPos = useRef({ x: 0, y: 0 });
@@ -38,7 +43,6 @@ export function DraggableSettingsWindow({
   // 窗口尺寸常量
   const WINDOW_WIDTH = 896; // max-w-4xl
   const WINDOW_HEIGHT = 600;
-  const Z_INDEX = 100; // 高于其他模态窗口
 
   // 居中计算和位置验证
   useEffect(() => {
@@ -149,7 +153,7 @@ export function DraggableSettingsWindow({
               top: `${position.y}px`,
               width: `${WINDOW_WIDTH}px`,
               height: `${WINDOW_HEIGHT}px`,
-              zIndex: Z_INDEX,
+              zIndex: Z_INDEX.FLOATING_WINDOW,
             }}
           >
             {/* 可拖动标题栏 */}

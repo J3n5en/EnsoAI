@@ -73,7 +73,7 @@ export function PromptEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-2xl">
+      <DialogPopup className="max-w-2xl" zIndexLevel="nested">
         <DialogHeader>
           <DialogTitle>{isEditing ? t('Edit Prompt') : t('Add Prompt')}</DialogTitle>
           <DialogDescription>{t('Create or edit a prompt preset for CLAUDE.md')}</DialogDescription>

@@ -101,7 +101,7 @@ export function MarketplacesDialog({ open, onOpenChange }: MarketplacesDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-lg">
+      <DialogPopup className="max-w-lg" zIndexLevel="nested">
         <DialogHeader>
           <DialogTitle>{t('Plugin Marketplaces')}</DialogTitle>
           <DialogDescription>{t('Manage plugin marketplace sources')}</DialogDescription>

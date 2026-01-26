@@ -139,7 +139,7 @@ export function PluginBrowserDialog({ open, onOpenChange, onInstalled }: PluginB
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-2xl">
+      <DialogPopup className="max-w-2xl" zIndexLevel="nested">
         <DialogHeader>
           <DialogTitle>{t('Browse Plugins')}</DialogTitle>
           <DialogDescription>{t('Browse and install plugins from marketplaces')}</DialogDescription>
