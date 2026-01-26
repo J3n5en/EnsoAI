@@ -569,6 +569,8 @@ interface SettingsState {
     updates: Partial<import('@shared/types').ClaudeProvider>
   ) => void;
   removeClaudeProvider: (id: string) => void;
+  reorderClaudeProviders: (fromIndex: number, toIndex: number) => void;
+  setClaudeProviderEnabled: (id: string, enabled: boolean) => void;
   setCommitMessageGenerator: (settings: Partial<CommitMessageGeneratorSettings>) => void;
   setCodeReview: (settings: Partial<CodeReviewSettings>) => void;
   setAutoUpdateEnabled: (enabled: boolean) => void;
@@ -817,6 +819,29 @@ export const useSettingsStore = create<SettingsState>()(
           claudeCodeIntegration: {
             ...state.claudeCodeIntegration,
             providers: state.claudeCodeIntegration.providers.filter((p) => p.id !== id),
+          },
+        })),
+      reorderClaudeProviders: (fromIndex, toIndex) =>
+        set((state) => {
+          const providers = [...state.claudeCodeIntegration.providers];
+          const [removed] = providers.splice(fromIndex, 1);
+          providers.splice(toIndex, 0, removed);
+          // 更新 displayOrder
+          const reordered = providers.map((p, index) => ({ ...p, displayOrder: index }));
+          return {
+            claudeCodeIntegration: {
+              ...state.claudeCodeIntegration,
+              providers: reordered,
+            },
+          };
+        }),
+      setClaudeProviderEnabled: (id, enabled) =>
+        set((state) => ({
+          claudeCodeIntegration: {
+            ...state.claudeCodeIntegration,
+            providers: state.claudeCodeIntegration.providers.map((p) =>
+              p.id === id ? { ...p, enabled } : p
+            ),
           },
         })),
       setCommitMessageGenerator: (settings) =>

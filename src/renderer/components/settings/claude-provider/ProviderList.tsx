@@ -1,9 +1,21 @@
 import type { ClaudeProvider } from '@shared/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, Circle, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Reorder, useDragControls } from 'framer-motion';
+import {
+  Ban,
+  Check,
+  CheckCircle,
+  Circle,
+  GripVertical,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+} from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { toastManager } from '@/components/ui/toast';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -14,12 +26,125 @@ interface ProviderListProps {
   className?: string;
 }
 
+interface ProviderItemProps {
+  provider: ClaudeProvider;
+  isActive: boolean;
+  isDisabled: boolean;
+  onSwitch: (provider: ClaudeProvider) => void;
+  onToggleEnabled: (provider: ClaudeProvider, e: React.MouseEvent) => void;
+  onEdit: (provider: ClaudeProvider) => void;
+  onDelete: (provider: ClaudeProvider) => void;
+  t: (key: string) => string;
+}
+
+function ProviderItem({
+  provider,
+  isActive,
+  isDisabled,
+  onSwitch,
+  onToggleEnabled,
+  onEdit,
+  onDelete,
+  t,
+}: ProviderItemProps) {
+  const controls = useDragControls();
+
+  return (
+    <Reorder.Item
+      key={provider.id}
+      value={provider}
+      dragListener={false}
+      dragControls={controls}
+      className={cn(
+        'group flex items-center justify-between rounded-md px-3 py-2 transition-colors',
+        isActive
+          ? 'bg-accent text-accent-foreground'
+          : isDisabled
+            ? 'opacity-60'
+            : 'cursor-pointer hover:bg-accent/50'
+      )}
+      onClick={() => !isActive && !isDisabled && onSwitch(provider)}
+      onKeyDown={(e) => {
+        if (!isActive && !isDisabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onSwitch(provider);
+        }
+      }}
+      drag="y"
+    >
+      <div className="flex items-center gap-2">
+        <div
+          onPointerDown={(e) => controls.start(e)}
+          className="cursor-grab text-muted-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </div>
+
+        {isActive ? (
+          <CheckCircle className="h-4 w-4" />
+        ) : (
+          <Circle className="h-4 w-4 text-muted-foreground" />
+        )}
+
+        <span
+          className={cn('text-sm font-medium', isDisabled && 'text-muted-foreground line-through')}
+        >
+          {provider.name}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger>
+            <Button variant="ghost" size="icon-xs" onClick={(e) => onToggleEnabled(provider, e)}>
+              {isDisabled ? (
+                <Check className="h-3.5 w-3.5 text-muted-foreground" />
+              ) : (
+                <Ban className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isDisabled ? t('Click to enable this Provider') : t('Click to disable this Provider')}
+          </TooltipContent>
+        </Tooltip>
+
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(provider);
+          }}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="text-destructive hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(provider);
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </Reorder.Item>
+  );
+}
+
 export function ProviderList({ className }: ProviderListProps) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const providers = useSettingsStore((s) => s.claudeCodeIntegration.providers);
   const removeClaudeProvider = useSettingsStore((s) => s.removeClaudeProvider);
   const shouldPoll = useShouldPoll();
+
+  const reorderClaudeProviders = useSettingsStore((s) => s.reorderClaudeProviders);
+  const setClaudeProviderEnabled = useSettingsStore((s) => s.setClaudeProviderEnabled);
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingProvider, setEditingProvider] = React.useState<ClaudeProvider | null>(null);
@@ -86,6 +211,27 @@ export function ProviderList({ className }: ProviderListProps) {
     removeClaudeProvider(provider.id);
   };
 
+  // 处理拖拽重排序
+  const handleReorder = (newProviders: ClaudeProvider[]) => {
+    // 找出位置变化的元素
+    const oldIds = providers.map((p) => p.id);
+    const newIds = newProviders.map((p) => p.id);
+
+    for (let i = 0; i < newIds.length; i++) {
+      const oldIndex = oldIds.indexOf(newIds[i]);
+      if (oldIndex !== i) {
+        reorderClaudeProviders(oldIndex, i);
+        break;
+      }
+    }
+  };
+
+  const handleToggleEnabled = (provider: ClaudeProvider, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newEnabled = provider.enabled === false ? true : false;
+    setClaudeProviderEnabled(provider.id, newEnabled);
+  };
+
   // 新建 Provider
   const handleAdd = () => {
     setEditingProvider(null);
@@ -115,63 +261,26 @@ export function ProviderList({ className }: ProviderListProps) {
 
       {/* Provider 列表 */}
       {providers.length > 0 ? (
-        <div className="space-y-1">
+        <Reorder.Group axis="y" values={providers} onReorder={handleReorder} className="space-y-1">
           {providers.map((provider) => {
             const isActive = activeProvider?.id === provider.id;
+            const isDisabled = provider.enabled === false;
+
             return (
-              <div
+              <ProviderItem
                 key={provider.id}
-                role="button"
-                tabIndex={isActive ? -1 : 0}
-                className={cn(
-                  'group flex items-center justify-between rounded-md px-3 py-2 transition-colors',
-                  isActive
-                    ? 'bg-accent text-accent-foreground'
-                    : 'cursor-pointer hover:bg-accent/50'
-                )}
-                onClick={() => !isActive && handleSwitch(provider)}
-                onKeyDown={(e) => {
-                  if (!isActive && (e.key === 'Enter' || e.key === ' ')) {
-                    e.preventDefault();
-                    handleSwitch(provider);
-                  }
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  {isActive ? (
-                    <CheckCircle className="h-4 w-4" />
-                  ) : (
-                    <Circle className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <span className="text-sm font-medium">{provider.name}</span>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(provider);
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="text-destructive hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(provider);
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
+                provider={provider}
+                isActive={isActive}
+                isDisabled={isDisabled}
+                onSwitch={handleSwitch}
+                onToggleEnabled={handleToggleEnabled}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                t={t}
+              />
             );
           })}
-        </div>
+        </Reorder.Group>
       ) : (
         <div className="py-4 text-center text-sm text-muted-foreground">
           {t('No providers configured')}

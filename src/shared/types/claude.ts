@@ -12,6 +12,8 @@ export interface ClaudeProvider {
   defaultSonnetModel?: string;
   defaultOpusModel?: string;
   defaultHaikuModel?: string;
+  displayOrder?: number; // 显示顺序，用于拖拽排序
+  enabled?: boolean; // 是否启用，默认 true
 }
 
 /**

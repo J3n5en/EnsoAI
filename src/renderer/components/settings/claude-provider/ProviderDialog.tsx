@@ -4,13 +4,16 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBackdrop,
   DialogClose,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogPanel,
   DialogPopup,
+  DialogPortal,
   DialogTitle,
+  DialogViewport,
 } from '@/components/ui/dialog';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -112,120 +115,125 @@ export function ProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup>
-        <DialogHeader>
-          <DialogTitle>{isEditing ? t('Edit Provider') : t('Add Provider')}</DialogTitle>
-          <DialogDescription>{t('Configure Claude API provider settings')}</DialogDescription>
-        </DialogHeader>
+      <DialogPortal>
+        <DialogBackdrop className="!z-[110]" />
+        <DialogViewport className="!z-[110]">
+          <DialogPopup>
+            <DialogHeader>
+              <DialogTitle>{isEditing ? t('Edit Provider') : t('Add Provider')}</DialogTitle>
+              <DialogDescription>{t('Configure Claude API provider settings')}</DialogDescription>
+            </DialogHeader>
 
-        <DialogPanel className="space-y-4">
-          {/* 名称 */}
-          <Field>
-            <FieldLabel>{t('Name')} *</FieldLabel>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('e.g., Official API')}
-            />
-          </Field>
-
-          {/* Base URL */}
-          <Field>
-            <FieldLabel>{t('Base URL')} *</FieldLabel>
-            <Input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.anthropic.com"
-            />
-          </Field>
-
-          {/* Auth Token */}
-          <Field>
-            <FieldLabel>{t('Auth Token')} *</FieldLabel>
-            <div className="relative w-full">
-              <Input
-                type={showToken ? 'text' : 'password'}
-                value={authToken}
-                onChange={(e) => setAuthToken(e.target.value)}
-                placeholder="sk-ant-..."
-                className="pr-10"
-              />
-              <button
-                type="button"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setShowToken(!showToken)}
-              >
-                {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </Field>
-
-          {/* 可选字段 - 折叠区域 */}
-          <details className="group">
-            <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
-              {t('Advanced Options')}
-            </summary>
-            <div className="mt-3 space-y-3">
-              {/* Model */}
+            <DialogPanel className="space-y-4">
+              {/* 名称 */}
               <Field>
-                <FieldLabel>{t('Model')}</FieldLabel>
+                <FieldLabel>{t('Name')} *</FieldLabel>
                 <Input
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="opus / sonnet / haiku"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t('e.g., Official API')}
                 />
               </Field>
 
-              {/* Small Fast Model */}
+              {/* Base URL */}
               <Field>
-                <FieldLabel>{t('Small/Fast Model')}</FieldLabel>
+                <FieldLabel>{t('Base URL')} *</FieldLabel>
                 <Input
-                  value={smallFastModel}
-                  onChange={(e) => setSmallFastModel(e.target.value)}
-                  placeholder="claude-3-haiku-..."
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="https://api.anthropic.com"
                 />
               </Field>
 
-              {/* Default Sonnet Model */}
+              {/* Auth Token */}
               <Field>
-                <FieldLabel>{t('Sonnet Model')}</FieldLabel>
-                <Input
-                  value={defaultSonnetModel}
-                  onChange={(e) => setDefaultSonnetModel(e.target.value)}
-                  placeholder="claude-sonnet-4-..."
-                />
+                <FieldLabel>{t('Auth Token')} *</FieldLabel>
+                <div className="relative w-full">
+                  <Input
+                    type={showToken ? 'text' : 'password'}
+                    value={authToken}
+                    onChange={(e) => setAuthToken(e.target.value)}
+                    placeholder="sk-ant-..."
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowToken(!showToken)}
+                  >
+                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </Field>
 
-              {/* Default Opus Model */}
-              <Field>
-                <FieldLabel>{t('Opus Model')}</FieldLabel>
-                <Input
-                  value={defaultOpusModel}
-                  onChange={(e) => setDefaultOpusModel(e.target.value)}
-                  placeholder="claude-opus-4-..."
-                />
-              </Field>
+              {/* 可选字段 - 折叠区域 */}
+              <details className="group">
+                <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
+                  {t('Advanced Options')}
+                </summary>
+                <div className="mt-3 space-y-3">
+                  {/* Model */}
+                  <Field>
+                    <FieldLabel>{t('Model')}</FieldLabel>
+                    <Input
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      placeholder="opus / sonnet / haiku"
+                    />
+                  </Field>
 
-              {/* Default Haiku Model */}
-              <Field>
-                <FieldLabel>{t('Haiku Model')}</FieldLabel>
-                <Input
-                  value={defaultHaikuModel}
-                  onChange={(e) => setDefaultHaikuModel(e.target.value)}
-                  placeholder="claude-3-haiku-..."
-                />
-              </Field>
-            </div>
-          </details>
-        </DialogPanel>
+                  {/* Small Fast Model */}
+                  <Field>
+                    <FieldLabel>{t('Small/Fast Model')}</FieldLabel>
+                    <Input
+                      value={smallFastModel}
+                      onChange={(e) => setSmallFastModel(e.target.value)}
+                      placeholder="claude-3-haiku-..."
+                    />
+                  </Field>
 
-        <DialogFooter variant="bare">
-          <DialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
-          <Button onClick={handleSave} disabled={!isValid}>
-            {isEditing ? t('Save') : t('Add')}
-          </Button>
-        </DialogFooter>
-      </DialogPopup>
+                  {/* Default Sonnet Model */}
+                  <Field>
+                    <FieldLabel>{t('Sonnet Model')}</FieldLabel>
+                    <Input
+                      value={defaultSonnetModel}
+                      onChange={(e) => setDefaultSonnetModel(e.target.value)}
+                      placeholder="claude-sonnet-4-..."
+                    />
+                  </Field>
+
+                  {/* Default Opus Model */}
+                  <Field>
+                    <FieldLabel>{t('Opus Model')}</FieldLabel>
+                    <Input
+                      value={defaultOpusModel}
+                      onChange={(e) => setDefaultOpusModel(e.target.value)}
+                      placeholder="claude-opus-4-..."
+                    />
+                  </Field>
+
+                  {/* Default Haiku Model */}
+                  <Field>
+                    <FieldLabel>{t('Haiku Model')}</FieldLabel>
+                    <Input
+                      value={defaultHaikuModel}
+                      onChange={(e) => setDefaultHaikuModel(e.target.value)}
+                      placeholder="claude-3-haiku-..."
+                    />
+                  </Field>
+                </div>
+              </details>
+            </DialogPanel>
+
+            <DialogFooter variant="bare">
+              <DialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+              <Button onClick={handleSave} disabled={!isValid}>
+                {isEditing ? t('Save') : t('Add')}
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </DialogViewport>
+      </DialogPortal>
     </Dialog>
   );
 }
