@@ -4,6 +4,7 @@ import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { ChevronDownIcon, ChevronsUpDownIcon, ChevronUpIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { Z_INDEX } from '@/lib/z-index';
 
 const Select = SelectPrimitive.Root;
 
@@ -61,7 +62,7 @@ function SelectPopup({
       <SelectPrimitive.Positioner
         alignItemWithTrigger={alignItemWithTrigger}
         className="select-none"
-        style={{ zIndex: zIndex ?? 200 }}
+        style={{ zIndex: zIndex ?? Z_INDEX.DROPDOWN }}
         data-slot="select-positioner"
         sideOffset={sideOffset}
       >

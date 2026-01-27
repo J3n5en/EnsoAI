@@ -161,7 +161,7 @@ export function DraggableSettingsWindow({
                 top: `${position.y}px`,
                 width: `${WINDOW_WIDTH}px`,
                 height: `${WINDOW_HEIGHT}px`,
-                zIndex: Z_INDEX.FLOATING_WINDOW,
+                zIndex: Z_INDEX.SETTINGS_WINDOW,
                 // 阻止主窗口 drag-region 穿透
                 WebkitAppRegion: 'no-drag',
               } as React.CSSProperties
