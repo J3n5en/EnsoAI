@@ -31,10 +31,6 @@ export function DraggableSettingsWindow({
   const setSettingsDisplayMode = useSettingsStore((s) => s.setSettingsDisplayMode);
 
   // 拖动状态
-  // TODO: 优化拖拽动画的流畅度，当前拖动设置窗口时存在以下问题：
-  // 1. 拖拽过程不够流畅，存在轻微卡顿
-  // 2. Provider List 组件跟随窗口移动时有明显滞后感
-  // 建议：考虑使用 CSS transform 替代 position，或优化 motion 动画配置
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState(savedPosition || { x: 0, y: 0 });
   const dragStartPos = useRef({ x: 0, y: 0 });
@@ -149,11 +145,13 @@ export function DraggableSettingsWindow({
             transition={springFast}
             className="fixed flex flex-col rounded-2xl border bg-popover shadow-lg"
             style={{
-              left: `${position.x}px`,
-              top: `${position.y}px`,
+              left: 0,
+              top: 0,
+              transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
               width: `${WINDOW_WIDTH}px`,
               height: `${WINDOW_HEIGHT}px`,
               zIndex: Z_INDEX.FLOATING_WINDOW,
+              willChange: isDragging ? 'transform' : 'auto',
             }}
           >
             {/* 可拖动标题栏 */}
@@ -171,10 +169,10 @@ export function DraggableSettingsWindow({
                   type="button"
                   onClick={() => setSettingsDisplayMode('tab')}
                   className="flex h-6 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                  title="将设置窗口切换为 TAB 标签页模式"
+                  title={t('Switch to TAB mode')}
                 >
                   <LayoutGrid className="h-3 w-3" />
-                  切换为 TAB 模式
+                  {t('Switch to TAB mode')}
                 </button>
                 <button
                   type="button"
