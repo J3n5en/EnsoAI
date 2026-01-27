@@ -559,6 +559,16 @@ export function TreeSidebar({
                 const repoLoading =
                   loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
 
+                // Pre-compute group tag variables
+                const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
+                const tagBg = group ? hexToRgba(group.color, 0.12) : null;
+                const tagBorder = group ? hexToRgba(group.color, 0.35) : null;
+
+                // Pre-compute workdir for CreateWorktreeDialog
+                const repoWts = worktreesMap[repo.path] || [];
+                const mainWorktree = repoWts.find((wt) => wt.isMainWorktree);
+                const workdir = mainWorktree?.path || repo.path;
+
                 return (
                   <div key={repo.path}>
                     {/* Repository row */}
@@ -623,38 +633,28 @@ export function TreeSidebar({
                             {repo.name}
                           </span>
 
-                          {/* Group Tag - 移到这里 */}
-                          {(() => {
-                            const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
-                            if (!group) return null;
-                            const bg = hexToRgba(group.color, 0.12);
-                            const border = hexToRgba(group.color, 0.35);
-                            return (
-                              <span
-                                className="shrink-0 inline-flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px]"
-                                style={{
-                                  backgroundColor: bg ?? undefined,
-                                  borderColor: border ?? undefined,
-                                  color: group.color,
-                                }}
-                              >
-                                {group.emoji && (
-                                  <span className="text-[0.9em] opacity-90">{group.emoji}</span>
-                                )}
-                                <span className="truncate max-w-[60px]">{group.name}</span>
-                              </span>
-                            );
-                          })()}
+                          {/* Group Tag */}
+                          {group && (
+                            <span
+                              className="shrink-0 inline-flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px]"
+                              style={{
+                                backgroundColor: tagBg ?? undefined,
+                                borderColor: tagBorder ?? undefined,
+                                color: group.color,
+                              }}
+                            >
+                              {group.emoji && (
+                                <span className="text-[0.9em] opacity-90">{group.emoji}</span>
+                              )}
+                              <span className="truncate max-w-[60px]">{group.name}</span>
+                            </span>
+                          )}
 
-                          {/* Create Worktree Button - 新增 */}
+                          {/* Create Worktree Button */}
                           <CreateWorktreeDialog
                             branches={branches}
                             projectName={repo.name}
-                            workdir={(() => {
-                              const repoWts = worktreesMap[repo.path] || [];
-                              const main = repoWts.find((wt) => wt.isMainWorktree);
-                              return main?.path || repo.path;
-                            })()}
+                            workdir={workdir}
                             isLoading={isCreating}
                             onSubmit={async (options) => {
                               await onCreateWorktree(options);
