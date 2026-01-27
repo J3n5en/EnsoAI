@@ -329,7 +329,7 @@ export function RepositorySidebar({
                           transition={springFast}
                         />
                       )}
-                      {/* Repo name */}
+                      {/* Repo name + Tag + Settings */}
                       <div className="relative z-10 flex w-full items-center gap-2">
                         <FolderGit2
                           className={cn(
@@ -338,6 +338,25 @@ export function RepositorySidebar({
                           )}
                         />
                         <span className="truncate font-medium flex-1">{repo.name}</span>
+
+                        {/* Group Tag - 移到这里 */}
+                        {group && (
+                          <span
+                            className="shrink-0 inline-flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
+                            style={{
+                              backgroundColor: tagBg ?? undefined,
+                              borderColor: tagBorder ?? undefined,
+                              color: group.color,
+                            }}
+                          >
+                            {group.emoji && (
+                              <span className="text-[0.9em] opacity-90">{group.emoji}</span>
+                            )}
+                            <span className="truncate max-w-[60px]">{group.name}</span>
+                          </span>
+                        )}
+
+                        {/* Repository Settings */}
                         <div
                           role="button"
                           tabIndex={0}
@@ -360,25 +379,6 @@ export function RepositorySidebar({
                           <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
                         </div>
                       </div>
-
-                      {/* Tags (Group) */}
-                      {group && (
-                        <div className="relative z-10 flex w-full items-center gap-1 pl-6">
-                          <span
-                            className="inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
-                            style={{
-                              backgroundColor: tagBg ?? undefined,
-                              borderColor: tagBorder ?? undefined,
-                              color: group.color,
-                            }}
-                          >
-                            {group.emoji && (
-                              <span className="text-[0.9em] opacity-90">{group.emoji}</span>
-                            )}
-                            <span className="truncate">{group.name}</span>
-                          </span>
-                        </div>
-                      )}
                       {/* Path */}
                       <div
                         className={cn(

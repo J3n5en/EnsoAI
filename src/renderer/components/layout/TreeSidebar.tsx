@@ -467,28 +467,6 @@ export function TreeSidebar({
       {/* Header */}
       <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
         <div className="flex items-center gap-1">
-          {/* Create worktree button */}
-          {selectedRepo && (
-            <CreateWorktreeDialog
-              branches={branches}
-              projectName={selectedRepo?.split('/').pop() || ''}
-              workdir={workdir}
-              isLoading={isCreating}
-              onSubmit={async (options) => {
-                await onCreateWorktree(options);
-                refetchExpandedWorktrees();
-              }}
-              trigger={
-                <button
-                  type="button"
-                  className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                  title={t('New Worktree')}
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              }
-            />
-          )}
           {/* Refresh button */}
           <button
             type="button"
@@ -625,7 +603,7 @@ export function TreeSidebar({
                             transition={springFast}
                           />
                         )}
-                        {/* Row 1: Chevron + Icon + Name + Actions (vertically centered) */}
+                        {/* Row 1: Chevron + Icon + Name + Tag + CreateWorktree + Settings */}
                         <div className="relative z-10 flex w-full items-center gap-1">
                           <span className="shrink-0 w-5 h-5 flex items-center justify-center">
                             <ChevronRight
@@ -644,6 +622,57 @@ export function TreeSidebar({
                           <span className="min-w-0 flex-1 truncate font-medium text-sm text-left">
                             {repo.name}
                           </span>
+
+                          {/* Group Tag - 移到这里 */}
+                          {(() => {
+                            const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
+                            if (!group) return null;
+                            const bg = hexToRgba(group.color, 0.12);
+                            const border = hexToRgba(group.color, 0.35);
+                            return (
+                              <span
+                                className="shrink-0 inline-flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px]"
+                                style={{
+                                  backgroundColor: bg ?? undefined,
+                                  borderColor: border ?? undefined,
+                                  color: group.color,
+                                }}
+                              >
+                                {group.emoji && (
+                                  <span className="text-[0.9em] opacity-90">{group.emoji}</span>
+                                )}
+                                <span className="truncate max-w-[60px]">{group.name}</span>
+                              </span>
+                            );
+                          })()}
+
+                          {/* Create Worktree Button - 新增 */}
+                          <CreateWorktreeDialog
+                            branches={branches}
+                            projectName={repo.name}
+                            workdir={(() => {
+                              const repoWts = worktreesMap[repo.path] || [];
+                              const main = repoWts.find((wt) => wt.isMainWorktree);
+                              return main?.path || repo.path;
+                            })()}
+                            isLoading={isCreating}
+                            onSubmit={async (options) => {
+                              await onCreateWorktree(options);
+                              refetchExpandedWorktrees();
+                            }}
+                            trigger={
+                              <button
+                                type="button"
+                                className="shrink-0 p-1 rounded hover:bg-muted"
+                                onClick={(e) => e.stopPropagation()}
+                                title={t('New Worktree')}
+                              >
+                                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                              </button>
+                            }
+                          />
+
+                          {/* Repository Settings Button */}
                           <button
                             type="button"
                             className="shrink-0 p-1 rounded hover:bg-muted"
@@ -657,32 +686,6 @@ export function TreeSidebar({
                             <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
                           </button>
                         </div>
-
-                        {/* Row 2: Tags */}
-                        {(() => {
-                          const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
-                          if (!group) return null;
-
-                          const bg = hexToRgba(group.color, 0.12);
-                          const border = hexToRgba(group.color, 0.35);
-                          return (
-                            <div className="relative z-10 flex items-center gap-1 pl-6">
-                              <span
-                                className="inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
-                                style={{
-                                  backgroundColor: bg ?? undefined,
-                                  borderColor: border ?? undefined,
-                                  color: group.color,
-                                }}
-                              >
-                                {group.emoji && (
-                                  <span className="text-[0.9em] opacity-90">{group.emoji}</span>
-                                )}
-                                <span className="truncate">{group.name}</span>
-                              </span>
-                            </div>
-                          );
-                        })()}
 
                         {/* Row 3: Path */}
                         <span

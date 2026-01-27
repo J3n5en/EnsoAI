@@ -217,23 +217,6 @@ export function WorktreePanel({
             <FolderOpen className="h-4 w-4" />
           </button>
         )}
-        {/* Create worktree button */}
-        <CreateWorktreeDialog
-          branches={branches}
-          projectName={projectName}
-          workdir={workdir}
-          isLoading={isCreating}
-          onSubmit={onCreateWorktree}
-          trigger={
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              title={t('New Worktree')}
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          }
-        />
         {/* Refresh button */}
         <button
           type="button"
@@ -363,6 +346,26 @@ export function WorktreePanel({
             </div>
           </LayoutGroup>
         )}
+      </div>
+
+      {/* Footer - Create Worktree Button */}
+      <div className="shrink-0 border-t p-2">
+        <CreateWorktreeDialog
+          branches={branches}
+          projectName={projectName}
+          workdir={workdir}
+          isLoading={isCreating}
+          onSubmit={onCreateWorktree}
+          trigger={
+            <button
+              type="button"
+              className="flex h-8 w-full items-center justify-start gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              {t('New Worktree')}
+            </button>
+          }
+        />
       </div>
 
       {/* Delete confirmation dialog */}
