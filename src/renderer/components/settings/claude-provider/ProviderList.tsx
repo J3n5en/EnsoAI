@@ -15,7 +15,7 @@ import {
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { toastManager } from '@/components/ui/toast';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -104,9 +104,9 @@ function ProviderItem({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
+          <TooltipPopup>
             {isDisabled ? t('Click to enable this Provider') : t('Click to disable this Provider')}
-          </TooltipContent>
+          </TooltipPopup>
         </Tooltip>
 
         <Button

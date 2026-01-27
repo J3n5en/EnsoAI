@@ -89,6 +89,7 @@ export function ProviderDialog({
 
     const providerData: ClaudeProvider = {
       id: provider?.id ?? crypto.randomUUID(),
+      ...(provider && { enabled: provider.enabled, displayOrder: provider.displayOrder }),
       name: name.trim(),
       baseUrl: baseUrl.trim(),
       authToken: authToken.trim(),
