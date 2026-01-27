@@ -219,8 +219,7 @@ export function ProviderList({ className }: ProviderListProps) {
 
   const handleToggleEnabled = (provider: ClaudeProvider, e: React.MouseEvent) => {
     e.stopPropagation();
-    const newEnabled = provider.enabled === false ? true : false;
-    setClaudeProviderEnabled(provider.id, newEnabled);
+    setClaudeProviderEnabled(provider.id, provider.enabled === false);
   };
 
   // 新建 Provider

@@ -96,8 +96,11 @@ interface ProviderMenuItemProps {
   isActive: boolean;
   isDisabled: boolean;
   isPending: boolean;
-  onSwitch: () => void;
-  onToggleEnabled: (e: React.MouseEvent) => void;
+  activeProviderId: string | undefined;
+  providers: ClaudeProvider[];
+  onApplyProvider: (provider: ClaudeProvider) => void;
+  onCloseMenu: () => void;
+  setClaudeProviderEnabled: (id: string, enabled: boolean) => void;
   t: (key: string) => string;
 }
 
@@ -106,10 +109,38 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
   isActive,
   isDisabled,
   isPending,
-  onSwitch,
-  onToggleEnabled,
+  activeProviderId,
+  providers,
+  onApplyProvider,
+  onCloseMenu,
+  setClaudeProviderEnabled,
   t,
 }: ProviderMenuItemProps) {
+  const handleSwitch = useCallback(() => {
+    if (!isActive && !isDisabled) {
+      onApplyProvider(provider);
+      onCloseMenu();
+    }
+  }, [isActive, isDisabled, provider, onApplyProvider, onCloseMenu]);
+
+  const handleToggleEnabled = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const newEnabled = provider.enabled !== false;
+      setClaudeProviderEnabled(provider.id, !newEnabled);
+
+      if (newEnabled && activeProviderId === provider.id) {
+        const nextEnabledProvider = providers.find(
+          (p) => p.id !== provider.id && p.enabled !== false
+        );
+        if (nextEnabledProvider) {
+          onApplyProvider(nextEnabledProvider);
+        }
+      }
+    },
+    [provider, activeProviderId, providers, setClaudeProviderEnabled, onApplyProvider]
+  );
+
   return (
     <div
       className={cn(
@@ -120,7 +151,7 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
       {/* 主按钮区域：切换 Provider */}
       <button
         type="button"
-        onClick={onSwitch}
+        onClick={handleSwitch}
         disabled={isPending || isDisabled}
         className={cn(
           'flex flex-1 items-center gap-2 whitespace-nowrap rounded-sm px-1',
@@ -147,7 +178,7 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
         <TooltipTrigger>
           <button
             type="button"
-            onClick={(e) => onToggleEnabled(e)}
+            onClick={handleToggleEnabled}
             className="shrink-0 rounded p-0.5 hover:bg-accent"
           >
             {isDisabled ? (
@@ -411,6 +442,18 @@ export function SessionBar({
     if (name.length <= 15) return name;
     return `${name.slice(0, 14)}...`;
   };
+
+  // 稳定的 Provider 回调函数
+  const handleApplyProvider = useCallback(
+    (provider: ClaudeProvider) => {
+      applyProvider.mutate(provider);
+    },
+    [applyProvider]
+  );
+
+  const handleCloseProviderMenu = useCallback(() => {
+    setShowProviderMenu(false);
+  }, []);
 
   // Tab drag reorder
   const draggedTabIndexRef = useRef<number | null>(null);
@@ -853,26 +896,11 @@ export function SessionBar({
                               isActive={isActive}
                               isDisabled={isDisabled}
                               isPending={applyProvider.isPending}
-                              onSwitch={() => {
-                                if (!isActive && !isDisabled) {
-                                  applyProvider.mutate(provider);
-                                  setShowProviderMenu(false);
-                                }
-                              }}
-                              onToggleEnabled={(e) => {
-                                e.stopPropagation();
-                                const newEnabled = provider.enabled === false ? true : false;
-                                setClaudeProviderEnabled(provider.id, newEnabled);
-
-                                if (!newEnabled && activeProvider?.id === provider.id) {
-                                  const nextEnabledProvider = providers.find(
-                                    (p) => p.id !== provider.id && p.enabled !== false
-                                  );
-                                  if (nextEnabledProvider) {
-                                    applyProvider.mutate(nextEnabledProvider);
-                                  }
-                                }
-                              }}
+                              activeProviderId={activeProvider?.id}
+                              providers={providers}
+                              onApplyProvider={handleApplyProvider}
+                              onCloseMenu={handleCloseProviderMenu}
+                              setClaudeProviderEnabled={setClaudeProviderEnabled}
                               t={t}
                             />
                           );
