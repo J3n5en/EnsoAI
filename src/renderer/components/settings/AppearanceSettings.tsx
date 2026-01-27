@@ -115,6 +115,8 @@ function FavoriteButton({
   return (
     <button
       type="button"
+      aria-label={isFavorite ? '取消收藏' : '添加收藏'}
+      aria-pressed={isFavorite}
       onClick={(e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -140,6 +142,7 @@ function ThemeCombobox({
   onThemeHover,
   showFavoritesOnly,
   onShowFavoritesOnlyChange,
+  showEmptyFavoritesHint,
 }: {
   value: string;
   onValueChange: (value: string | null) => void;
@@ -149,6 +152,7 @@ function ThemeCombobox({
   onThemeHover?: (theme: string) => void;
   showFavoritesOnly: boolean;
   onShowFavoritesOnlyChange: (checked: boolean) => void;
+  showEmptyFavoritesHint?: boolean;
 }) {
   const { t } = useI18n();
   // 使用内部值与外部值解耦，防止悬停时下拉框关闭
@@ -205,8 +209,8 @@ function ThemeCombobox({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        // 使用 setTimeout 确保 Combobox 完成高亮状态更新后再查询
-        setTimeout(() => {
+        // 使用 requestAnimationFrame 确保 Combobox 完成高亮状态更新后再查询
+        requestAnimationFrame(() => {
           const highlighted = listRef.current?.querySelector('[data-highlighted]');
           if (highlighted) {
             const themeName = highlighted.getAttribute('data-value');
@@ -214,7 +218,7 @@ function ThemeCombobox({
               onThemeHover?.(themeName);
             }
           }
-        }, 0);
+        });
       }
     };
 
@@ -263,7 +267,9 @@ function ThemeCombobox({
         <ComboboxList ref={listRef}>
           {filteredThemes.length === 0 && (
             <div className="py-6 text-center text-sm text-muted-foreground">
-              {t('No themes found')}
+              {showEmptyFavoritesHint
+                ? t('No favorite themes yet. Click the heart icon to add favorites.')
+                : t('No themes found')}
             </div>
           )}
           {filteredThemes.map((name) => (
@@ -331,6 +337,7 @@ export function AppearanceSettings() {
   const [localFontSize, setLocalFontSize] = React.useState(globalFontSize);
   const [localFontFamily, setLocalFontFamily] = React.useState(globalFontFamily);
   const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false);
+  const [previewThemeName, setPreviewThemeName] = React.useState<string | null>(null);
 
   // Sync local state with global when global changes externally
   React.useEffect(() => {
@@ -379,10 +386,12 @@ export function AppearanceSettings() {
     return favorites;
   }, [themeNames, showFavoritesOnly, favoriteTerminalThemes, terminalTheme]);
 
+  const showEmptyFavoritesHint = showFavoritesOnly && favoriteTerminalThemes.length === 0;
+
   // Get preview theme synchronously
   const previewTheme = React.useMemo(() => {
-    return getXtermTheme(terminalTheme) ?? defaultDarkTheme;
-  }, [terminalTheme]);
+    return getXtermTheme(previewThemeName ?? terminalTheme) ?? defaultDarkTheme;
+  }, [previewThemeName, terminalTheme]);
 
   const handleThemeChange = (value: string | null) => {
     if (value) {
@@ -493,9 +502,10 @@ export function AppearanceSettings() {
               themes={displayThemes}
               favoriteThemes={favoriteTerminalThemes}
               onToggleFavorite={toggleFavoriteTerminalTheme}
-              onThemeHover={setTerminalTheme}
+              onThemeHover={setPreviewThemeName}
               showFavoritesOnly={showFavoritesOnly}
               onShowFavoritesOnlyChange={setShowFavoritesOnly}
+              showEmptyFavoritesHint={showEmptyFavoritesHint}
             />
           </div>
           <Button variant="outline" size="icon" onClick={handleNextTheme}>
