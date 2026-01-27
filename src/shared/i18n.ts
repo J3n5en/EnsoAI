@@ -5,6 +5,8 @@ export const zhTranslations: Record<string, string> = {
   'Add Repository': '添加仓库',
   'Add Workspace': '新建工作区',
   'Add agent': '添加 Agent',
+  'Add to favorites': '添加收藏',
+  'Remove from favorites': '取消收藏',
   Agent: 'Agent',
   'Agent Notifications': 'Agent 通知',
   'Agent session shortcuts': '设置 Agent session 管理快捷键',

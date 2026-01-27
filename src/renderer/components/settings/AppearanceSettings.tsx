@@ -107,15 +107,17 @@ function FavoriteButton({
   isFavorite,
   onClick,
   className,
+  ariaLabel,
 }: {
   isFavorite: boolean;
   onClick: (e: React.MouseEvent) => void;
   className?: string;
+  ariaLabel: string;
 }) {
   return (
     <button
       type="button"
-      aria-label={isFavorite ? '取消收藏' : '添加收藏'}
+      aria-label={ariaLabel}
       aria-pressed={isFavorite}
       onClick={(e) => {
         e.stopPropagation();
@@ -161,6 +163,9 @@ function ThemeCombobox({
   const [isOpen, setIsOpen] = React.useState(false);
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const listRef = React.useRef<HTMLDivElement>(null);
+
+  // 性能优化：使用 Set 替代数组查找
+  const favoriteSet = React.useMemo(() => new Set(favoriteThemes), [favoriteThemes]);
 
   // 仅在下拉框关闭时同步外部值
   React.useEffect(() => {
@@ -281,8 +286,11 @@ function ThemeCombobox({
               onMouseLeave={handleItemMouseLeave}
               endAddon={
                 <FavoriteButton
-                  isFavorite={favoriteThemes.includes(name)}
+                  isFavorite={favoriteSet.has(name)}
                   onClick={() => onToggleFavorite(name)}
+                  ariaLabel={
+                    favoriteSet.has(name) ? t('Remove from favorites') : t('Add to favorites')
+                  }
                 />
               }
             >
