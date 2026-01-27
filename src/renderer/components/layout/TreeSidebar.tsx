@@ -664,7 +664,10 @@ export function TreeSidebar({
                               <button
                                 type="button"
                                 className="shrink-0 p-1 rounded hover:bg-muted"
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.currentTarget.blur();
+                                }}
                                 title={t('New Worktree')}
                               >
                                 <Plus className="h-3.5 w-3.5 text-muted-foreground" />
