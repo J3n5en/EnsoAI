@@ -5,6 +5,7 @@ import {
   GitBranch,
   MessageSquare,
   RectangleEllipsis,
+  Settings,
   Sparkles,
   Terminal,
 } from 'lucide-react';
@@ -346,8 +347,22 @@ export function MainContent({
           })}
         </div>
 
-        {/* Right: Review button + Open In Menu */}
+        {/* Right: Settings + Review button + Open In Menu */}
         <div className="flex items-center gap-2 no-drag">
+          {/* Settings button */}
+          <button
+            type="button"
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
+              isSettingsActive
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+            )}
+            onClick={() => onTabChange('settings')}
+            title={t('Settings')}
+          >
+            <Settings className="h-4 w-4" />
+          </button>
           {activeSessionId && (
             <Button
               variant="outline"
