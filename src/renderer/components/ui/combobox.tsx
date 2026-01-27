@@ -7,6 +7,7 @@ import * as React from 'react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Z_INDEX } from '@/lib/z-index';
 
 const ComboboxContext = React.createContext<{
   chipsRef: React.RefObject<Element | null> | null;
@@ -137,7 +138,7 @@ function ComboboxPopup({
       <ComboboxPrimitive.Positioner
         anchor={chipsRef}
         className="select-none"
-        style={{ zIndex: zIndex ?? 200 }}
+        style={{ zIndex: zIndex ?? Z_INDEX.DROPDOWN }}
         data-slot="combobox-positioner"
         sideOffset={sideOffset}
       >

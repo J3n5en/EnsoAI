@@ -40,33 +40,40 @@ export function DraggableSettingsWindow({
   const WINDOW_WIDTH = 896; // max-w-4xl
   const WINDOW_HEIGHT = 600;
 
+  // macOS traffic lights 安全边距（避免标题栏被遮挡）
+  const isMac = window.electronAPI.env.platform === 'darwin';
+  const MAC_SAFE_MARGIN_X = 0; // 左侧不限制
+  const MAC_SAFE_MARGIN_Y = 50; // traffic lights 高度 + 缓冲
+
   // 居中计算和位置验证
   useEffect(() => {
     if (!open) return;
 
-    const centerX = (window.innerWidth - WINDOW_WIDTH) / 2;
-    const centerY = (window.innerHeight - WINDOW_HEIGHT) / 2;
+    const minX = isMac ? MAC_SAFE_MARGIN_X : 0;
+    const minY = isMac ? MAC_SAFE_MARGIN_Y : 0;
+    const centerX = Math.max(minX, (window.innerWidth - WINDOW_WIDTH) / 2);
+    const centerY = Math.max(minY, (window.innerHeight - WINDOW_HEIGHT) / 2);
 
     if (!savedPosition) {
       // 首次打开：居中
       setPosition({ x: centerX, y: centerY });
     } else {
-      // 验证保存的位置是否在屏幕内
+      // 验证保存的位置是否在安全区域内
       const isOutOfBounds =
-        savedPosition.x < 0 ||
-        savedPosition.y < 0 ||
+        savedPosition.x < minX ||
+        savedPosition.y < minY ||
         savedPosition.x + WINDOW_WIDTH > window.innerWidth ||
         savedPosition.y + WINDOW_HEIGHT > window.innerHeight;
 
       if (isOutOfBounds) {
-        // 位置超出屏幕：重置为居中
+        // 位置超出安全区域：重置为居中
         setPosition({ x: centerX, y: centerY });
         setSettingsModalPosition({ x: centerX, y: centerY });
       } else {
         setPosition(savedPosition);
       }
     }
-  }, [open, savedPosition, setSettingsModalPosition]);
+  }, [open, savedPosition, setSettingsModalPosition, isMac]);
 
   // ESC 键关闭
   useEffect(() => {
@@ -103,12 +110,15 @@ export function DraggableSettingsWindow({
       let newY = e.clientY - dragStartPos.current.y;
 
       // 边界限制（防止拖出屏幕）
-      newX = Math.max(0, Math.min(newX, window.innerWidth - WINDOW_WIDTH));
-      newY = Math.max(0, Math.min(newY, window.innerHeight - WINDOW_HEIGHT));
+      // macOS: 避免与 traffic lights 重叠导致无法拖动
+      const minX = isMac ? MAC_SAFE_MARGIN_X : 0;
+      const minY = isMac ? MAC_SAFE_MARGIN_Y : 0;
+      newX = Math.max(minX, Math.min(newX, window.innerWidth - WINDOW_WIDTH));
+      newY = Math.max(minY, Math.min(newY, window.innerHeight - WINDOW_HEIGHT));
 
       setPosition({ x: newX, y: newY });
     },
-    [isDragging]
+    [isDragging, isMac]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -144,15 +154,18 @@ export function DraggableSettingsWindow({
             exit="exit"
             transition={springFast}
             className="fixed flex flex-col rounded-2xl border bg-popover shadow-lg"
-            style={{
-              left: 0,
-              top: 0,
-              transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-              width: `${WINDOW_WIDTH}px`,
-              height: `${WINDOW_HEIGHT}px`,
-              zIndex: Z_INDEX.FLOATING_WINDOW,
-              willChange: isDragging ? 'transform' : 'auto',
-            }}
+            style={
+              {
+                // 使用 left/top 而非 transform，避免与 framer-motion 动画冲突
+                left: `${position.x}px`,
+                top: `${position.y}px`,
+                width: `${WINDOW_WIDTH}px`,
+                height: `${WINDOW_HEIGHT}px`,
+                zIndex: Z_INDEX.SETTINGS_WINDOW,
+                // 阻止主窗口 drag-region 穿透
+                WebkitAppRegion: 'no-drag',
+              } as React.CSSProperties
+            }
           >
             {/* 可拖动标题栏 */}
             <div

@@ -1330,10 +1330,14 @@ export default function App() {
           }
           onSwitchWorktree={handleSwitchWorktreePath}
           onSwitchTab={handleTabChange}
-          isSettingsActive={settingsDisplayMode === 'tab' && activeTab === 'settings'}
+          isSettingsActive={
+            (settingsDisplayMode === 'tab' && activeTab === 'settings') ||
+            (settingsDisplayMode === 'draggable-modal' && settingsDialogOpen)
+          }
           settingsCategory={settingsCategory}
           onCategoryChange={handleSettingsCategoryChange}
           scrollToProvider={scrollToProvider}
+          onToggleSettings={toggleSettings}
         />
 
         {/* Add Repository Dialog */}

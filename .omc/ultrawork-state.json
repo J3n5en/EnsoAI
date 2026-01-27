@@ -1,7 +1,0 @@
-{
-  "active": true,
-  "started_at": "2026-01-27T02:44:11.247Z",
-  "original_prompt": " 拉取 PR , https://github.com/J3n5en/EnsoAI/pull/196 继续修复新增的 P1 问题以及所有 P2 问题. ralph   ulw  ",
-  "reinforcement_count": 0,
-  "last_checked_at": "2026-01-27T02:44:11.248Z"
-}

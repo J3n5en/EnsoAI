@@ -801,18 +801,6 @@ export function TreeSidebar({
             <Plus className="h-4 w-4" />
             {t('Add Repository')}
           </button>
-          <button
-            type="button"
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-md transition-colors',
-              settingsDisplayMode === 'tab' && isSettingsActive
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-            )}
-            onClick={onToggleSettings || onOpenSettings}
-          >
-            <Settings className="h-4 w-4" />
-          </button>
         </div>
       </div>
 

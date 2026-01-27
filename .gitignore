@@ -30,3 +30,5 @@ coverage/
 thumbs.db
 dist*/
 build/cer.p12
+
+.omc/
