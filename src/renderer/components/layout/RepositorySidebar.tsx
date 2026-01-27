@@ -338,18 +338,27 @@ export function RepositorySidebar({
                           )}
                         />
                         <span className="truncate font-medium flex-1">{repo.name}</span>
-                        <button
-                          type="button"
-                          className="shrink-0 p-1 rounded hover:bg-muted"
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className="shrink-0 p-1 rounded hover:bg-muted cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation();
                             setRepoSettingsTarget(repo);
                             setRepoSettingsOpen(true);
                           }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setRepoSettingsTarget(repo);
+                              setRepoSettingsOpen(true);
+                            }
+                          }}
                           title={t('Repository Settings')}
                         >
                           <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
+                        </div>
                       </div>
 
                       {/* Tags (Group) */}
