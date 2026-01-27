@@ -1,7 +1,7 @@
 import type { ClaudeProvider } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Check, CheckCircle, Circle, GripVertical, Plus, Sparkles, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GlowCard, useGlowEffectEnabled } from '@/components/ui/glow-card';
 import { toastManager } from '@/components/ui/toast';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
@@ -90,6 +90,80 @@ interface SessionTabProps {
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent) => void;
 }
+
+interface ProviderMenuItemProps {
+  provider: ClaudeProvider;
+  isActive: boolean;
+  isDisabled: boolean;
+  isPending: boolean;
+  onSwitch: () => void;
+  onToggleEnabled: (e: React.MouseEvent) => void;
+  t: (key: string) => string;
+}
+
+const ProviderMenuItem = React.memo(function ProviderMenuItem({
+  provider,
+  isActive,
+  isDisabled,
+  isPending,
+  onSwitch,
+  onToggleEnabled,
+  t,
+}: ProviderMenuItemProps) {
+  return (
+    <div
+      className={cn(
+        'flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors',
+        isDisabled && 'opacity-60'
+      )}
+    >
+      {/* 主按钮区域：切换 Provider */}
+      <button
+        type="button"
+        onClick={onSwitch}
+        disabled={isPending || isDisabled}
+        className={cn(
+          'flex flex-1 items-center gap-2 whitespace-nowrap rounded-sm px-1',
+          isActive
+            ? 'text-foreground'
+            : isDisabled
+              ? 'cursor-not-allowed text-muted-foreground'
+              : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
+          isPending && 'opacity-50 cursor-not-allowed'
+        )}
+      >
+        {isActive ? (
+          <CheckCircle className="h-4 w-4 shrink-0" />
+        ) : (
+          <Circle className="h-4 w-4 shrink-0" />
+        )}
+        <span className={cn('flex-1 text-left', isDisabled && 'line-through')}>
+          {provider.name}
+        </span>
+      </button>
+
+      {/* 禁用/启用按钮 */}
+      <Tooltip>
+        <TooltipTrigger>
+          <button
+            type="button"
+            onClick={(e) => onToggleEnabled(e)}
+            className="shrink-0 rounded p-0.5 hover:bg-accent"
+          >
+            {isDisabled ? (
+              <Check className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <Ban className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipPopup side="right">
+          {isDisabled ? t('Click to enable this Provider') : t('Click to disable this Provider')}
+        </TooltipPopup>
+      </Tooltip>
+    </div>
+  );
+});
 
 function SessionTab({
   session,
@@ -773,81 +847,34 @@ export function SessionBar({
                           const isDisabled = provider.enabled === false;
 
                           return (
-                            <div
+                            <ProviderMenuItem
                               key={provider.id}
-                              className={cn(
-                                'flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors',
-                                isDisabled && 'opacity-60'
-                              )}
-                            >
-                              {/* 主按钮区域：切换 Provider */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!isActive && !isDisabled) {
-                                    applyProvider.mutate(provider);
-                                    setShowProviderMenu(false);
+                              provider={provider}
+                              isActive={isActive}
+                              isDisabled={isDisabled}
+                              isPending={applyProvider.isPending}
+                              onSwitch={() => {
+                                if (!isActive && !isDisabled) {
+                                  applyProvider.mutate(provider);
+                                  setShowProviderMenu(false);
+                                }
+                              }}
+                              onToggleEnabled={(e) => {
+                                e.stopPropagation();
+                                const newEnabled = provider.enabled === false ? true : false;
+                                setClaudeProviderEnabled(provider.id, newEnabled);
+
+                                if (!newEnabled && activeProvider?.id === provider.id) {
+                                  const nextEnabledProvider = providers.find(
+                                    (p) => p.id !== provider.id && p.enabled !== false
+                                  );
+                                  if (nextEnabledProvider) {
+                                    applyProvider.mutate(nextEnabledProvider);
                                   }
-                                }}
-                                disabled={applyProvider.isPending || isDisabled}
-                                className={cn(
-                                  'flex flex-1 items-center gap-2 whitespace-nowrap rounded-sm px-1',
-                                  isActive
-                                    ? 'text-foreground'
-                                    : isDisabled
-                                      ? 'cursor-not-allowed text-muted-foreground'
-                                      : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
-                                  applyProvider.isPending && 'opacity-50 cursor-not-allowed'
-                                )}
-                              >
-                                {isActive ? (
-                                  <CheckCircle className="h-4 w-4 shrink-0" />
-                                ) : (
-                                  <Circle className="h-4 w-4 shrink-0" />
-                                )}
-                                <span
-                                  className={cn('flex-1 text-left', isDisabled && 'line-through')}
-                                >
-                                  {provider.name}
-                                </span>
-                              </button>
-
-                              {/* 禁用/启用按钮 */}
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const newEnabled = provider.enabled === false ? true : false;
-                                      setClaudeProviderEnabled(provider.id, newEnabled);
-
-                                      // 如果禁用的是当前激活的 Provider，自动切换到下一个已启用的 Provider
-                                      if (!newEnabled && activeProvider?.id === provider.id) {
-                                        const nextEnabledProvider = providers.find(
-                                          (p) => p.id !== provider.id && p.enabled !== false
-                                        );
-                                        if (nextEnabledProvider) {
-                                          applyProvider.mutate(nextEnabledProvider);
-                                        }
-                                      }
-                                    }}
-                                    className="shrink-0 rounded p-0.5 hover:bg-accent"
-                                  >
-                                    {isDisabled ? (
-                                      <Check className="h-3.5 w-3.5 text-muted-foreground" />
-                                    ) : (
-                                      <Ban className="h-3.5 w-3.5 text-muted-foreground" />
-                                    )}
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipPopup side="right">
-                                  {isDisabled
-                                    ? t('Click to enable this Provider')
-                                    : t('Click to disable this Provider')}
-                                </TooltipPopup>
-                              </Tooltip>
-                            </div>
+                                }
+                              }}
+                              t={t}
+                            />
                           );
                         })}
                       </div>

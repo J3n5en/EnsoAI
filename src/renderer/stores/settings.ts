@@ -571,6 +571,7 @@ interface SettingsState {
   removeClaudeProvider: (id: string) => void;
   reorderClaudeProviders: (fromIndex: number, toIndex: number) => void;
   setClaudeProviderEnabled: (id: string, enabled: boolean) => void;
+  setClaudeProviderOrder: (providers: import('@shared/types').ClaudeProvider[]) => void;
   setCommitMessageGenerator: (settings: Partial<CommitMessageGeneratorSettings>) => void;
   setCodeReview: (settings: Partial<CodeReviewSettings>) => void;
   setAutoUpdateEnabled: (enabled: boolean) => void;
@@ -835,6 +836,13 @@ export const useSettingsStore = create<SettingsState>()(
             },
           };
         }),
+      setClaudeProviderOrder: (providers) =>
+        set((state) => ({
+          claudeCodeIntegration: {
+            ...state.claudeCodeIntegration,
+            providers: providers.map((p, index) => ({ ...p, displayOrder: index })),
+          },
+        })),
       setClaudeProviderEnabled: (id, enabled) =>
         set((state) => ({
           claudeCodeIntegration: {

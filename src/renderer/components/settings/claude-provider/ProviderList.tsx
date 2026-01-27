@@ -145,6 +145,7 @@ export function ProviderList({ className }: ProviderListProps) {
 
   const reorderClaudeProviders = useSettingsStore((s) => s.reorderClaudeProviders);
   const setClaudeProviderEnabled = useSettingsStore((s) => s.setClaudeProviderEnabled);
+  const setClaudeProviderOrder = useSettingsStore((s) => s.setClaudeProviderOrder);
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingProvider, setEditingProvider] = React.useState<ClaudeProvider | null>(null);
@@ -213,17 +214,7 @@ export function ProviderList({ className }: ProviderListProps) {
 
   // 处理拖拽重排序
   const handleReorder = (newProviders: ClaudeProvider[]) => {
-    // 找出位置变化的元素
-    const oldIds = providers.map((p) => p.id);
-    const newIds = newProviders.map((p) => p.id);
-
-    for (let i = 0; i < newIds.length; i++) {
-      const oldIndex = oldIds.indexOf(newIds[i]);
-      if (oldIndex !== i) {
-        reorderClaudeProviders(oldIndex, i);
-        break;
-      }
-    }
+    setClaudeProviderOrder(newProviders);
   };
 
   const handleToggleEnabled = (provider: ClaudeProvider, e: React.MouseEvent) => {
