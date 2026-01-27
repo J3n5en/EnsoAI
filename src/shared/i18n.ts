@@ -276,6 +276,8 @@ export const zhTranslations: Record<string, string> = {
   'Search worktrees...': '搜索 worktree...',
   'Search worktrees': '搜索 worktree',
   'Settings Display Mode': '设置视图',
+  'Switch to floating mode': '切换为浮动模式',
+  'Switch to TAB mode': '切换为标签模式',
   Select: '选择',
   'Select Agent': '选择 Agent',
   'Select all': '全选',

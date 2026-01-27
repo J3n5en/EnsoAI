@@ -55,6 +55,7 @@ interface MainContentProps {
   settingsCategory?: SettingsCategory;
   onCategoryChange?: (category: SettingsCategory) => void;
   scrollToProvider?: boolean;
+  onToggleSettings?: () => void;
 }
 
 export function MainContent({
@@ -75,6 +76,7 @@ export function MainContent({
   settingsCategory,
   onCategoryChange,
   scrollToProvider,
+  onToggleSettings,
 }: MainContentProps) {
   const { t } = useI18n();
   const setSettingsDisplayMode = useSettingsStore((s) => s.setSettingsDisplayMode);
@@ -324,15 +326,13 @@ export function MainContent({
                   onClick={() => onTabChange(tab.id)}
                   className={cn(
                     'relative flex h-8 items-center gap-1.5 rounded-md px-3 text-sm transition-colors',
-                    isSettingsActive
-                      ? 'text-muted-foreground/60'
-                      : isActive
-                        ? 'text-accent-foreground'
-                        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                    isActive
+                      ? 'text-accent-foreground'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                   )}
                 >
                   {/* Active highlight background */}
-                  {isActive && !isSettingsActive && (
+                  {isActive && (
                     <motion.div
                       layoutId="main-tab-highlight"
                       className="absolute inset-0 rounded-md bg-accent"
@@ -358,7 +358,7 @@ export function MainContent({
                 ? 'bg-accent text-accent-foreground'
                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
             )}
-            onClick={() => onTabChange('settings')}
+            onClick={onToggleSettings}
             title={t('Settings')}
           >
             <Settings className="h-4 w-4" />
@@ -495,10 +495,10 @@ export function MainContent({
                 type="button"
                 onClick={() => setSettingsDisplayMode('draggable-modal')}
                 className="flex h-6 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                title="将设置窗口切换为浮动窗口模式"
+                title={t('Switch to floating mode')}
               >
                 <RectangleEllipsis className="h-3.5 w-3.5" />
-                切换为浮动模式
+                {t('Switch to floating mode')}
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
