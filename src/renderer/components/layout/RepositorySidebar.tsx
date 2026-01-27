@@ -283,7 +283,14 @@ export function RepositorySidebar({
                 {t('Add a Git repository from a local folder to get started')}
               </EmptyDescription>
             </EmptyHeader>
-            <Button onClick={onAddRepository} variant="outline" className="mt-2">
+            <Button
+              onClick={(e) => {
+                e.currentTarget.blur();
+                onAddRepository();
+              }}
+              variant="outline"
+              className="mt-2"
+            >
               <Plus className="mr-2 h-4 w-4" />
               {t('Add Repository')}
             </Button>
@@ -410,7 +417,10 @@ export function RepositorySidebar({
           <button
             type="button"
             className="flex h-8 flex-1 items-center justify-start gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-            onClick={onAddRepository}
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onAddRepository();
+            }}
           >
             <Plus className="h-4 w-4" />
             {t('Add Repository')}
