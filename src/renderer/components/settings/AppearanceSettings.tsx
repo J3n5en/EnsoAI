@@ -163,6 +163,8 @@ function ThemeCombobox({
   const [isOpen, setIsOpen] = React.useState(false);
   const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const listRef = React.useRef<HTMLDivElement>(null);
+  const originalValueRef = React.useRef<string>(value);
+  const explicitSelectionRef = React.useRef(false);
 
   // 性能优化：使用 Set 替代数组查找
   const favoriteSet = React.useMemo(() => new Set(favoriteThemes), [favoriteThemes]);
@@ -183,6 +185,7 @@ function ThemeCombobox({
 
   const handleValueChange = (newValue: string | null) => {
     if (newValue) {
+      explicitSelectionRef.current = true;
       setInternalValue(newValue);
       setSearch(newValue);
     }
@@ -192,8 +195,15 @@ function ThemeCombobox({
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (open) {
+      originalValueRef.current = value;
+      explicitSelectionRef.current = false;
       setInternalValue(value);
       setSearch(value);
+    } else {
+      // 关闭时如果没有显式选择，恢复原始主题
+      if (!explicitSelectionRef.current) {
+        onThemeHover?.(originalValueRef.current);
+      }
     }
   };
 
@@ -345,7 +355,6 @@ export function AppearanceSettings() {
   const [localFontSize, setLocalFontSize] = React.useState(globalFontSize);
   const [localFontFamily, setLocalFontFamily] = React.useState(globalFontFamily);
   const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false);
-  const [previewThemeName, setPreviewThemeName] = React.useState<string | null>(null);
 
   // Sync local state with global when global changes externally
   React.useEffect(() => {
@@ -398,8 +407,8 @@ export function AppearanceSettings() {
 
   // Get preview theme synchronously
   const previewTheme = React.useMemo(() => {
-    return getXtermTheme(previewThemeName ?? terminalTheme) ?? defaultDarkTheme;
-  }, [previewThemeName, terminalTheme]);
+    return getXtermTheme(terminalTheme) ?? defaultDarkTheme;
+  }, [terminalTheme]);
 
   const handleThemeChange = (value: string | null) => {
     if (value) {
@@ -510,7 +519,7 @@ export function AppearanceSettings() {
               themes={displayThemes}
               favoriteThemes={favoriteTerminalThemes}
               onToggleFavorite={toggleFavoriteTerminalTheme}
-              onThemeHover={setPreviewThemeName}
+              onThemeHover={setTerminalTheme}
               showFavoritesOnly={showFavoritesOnly}
               onShowFavoritesOnlyChange={setShowFavoritesOnly}
               showEmptyFavoritesHint={showEmptyFavoritesHint}
