@@ -30,6 +30,17 @@ export function ShellTerminal({
 }: ShellTerminalProps) {
   const { t } = useI18n();
 
+  // Handle Shift+Enter for newline (send LF character)
+  const handleCustomKey = useCallback((event: KeyboardEvent, ptyId: string) => {
+    if (event.key === 'Enter' && event.shiftKey) {
+      if (event.type === 'keydown') {
+        window.electronAPI.terminal.write(ptyId, '\x0a');
+      }
+      return false; // Prevent default Enter behavior
+    }
+    return true;
+  }, []);
+
   const {
     containerRef,
     isLoading,
@@ -49,6 +60,7 @@ export function ShellTerminal({
     onSplit,
     onMerge,
     canMerge,
+    onCustomKey: handleCustomKey,
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
