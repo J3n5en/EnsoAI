@@ -526,6 +526,8 @@ interface SettingsState {
   // Settings display mode
   settingsDisplayMode: SettingsDisplayMode;
   settingsModalPosition: { x: number; y: number } | null;
+  // Terminal theme favorites
+  favoriteTerminalThemes: string[];
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -593,6 +595,10 @@ interface SettingsState {
   // Settings display mode
   setSettingsDisplayMode: (mode: SettingsDisplayMode) => void;
   setSettingsModalPosition: (position: { x: number; y: number } | null) => void;
+  // Terminal theme favorites
+  addFavoriteTerminalTheme: (theme: string) => void;
+  removeFavoriteTerminalTheme: (theme: string) => void;
+  toggleFavoriteTerminalTheme: (theme: string) => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -659,6 +665,8 @@ export const useSettingsStore = create<SettingsState>()(
       // Settings display mode
       settingsDisplayMode: 'tab', // 默认使用 Tab 模式（保持向后兼容）
       settingsModalPosition: null, // 首次打开居中
+      // Terminal theme favorites
+      favoriteTerminalThemes: [],
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -902,6 +910,23 @@ export const useSettingsStore = create<SettingsState>()(
       setSettingsModalPosition: (position) => {
         set({ settingsModalPosition: position });
       },
+      // Terminal theme favorites
+      addFavoriteTerminalTheme: (theme) =>
+        set((state) => ({
+          favoriteTerminalThemes: state.favoriteTerminalThemes.includes(theme)
+            ? state.favoriteTerminalThemes
+            : [...state.favoriteTerminalThemes, theme],
+        })),
+      removeFavoriteTerminalTheme: (theme) =>
+        set((state) => ({
+          favoriteTerminalThemes: state.favoriteTerminalThemes.filter((t) => t !== theme),
+        })),
+      toggleFavoriteTerminalTheme: (theme) =>
+        set((state) => ({
+          favoriteTerminalThemes: state.favoriteTerminalThemes.includes(theme)
+            ? state.favoriteTerminalThemes.filter((t) => t !== theme)
+            : [...state.favoriteTerminalThemes, theme],
+        })),
     }),
     {
       name: 'enso-settings',

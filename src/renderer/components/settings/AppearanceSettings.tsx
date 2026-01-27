@@ -1,6 +1,16 @@
-import { ChevronLeft, ChevronRight, Monitor, Moon, Sparkles, Sun, Terminal } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  Monitor,
+  Moon,
+  Sparkles,
+  Sun,
+  Terminal,
+} from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Combobox,
   ComboboxInput,
@@ -93,58 +103,183 @@ function TerminalPreview({
   );
 }
 
+function FavoriteButton({
+  isFavorite,
+  onClick,
+  className,
+}: {
+  isFavorite: boolean;
+  onClick: (e: React.MouseEvent) => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onClick(e);
+      }}
+      className={cn('p-1 hover:text-red-500 transition-colors', className)}
+    >
+      {isFavorite ? (
+        <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+      ) : (
+        <Heart className="h-4 w-4" />
+      )}
+    </button>
+  );
+}
+
 function ThemeCombobox({
   value,
   onValueChange,
   themes,
+  favoriteThemes,
+  onToggleFavorite,
+  onThemeHover,
+  showFavoritesOnly,
+  onShowFavoritesOnlyChange,
 }: {
   value: string;
   onValueChange: (value: string | null) => void;
   themes: string[];
+  favoriteThemes: string[];
+  onToggleFavorite: (theme: string) => void;
+  onThemeHover?: (theme: string) => void;
+  showFavoritesOnly: boolean;
+  onShowFavoritesOnlyChange: (checked: boolean) => void;
 }) {
   const { t } = useI18n();
+  // 使用内部值与外部值解耦，防止悬停时下拉框关闭
+  const [internalValue, setInternalValue] = React.useState(value);
   const [search, setSearch] = React.useState(value);
   const [isOpen, setIsOpen] = React.useState(false);
+  const hoverTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const listRef = React.useRef<HTMLDivElement>(null);
 
-  // Update search when value changes externally (prev/next buttons)
+  // 仅在下拉框关闭时同步外部值
   React.useEffect(() => {
     if (!isOpen) {
+      setInternalValue(value);
       setSearch(value);
     }
   }, [value, isOpen]);
 
   const filteredThemes = React.useMemo(() => {
-    if (!search || search === value) return themes;
+    if (!search || search === internalValue) return themes;
     const query = search.toLowerCase();
     return themes.filter((name) => name.toLowerCase().includes(query));
-  }, [themes, search, value]);
+  }, [themes, search, internalValue]);
 
   const handleValueChange = (newValue: string | null) => {
-    onValueChange(newValue);
     if (newValue) {
+      setInternalValue(newValue);
       setSearch(newValue);
+    }
+    onValueChange(newValue);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (open) {
+      setInternalValue(value);
+      setSearch(value);
     }
   };
 
+  const handleItemMouseEnter = (themeName: string) => {
+    clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      onThemeHover?.(themeName);
+    }, 50);
+  };
+
+  const handleItemMouseLeave = () => {
+    clearTimeout(hoverTimeoutRef.current);
+  };
+
+  // 键盘导航处理 - 使用捕获阶段监听，确保在输入框处理之前捕获事件
+  React.useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        // 使用 setTimeout 确保 Combobox 完成高亮状态更新后再查询
+        setTimeout(() => {
+          const highlighted = listRef.current?.querySelector('[data-highlighted]');
+          if (highlighted) {
+            const themeName = highlighted.getAttribute('data-value');
+            if (themeName) {
+              onThemeHover?.(themeName);
+            }
+          }
+        }, 0);
+      }
+    };
+
+    // 使用 capture: true 在捕获阶段监听，确保事件不会被输入框拦截
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isOpen, onThemeHover]);
+
+  React.useEffect(() => {
+    return () => {
+      clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
   return (
     <Combobox<string>
-      value={value}
+      value={internalValue}
       onValueChange={handleValueChange}
       inputValue={search}
       onInputValueChange={setSearch}
       open={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={handleOpenChange}
     >
-      <ComboboxInput placeholder={t('Search themes...')} />
+      <div className="relative">
+        <ComboboxInput placeholder={t('Search themes...')} />
+        <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          <Checkbox
+            id="show-favorites-only-inner"
+            checked={showFavoritesOnly}
+            onCheckedChange={(checked) => onShowFavoritesOnlyChange(checked === true)}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <label
+            htmlFor="show-favorites-only-inner"
+            className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {t('Show favorites only')}
+          </label>
+        </div>
+      </div>
       <ComboboxPopup>
-        <ComboboxList>
+        <ComboboxList ref={listRef}>
           {filteredThemes.length === 0 && (
             <div className="py-6 text-center text-sm text-muted-foreground">
               {t('No themes found')}
             </div>
           )}
           {filteredThemes.map((name) => (
-            <ComboboxItem key={name} value={name}>
+            <ComboboxItem
+              key={name}
+              value={name}
+              data-value={name}
+              onMouseEnter={() => handleItemMouseEnter(name)}
+              onMouseLeave={handleItemMouseLeave}
+              endAddon={
+                <FavoriteButton
+                  isFavorite={favoriteThemes.includes(name)}
+                  onClick={() => onToggleFavorite(name)}
+                />
+              }
+            >
               {name}
             </ComboboxItem>
           ))}
@@ -170,6 +305,8 @@ export function AppearanceSettings() {
     setTerminalFontWeightBold,
     glowEffectEnabled,
     setGlowEffectEnabled,
+    favoriteTerminalThemes,
+    toggleFavoriteTerminalTheme,
   } = useSettingsStore();
   const { t } = useI18n();
 
@@ -193,6 +330,7 @@ export function AppearanceSettings() {
   // Local state for inputs
   const [localFontSize, setLocalFontSize] = React.useState(globalFontSize);
   const [localFontFamily, setLocalFontFamily] = React.useState(globalFontFamily);
+  const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false);
 
   // Sync local state with global when global changes externally
   React.useEffect(() => {
@@ -228,10 +366,18 @@ export function AppearanceSettings() {
   // Get theme names synchronously from embedded data
   const themeNames = React.useMemo(() => getThemeNames(), []);
 
-  // Get current theme index
-  const currentIndex = React.useMemo(() => {
-    return themeNames.indexOf(terminalTheme);
-  }, [themeNames, terminalTheme]);
+  // Display themes based on favorites filter
+  const displayThemes = React.useMemo(() => {
+    if (!showFavoritesOnly) {
+      return themeNames;
+    }
+    const favorites = themeNames.filter((name) => favoriteTerminalThemes.includes(name));
+    // 当前选中的非收藏配色临时显示在列表第1位
+    if (!favoriteTerminalThemes.includes(terminalTheme)) {
+      return [terminalTheme, ...favorites];
+    }
+    return favorites;
+  }, [themeNames, showFavoritesOnly, favoriteTerminalThemes, terminalTheme]);
 
   // Get preview theme synchronously
   const previewTheme = React.useMemo(() => {
@@ -245,13 +391,17 @@ export function AppearanceSettings() {
   };
 
   const handlePrevTheme = () => {
-    const newIndex = currentIndex <= 0 ? themeNames.length - 1 : currentIndex - 1;
-    setTerminalTheme(themeNames[newIndex]);
+    const list = showFavoritesOnly ? displayThemes : themeNames;
+    const idx = list.indexOf(terminalTheme);
+    const newIndex = idx <= 0 ? list.length - 1 : idx - 1;
+    setTerminalTheme(list[newIndex]);
   };
 
   const handleNextTheme = () => {
-    const newIndex = currentIndex >= themeNames.length - 1 ? 0 : currentIndex + 1;
-    setTerminalTheme(themeNames[newIndex]);
+    const list = showFavoritesOnly ? displayThemes : themeNames;
+    const idx = list.indexOf(terminalTheme);
+    const newIndex = idx >= list.length - 1 ? 0 : idx + 1;
+    setTerminalTheme(list[newIndex]);
   };
 
   return (
@@ -340,7 +490,12 @@ export function AppearanceSettings() {
             <ThemeCombobox
               value={terminalTheme}
               onValueChange={handleThemeChange}
-              themes={themeNames}
+              themes={displayThemes}
+              favoriteThemes={favoriteTerminalThemes}
+              onToggleFavorite={toggleFavoriteTerminalTheme}
+              onThemeHover={setTerminalTheme}
+              showFavoritesOnly={showFavoritesOnly}
+              onShowFavoritesOnlyChange={setShowFavoritesOnly}
             />
           </div>
           <Button variant="outline" size="icon" onClick={handleNextTheme}>
