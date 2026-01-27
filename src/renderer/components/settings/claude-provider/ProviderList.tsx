@@ -74,6 +74,9 @@ function ProviderItem({
     >
       <div className="flex items-center gap-2">
         <div
+          role="button"
+          tabIndex={0}
+          aria-label={t('Drag to reorder')}
           onPointerDown={(e) => controls.start(e)}
           className="cursor-grab text-muted-foreground active:cursor-grabbing"
         >
@@ -143,7 +146,6 @@ export function ProviderList({ className }: ProviderListProps) {
   const removeClaudeProvider = useSettingsStore((s) => s.removeClaudeProvider);
   const shouldPoll = useShouldPoll();
 
-  const reorderClaudeProviders = useSettingsStore((s) => s.reorderClaudeProviders);
   const setClaudeProviderEnabled = useSettingsStore((s) => s.setClaudeProviderEnabled);
   const setClaudeProviderOrder = useSettingsStore((s) => s.setClaudeProviderOrder);
 

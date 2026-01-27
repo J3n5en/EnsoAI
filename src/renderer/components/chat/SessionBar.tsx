@@ -126,10 +126,11 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
   const handleToggleEnabled = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      const newEnabled = provider.enabled !== false;
-      setClaudeProviderEnabled(provider.id, !newEnabled);
+      const isCurrentlyEnabled = provider.enabled !== false;
+      setClaudeProviderEnabled(provider.id, !isCurrentlyEnabled);
 
-      if (newEnabled && activeProviderId === provider.id) {
+      // 禁用当前激活的 Provider 时，自动切换到下一个可用的 Provider
+      if (isCurrentlyEnabled && activeProviderId === provider.id) {
         const nextEnabledProvider = providers.find(
           (p) => p.id !== provider.id && p.enabled !== false
         );

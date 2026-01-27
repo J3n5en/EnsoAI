@@ -23,7 +23,8 @@ function DialogBackdrop({ className, ...props }: DialogPrimitive.Backdrop.Props)
     <DialogPrimitive.Backdrop
       className={cn(
         // 优化动画：150ms，使用 ease-out 实现快速响应
-        'fixed inset-0 z-50 no-drag bg-black/32 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0',
+        // z-index 由 DialogPopup 通过 style prop 统一控制
+        'fixed inset-0 no-drag bg-black/32 backdrop-blur-sm transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0',
         className
       )}
       data-slot="dialog-backdrop"
@@ -36,7 +37,8 @@ function DialogViewport({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4 pointer-events-none',
+        // z-index 由 DialogPopup 通过 style prop 统一控制
+        'fixed inset-0 grid grid-rows-[1fr_auto_3fr] justify-items-center p-4 pointer-events-none',
         className
       )}
       data-slot="dialog-viewport"
