@@ -49,10 +49,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       newMap.set(worktreePath, sessionId);
       return { quickTerminalSessions: newMap };
     }),
-  getQuickTerminalSession: (worktreePath) => {
-    const state = get();
-    return state.quickTerminalSessions.get(worktreePath);
-  },
+  getQuickTerminalSession: (worktreePath) => get().quickTerminalSessions.get(worktreePath),
   removeQuickTerminalSession: (worktreePath) =>
     set((state) => {
       const newMap = new Map(state.quickTerminalSessions);
