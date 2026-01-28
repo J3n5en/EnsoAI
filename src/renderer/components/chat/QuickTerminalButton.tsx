@@ -18,7 +18,7 @@ export function QuickTerminalButton({
   const buttonPosition = useSettingsStore((s) => s.quickTerminal.buttonPosition);
   const setButtonPosition = useSettingsStore((s) => s.setQuickTerminalButtonPosition);
 
-  const BUTTON_SIZE = 48;
+  const BUTTON_SIZE = 44; // 稍微缩小，更精致
 
   // 使用 useRef 缓存默认位置
   const defaultPositionRef = useRef<{ x: number; y: number } | null>(null);
@@ -52,15 +52,19 @@ export function QuickTerminalButton({
       onClick={handleClick}
       {...dragHandlers}
       className={cn(
-        'fixed z-30 flex items-center justify-center rounded-full border shadow-lg backdrop-blur-sm',
-        // 拖动时禁用过渡和 hover 效果
-        isDragging ? 'cursor-grabbing opacity-70' : 'cursor-grab transition-all',
+        'fixed z-30 flex items-center justify-center rounded-full',
+        'border backdrop-blur-sm',
+        // 阴影效果
+        'shadow-[0_2px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.16)]',
+        // 拖动时状态
+        isDragging && 'cursor-grabbing opacity-70 scale-95',
+        !isDragging && 'cursor-grab transition-all duration-200', // 只在非拖动时启用过渡
         // 根据状态设置背景和文字颜色
         isOpen
-          ? 'bg-accent text-accent-foreground'
+          ? 'bg-accent text-accent-foreground border-accent/50'
           : hasRunningProcess
-            ? 'bg-accent/50 text-accent-foreground hover:bg-accent'
-            : 'bg-background/90 text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+            ? 'bg-accent/40 text-accent-foreground border-accent/30 hover:bg-accent/60'
+            : 'bg-background/95 text-muted-foreground border-border/50 hover:bg-accent/30 hover:text-foreground hover:border-accent/30'
       )}
       style={{
         left: `${position.x}px`,
@@ -71,10 +75,10 @@ export function QuickTerminalButton({
       title="Quick Terminal (Ctrl+`)"
     >
       <div className="relative flex items-center justify-center">
-        <Terminal className="h-5 w-5" />
+        <Terminal className="h-[18px] w-[18px]" />
         {/* 有活跃 PTY 时显示指示器 */}
         {hasRunningProcess && !isOpen && (
-          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary border border-background/90" />
+          <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-primary ring-1 ring-background" />
         )}
       </div>
     </button>
