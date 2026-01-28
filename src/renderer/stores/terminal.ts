@@ -4,7 +4,7 @@ import { create } from 'zustand';
 interface TerminalState {
   sessions: TerminalSession[];
   activeSessionId: string | null;
-  quickTerminalSessions: Map<string, string>; // worktreePath -> sessionId
+  quickTerminalSessions: Record<string, string>; // worktreePath -> sessionId
 
   addSession: (session: TerminalSession) => void;
   removeSession: (id: string) => void;
@@ -21,7 +21,7 @@ interface TerminalState {
 export const useTerminalStore = create<TerminalState>((set, get) => ({
   sessions: [],
   activeSessionId: null,
-  quickTerminalSessions: new Map(),
+  quickTerminalSessions: {},
 
   addSession: (session) =>
     set((state) => ({
@@ -44,16 +44,13 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   syncSessions: (sessions) => set({ sessions }),
 
   setQuickTerminalSession: (worktreePath, sessionId) =>
-    set((state) => {
-      const newMap = new Map(state.quickTerminalSessions);
-      newMap.set(worktreePath, sessionId);
-      return { quickTerminalSessions: newMap };
-    }),
-  getQuickTerminalSession: (worktreePath) => get().quickTerminalSessions.get(worktreePath),
+    set((state) => ({
+      quickTerminalSessions: { ...state.quickTerminalSessions, [worktreePath]: sessionId },
+    })),
+  getQuickTerminalSession: (worktreePath) => get().quickTerminalSessions[worktreePath],
   removeQuickTerminalSession: (worktreePath) =>
     set((state) => {
-      const newMap = new Map(state.quickTerminalSessions);
-      newMap.delete(worktreePath);
-      return { quickTerminalSessions: newMap };
+      const { [worktreePath]: _, ...rest } = state.quickTerminalSessions;
+      return { quickTerminalSessions: rest };
     }),
 }));

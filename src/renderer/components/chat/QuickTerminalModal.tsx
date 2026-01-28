@@ -21,8 +21,6 @@ export function QuickTerminalModal({
   sessionId: _sessionId, // 前缀 _ 标记为有意未使用
   onSessionInit,
 }: QuickTerminalModalProps) {
-  console.log('[QuickTerminalModal] Render:', { open, cwd, sessionId: _sessionId });
-
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
 
