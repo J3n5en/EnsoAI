@@ -1,7 +1,6 @@
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
 
 interface QuickTerminalModalProps {
   open: boolean;
