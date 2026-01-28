@@ -18,7 +18,7 @@ export function QuickTerminalButton({
   const buttonPosition = useSettingsStore((s) => s.quickTerminal.buttonPosition);
   const setButtonPosition = useSettingsStore((s) => s.setQuickTerminalButtonPosition);
 
-  const BUTTON_SIZE = 44; // 稍微缩小，更精致
+  const BUTTON_SIZE = 40; // 更小更精致
 
   // 使用 useRef 缓存默认位置
   const defaultPositionRef = useRef<{ x: number; y: number } | null>(null);
@@ -74,7 +74,7 @@ export function QuickTerminalButton({
       }}
       title="Quick Terminal (Ctrl+`)"
     >
-      <Terminal className="h-[18px] w-[18px]" />
+      <Terminal className="h-4 w-4" />
     </button>
   );
 }
