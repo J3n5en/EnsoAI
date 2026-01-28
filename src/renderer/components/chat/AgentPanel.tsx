@@ -136,6 +136,8 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const defaultAgentId = useMemo(() => getDefaultAgentId(agentSettings), [agentSettings]);
   const { setAgentCount, registerAgentCloseHandler } = useWorktreeActivityStore();
 
+  const [hasRunningProcess, setHasRunningProcess] = useState(false);
+
   const handleToggleQuickTerminal = useCallback(() => {
     setQuickTerminalOpen(!quickTerminalOpen);
   }, [quickTerminalOpen, setQuickTerminalOpen]);
@@ -148,6 +150,16 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     },
     [cwd, currentQuickTerminalSession, setQuickTerminalSession]
   );
+
+  // 监听终端输出状态（简化版）
+  useEffect(() => {
+    if (!currentQuickTerminalSession) {
+      setHasRunningProcess(false);
+      return;
+    }
+    // TODO: 实现真正的进程检测逻辑
+    setHasRunningProcess(false);
+  }, [currentQuickTerminalSession]);
 
   // Global session IDs to keep terminals mounted across group moves
   const [globalSessionIds, setGlobalSessionIds] = useState<Set<string>>(new Set());
@@ -1016,6 +1028,22 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     handleSelectSession,
   ]);
 
+  // Quick Terminal 快捷键监听
+  useEffect(() => {
+    if (!isActive) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+` 或 Cmd+` (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+        e.preventDefault();
+        handleToggleQuickTerminal();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isActive, handleToggleQuickTerminal]);
+
   if (!cwd) return null;
 
   // Check if current worktree has any groups (used for empty state detection)
@@ -1290,7 +1318,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         <>
           <QuickTerminalButton
             isOpen={quickTerminalOpen}
-            hasRunningProcess={false} // 阶段 3 实现
+            hasRunningProcess={hasRunningProcess}
             onClick={handleToggleQuickTerminal}
           />
           <QuickTerminalModal

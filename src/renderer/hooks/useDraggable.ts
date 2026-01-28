@@ -101,6 +101,16 @@ export function useDraggable({
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // 窗口 resize 时重新验证位置
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition((prev) => clampPosition(prev));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [clampPosition]);
+
   return {
     position,
     isDragging,
