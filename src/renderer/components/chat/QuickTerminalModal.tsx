@@ -133,6 +133,7 @@ export function QuickTerminalModal({
       // ESC 键最小化
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         onOpenChange(false);
         return;
       }
@@ -140,12 +141,14 @@ export function QuickTerminalModal({
       // Cmd+W / Ctrl+W 最小化（与关闭 Tab 行为一致）
       if (matchesKeybinding(e, xtermKeybindings.closeTab)) {
         e.preventDefault();
+        e.stopPropagation();
         onOpenChange(false);
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    // 使用捕获阶段拦截,确保优先于其他监听器
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [open, onOpenChange, xtermKeybindings.closeTab]);
 
   // 点击背景关闭
