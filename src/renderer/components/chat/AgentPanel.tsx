@@ -1313,23 +1313,19 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           </div>
         );
       })}
-      {/* Quick Terminal - 仅在 Agent Panel 激活时显示 */}
-      {isActive && (
-        <>
-          <QuickTerminalButton
-            isOpen={quickTerminalOpen}
-            hasRunningProcess={hasRunningProcess}
-            onClick={handleToggleQuickTerminal}
-          />
-          <QuickTerminalModal
-            open={quickTerminalOpen}
-            onOpenChange={setQuickTerminalOpen}
-            cwd={cwd}
-            sessionId={currentQuickTerminalSession}
-            onSessionInit={handleQuickTerminalSessionInit}
-          />
-        </>
-      )}
+      {/* Quick Terminal - 始终渲染以保持 terminal 挂载状态 */}
+      <QuickTerminalButton
+        isOpen={isActive && quickTerminalOpen}
+        hasRunningProcess={hasRunningProcess}
+        onClick={handleToggleQuickTerminal}
+      />
+      <QuickTerminalModal
+        open={isActive && quickTerminalOpen}
+        onOpenChange={setQuickTerminalOpen}
+        cwd={cwd}
+        sessionId={currentQuickTerminalSession}
+        onSessionInit={handleQuickTerminalSessionInit}
+      />
     </div>
   );
 }
