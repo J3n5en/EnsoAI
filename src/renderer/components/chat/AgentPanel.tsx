@@ -20,6 +20,8 @@ import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
+import { QuickTerminalButton } from './QuickTerminalButton';
+import { QuickTerminalModal } from './QuickTerminalModal';
 import type { Session } from './SessionBar';
 import { StatusLine } from './StatusLine';
 import type { AgentGroupState, AgentGroup as AgentGroupType } from './types';
@@ -121,12 +123,18 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     claudeCodeIntegration,
     terminalTheme,
   } = useSettingsStore();
+  const quickTerminalOpen = useSettingsStore((s) => s.quickTerminal.isOpen);
+  const setQuickTerminalOpen = useSettingsStore((s) => s.setQuickTerminalOpen);
   const terminalBgColor = useMemo(() => {
     return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
   }, [terminalTheme]);
   const statusLineEnabled = claudeCodeIntegration.statusLineEnabled;
   const defaultAgentId = useMemo(() => getDefaultAgentId(agentSettings), [agentSettings]);
   const { setAgentCount, registerAgentCloseHandler } = useWorktreeActivityStore();
+
+  const handleToggleQuickTerminal = useCallback(() => {
+    setQuickTerminalOpen(!quickTerminalOpen);
+  }, [quickTerminalOpen, setQuickTerminalOpen]);
 
   // Global session IDs to keep terminals mounted across group moves
   const [globalSessionIds, setGlobalSessionIds] = useState<Set<string>>(new Set());
@@ -1264,6 +1272,21 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           </div>
         );
       })}
+      {/* Quick Terminal - 仅在 Agent Panel 激活时显示 */}
+      {isActive && (
+        <>
+          <QuickTerminalButton
+            isOpen={quickTerminalOpen}
+            hasRunningProcess={false} // 阶段 3 实现
+            onClick={handleToggleQuickTerminal}
+          />
+          <QuickTerminalModal
+            open={quickTerminalOpen}
+            onOpenChange={setQuickTerminalOpen}
+            cwd={cwd}
+          />
+        </>
+      )}
     </div>
   );
 }
