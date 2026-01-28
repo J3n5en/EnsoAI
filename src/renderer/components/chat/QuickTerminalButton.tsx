@@ -51,10 +51,12 @@ export function QuickTerminalButton({
       onClick={handleClick}
       {...dragHandlers}
       className={cn(
-        'fixed z-30 flex items-center justify-center rounded-full shadow-lg transition-all',
-        'bg-primary/90 text-primary-foreground hover:bg-primary hover:scale-105 active:scale-95',
-        isDragging && 'cursor-grabbing opacity-70',
-        !isDragging && 'cursor-grab',
+        'fixed z-30 flex items-center justify-center rounded-full shadow-lg',
+        'bg-primary/90 text-primary-foreground',
+        // 拖动时禁用过渡和 hover 效果
+        isDragging
+          ? 'cursor-grabbing opacity-70'
+          : 'cursor-grab transition-all hover:bg-primary hover:scale-105 active:scale-95',
         isOpen && 'opacity-50'
       )}
       style={{
