@@ -20,7 +20,7 @@ export function QuickTerminalModal({
   onOpenChange,
   onClose,
   cwd,
-  sessionId: _sessionId, // 前缀 _ 标记为有意未使用
+  sessionId,
   onSessionInit,
 }: QuickTerminalModalProps) {
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
@@ -227,7 +227,12 @@ export function QuickTerminalModal({
 
         {/* 终端内容区 - 始终渲染 */}
         <div className="flex-1 min-h-0">
-          <ShellTerminal cwd={cwd} isActive={open} onInit={handleTerminalInit} />
+          <ShellTerminal
+            key={sessionId || 'new'}
+            cwd={cwd}
+            isActive={open}
+            onInit={handleTerminalInit}
+          />
         </div>
       </div>
     </div>,
