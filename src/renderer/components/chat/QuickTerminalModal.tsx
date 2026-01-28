@@ -9,6 +9,7 @@ import { useSettingsStore } from '@/stores/settings';
 interface QuickTerminalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onClose: () => void; // 真正关闭并销毁 PTY
   cwd: string;
   sessionId?: string; // 保留供阶段 3 使用
   onSessionInit: (sessionId: string) => void;
@@ -17,6 +18,7 @@ interface QuickTerminalModalProps {
 export function QuickTerminalModal({
   open,
   onOpenChange,
+  onClose,
   cwd,
   sessionId: _sessionId, // 前缀 _ 标记为有意未使用
   onSessionInit,
@@ -214,7 +216,7 @@ export function QuickTerminalModal({
             </button>
             <button
               type="button"
-              onClick={() => onOpenChange(false)}
+              onClick={onClose}
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
               title="关闭"
             >

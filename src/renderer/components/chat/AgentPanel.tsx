@@ -126,7 +126,8 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   } = useSettingsStore();
   const quickTerminalOpen = useSettingsStore((s) => s.quickTerminal.isOpen);
   const setQuickTerminalOpen = useSettingsStore((s) => s.setQuickTerminalOpen);
-  const { getQuickTerminalSession, setQuickTerminalSession } = useTerminalStore();
+  const { getQuickTerminalSession, setQuickTerminalSession, removeQuickTerminalSession } =
+    useTerminalStore();
   const currentQuickTerminalSession = getQuickTerminalSession(cwd);
 
   const terminalBgColor = useMemo(() => {
@@ -150,6 +151,22 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     },
     [cwd, currentQuickTerminalSession, setQuickTerminalSession]
   );
+
+  const handleCloseQuickTerminal = useCallback(async () => {
+    // 关闭 modal
+    setQuickTerminalOpen(false);
+
+    // 如果有活跃的 session，销毁 PTY
+    if (currentQuickTerminalSession) {
+      try {
+        await window.electronAPI.terminal.destroy(currentQuickTerminalSession);
+      } catch (error) {
+        console.error('Failed to destroy terminal:', error);
+      }
+      // 清除 session 记录
+      removeQuickTerminalSession(cwd);
+    }
+  }, [currentQuickTerminalSession, cwd, setQuickTerminalOpen, removeQuickTerminalSession]);
 
   // 监听终端会话状态
   useEffect(() => {
@@ -1320,6 +1337,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           <QuickTerminalModal
             open={quickTerminalOpen}
             onOpenChange={setQuickTerminalOpen}
+            onClose={handleCloseQuickTerminal}
             cwd={cwd}
             sessionId={currentQuickTerminalSession}
             onSessionInit={handleQuickTerminalSessionInit}
