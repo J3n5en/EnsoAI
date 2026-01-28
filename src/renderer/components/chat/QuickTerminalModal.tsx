@@ -10,7 +10,7 @@ interface QuickTerminalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   cwd: string;
-  sessionId?: string;
+  sessionId?: string; // 保留供阶段 3 使用
   onSessionInit: (sessionId: string) => void;
 }
 
@@ -18,7 +18,7 @@ export function QuickTerminalModal({
   open,
   onOpenChange,
   cwd,
-  sessionId,
+  sessionId: _sessionId, // 前缀 _ 标记为有意未使用
   onSessionInit,
 }: QuickTerminalModalProps) {
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
