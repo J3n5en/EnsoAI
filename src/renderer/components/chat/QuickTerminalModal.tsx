@@ -1,8 +1,8 @@
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
-import { useDraggable } from '@/hooks/useDraggable';
+import { useResizable } from '@/hooks/useResizable';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -22,7 +22,9 @@ export function QuickTerminalModal({
   onSessionInit,
 }: QuickTerminalModalProps) {
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
+  const savedModalSize = useSettingsStore((s) => s.quickTerminal.modalSize);
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
+  const setModalSize = useSettingsStore((s) => s.setQuickTerminalModalSize);
 
   // 终端初始化回调
   const handleTerminalInit = useCallback(
@@ -33,27 +35,75 @@ export function QuickTerminalModal({
   );
 
   // 计算默认尺寸
-  const modalSize = useMemo(() => {
+  const defaultSize = useMemo(() => {
     const width = Math.min(Math.max(window.innerWidth * 0.6, 600), 1200);
     const height = Math.min(Math.max(window.innerHeight * 0.35, 300), 600);
     return { width, height };
   }, []);
 
-  // 使用 useRef 缓存默认位置，防止 Modal 关闭再打开时重置
+  // 计算默认位置
   const defaultPositionRef = useRef<{ x: number; y: number } | null>(null);
-
   if (!defaultPositionRef.current) {
-    const left = (window.innerWidth - modalSize.width) / 2;
-    const top = window.innerHeight - modalSize.height - 40;
+    const size = savedModalSize || defaultSize;
+    const left = (window.innerWidth - size.width) / 2;
+    const top = window.innerHeight - size.height - 40;
     defaultPositionRef.current = { x: left, y: top };
   }
 
-  const { position, isDragging, dragHandlers } = useDraggable({
+  const { size, position, setPosition, isResizing, getResizeHandleProps } = useResizable({
+    initialSize: savedModalSize || defaultSize,
     initialPosition: modalPosition || defaultPositionRef.current,
-    bounds: modalSize,
-    minVisibleArea: { x: 50, y: 32 }, // 确保标题栏至少 50% 可见
+    minSize: { width: 400, height: 250 },
+    maxSize: { width: window.innerWidth - 40, height: window.innerHeight - 80 },
+    onSizeChange: setModalSize,
     onPositionChange: setModalPosition,
   });
+
+  // 拖动标题栏
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      // 忽略 resize 时的拖动
+      if (isResizing) return;
+      setIsDragging(true);
+      dragStartRef.current = {
+        x: e.clientX - position.x,
+        y: e.clientY - position.y,
+      };
+    },
+    [isResizing, position]
+  );
+
+  const handleDragMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging || isResizing) return;
+      setPosition({
+        x: e.clientX - dragStartRef.current.x,
+        y: e.clientY - dragStartRef.current.y,
+      });
+    },
+    [isDragging, isResizing, setPosition]
+  );
+
+  const handleDragEnd = useCallback(() => {
+    if (isDragging) {
+      setIsDragging(false);
+      setModalPosition(position);
+    }
+  }, [isDragging, position, setModalPosition]);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleDragMove);
+      document.addEventListener('mouseup', handleDragEnd);
+      return () => {
+        document.removeEventListener('mousemove', handleDragMove);
+        document.removeEventListener('mouseup', handleDragEnd);
+      };
+    }
+  }, [isDragging, handleDragMove, handleDragEnd]);
 
   // ESC 键关闭
   useEffect(() => {
@@ -101,13 +151,49 @@ export function QuickTerminalModal({
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
-          width: `${modalSize.width}px`,
-          height: `${modalSize.height}px`,
+          width: `${size.width}px`,
+          height: `${size.height}px`,
         }}
       >
+        {/* Resize Handles */}
+        {/* 边 - 使用较大的点击区域但视觉上保持细线 */}
+        <div
+          {...getResizeHandleProps('n')}
+          className="absolute top-0 left-0 right-0 h-1 cursor-n-resize z-10 hover:bg-primary/30 active:bg-primary/50"
+        />
+        <div
+          {...getResizeHandleProps('s')}
+          className="absolute bottom-0 left-0 right-0 h-1 cursor-s-resize z-10 hover:bg-primary/30 active:bg-primary/50"
+        />
+        <div
+          {...getResizeHandleProps('w')}
+          className="absolute top-0 bottom-0 left-0 w-1 cursor-w-resize z-10 hover:bg-primary/30 active:bg-primary/50"
+        />
+        <div
+          {...getResizeHandleProps('e')}
+          className="absolute top-0 bottom-0 right-0 w-1 cursor-e-resize z-10 hover:bg-primary/30 active:bg-primary/50"
+        />
+        {/* 角 - 更大的点击区域 */}
+        <div
+          {...getResizeHandleProps('nw')}
+          className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize z-20"
+        />
+        <div
+          {...getResizeHandleProps('ne')}
+          className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize z-20"
+        />
+        <div
+          {...getResizeHandleProps('sw')}
+          className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize z-20"
+        />
+        <div
+          {...getResizeHandleProps('se')}
+          className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize z-20"
+        />
+
         {/* 标题栏 - 可拖动 */}
         <div
-          {...dragHandlers}
+          onMouseDown={handleDragStart}
           className={cn(
             'flex items-center justify-between h-9 px-3 border-b bg-muted/30 rounded-t-lg select-none',
             isDragging ? 'cursor-grabbing' : 'cursor-grab'
