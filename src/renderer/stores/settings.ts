@@ -1139,6 +1139,11 @@ export const useSettingsStore = create<SettingsState>()(
           // MCP, Prompts - use persisted or defaults
           mcpServers: persisted.mcpServers ?? currentState.mcpServers,
           promptPresets: persisted.promptPresets ?? currentState.promptPresets,
+          // Quick Terminal - deep merge with defaults
+          quickTerminal: {
+            ...currentState.quickTerminal,
+            ...persisted.quickTerminal,
+          },
         };
       },
       onRehydrateStorage: () => (state) => {
