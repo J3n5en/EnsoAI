@@ -1,7 +1,7 @@
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
-import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { useDraggable } from '@/hooks/useDraggable';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -23,12 +23,6 @@ export function QuickTerminalModal({
 }: QuickTerminalModalProps) {
   console.log('[QuickTerminalModal] Render:', { open, cwd, sessionId: _sessionId });
 
-  useEffect(() => {
-    console.log('[QuickTerminalModal] Mount/Update:', { open, cwd });
-    return () => {
-      console.log('[QuickTerminalModal] Cleanup:', { open, cwd });
-    };
-  }, [open, cwd]);
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
 
@@ -63,22 +57,42 @@ export function QuickTerminalModal({
     onPositionChange: setModalPosition,
   });
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup
+  // ESC 键关闭
+  useEffect(() => {
+    if (!open) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onOpenChange(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [open, onOpenChange]);
+
+  // 点击外部关闭(可选)
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  return createPortal(
+    <div
+      className={cn(
+        'fixed inset-0 z-50 transition-opacity',
+        !open && 'opacity-0 pointer-events-none'
+      )}
+    >
+      {/* Modal 窗口 */}
+      <div
+        ref={modalRef}
         className={cn(
-          '!max-w-none !rounded-lg transition-opacity',
-          !open && 'opacity-0 pointer-events-none'
+          'fixed flex flex-col rounded-lg border bg-popover shadow-2xl transition-opacity',
+          !open && 'opacity-0'
         )}
-        showCloseButton={false}
-        showBackdrop={false}
         style={{
-          position: 'fixed',
           left: `${position.x}px`,
           top: `${position.y}px`,
           width: `${modalSize.width}px`,
           height: `${modalSize.height}px`,
-          transform: 'none',
         }}
       >
         {/* 标题栏 - 可拖动 */}
@@ -117,7 +131,8 @@ export function QuickTerminalModal({
         <div className="flex-1 min-h-0">
           <ShellTerminal cwd={cwd} isActive={open} onInit={handleTerminalInit} />
         </div>
-      </DialogPopup>
-    </Dialog>
+      </div>
+    </div>,
+    document.body
   );
 }
