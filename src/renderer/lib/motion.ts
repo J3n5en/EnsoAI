@@ -181,9 +181,7 @@ export const iconButtonHover = { scale: 1.1 };
 /**
  * 根据方向获取滑入动画 variants
  */
-export function getSlideVariants(
-  direction: 'up' | 'down' | 'left' | 'right',
-): Variants {
+export function getSlideVariants(direction: 'up' | 'down' | 'left' | 'right'): Variants {
   switch (direction) {
     case 'up':
       return slideUpVariants;

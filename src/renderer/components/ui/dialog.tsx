@@ -65,7 +65,7 @@ function DialogPopup({
   zIndexLevel?: 'base' | 'nested';
 }) {
   const mergedStyle = disableNestedTransform
-    ? ({ ...(style ?? {}), ['--nested-dialogs']: 0 } as React.CSSProperties)
+    ? ({ ...(style ?? {}), '--nested-dialogs': 0 } as React.CSSProperties)
     : style;
 
   const contentZIndex =

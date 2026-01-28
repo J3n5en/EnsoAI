@@ -119,7 +119,7 @@ export default function App() {
   const switchWorktreePathRef = useRef<((path: string) => void) | null>(null);
 
   // Settings dialog state
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [_settingsOpen, _setSettingsOpen] = useState(false);
   // Settings page state (used in MainContent)
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
     try {

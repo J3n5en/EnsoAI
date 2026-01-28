@@ -323,7 +323,7 @@ export async function startClaudeIdeBridge(
     if (targetWorkspace) {
       for (const [, client] of clients) {
         // Client with matching workspace folder
-        if (client.workspace && client.workspace.startsWith(targetWorkspace)) {
+        if (client.workspace?.startsWith(targetWorkspace)) {
           return client;
         }
         // Client without workspace but connected - assign this workspace folder

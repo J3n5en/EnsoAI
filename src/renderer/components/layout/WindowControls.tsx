@@ -88,7 +88,15 @@ export function WindowControls() {
         >
           {isMaximized ? (
             // Restore icon (two overlapping squares)
-            <svg className="h-3.5 w-3.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
+            <svg
+              className="h-3.5 w-3.5"
+              viewBox="0 0 10 10"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1"
+              role="img"
+              aria-label="Restore"
+            >
               <path d="M2 3h5v5H2z" />
               <path d="M3 3V2h5v5H7" />
             </svg>

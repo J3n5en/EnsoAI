@@ -13,9 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { GlowCard, useGlowEffectEnabled } from '@/components/ui/glow-card';
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
+import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { useWorktreeOutputState } from '@/hooks/useOutputState';
 
 interface WorktreeCardProps {
   worktree: GitWorktree;
@@ -62,7 +62,9 @@ export function WorktreeCard({
   const cardContent = (
     <>
       {/* Active indicator */}
-      {isActive && <div className="absolute left-0 top-0 h-full w-1 rounded-l-lg bg-primary z-20" />}
+      {isActive && (
+        <div className="absolute left-0 top-0 h-full w-1 rounded-l-lg bg-primary z-20" />
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-2">

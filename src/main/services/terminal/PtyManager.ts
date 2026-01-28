@@ -243,7 +243,11 @@ export function getEnhancedPath(): string {
     const parseVersion = (v: string): [number, number, number] => {
       const match = v.match(/^v(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
       if (!match) return [0, 0, 0];
-      return [parseInt(match[1]) || 0, parseInt(match[2]) || 0, parseInt(match[3]) || 0];
+      return [
+        parseInt(match[1], 10) || 0,
+        parseInt(match[2], 10) || 0,
+        parseInt(match[3], 10) || 0,
+      ];
     };
 
     // Add versioned paths, sorted by semver descending (newer versions first)
@@ -457,7 +461,7 @@ export class PtyManager {
         return;
       }
 
-      const pid = session.pty.pid;
+      const _pid = session.pty.pid;
       let resolved = false;
 
       // Set up timeout

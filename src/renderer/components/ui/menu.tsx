@@ -299,12 +299,12 @@ function TitleBarMenuPopup({
             // 基础样式
             "relative flex not-[class*='w-']:min-w-32 rounded-md border bg-popover shadow-lg outline-none",
             // 优化动画：150ms，使用模拟 Spring 的 cubic-bezier 曲线
-            "origin-(--transform-origin) transition-[scale,opacity] duration-150 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)]",
-            "has-data-starting-style:scale-95 has-data-starting-style:opacity-0",
-            "has-data-ending-style:scale-95 has-data-ending-style:opacity-0",
+            'origin-(--transform-origin) transition-[scale,opacity] duration-150 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)]',
+            'has-data-starting-style:scale-95 has-data-starting-style:opacity-0',
+            'has-data-ending-style:scale-95 has-data-ending-style:opacity-0',
             // 标题栏菜单使用更小的字体
-            "[&_[data-slot=menu-item]]:text-xs [&_[data-slot=menu-item]]:min-h-7 [&_[data-slot=menu-item]]:py-1.5",
-            "[&_[data-slot=menu-shortcut]]:text-[10px]",
+            '[&_[data-slot=menu-item]]:text-xs [&_[data-slot=menu-item]]:min-h-7 [&_[data-slot=menu-item]]:py-1.5',
+            '[&_[data-slot=menu-shortcut]]:text-[10px]',
             className
           )}
           data-slot="menu-popup"

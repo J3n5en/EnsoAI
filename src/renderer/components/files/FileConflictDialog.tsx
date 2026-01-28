@@ -131,7 +131,7 @@ export function FileConflictDialog({
 
   // Check if all rename actions have valid names
   const canConfirm = Array.from(resolutions.values()).every(
-    (r) => r.action !== 'rename' || (r.newName && r.newName.trim())
+    (r) => r.action !== 'rename' || r.newName?.trim()
   );
 
   return (

@@ -1,24 +1,17 @@
-import {
-  ExternalLink,
-  MoreHorizontal,
-  RefreshCw,
-  Settings,
-  Terminal,
-  X,
-} from 'lucide-react';
+import { ExternalLink, MoreHorizontal, RefreshCw, Settings, Terminal, X } from 'lucide-react';
 import { useCallback } from 'react';
+import logoImage from '@/assets/logo.png';
 import {
   Menu,
   MenuItem,
-  TitleBarMenuPopup,
   MenuSeparator,
   MenuShortcut,
   MenuTrigger,
+  TitleBarMenuPopup,
 } from '@/components/ui/menu';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { WindowControls } from './WindowControls';
-import logoImage from '@/assets/logo.png';
 
 // 平台检查在模块级别进行，避免在组件内部违反 Hooks 规则
 const isMac = typeof window !== 'undefined' && window.electronAPI?.env?.platform === 'darwin';
@@ -69,7 +62,7 @@ export function WindowTitleBar({ onOpenSettings }: WindowTitleBarProps) {
           'flex h-8 items-center gap-1.5 px-2 no-drag',
           'transition-opacity duration-200 hover:opacity-80 active:opacity-60'
         )}
-        title={t('Settings') + ' (Ctrl+,)'}
+        title={`${t('Settings')} (Ctrl+,)`}
       >
         <img src={logoImage} alt="Enso AI" className="h-5 w-5" />
         <span className="text-xs font-medium text-muted-foreground">Enso AI</span>
@@ -83,7 +76,7 @@ export function WindowTitleBar({ onOpenSettings }: WindowTitleBarProps) {
           onClick={onOpenSettings}
           className={iconButtonClass}
           aria-label={t('Settings')}
-          title={t('Settings') + ' (Ctrl+,)'}
+          title={`${t('Settings')} (Ctrl+,)`}
         >
           <Settings className="h-3.5 w-3.5" />
         </button>
@@ -92,19 +85,13 @@ export function WindowTitleBar({ onOpenSettings }: WindowTitleBarProps) {
         <Menu>
           <MenuTrigger
             render={
-              <button
-                type="button"
-                className={iconButtonClass}
-                aria-label={t('More')}
-              >
+              <button type="button" className={iconButtonClass} aria-label={t('More')}>
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </button>
             }
           />
           <TitleBarMenuPopup align="end" sideOffset={6} className="min-w-[180px]">
-            <MenuItem
-              onClick={handleReload}
-            >
+            <MenuItem onClick={handleReload}>
               <RefreshCw className="h-3.5 w-3.5" />
               {t('Reload')}
               <MenuShortcut>Ctrl+R</MenuShortcut>
@@ -120,10 +107,7 @@ export function WindowTitleBar({ onOpenSettings }: WindowTitleBarProps) {
               {t('GitHub')}
             </MenuItem>
             <MenuSeparator />
-            <MenuItem
-              variant="destructive"
-              onClick={() => window.electronAPI.window.close()}
-            >
+            <MenuItem variant="destructive" onClick={() => window.electronAPI.window.close()}>
               <X className="h-3.5 w-3.5" />
               {t('Exit')}
               <MenuShortcut>Alt+F4</MenuShortcut>

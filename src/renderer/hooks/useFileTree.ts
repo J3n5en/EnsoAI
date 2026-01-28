@@ -178,7 +178,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             if (children.length === 1 && children[0].isDirectory) {
               const loadChain = async (
                 dirPath: string,
-                nodes: FileTreeNode[]
+                _nodes: FileTreeNode[]
               ): Promise<FileTreeNode[]> => {
                 const dirChildren = await loadChildren(dirPath);
                 allPaths.push(dirPath);
@@ -261,7 +261,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             const next = new Set(prev);
             // Remove this path and all children paths
             for (const p of prev) {
-              if (p === targetPath || p.startsWith(targetPath + '/')) {
+              if (p === targetPath || p.startsWith(`${targetPath}/`)) {
                 next.delete(p);
               }
             }

@@ -18,7 +18,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertDialog,
-  AlertDialogClose,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -84,7 +83,7 @@ export function FileTree({
   onSelectedPathChange,
   onRecordOperations,
   onFileDeleted,
-  isCollapsed,
+  isCollapsed: _isCollapsed,
   onToggleCollapse,
 }: FileTreeProps) {
   const { t } = useI18n();
@@ -96,7 +95,7 @@ export function FileTree({
   } | null>(null);
 
   // Drag and drop state
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [_isDraggingOver, setIsDraggingOver] = useState(false);
   const dragCounterRef = useRef(0);
   // Track which folder should be highlighted during drag
   const [draggingOverFolderPath, setDraggingOverFolderPath] = useState<string | null>(null);
@@ -789,7 +788,7 @@ export function FileTree({
       }
 
       // Don't allow dropping parent into child
-      if (targetPath.startsWith(dragNode.path + '/')) {
+      if (targetPath.startsWith(`${dragNode.path}/`)) {
         console.warn('[FileTree] Cannot move parent into child');
         setDraggingNode(null);
         return;
@@ -1218,17 +1217,15 @@ export function FileTree({
             <AlertDialogTitle>{t('Confirm Move')}</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDragData && (
-                <>
-                  <span className="block text-sm">
-                    {t('Are you sure you want to move "')}
-                    <span className="font-medium">{pendingDragData.draggingNode.name}</span>
-                    {t('" to "')}
-                    <span className="font-medium">
-                      {pendingDragData.targetDir.split('/').pop() || pendingDragData.targetDir}
-                    </span>
-                    {t('"?')}
+                <span className="block text-sm">
+                  {t('Are you sure you want to move "')}
+                  <span className="font-medium">{pendingDragData.draggingNode.name}</span>
+                  {t('" to "')}
+                  <span className="font-medium">
+                    {pendingDragData.targetDir.split('/').pop() || pendingDragData.targetDir}
                   </span>
-                </>
+                  {t('"?')}
+                </span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1442,7 +1439,7 @@ function FileTreeNodeComponent({
   const inputRef = useRef<HTMLInputElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [_isDraggingOver, setIsDraggingOver] = useState(false);
   const [isBeingDragged, setIsBeingDragged] = useState(false);
 
   // 获取压缩后的节点信息

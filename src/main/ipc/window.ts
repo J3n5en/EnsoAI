@@ -1,5 +1,5 @@
 import { IPC_CHANNELS } from '@shared/types';
-import { BrowserWindow, ipcMain } from 'electron';
+import { type BrowserWindow, ipcMain } from 'electron';
 
 export function registerWindowHandlers(mainWindow: BrowserWindow): () => void {
   /**

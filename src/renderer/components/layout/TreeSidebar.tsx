@@ -12,7 +12,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Settings,
   Settings2,
   Sparkles,
   Terminal,
@@ -121,9 +120,9 @@ export function TreeSidebar({
   onReorderWorktrees,
   onRefresh,
   onInitGit,
-  onOpenSettings,
-  isSettingsActive,
-  onToggleSettings,
+  onOpenSettings: _onOpenSettings,
+  isSettingsActive: _isSettingsActive,
+  onToggleSettings: _onToggleSettings,
   collapsed: _collapsed = false,
   onCollapse,
   groups,
@@ -138,7 +137,7 @@ export function TreeSidebar({
   toggleSelectedRepoExpandedRef,
 }: TreeSidebarProps) {
   const { t, tNode } = useI18n();
-  const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
+  const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRepoList, setExpandedRepoList] = useState<string[]>([]);
 

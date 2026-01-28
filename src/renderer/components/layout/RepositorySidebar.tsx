@@ -1,13 +1,5 @@
 import { LayoutGroup, motion } from 'framer-motion';
-import {
-  FolderGit2,
-  FolderMinus,
-  PanelLeftClose,
-  Plus,
-  Search,
-  Settings,
-  Settings2,
-} from 'lucide-react';
+import { FolderGit2, FolderMinus, PanelLeftClose, Plus, Search, Settings2 } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ALL_GROUP_ID, type RepositoryGroup, type TabId } from '@/App/constants';
 import {
@@ -78,9 +70,9 @@ export function RepositorySidebar({
   onAddRepository,
   onRemoveRepository,
   onReorderRepositories,
-  onOpenSettings,
-  isSettingsActive,
-  onToggleSettings,
+  onOpenSettings: _onOpenSettings,
+  isSettingsActive: _isSettingsActive,
+  onToggleSettings: _onToggleSettings,
   collapsed: _collapsed = false,
   onCollapse,
   groups,
@@ -94,7 +86,7 @@ export function RepositorySidebar({
   onSwitchWorktreeByPath,
 }: RepositorySidebarProps) {
   const { t, tNode } = useI18n();
-  const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
+  const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
