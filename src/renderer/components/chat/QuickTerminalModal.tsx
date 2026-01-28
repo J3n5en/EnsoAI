@@ -31,22 +31,22 @@ export function QuickTerminalModal({
   const { getAllQuickTerminalCwds } = useTerminalStore();
 
   // 组件挂载时生成唯一 ID，用于强制重新创建 ShellTerminal
-  const mountId = useMemo(() => Date.now(), []);
+  // 使用 useRef 确保整个组件生命周期内 ID 不变
+  const mountIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   // 维护一个已渲染的 worktree 列表（一旦渲染就保持挂载）
   const [renderedCwds, setRenderedCwds] = useState<Set<string>>(new Set());
-  const renderedCwdsRef = useRef<Set<string>>(renderedCwds);
-  renderedCwdsRef.current = renderedCwds;
 
-  // 处理真正关闭（销毁 PTY 和移除 cwd）
+  // 处理真正关闭：移除 cwd 让 ShellTerminal 卸载（PTY 由 ShellTerminal 的 cleanup 销毁）
+  // 然后通知外部清理 session 记录
   const handleRealClose = useCallback(() => {
-    // 先从 renderedCwds 移除，让 ShellTerminal 卸载
+    // 从 renderedCwds 移除，触发 ShellTerminal 卸载（其 cleanup 会销毁 PTY）
     setRenderedCwds((prev) => {
       const updated = new Set(prev);
       updated.delete(cwd);
       return updated;
     });
-    // 然后调用外部的 onClose 来销毁 PTY
+    // 通知外部清理 session 记录（不要再 destroy PTY，避免重复销毁）
     onClose();
   }, [cwd, onClose]);
 
@@ -276,7 +276,7 @@ export function QuickTerminalModal({
         <div className="flex-1 min-h-0">
           {Array.from(renderedCwds).map((terminalCwd) => (
             <div
-              key={`terminal-${mountId}-${terminalCwd}`}
+              key={`terminal-${mountIdRef.current}-${terminalCwd}`}
               className={cn('h-full', terminalCwd !== cwd && 'hidden')}
             >
               <ShellTerminal

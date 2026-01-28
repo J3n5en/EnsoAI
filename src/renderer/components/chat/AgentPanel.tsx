@@ -125,7 +125,8 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     claudeCodeIntegration,
     terminalTheme,
   } = useSettingsStore();
-  const quickTerminalEnabled = useSettingsStore((s) => s.quickTerminal.enabled);
+  // 添加 ?? true 回退，兼容老用户可能没有 enabled 字段的情况
+  const quickTerminalEnabled = useSettingsStore((s) => s.quickTerminal.enabled ?? true);
   const quickTerminalOpen = useSettingsStore((s) => s.quickTerminal.isOpen);
   const setQuickTerminalOpen = useSettingsStore((s) => s.setQuickTerminalOpen);
   const { getQuickTerminalSession, setQuickTerminalSession, removeQuickTerminalSession } =
@@ -179,18 +180,12 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [cwd, setQuickTerminalSession]
   );
 
-  const handleCloseQuickTerminal = useCallback(async () => {
+  const handleCloseQuickTerminal = useCallback(() => {
     // 关闭 modal
     setQuickTerminalOpen(false);
 
-    // 如果有活跃的 session，销毁 PTY
+    // 清除 session 记录（PTY 由 ShellTerminal 组件卸载时的 cleanup 销毁，这里不要重复调用 destroy）
     if (currentQuickTerminalSession) {
-      try {
-        await window.electronAPI.terminal.destroy(currentQuickTerminalSession);
-      } catch (error) {
-        console.error('Failed to destroy terminal:', error);
-      }
-      // 清除 session 记录
       removeQuickTerminalSession(cwd);
     }
   }, [currentQuickTerminalSession, cwd, setQuickTerminalOpen, removeQuickTerminalSession]);
