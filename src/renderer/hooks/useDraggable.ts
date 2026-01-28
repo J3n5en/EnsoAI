@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 interface UseDraggableOptions {
   initialPosition: { x: number; y: number } | null;
   bounds?: { width: number; height: number }; // 元素尺寸
-  containerBounds?: { width: number; height: number }; // 容器尺寸 (默认 window)
+  containerBounds?: { width: number; height: number; left?: number; top?: number }; // 容器尺寸和偏移
   minVisibleArea?: { x: number; y: number }; // 最小可见区域
   onPositionChange?: (position: { x: number; y: number }) => void;
 }
@@ -26,8 +26,24 @@ export function useDraggable({
       const container = containerBounds || {
         width: window.innerWidth,
         height: window.innerHeight,
+        left: 0,
+        top: 0,
       };
 
+      // 如果提供了容器偏移（fixed 定位场景），使用绝对坐标
+      if (container.left !== undefined && container.top !== undefined) {
+        const minX = container.left;
+        const maxX = container.left + container.width - bounds.width;
+        const minY = container.top;
+        const maxY = container.top + container.height - bounds.height;
+
+        return {
+          x: Math.max(minX, Math.min(pos.x, maxX)),
+          y: Math.max(minY, Math.min(pos.y, maxY)),
+        };
+      }
+
+      // 默认逻辑（相对定位）
       const minX = -bounds.width + minVisibleArea.x;
       const maxX = container.width - minVisibleArea.x;
       const minY = 0;

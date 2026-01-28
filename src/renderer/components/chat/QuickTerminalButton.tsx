@@ -22,13 +22,23 @@ export function QuickTerminalButton({
 
   const BUTTON_SIZE = 40; // 更小更精致
 
-  // 计算容器边界
+  // 计算容器边界（相对于 viewport）
   const getContainerBounds = useCallback(() => {
     if (!containerRef.current) {
-      return { width: window.innerWidth, height: window.innerHeight };
+      return {
+        left: 0,
+        top: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      };
     }
     const rect = containerRef.current.getBoundingClientRect();
-    return { width: rect.width, height: rect.height };
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
   }, [containerRef]);
 
   // 使用 useRef 缓存默认位置
@@ -37,15 +47,22 @@ export function QuickTerminalButton({
   if (!defaultPositionRef.current) {
     const bounds = getContainerBounds();
     defaultPositionRef.current = {
-      x: bounds.width - BUTTON_SIZE - 16,
-      y: bounds.height - BUTTON_SIZE - 16,
+      x: bounds.left + bounds.width - BUTTON_SIZE - 16,
+      y: bounds.top + bounds.height - BUTTON_SIZE - 16,
     };
   }
+
+  const containerBounds = getContainerBounds();
 
   const { position, isDragging, hasDragged, dragHandlers } = useDraggable({
     initialPosition: buttonPosition || defaultPositionRef.current,
     bounds: { width: BUTTON_SIZE, height: BUTTON_SIZE },
-    containerBounds: getContainerBounds(),
+    containerBounds: {
+      width: containerBounds.width,
+      height: containerBounds.height,
+      left: containerBounds.left,
+      top: containerBounds.top,
+    },
     onPositionChange: setButtonPosition,
   });
 
