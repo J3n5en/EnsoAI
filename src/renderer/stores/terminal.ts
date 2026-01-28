@@ -15,6 +15,7 @@ interface TerminalState {
   // Quick Terminal session management
   setQuickTerminalSession: (worktreePath: string, sessionId: string) => void;
   getQuickTerminalSession: (worktreePath: string) => string | undefined;
+  getAllQuickTerminalCwds: () => string[];
   removeQuickTerminalSession: (worktreePath: string) => void;
 }
 
@@ -48,6 +49,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       quickTerminalSessions: { ...state.quickTerminalSessions, [worktreePath]: sessionId },
     })),
   getQuickTerminalSession: (worktreePath) => get().quickTerminalSessions[worktreePath],
+  getAllQuickTerminalCwds: () => Object.keys(get().quickTerminalSessions),
   removeQuickTerminalSession: (worktreePath) =>
     set((state) => {
       const { [worktreePath]: _, ...rest } = state.quickTerminalSessions;

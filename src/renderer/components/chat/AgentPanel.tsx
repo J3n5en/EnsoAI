@@ -1345,7 +1345,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
             onOpenChange={setQuickTerminalOpen}
             onClose={handleCloseQuickTerminal}
             cwd={cwd}
-            sessionId={currentQuickTerminalSession}
             onSessionInit={handleQuickTerminalSessionInit}
           />
         </>

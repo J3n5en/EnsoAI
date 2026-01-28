@@ -6,13 +6,13 @@ import { useResizable } from '@/hooks/useResizable';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
+import { useTerminalStore } from '@/stores/terminal';
 
 interface QuickTerminalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onClose: () => void; // 真正关闭并销毁 PTY
   cwd: string;
-  sessionId?: string; // 保留供阶段 3 使用
   onSessionInit: (sessionId: string) => void;
 }
 
@@ -21,7 +21,6 @@ export function QuickTerminalModal({
   onOpenChange,
   onClose,
   cwd,
-  sessionId,
   onSessionInit,
 }: QuickTerminalModalProps) {
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
@@ -29,14 +28,31 @@ export function QuickTerminalModal({
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
   const setModalSize = useSettingsStore((s) => s.setQuickTerminalModalSize);
   const xtermKeybindings = useSettingsStore((s) => s.xtermKeybindings);
+  const { getAllQuickTerminalCwds } = useTerminalStore();
 
-  // 终端初始化回调
-  const handleTerminalInit = useCallback(
-    (ptyId: string) => {
-      onSessionInit?.(ptyId);
-    },
-    [onSessionInit]
-  );
+  // 维护一个已渲染的 worktree 列表（一旦渲染就保持挂载）
+  const [renderedCwds, setRenderedCwds] = useState<Set<string>>(new Set());
+
+  // 当 open 且 cwd 不在列表中时，添加到列表
+  useEffect(() => {
+    if (open && !renderedCwds.has(cwd)) {
+      setRenderedCwds((prev) => new Set([...prev, cwd]));
+    }
+  }, [open, cwd, renderedCwds]);
+
+  // 同步 store 中的所有 cwd 到渲染列表（确保所有有 session 的都被渲染）
+  useEffect(() => {
+    const storeCwds = getAllQuickTerminalCwds();
+    if (storeCwds.length > 0) {
+      setRenderedCwds((prev) => {
+        const updated = new Set(prev);
+        for (const c of storeCwds) {
+          updated.add(c);
+        }
+        return updated;
+      });
+    }
+  }, [getAllQuickTerminalCwds]);
 
   // 计算默认尺寸
   const defaultSize = useMemo(() => {
@@ -236,14 +252,20 @@ export function QuickTerminalModal({
           </div>
         </div>
 
-        {/* 终端内容区 - 始终渲染 */}
+        {/* 终端内容区 - 渲染所有已激活的 worktree，用 CSS 控制显示 */}
         <div className="flex-1 min-h-0">
-          <ShellTerminal
-            key={sessionId || 'new'}
-            cwd={cwd}
-            isActive={open}
-            onInit={handleTerminalInit}
-          />
+          {Array.from(renderedCwds).map((terminalCwd) => (
+            <div
+              key={`terminal-${terminalCwd}`}
+              className={cn('h-full', terminalCwd !== cwd && 'hidden')}
+            >
+              <ShellTerminal
+                cwd={terminalCwd}
+                isActive={open && terminalCwd === cwd}
+                onInit={onSessionInit}
+              />
+            </div>
+          ))}
         </div>
       </div>
     </div>,
