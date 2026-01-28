@@ -114,8 +114,8 @@ export function QuickTerminalModal({
               </div>
 
               {/* 终端内容区 */}
-              <div className="flex-1 min-h-0">
-                {open && <ShellTerminal cwd={cwd} isActive={open} onInit={handleTerminalInit} />}
+              <div className={cn('flex-1 min-h-0', !open && 'hidden')}>
+                <ShellTerminal cwd={cwd} isActive={open} onInit={handleTerminalInit} />
               </div>
             </DialogPopup>
           </motion.div>
