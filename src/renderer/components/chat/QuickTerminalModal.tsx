@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { useResizable } from '@/hooks/useResizable';
+import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -27,6 +28,7 @@ export function QuickTerminalModal({
   const savedModalSize = useSettingsStore((s) => s.quickTerminal.modalSize);
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
   const setModalSize = useSettingsStore((s) => s.setQuickTerminalModalSize);
+  const xtermKeybindings = useSettingsStore((s) => s.xtermKeybindings);
 
   // 终端初始化回调
   const handleTerminalInit = useCallback(
@@ -107,19 +109,28 @@ export function QuickTerminalModal({
     }
   }, [isDragging, handleDragMove, handleDragEnd]);
 
-  // ESC 键关闭
+  // ESC 键和关闭 Tab 快捷键
   useEffect(() => {
     if (!open) return;
 
-    const handleEscape = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ESC 键最小化
       if (e.key === 'Escape') {
+        e.preventDefault();
+        onOpenChange(false);
+        return;
+      }
+
+      // Cmd+W / Ctrl+W 最小化（与关闭 Tab 行为一致）
+      if (matchesKeybinding(e, xtermKeybindings.closeTab)) {
+        e.preventDefault();
         onOpenChange(false);
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [open, onOpenChange]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onOpenChange, xtermKeybindings.closeTab]);
 
   // 点击背景关闭
   const modalRef = useRef<HTMLDivElement>(null);
