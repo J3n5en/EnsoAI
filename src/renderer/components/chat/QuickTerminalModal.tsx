@@ -1,6 +1,10 @@
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
+import { useMemo } from 'react';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
+import { useDraggable } from '@/hooks/useDraggable';
+import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
 
 interface QuickTerminalModalProps {
   open: boolean;
@@ -9,11 +13,29 @@ interface QuickTerminalModalProps {
 }
 
 export function QuickTerminalModal({ open, onOpenChange, cwd }: QuickTerminalModalProps) {
-  // 默认尺寸和位置（阶段 1 固定值）
-  const modalWidth = Math.min(Math.max(window.innerWidth * 0.6, 600), 1200);
-  const modalHeight = Math.min(Math.max(window.innerHeight * 0.35, 300), 600);
-  const modalLeft = (window.innerWidth - modalWidth) / 2;
-  const modalBottom = 40;
+  const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
+  const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
+
+  // 计算默认尺寸
+  const modalSize = useMemo(() => {
+    const width = Math.min(Math.max(window.innerWidth * 0.6, 600), 1200);
+    const height = Math.min(Math.max(window.innerHeight * 0.35, 300), 600);
+    return { width, height };
+  }, []);
+
+  // 计算默认位置（底部居中）
+  const defaultPosition = useMemo(() => {
+    const left = (window.innerWidth - modalSize.width) / 2;
+    const top = window.innerHeight - modalSize.height - 40;
+    return { x: left, y: top };
+  }, [modalSize]);
+
+  const { position, isDragging, dragHandlers } = useDraggable({
+    initialPosition: modalPosition || defaultPosition,
+    bounds: modalSize,
+    minVisibleArea: { x: 50, y: 32 }, // 确保标题栏至少 50% 可见
+    onPositionChange: setModalPosition,
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -23,21 +45,26 @@ export function QuickTerminalModal({ open, onOpenChange, cwd }: QuickTerminalMod
         showBackdrop={false}
         style={{
           position: 'fixed',
-          left: `${modalLeft}px`,
-          bottom: `${modalBottom}px`,
-          width: `${modalWidth}px`,
-          height: `${modalHeight}px`,
-          top: 'auto',
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          width: `${modalSize.width}px`,
+          height: `${modalSize.height}px`,
           transform: 'none',
         }}
       >
-        {/* 标题栏 */}
-        <div className="flex items-center justify-between h-9 px-3 border-b bg-muted/30 rounded-t-lg select-none">
-          <div className="flex items-center gap-2 text-sm font-medium">
+        {/* 标题栏 - 可拖动 */}
+        <div
+          {...dragHandlers}
+          className={cn(
+            'flex items-center justify-between h-9 px-3 border-b bg-muted/30 rounded-t-lg select-none',
+            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          )}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium pointer-events-none">
             <TerminalIcon className="h-4 w-4" />
             <span>Quick Terminal</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 pointer-events-auto">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
