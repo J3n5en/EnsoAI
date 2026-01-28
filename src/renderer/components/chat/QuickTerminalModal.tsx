@@ -30,8 +30,25 @@ export function QuickTerminalModal({
   const xtermKeybindings = useSettingsStore((s) => s.xtermKeybindings);
   const { getAllQuickTerminalCwds } = useTerminalStore();
 
+  // 组件挂载时生成唯一 ID，用于强制重新创建 ShellTerminal
+  const mountId = useMemo(() => Date.now(), []);
+
   // 维护一个已渲染的 worktree 列表（一旦渲染就保持挂载）
   const [renderedCwds, setRenderedCwds] = useState<Set<string>>(new Set());
+  const renderedCwdsRef = useRef<Set<string>>(renderedCwds);
+  renderedCwdsRef.current = renderedCwds;
+
+  // 处理真正关闭（销毁 PTY 和移除 cwd）
+  const handleRealClose = useCallback(() => {
+    // 先从 renderedCwds 移除，让 ShellTerminal 卸载
+    setRenderedCwds((prev) => {
+      const updated = new Set(prev);
+      updated.delete(cwd);
+      return updated;
+    });
+    // 然后调用外部的 onClose 来销毁 PTY
+    onClose();
+  }, [cwd, onClose]);
 
   // 当 open 且 cwd 不在列表中时，添加到列表
   useEffect(() => {
@@ -246,7 +263,7 @@ export function QuickTerminalModal({
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleRealClose}
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
               title="关闭"
             >
@@ -259,7 +276,7 @@ export function QuickTerminalModal({
         <div className="flex-1 min-h-0">
           {Array.from(renderedCwds).map((terminalCwd) => (
             <div
-              key={`terminal-${terminalCwd}`}
+              key={`terminal-${mountId}-${terminalCwd}`}
               className={cn('h-full', terminalCwd !== cwd && 'hidden')}
             >
               <ShellTerminal

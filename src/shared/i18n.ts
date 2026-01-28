@@ -630,6 +630,9 @@ export const zhTranslations: Record<string, string> = {
   'Auto-create session': '自动创建 Session',
   'Automatically create Agent/Terminal session when activating a worktree':
     '激活 Worktree 时自动创建 Agent/Terminal Session',
+  'Quick Terminal': '快捷终端',
+  'Enable Quick Terminal': '启用快捷终端',
+  'Show floating terminal button for quick access': '显示浮动终端按钮以便快速访问',
   'Auto-completion settings': '自动补全设置',
   'Auto brackets': '自动括号',
   'Auto quotes': '自动引号',

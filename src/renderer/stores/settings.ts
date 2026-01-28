@@ -153,6 +153,7 @@ export const BUILTIN_AGENT_IDS: BuiltinAgentId[] = [
 
 // Quick Terminal settings
 export interface QuickTerminalSettings {
+  enabled: boolean;
   buttonPosition: { x: number; y: number } | null;
   modalPosition: { x: number; y: number } | null;
   modalSize: { width: number; height: number } | null;
@@ -613,6 +614,7 @@ interface SettingsState {
   removeFavoriteTerminalTheme: (theme: string) => void;
   toggleFavoriteTerminalTheme: (theme: string) => void;
   // Quick Terminal methods
+  setQuickTerminalEnabled: (enabled: boolean) => void;
   setQuickTerminalButtonPosition: (position: { x: number; y: number } | null) => void;
   setQuickTerminalModalPosition: (position: { x: number; y: number } | null) => void;
   setQuickTerminalModalSize: (size: { width: number; height: number } | null) => void;
@@ -687,6 +689,7 @@ export const useSettingsStore = create<SettingsState>()(
       favoriteTerminalThemes: [],
       // Quick Terminal defaults
       quickTerminal: {
+        enabled: true,
         buttonPosition: null,
         modalPosition: null,
         modalSize: null,
@@ -983,6 +986,10 @@ export const useSettingsStore = create<SettingsState>()(
             : [...state.favoriteTerminalThemes, theme],
         })),
       // Quick Terminal methods
+      setQuickTerminalEnabled: (enabled) =>
+        set((state) => ({
+          quickTerminal: { ...state.quickTerminal, enabled },
+        })),
       setQuickTerminalButtonPosition: (position) =>
         set((state) => ({
           quickTerminal: { ...state.quickTerminal, buttonPosition: position },

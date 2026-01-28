@@ -125,11 +125,38 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     claudeCodeIntegration,
     terminalTheme,
   } = useSettingsStore();
+  const quickTerminalEnabled = useSettingsStore((s) => s.quickTerminal.enabled);
   const quickTerminalOpen = useSettingsStore((s) => s.quickTerminal.isOpen);
   const setQuickTerminalOpen = useSettingsStore((s) => s.setQuickTerminalOpen);
   const { getQuickTerminalSession, setQuickTerminalSession, removeQuickTerminalSession } =
     useTerminalStore();
   const currentQuickTerminalSession = getQuickTerminalSession(cwd);
+
+  // 用于强制重新创建 QuickTerminalModal 的 key
+  // 当功能被禁用再启用时递增，确保创建全新的 terminal
+  const [quickTerminalMountKey, setQuickTerminalMountKey] = useState(0);
+  const prevQuickTerminalEnabled = useRef(quickTerminalEnabled);
+  useEffect(() => {
+    if (quickTerminalEnabled && !prevQuickTerminalEnabled.current) {
+      // 功能从禁用变为启用，递增 key 强制重新创建
+      setQuickTerminalMountKey((k) => k + 1);
+    }
+    if (!quickTerminalEnabled && prevQuickTerminalEnabled.current) {
+      // 功能从启用变为禁用，清理 session
+      if (currentQuickTerminalSession) {
+        window.electronAPI.terminal.destroy(currentQuickTerminalSession).catch(console.error);
+      }
+      removeQuickTerminalSession(cwd);
+      setQuickTerminalOpen(false);
+    }
+    prevQuickTerminalEnabled.current = quickTerminalEnabled;
+  }, [
+    quickTerminalEnabled,
+    cwd,
+    currentQuickTerminalSession,
+    removeQuickTerminalSession,
+    setQuickTerminalOpen,
+  ]);
 
   const terminalBgColor = useMemo(() => {
     return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
@@ -146,11 +173,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   const handleQuickTerminalSessionInit = useCallback(
     (sessionId: string) => {
-      if (!currentQuickTerminalSession) {
-        setQuickTerminalSession(cwd, sessionId);
-      }
+      // 总是更新 session，覆盖可能存在的旧记录（对应已销毁的 PTY）
+      setQuickTerminalSession(cwd, sessionId);
     },
-    [cwd, currentQuickTerminalSession, setQuickTerminalSession]
+    [cwd, setQuickTerminalSession]
   );
 
   const handleCloseQuickTerminal = useCallback(async () => {
@@ -1331,23 +1357,25 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           </div>
         );
       })}
-      {/* Quick Terminal - 始终渲染以保持 terminal 挂载状态 */}
-      {isActive && (
-        <>
-          <QuickTerminalButton
-            containerRef={panelRef}
-            isOpen={quickTerminalOpen}
-            hasRunningProcess={hasRunningProcess}
-            onClick={handleToggleQuickTerminal}
-          />
-          <QuickTerminalModal
-            open={quickTerminalOpen}
-            onOpenChange={setQuickTerminalOpen}
-            onClose={handleCloseQuickTerminal}
-            cwd={cwd}
-            onSessionInit={handleQuickTerminalSessionInit}
-          />
-        </>
+      {/* Quick Terminal Button - 只在当前 panel 激活时显示 */}
+      {isActive && quickTerminalEnabled && (
+        <QuickTerminalButton
+          containerRef={panelRef}
+          isOpen={quickTerminalOpen}
+          hasRunningProcess={hasRunningProcess}
+          onClick={handleToggleQuickTerminal}
+        />
+      )}
+      {/* Quick Terminal Modal - 始终挂载以保持 terminal 运行状态 */}
+      {quickTerminalEnabled && (
+        <QuickTerminalModal
+          key={`quick-terminal-${quickTerminalMountKey}`}
+          open={quickTerminalOpen && isActive}
+          onOpenChange={setQuickTerminalOpen}
+          onClose={handleCloseQuickTerminal}
+          cwd={cwd}
+          onSessionInit={handleQuickTerminalSessionInit}
+        />
       )}
     </div>
   );

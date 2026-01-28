@@ -48,6 +48,8 @@ export function GeneralSettings() {
     setProxySettings,
     autoCreateSessionOnActivate,
     setAutoCreateSessionOnActivate,
+    quickTerminal,
+    setQuickTerminalEnabled,
   } = useSettingsStore();
   const { t, locale } = useI18n();
 
@@ -248,6 +250,17 @@ export function GeneralSettings() {
             checked={autoCreateSessionOnActivate}
             onCheckedChange={setAutoCreateSessionOnActivate}
           />
+        </div>
+      </div>
+
+      {/* Quick Terminal */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Quick Terminal')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Show floating terminal button for quick access')}
+          </p>
+          <Switch checked={quickTerminal.enabled} onCheckedChange={setQuickTerminalEnabled} />
         </div>
       </div>
 
