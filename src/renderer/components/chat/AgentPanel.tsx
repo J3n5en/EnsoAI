@@ -1316,15 +1316,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       {/* Quick Terminal - 始终渲染以保持 terminal 挂载状态 */}
       {isActive && (
         <>
-          {(() => {
-            console.log('[AgentPanel] QuickTerminal state:', {
-              isActive,
-              quickTerminalOpen,
-              shouldRender: isActive,
-              cwd,
-            });
-            return null;
-          })()}
           <QuickTerminalButton
             isOpen={quickTerminalOpen}
             hasRunningProcess={hasRunningProcess}

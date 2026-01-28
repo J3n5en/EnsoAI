@@ -30,21 +30,7 @@ export function ShellTerminal({
   onSplit,
   onMerge,
 }: ShellTerminalProps) {
-  console.log('[ShellTerminal] Render:', { cwd, isActive });
-
   const { t } = useI18n();
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mount/unmount logging only
-  useEffect(() => {
-    console.log('[ShellTerminal] Mounted:', { cwd, isActive });
-    return () => {
-      console.log('[ShellTerminal] UNMOUNTED:', { cwd, isActive });
-    };
-  }, []);
-
-  useEffect(() => {
-    console.log('[ShellTerminal] isActive changed:', { isActive, cwd });
-  }, [isActive, cwd]);
 
   // Handle Shift+Enter for newline (send LF character)
   const handleCustomKey = useCallback((event: KeyboardEvent, ptyId: string) => {
