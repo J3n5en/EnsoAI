@@ -1,8 +1,10 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { useDraggable } from '@/hooks/useDraggable';
+import { fadeVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -55,56 +57,68 @@ export function QuickTerminalModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup
-        className="!max-w-none !rounded-lg"
-        showCloseButton={false}
-        showBackdrop={false}
-        style={{
-          position: 'fixed',
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          width: `${modalSize.width}px`,
-          height: `${modalSize.height}px`,
-          transform: 'none',
-        }}
-      >
-        {/* 标题栏 - 可拖动 */}
-        <div
-          {...dragHandlers}
-          className={cn(
-            'flex items-center justify-between h-9 px-3 border-b bg-muted/30 rounded-t-lg select-none',
-            isDragging ? 'cursor-grabbing' : 'cursor-grab'
-          )}
-        >
-          <div className="flex items-center gap-2 text-sm font-medium pointer-events-none">
-            <TerminalIcon className="h-4 w-4" />
-            <span>Quick Terminal</span>
-          </div>
-          <div className="flex items-center gap-1 pointer-events-auto">
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              title="最小化 (Esc)"
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            variants={fadeVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={springFast}
+          >
+            <DialogPopup
+              className="!max-w-none !rounded-lg"
+              showCloseButton={false}
+              showBackdrop={false}
+              style={{
+                position: 'fixed',
+                left: `${position.x}px`,
+                top: `${position.y}px`,
+                width: `${modalSize.width}px`,
+                height: `${modalSize.height}px`,
+                transform: 'none',
+              }}
             >
-              <Minimize2 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-              title="关闭"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+              {/* 标题栏 - 可拖动 */}
+              <div
+                {...dragHandlers}
+                className={cn(
+                  'flex items-center justify-between h-9 px-3 border-b bg-muted/30 rounded-t-lg select-none',
+                  isDragging ? 'cursor-grabbing' : 'cursor-grab'
+                )}
+              >
+                <div className="flex items-center gap-2 text-sm font-medium pointer-events-none">
+                  <TerminalIcon className="h-4 w-4" />
+                  <span>Quick Terminal</span>
+                </div>
+                <div className="flex items-center gap-1 pointer-events-auto">
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                    title="最小化 (Esc)"
+                  >
+                    <Minimize2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                    title="关闭"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
 
-        {/* 终端内容区 */}
-        <div className="flex-1 min-h-0">
-          {open && <ShellTerminal cwd={cwd} isActive={open} onInit={handleTerminalInit} />}
-        </div>
-      </DialogPopup>
+              {/* 终端内容区 */}
+              <div className="flex-1 min-h-0">
+                {open && <ShellTerminal cwd={cwd} isActive={open} onInit={handleTerminalInit} />}
+              </div>
+            </DialogPopup>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Dialog>
   );
 }
