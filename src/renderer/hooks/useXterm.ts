@@ -603,7 +603,6 @@ export function useXterm({
   }, [terminalRenderer, loadRenderer]);
 
   // Cleanup on unmount
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup logging only
   useEffect(() => {
     return () => {
       cleanupRef.current?.();
