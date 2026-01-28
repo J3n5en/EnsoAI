@@ -41,6 +41,7 @@ export interface UseXtermOptions {
   onData?: (data: string) => void;
   onCustomKey?: (event: KeyboardEvent, ptyId: string) => boolean;
   onTitleChange?: (title: string) => void;
+  onInit?: (ptyId: string) => void;
   onSplit?: () => void;
   onMerge?: () => void;
   canMerge?: boolean;
@@ -112,6 +113,7 @@ export function useXterm({
   onData,
   onCustomKey,
   onTitleChange,
+  onInit,
   onSplit,
   onMerge,
   canMerge = false,
@@ -139,6 +141,8 @@ export function useXterm({
   onCustomKeyRef.current = onCustomKey;
   const onTitleChangeRef = useRef(onTitleChange);
   onTitleChangeRef.current = onTitleChange;
+  const onInitRef = useRef(onInit);
+  onInitRef.current = onInit;
   const onSplitRef = useRef(onSplit);
   onSplitRef.current = onSplit;
   const onMergeRef = useRef(onMerge);
@@ -511,6 +515,9 @@ export function useXterm({
       });
 
       ptyIdRef.current = ptyId;
+
+      // Call onInit callback with ptyId
+      onInitRef.current?.(ptyId);
 
       // Handle data from pty with debounced buffering for smooth rendering
       // 30ms delay merges fragmented TUI packets (clear + write)

@@ -17,6 +17,7 @@ import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { initAgentStatusListener } from '@/stores/agentStatus';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
+import { useTerminalStore } from '@/stores/terminal';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
@@ -125,6 +126,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   } = useSettingsStore();
   const quickTerminalOpen = useSettingsStore((s) => s.quickTerminal.isOpen);
   const setQuickTerminalOpen = useSettingsStore((s) => s.setQuickTerminalOpen);
+  const { getQuickTerminalSession, setQuickTerminalSession } = useTerminalStore();
+  const currentQuickTerminalSession = getQuickTerminalSession(cwd);
+
   const terminalBgColor = useMemo(() => {
     return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
   }, [terminalTheme]);
@@ -135,6 +139,15 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const handleToggleQuickTerminal = useCallback(() => {
     setQuickTerminalOpen(!quickTerminalOpen);
   }, [quickTerminalOpen, setQuickTerminalOpen]);
+
+  const handleQuickTerminalSessionInit = useCallback(
+    (sessionId: string) => {
+      if (!currentQuickTerminalSession) {
+        setQuickTerminalSession(cwd, sessionId);
+      }
+    },
+    [cwd, currentQuickTerminalSession, setQuickTerminalSession]
+  );
 
   // Global session IDs to keep terminals mounted across group moves
   const [globalSessionIds, setGlobalSessionIds] = useState<Set<string>>(new Set());
@@ -1284,6 +1297,8 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
             open={quickTerminalOpen}
             onOpenChange={setQuickTerminalOpen}
             cwd={cwd}
+            sessionId={currentQuickTerminalSession}
+            onSessionInit={handleQuickTerminalSessionInit}
           />
         </>
       )}

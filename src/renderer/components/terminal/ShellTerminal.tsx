@@ -14,6 +14,7 @@ interface ShellTerminalProps {
   initialCommand?: string;
   onExit?: () => void;
   onTitleChange?: (title: string) => void;
+  onInit?: (ptyId: string) => void;
   onSplit?: () => void;
   onMerge?: () => void;
 }
@@ -25,6 +26,7 @@ export function ShellTerminal({
   initialCommand,
   onExit,
   onTitleChange,
+  onInit,
   onSplit,
   onMerge,
 }: ShellTerminalProps) {
@@ -57,6 +59,7 @@ export function ShellTerminal({
     initialCommand,
     onExit,
     onTitleChange,
+    onInit,
     onSplit,
     onMerge,
     canMerge,

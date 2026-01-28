@@ -1,5 +1,5 @@
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { useDraggable } from '@/hooks/useDraggable';
@@ -10,11 +10,27 @@ interface QuickTerminalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   cwd: string;
+  sessionId?: string;
+  onSessionInit: (sessionId: string) => void;
 }
 
-export function QuickTerminalModal({ open, onOpenChange, cwd }: QuickTerminalModalProps) {
+export function QuickTerminalModal({
+  open,
+  onOpenChange,
+  cwd,
+  sessionId,
+  onSessionInit,
+}: QuickTerminalModalProps) {
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
+
+  // 终端初始化回调
+  const handleTerminalInit = useCallback(
+    (ptyId: string) => {
+      onSessionInit?.(ptyId);
+    },
+    [onSessionInit]
+  );
 
   // 计算默认尺寸
   const modalSize = useMemo(() => {
@@ -85,7 +101,9 @@ export function QuickTerminalModal({ open, onOpenChange, cwd }: QuickTerminalMod
         </div>
 
         {/* 终端内容区 */}
-        <div className="flex-1 min-h-0">{open && <ShellTerminal cwd={cwd} isActive={open} />}</div>
+        <div className="flex-1 min-h-0">
+          {open && <ShellTerminal cwd={cwd} isActive={open} onInit={handleTerminalInit} />}
+        </div>
       </DialogPopup>
     </Dialog>
   );
