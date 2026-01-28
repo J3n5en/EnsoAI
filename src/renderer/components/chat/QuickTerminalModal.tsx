@@ -69,19 +69,31 @@ export function QuickTerminalModal({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [open, onOpenChange]);
 
-  // 点击外部关闭(可选)
+  // 点击背景关闭
   const modalRef = useRef<HTMLDivElement>(null);
 
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    // 点击背景层关闭
+    if (e.target === e.currentTarget) {
+      onOpenChange(false);
+    }
+  };
+
   return createPortal(
+    // biome-ignore lint/a11y/useKeyWithClickEvents: ESC 键已在 useEffect 中处理
     <div
+      onClick={handleBackdropClick}
       className={cn(
-        'fixed inset-0 z-50 transition-opacity',
-        !open && 'opacity-0 pointer-events-none'
+        'fixed inset-0 z-50 transition-all',
+        // 打开时显示半透明背景
+        open ? 'bg-black/20 backdrop-blur-[2px]' : 'opacity-0 pointer-events-none'
       )}
     >
       {/* Modal 窗口 */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation 不是交互行为 */}
       <div
         ref={modalRef}
+        onClick={(e) => e.stopPropagation()} // 阻止事件冒泡到背景层
         className={cn(
           'fixed flex flex-col rounded-lg border bg-popover shadow-2xl transition-opacity',
           !open && 'opacity-0'

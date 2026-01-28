@@ -30,16 +30,17 @@ export function QuickTerminalButton({
     };
   }
 
-  const { position, isDragging, dragHandlers } = useDraggable({
+  const { position, isDragging, hasDragged, dragHandlers } = useDraggable({
     initialPosition: buttonPosition || defaultPositionRef.current,
     bounds: { width: BUTTON_SIZE, height: BUTTON_SIZE },
     onPositionChange: setButtonPosition,
   });
 
   const handleClick = (e: React.MouseEvent) => {
-    // 如果刚拖动过，不触发点击
-    if (isDragging) {
+    // 如果发生了拖动，不触发点击
+    if (hasDragged) {
       e.stopPropagation();
+      e.preventDefault();
       return;
     }
     onClick();

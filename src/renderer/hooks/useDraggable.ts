@@ -16,7 +16,9 @@ export function useDraggable({
   onPositionChange,
 }: UseDraggableOptions) {
   const [isDragging, setIsDragging] = useState(false);
+  const [hasDragged, setHasDragged] = useState(false); // 跟踪是否真正拖动过
   const dragStartPos = useRef({ x: 0, y: 0 });
+  const initialDragPosition = useRef({ x: 0, y: 0 }); // 记录拖动开始时的位置
 
   // 计算边界约束
   const clampPosition = useCallback(
@@ -58,6 +60,8 @@ export function useDraggable({
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       setIsDragging(true);
+      setHasDragged(false); // 重置拖动标记
+      initialDragPosition.current = { x: position.x, y: position.y }; // 记录初始位置
       dragStartPos.current = {
         x: e.clientX - position.x,
         y: e.clientY - position.y,
@@ -75,15 +79,27 @@ export function useDraggable({
         y: e.clientY - dragStartPos.current.y,
       };
 
+      // 如果移动距离超过 5px，认为是拖动而非点击
+      if (!hasDragged) {
+        const dx = newPos.x - initialDragPosition.current.x;
+        const dy = newPos.y - initialDragPosition.current.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 5) {
+          setHasDragged(true);
+        }
+      }
+
       setPosition(clampPosition(newPos));
     },
-    [isDragging, clampPosition]
+    [isDragging, clampPosition, hasDragged]
   );
 
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
       setIsDragging(false);
       onPositionChange?.(position);
+      // 延迟重置 hasDragged，让 click 事件能够检测到
+      setTimeout(() => setHasDragged(false), 100);
     }
   }, [isDragging, position, onPositionChange]);
 
@@ -111,6 +127,7 @@ export function useDraggable({
   return {
     position,
     isDragging,
+    hasDragged, // 是否真正发生了拖动
     dragHandlers: {
       onMouseDown: handleMouseDown,
     },
