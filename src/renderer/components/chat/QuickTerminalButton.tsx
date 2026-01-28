@@ -78,7 +78,7 @@ export function QuickTerminalButton({
         <Terminal className="h-[18px] w-[18px]" />
         {/* 有活跃 PTY 时显示指示器 */}
         {hasRunningProcess && !isOpen && (
-          <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-primary ring-1 ring-background" />
+          <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-foreground" />
         )}
       </div>
     </button>
