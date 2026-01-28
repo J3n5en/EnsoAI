@@ -16,7 +16,6 @@ export function useDraggable({
   onPositionChange,
 }: UseDraggableOptions) {
   const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState(initialPosition || { x: 0, y: 0 });
   const dragStartPos = useRef({ x: 0, y: 0 });
 
   // 计算边界约束
@@ -40,23 +39,21 @@ export function useDraggable({
     [bounds, containerBounds, minVisibleArea]
   );
 
-  // 初始化位置（居中或使用保存的位置）
-  useEffect(() => {
+  // 使用 useState 初始化函数，只执行一次
+  const [position, setPosition] = useState(() => {
     if (initialPosition) {
-      setPosition(clampPosition(initialPosition));
-    } else {
-      // 默认居中
-      const container = containerBounds || {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      };
-      const centered = {
-        x: (container.width - bounds.width) / 2,
-        y: (container.height - bounds.height) / 2,
-      };
-      setPosition(clampPosition(centered));
+      return clampPosition(initialPosition);
     }
-  }, [initialPosition, bounds, containerBounds, clampPosition]);
+    // 默认居中
+    const container = containerBounds || {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
+    return clampPosition({
+      x: (container.width - bounds.width) / 2,
+      y: (container.height - bounds.height) / 2,
+    });
+  });
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {

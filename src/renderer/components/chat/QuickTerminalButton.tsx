@@ -1,4 +1,5 @@
 import { Terminal } from 'lucide-react';
+import { useRef } from 'react';
 import { useDraggable } from '@/hooks/useDraggable';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -19,11 +20,18 @@ export function QuickTerminalButton({
 
   const BUTTON_SIZE = 48;
 
-  const { position, isDragging, dragHandlers } = useDraggable({
-    initialPosition: buttonPosition || {
+  // 使用 useRef 缓存默认位置
+  const defaultPositionRef = useRef<{ x: number; y: number } | null>(null);
+
+  if (!defaultPositionRef.current) {
+    defaultPositionRef.current = {
       x: window.innerWidth - BUTTON_SIZE - 16,
       y: window.innerHeight - BUTTON_SIZE - 16,
-    },
+    };
+  }
+
+  const { position, isDragging, dragHandlers } = useDraggable({
+    initialPosition: buttonPosition || defaultPositionRef.current,
     bounds: { width: BUTTON_SIZE, height: BUTTON_SIZE },
     onPositionChange: setButtonPosition,
   });

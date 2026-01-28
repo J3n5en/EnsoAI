@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { useDraggable } from '@/hooks/useDraggable';
@@ -41,15 +41,17 @@ export function QuickTerminalModal({
     return { width, height };
   }, []);
 
-  // 计算默认位置（底部居中）
-  const defaultPosition = useMemo(() => {
+  // 使用 useRef 缓存默认位置，防止 Modal 关闭再打开时重置
+  const defaultPositionRef = useRef<{ x: number; y: number } | null>(null);
+
+  if (!defaultPositionRef.current) {
     const left = (window.innerWidth - modalSize.width) / 2;
     const top = window.innerHeight - modalSize.height - 40;
-    return { x: left, y: top };
-  }, [modalSize]);
+    defaultPositionRef.current = { x: left, y: top };
+  }
 
   const { position, isDragging, dragHandlers } = useDraggable({
-    initialPosition: modalPosition || defaultPosition,
+    initialPosition: modalPosition || defaultPositionRef.current,
     bounds: modalSize,
     minVisibleArea: { x: 50, y: 32 }, // 确保标题栏至少 50% 可见
     onPositionChange: setModalPosition,
