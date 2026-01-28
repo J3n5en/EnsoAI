@@ -52,13 +52,15 @@ export function QuickTerminalButton({
       onClick={handleClick}
       {...dragHandlers}
       className={cn(
-        'fixed z-30 flex items-center justify-center rounded-full shadow-lg',
-        'bg-primary/90 text-primary-foreground',
+        'fixed z-30 flex items-center justify-center rounded-full border shadow-lg backdrop-blur-sm',
         // 拖动时禁用过渡和 hover 效果
-        isDragging
-          ? 'cursor-grabbing opacity-70'
-          : 'cursor-grab transition-all hover:bg-primary hover:scale-105 active:scale-95',
-        isOpen && 'opacity-50'
+        isDragging ? 'cursor-grabbing opacity-70' : 'cursor-grab transition-all',
+        // 根据状态设置背景和文字颜色
+        isOpen
+          ? 'bg-accent text-accent-foreground'
+          : hasRunningProcess
+            ? 'bg-accent/50 text-accent-foreground hover:bg-accent'
+            : 'bg-background/90 text-muted-foreground hover:bg-accent/50 hover:text-foreground'
       )}
       style={{
         left: `${position.x}px`,
@@ -69,10 +71,6 @@ export function QuickTerminalButton({
       title="Quick Terminal (Ctrl+`)"
     >
       <Terminal className="h-5 w-5" />
-
-      {hasRunningProcess && (
-        <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-      )}
     </button>
   );
 }
