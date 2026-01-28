@@ -1,5 +1,5 @@
 import { Minimize2, Terminal as TerminalIcon, X } from 'lucide-react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { useDraggable } from '@/hooks/useDraggable';
@@ -21,6 +21,14 @@ export function QuickTerminalModal({
   sessionId: _sessionId, // 前缀 _ 标记为有意未使用
   onSessionInit,
 }: QuickTerminalModalProps) {
+  console.log('[QuickTerminalModal] Render:', { open, cwd, sessionId: _sessionId });
+
+  useEffect(() => {
+    console.log('[QuickTerminalModal] Mount/Update:', { open, cwd });
+    return () => {
+      console.log('[QuickTerminalModal] Cleanup:', { open, cwd });
+    };
+  }, [open, cwd]);
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
 

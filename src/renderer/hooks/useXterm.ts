@@ -118,6 +118,8 @@ export function useXterm({
   onMerge,
   canMerge = false,
 }: UseXtermOptions): UseXtermResult {
+  console.log('[useXterm] Render:', { cwd, isActive });
+
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const settings = useTerminalSettings();
@@ -265,6 +267,7 @@ export function useXterm({
   const initTerminal = useCallback(async () => {
     if (!containerRef.current || terminalRef.current) return;
 
+    console.log('[useXterm] initTerminal called:', { cwd, isActive });
     setIsLoading(true);
 
     const terminal = new Terminal({
@@ -503,6 +506,7 @@ export function useXterm({
     });
 
     try {
+      console.log('[useXterm] Creating PTY:', { cwd });
       const ptyId = await window.electronAPI.terminal.create({
         cwd: cwd || window.electronAPI.env.HOME,
         // If command is provided (e.g., for agent), use shell/args directly
@@ -514,6 +518,7 @@ export function useXterm({
         initialCommand: initialCommandRef.current,
       });
 
+      console.log('[useXterm] PTY Created:', { ptyId, cwd });
       ptyIdRef.current = ptyId;
 
       // Call onInit callback with ptyId
@@ -585,8 +590,14 @@ export function useXterm({
 
   useEffect(() => {
     const shouldActivate = isActive || initialCommandRef.current;
+    console.log('[useXterm] Activation effect:', {
+      isActive,
+      shouldActivate,
+      hasBeenActivated: hasBeenActivatedRef.current,
+    });
     if (shouldActivate && !hasBeenActivatedRef.current) {
       hasBeenActivatedRef.current = true;
+      console.log('[useXterm] Starting terminal initialization');
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           initTerminal();
@@ -603,8 +614,10 @@ export function useXterm({
   }, [terminalRenderer, loadRenderer]);
 
   // Cleanup on unmount
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup logging only
   useEffect(() => {
     return () => {
+      console.log('[useXterm] Cleanup - Destroying PTY:', { ptyId: ptyIdRef.current, cwd });
       cleanupRef.current?.();
       exitCleanupRef.current?.();
       if (ptyIdRef.current) {
