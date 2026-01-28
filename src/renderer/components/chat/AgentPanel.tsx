@@ -151,14 +151,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [cwd, currentQuickTerminalSession, setQuickTerminalSession]
   );
 
-  // 监听终端输出状态（简化版）
+  // 监听终端会话状态
   useEffect(() => {
-    if (!currentQuickTerminalSession) {
-      setHasRunningProcess(false);
-      return;
-    }
-    // TODO: 实现真正的进程检测逻辑
-    setHasRunningProcess(false);
+    // 只要有 session 存在就认为是 active（有 PTY 在运行）
+    setHasRunningProcess(!!currentQuickTerminalSession);
   }, [currentQuickTerminalSession]);
 
   // Global session IDs to keep terminals mounted across group moves

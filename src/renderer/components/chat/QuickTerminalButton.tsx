@@ -70,7 +70,13 @@ export function QuickTerminalButton({
       }}
       title="Quick Terminal (Ctrl+`)"
     >
-      <Terminal className="h-5 w-5" />
+      <div className="relative flex items-center justify-center">
+        <Terminal className="h-5 w-5" />
+        {/* 有活跃 PTY 时显示指示器 */}
+        {hasRunningProcess && !isOpen && (
+          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary border border-background/90" />
+        )}
+      </div>
     </button>
   );
 }
