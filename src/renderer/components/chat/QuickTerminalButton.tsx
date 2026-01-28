@@ -1,16 +1,18 @@
 import { Terminal } from 'lucide-react';
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { useDraggable } from '@/hooks/useDraggable';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 
 interface QuickTerminalButtonProps {
+  containerRef: React.RefObject<HTMLDivElement | null>;
   isOpen: boolean;
   hasRunningProcess: boolean;
   onClick: () => void;
 }
 
 export function QuickTerminalButton({
+  containerRef,
   isOpen,
   hasRunningProcess,
   onClick,
@@ -20,19 +22,30 @@ export function QuickTerminalButton({
 
   const BUTTON_SIZE = 40; // 更小更精致
 
+  // 计算容器边界
+  const getContainerBounds = useCallback(() => {
+    if (!containerRef.current) {
+      return { width: window.innerWidth, height: window.innerHeight };
+    }
+    const rect = containerRef.current.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  }, [containerRef]);
+
   // 使用 useRef 缓存默认位置
   const defaultPositionRef = useRef<{ x: number; y: number } | null>(null);
 
   if (!defaultPositionRef.current) {
+    const bounds = getContainerBounds();
     defaultPositionRef.current = {
-      x: window.innerWidth - BUTTON_SIZE - 16,
-      y: window.innerHeight - BUTTON_SIZE - 16,
+      x: bounds.width - BUTTON_SIZE - 16,
+      y: bounds.height - BUTTON_SIZE - 16,
     };
   }
 
   const { position, isDragging, hasDragged, dragHandlers } = useDraggable({
     initialPosition: buttonPosition || defaultPositionRef.current,
     bounds: { width: BUTTON_SIZE, height: BUTTON_SIZE },
+    containerBounds: getContainerBounds(),
     onPositionChange: setButtonPosition,
   });
 

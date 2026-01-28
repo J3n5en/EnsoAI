@@ -1,5 +1,5 @@
 import { Plus, Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { normalizePath, pathsEqual } from '@/App/storage';
 import { ResizeHandle } from '@/components/terminal/ResizeHandle';
 import { Button } from '@/components/ui/button';
@@ -114,6 +114,7 @@ function createSession(
 
 export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }: AgentPanelProps) {
   const { t } = useI18n();
+  const panelRef = useRef<HTMLDivElement>(null); // 容器引用
   const {
     agentSettings,
     agentDetectionStatus,
@@ -1096,7 +1097,11 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const currentGroupPositions = getGroupPositions(currentGroupState);
 
   return (
-    <div className="relative h-full w-full" style={{ backgroundColor: terminalBgColor }}>
+    <div
+      ref={panelRef}
+      className="relative h-full w-full"
+      style={{ backgroundColor: terminalBgColor }}
+    >
       {/* Empty state overlay - shown when current worktree has no sessions */}
       {/* IMPORTANT: Don't use early return here - terminals must stay mounted to prevent PTY destruction */}
       {showEmptyState && (
@@ -1330,6 +1335,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       {isActive && (
         <>
           <QuickTerminalButton
+            containerRef={panelRef}
             isOpen={quickTerminalOpen}
             hasRunningProcess={hasRunningProcess}
             onClick={handleToggleQuickTerminal}
