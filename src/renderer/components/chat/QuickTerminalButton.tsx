@@ -63,7 +63,7 @@ export function QuickTerminalButton({
         isOpen
           ? 'bg-accent text-accent-foreground border-accent/50'
           : hasRunningProcess
-            ? 'bg-accent/40 text-accent-foreground border-accent/30 hover:bg-accent/60'
+            ? 'bg-accent text-accent-foreground border-accent/50 hover:bg-accent/90'
             : 'bg-background/95 text-muted-foreground border-border/50 hover:bg-accent/30 hover:text-foreground hover:border-accent/30'
       )}
       style={{
@@ -74,13 +74,7 @@ export function QuickTerminalButton({
       }}
       title="Quick Terminal (Ctrl+`)"
     >
-      <div className="relative flex items-center justify-center">
-        <Terminal className="h-[18px] w-[18px]" />
-        {/* 有活跃 PTY 时显示指示器 */}
-        {hasRunningProcess && !isOpen && (
-          <span className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-foreground" />
-        )}
-      </div>
+      <Terminal className="h-[18px] w-[18px]" />
     </button>
   );
 }
