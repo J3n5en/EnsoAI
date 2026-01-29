@@ -1,0 +1,39 @@
+import type { ClaudeProvider } from '@shared/types';
+
+export type ClaudeProviderMatchSnapshot = Partial<
+  Pick<
+    ClaudeProvider,
+    | 'baseUrl'
+    | 'authToken'
+    | 'model'
+    | 'smallFastModel'
+    | 'defaultSonnetModel'
+    | 'defaultOpusModel'
+    | 'defaultHaikuModel'
+  >
+>;
+
+const normalizeValue = (value?: string): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+export function isClaudeProviderMatch(
+  provider: ClaudeProvider,
+  current?: ClaudeProviderMatchSnapshot | null
+): boolean {
+  if (!current) return false;
+  const baseUrl = normalizeValue(current.baseUrl);
+  const authToken = normalizeValue(current.authToken);
+  if (!baseUrl || !authToken) return false;
+
+  return (
+    normalizeValue(provider.baseUrl) === baseUrl &&
+    normalizeValue(provider.authToken) === authToken &&
+    normalizeValue(provider.model) === normalizeValue(current.model) &&
+    normalizeValue(provider.smallFastModel) === normalizeValue(current.smallFastModel) &&
+    normalizeValue(provider.defaultSonnetModel) === normalizeValue(current.defaultSonnetModel) &&
+    normalizeValue(provider.defaultOpusModel) === normalizeValue(current.defaultOpusModel) &&
+    normalizeValue(provider.defaultHaikuModel) === normalizeValue(current.defaultHaikuModel)
+  );
+}

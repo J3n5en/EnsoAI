@@ -7,6 +7,7 @@ import { toastManager } from '@/components/ui/toast';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSessionOutputState } from '@/hooks/useOutputState';
 import { useI18n } from '@/i18n';
+import { isClaudeProviderMatch } from '@/lib/claudeProvider';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -409,14 +410,10 @@ export function SessionBar({
 
   // 计算当前激活的 Provider
   const activeProvider = useMemo(() => {
-    const env = claudeData?.settings?.env;
-    if (!env) return null;
-    return (
-      providers.find(
-        (p) => p.baseUrl === env.ANTHROPIC_BASE_URL && p.authToken === env.ANTHROPIC_AUTH_TOKEN
-      ) ?? null
-    );
-  }, [providers, claudeData?.settings]);
+    const currentConfig = claudeData?.extracted;
+    if (!currentConfig) return null;
+    return providers.find((p) => isClaudeProviderMatch(p, currentConfig)) ?? null;
+  }, [providers, claudeData?.extracted]);
 
   // Provider 切换 mutation
   const applyProvider = useMutation({

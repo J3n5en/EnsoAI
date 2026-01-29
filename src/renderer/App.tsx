@@ -7,6 +7,7 @@ import type {
 } from '@shared/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isClaudeProviderMatch } from '@/lib/claudeProvider';
 import { normalizeHexColor } from '@/lib/colors';
 import {
   ALL_GROUP_ID,
@@ -415,9 +416,7 @@ export default function App() {
       }
 
       // Check if the new config matches any saved provider
-      const matched = claudeProviders.find(
-        (p) => p.baseUrl === extracted.baseUrl && p.authToken === extracted.authToken
-      );
+      const matched = claudeProviders.find((p) => isClaudeProviderMatch(p, extracted));
 
       if (matched) {
         // Switched to a known provider
