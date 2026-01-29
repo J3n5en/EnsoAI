@@ -273,6 +273,28 @@ export default function App() {
     }
   }, [settingsDisplayMode]);
 
+  // Listen for 'open-settings-provider' event from SessionBar
+  useEffect(() => {
+    const handleOpenSettingsProvider = () => {
+      setSettingsCategory('integration');
+      setScrollToProvider(true);
+      // 根据用户上次的设置显示模式打开设置
+      if (settingsDisplayMode === 'tab') {
+        if (activeTab !== 'settings') {
+          setPreviousTab(activeTab);
+          setActiveTab('settings');
+        }
+      } else {
+        setSettingsDialogOpen(true);
+      }
+    };
+
+    window.addEventListener('open-settings-provider', handleOpenSettingsProvider);
+    return () => {
+      window.removeEventListener('open-settings-provider', handleOpenSettingsProvider);
+    };
+  }, [settingsDisplayMode, activeTab]);
+
   // Keyboard shortcuts
   useAppKeyboardShortcuts({
     activeWorktreePath: activeWorktree?.path,
