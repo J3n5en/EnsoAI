@@ -33,7 +33,10 @@ export function DraggableSettingsWindow({
   // 拖动状态
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState(savedPosition || { x: 0, y: 0 });
-  const dragStartPos = useRef({ x: 0, y: 0 });
+  const dragStartPos = useRef<{ x: number; y: number; lastX?: number; lastY?: number }>({
+    x: 0,
+    y: 0,
+  });
   const windowRef = useRef<HTMLDivElement>(null);
 
   // 窗口尺寸常量
@@ -89,7 +92,7 @@ export function DraggableSettingsWindow({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [open, onOpenChange]);
 
-  // 拖动逻辑
+  // 拖动逻辑 - 使用原生 DOM 操作避免 React 重渲染导致的延迟
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if ((e.target as HTMLElement).closest('.no-drag')) return;
@@ -102,42 +105,46 @@ export function DraggableSettingsWindow({
     [position]
   );
 
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isDragging) return;
+  useEffect(() => {
+    if (!isDragging) return;
 
+    const minX = isMac ? MAC_SAFE_MARGIN_X : 0;
+    const minY = isMac ? MAC_SAFE_MARGIN_Y : 0;
+
+    const handleMouseMove = (e: MouseEvent) => {
       let newX = e.clientX - dragStartPos.current.x;
       let newY = e.clientY - dragStartPos.current.y;
 
       // 边界限制（防止拖出屏幕）
-      // macOS: 避免与 traffic lights 重叠导致无法拖动
-      const minX = isMac ? MAC_SAFE_MARGIN_X : 0;
-      const minY = isMac ? MAC_SAFE_MARGIN_Y : 0;
       newX = Math.max(minX, Math.min(newX, window.innerWidth - WINDOW_WIDTH));
       newY = Math.max(minY, Math.min(newY, window.innerHeight - WINDOW_HEIGHT));
 
-      setPosition({ x: newX, y: newY });
-    },
-    [isDragging, isMac]
-  );
+      // 直接操作 DOM，避免 React 状态更新导致的重渲染延迟
+      if (windowRef.current) {
+        windowRef.current.style.left = `${newX}px`;
+        windowRef.current.style.top = `${newY}px`;
+      }
+      // 保存最新位置用于 mouseup 时同步到 state
+      dragStartPos.current.lastX = newX;
+      dragStartPos.current.lastY = newY;
+    };
 
-  const handleMouseUp = useCallback(() => {
-    if (isDragging) {
+    const handleMouseUp = () => {
       setIsDragging(false);
-      setSettingsModalPosition(position);
-    }
-  }, [isDragging, position, setSettingsModalPosition]);
+      // 同步最终位置到 React state
+      const finalX = dragStartPos.current.lastX ?? position.x;
+      const finalY = dragStartPos.current.lastY ?? position.y;
+      setPosition({ x: finalX, y: finalY });
+      setSettingsModalPosition({ x: finalX, y: finalY });
+    };
 
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, isMac, position.x, position.y, setSettingsModalPosition]);
 
   if (!open) return null;
 
@@ -152,7 +159,7 @@ export function DraggableSettingsWindow({
             initial="initial"
             animate="animate"
             exit="exit"
-            transition={springFast}
+            transition={isDragging ? { duration: 0 } : springFast}
             className="fixed flex flex-col rounded-2xl border bg-popover shadow-lg"
             style={
               {
