@@ -18,7 +18,11 @@ import { toastManager } from '@/components/ui/toast';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
 import { useI18n } from '@/i18n';
-import { isClaudeProviderMatch } from '@/lib/claudeProvider';
+import {
+  clearClaudeProviderSwitch,
+  isClaudeProviderMatch,
+  markClaudeProviderSwitch,
+} from '@/lib/claudeProvider';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ProviderDialog } from './ProviderDialog';
@@ -188,6 +192,7 @@ export function ProviderList({ className }: ProviderListProps) {
 
   // 切换 Provider
   const handleSwitch = async (provider: ClaudeProvider) => {
+    markClaudeProviderSwitch(provider);
     const success = await window.electronAPI.claudeProvider.apply(provider);
     if (success) {
       queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
@@ -196,6 +201,8 @@ export function ProviderList({ className }: ProviderListProps) {
         title: t('Provider switched'),
         description: provider.name,
       });
+    } else {
+      clearClaudeProviderSwitch();
     }
   };
 

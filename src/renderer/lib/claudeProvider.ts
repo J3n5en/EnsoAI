@@ -37,3 +37,30 @@ export function isClaudeProviderMatch(
     normalizeValue(provider.defaultHaikuModel) === normalizeValue(current.defaultHaikuModel)
   );
 }
+
+const PROVIDER_SWITCH_WINDOW_MS = 5000;
+let pendingProviderSwitch: { provider: ClaudeProvider; timestamp: number } | null = null;
+
+export function markClaudeProviderSwitch(provider: ClaudeProvider): void {
+  pendingProviderSwitch = { provider, timestamp: Date.now() };
+}
+
+export function clearClaudeProviderSwitch(): void {
+  pendingProviderSwitch = null;
+}
+
+export function consumeClaudeProviderSwitch(
+  extracted?: ClaudeProviderMatchSnapshot | null
+): boolean {
+  if (!pendingProviderSwitch) return false;
+  const { provider, timestamp } = pendingProviderSwitch;
+  if (Date.now() - timestamp > PROVIDER_SWITCH_WINDOW_MS) {
+    pendingProviderSwitch = null;
+    return false;
+  }
+  if (!isClaudeProviderMatch(provider, extracted)) {
+    return false;
+  }
+  pendingProviderSwitch = null;
+  return true;
+}

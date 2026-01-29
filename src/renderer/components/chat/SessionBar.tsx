@@ -7,7 +7,11 @@ import { toastManager } from '@/components/ui/toast';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSessionOutputState } from '@/hooks/useOutputState';
 import { useI18n } from '@/i18n';
-import { isClaudeProviderMatch } from '@/lib/claudeProvider';
+import {
+  clearClaudeProviderSwitch,
+  isClaudeProviderMatch,
+  markClaudeProviderSwitch,
+} from '@/lib/claudeProvider';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -418,7 +422,15 @@ export function SessionBar({
   // Provider 切换 mutation
   const applyProvider = useMutation({
     mutationFn: (provider: ClaudeProvider) => window.electronAPI.claudeProvider.apply(provider),
-    onSuccess: (_, provider) => {
+    onSuccess: (success, provider) => {
+      if (!success) {
+        clearClaudeProviderSwitch();
+        toastManager.add({
+          type: 'error',
+          title: t('Switch failed'),
+        });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
       toastManager.add({
         type: 'success',
@@ -427,6 +439,7 @@ export function SessionBar({
       });
     },
     onError: (error) => {
+      clearClaudeProviderSwitch();
       toastManager.add({
         type: 'error',
         title: t('Switch failed'),
@@ -444,6 +457,7 @@ export function SessionBar({
   // 稳定的 Provider 回调函数
   const handleApplyProvider = useCallback(
     (provider: ClaudeProvider) => {
+      markClaudeProviderSwitch(provider);
       applyProvider.mutate(provider);
     },
     [applyProvider]

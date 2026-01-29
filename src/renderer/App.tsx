@@ -7,7 +7,7 @@ import type {
 } from '@shared/types';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isClaudeProviderMatch } from '@/lib/claudeProvider';
+import { consumeClaudeProviderSwitch, isClaudeProviderMatch } from '@/lib/claudeProvider';
 import { normalizeHexColor } from '@/lib/colors';
 import {
   ALL_GROUP_ID,
@@ -409,6 +409,10 @@ export default function App() {
     const cleanup = window.electronAPI.claudeProvider.onSettingsChanged((data) => {
       const { extracted } = data;
       if (!extracted?.baseUrl) return;
+
+      if (consumeClaudeProviderSwitch(extracted)) {
+        return;
+      }
 
       // Close previous provider toast if exists
       if (providerToastRef.current) {
