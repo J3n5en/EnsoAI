@@ -119,8 +119,6 @@ export default function App() {
   // Ref for cross-repo worktree switching (defined later)
   const switchWorktreePathRef = useRef<((path: string) => void) | null>(null);
 
-  // Settings dialog state
-  const [_settingsOpen, _setSettingsOpen] = useState(false);
   // Settings page state (used in MainContent)
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
     try {
@@ -143,6 +141,9 @@ export default function App() {
     }
   });
   const [scrollToProvider, setScrollToProvider] = useState(false);
+  const [pendingProviderAction, setPendingProviderAction] = useState<'preview' | 'save' | null>(
+    null
+  );
 
   // 持久化状态变更
   useEffect(() => {
@@ -200,6 +201,17 @@ export default function App() {
   // Navigation store for terminal -> editor file navigation
   const { pendingNavigation, clearNavigation } = useNavigationStore();
   const { navigateToFile } = useEditor();
+
+  const openSettings = useCallback(() => {
+    if (settingsDisplayMode === 'tab') {
+      if (activeTab !== 'settings') {
+        setPreviousTab(activeTab);
+        setActiveTab('settings');
+      }
+    } else {
+      setSettingsDialogOpen(true);
+    }
+  }, [settingsDisplayMode, activeTab]);
 
   // Toggle settings page
   const toggleSettings = useCallback(() => {
@@ -278,22 +290,14 @@ export default function App() {
     const handleOpenSettingsProvider = () => {
       setSettingsCategory('integration');
       setScrollToProvider(true);
-      // 根据用户上次的设置显示模式打开设置
-      if (settingsDisplayMode === 'tab') {
-        if (activeTab !== 'settings') {
-          setPreviousTab(activeTab);
-          setActiveTab('settings');
-        }
-      } else {
-        setSettingsDialogOpen(true);
-      }
+      openSettings();
     };
 
     window.addEventListener('open-settings-provider', handleOpenSettingsProvider);
     return () => {
       window.removeEventListener('open-settings-provider', handleOpenSettingsProvider);
     };
-  }, [settingsDisplayMode, activeTab]);
+  }, [openSettings]);
 
   // Keyboard shortcuts
   useAppKeyboardShortcuts({
@@ -363,7 +367,7 @@ export default function App() {
     const cleanup = window.electronAPI.menu.onAction((action) => {
       switch (action) {
         case 'open-settings':
-          toggleSettings();
+          openSettings();
           break;
         case 'open-action-panel':
           setActionPanelOpen(true);
@@ -371,7 +375,7 @@ export default function App() {
       }
     });
     return cleanup;
-  }, [toggleSettings]);
+  }, [openSettings]);
 
   // Listen for close request from main process (native dialogs are shown in main)
   useEffect(() => {
@@ -457,14 +461,36 @@ export default function App() {
           type: 'info',
           title: t('New provider detected'),
           description: t('Click to save this config'),
-          actionProps: {
-            children: t('Open Settings'),
-            onClick: () => {
-              setSettingsCategory('integration');
-              setScrollToProvider(true);
-              toggleSettings();
+          actions: [
+            {
+              label: t('Preview'),
+              onClick: () => {
+                setSettingsCategory('integration');
+                setScrollToProvider(true);
+                openSettings();
+                setPendingProviderAction('preview');
+              },
+              variant: 'ghost',
             },
-          },
+            {
+              label: t('Save'),
+              onClick: () => {
+                setSettingsCategory('integration');
+                setScrollToProvider(true);
+                openSettings();
+                setPendingProviderAction('save');
+              },
+              variant: 'outline',
+            },
+            {
+              label: t('Open Settings'),
+              onClick: () => {
+                setSettingsCategory('integration');
+                setScrollToProvider(true);
+                openSettings();
+              },
+            },
+          ],
         });
       }
     });
@@ -477,7 +503,7 @@ export default function App() {
       }
       cleanup();
     };
-  }, [claudeProviders, t, toggleSettings]);
+  }, [claudeProviders, t, openSettings]);
 
   // Save collapsed states to localStorage
   useEffect(() => {
@@ -1179,10 +1205,27 @@ export default function App() {
     return window.electronAPI.worktree.getConflictContent(selectedRepo, file);
   };
 
+  useEffect(() => {
+    const isSettingsOpen =
+      (settingsDisplayMode === 'tab' && activeTab === 'settings') ||
+      (settingsDisplayMode === 'draggable-modal' && settingsDialogOpen);
+
+    if (!isSettingsOpen) return;
+    if (!pendingProviderAction) return;
+
+    const eventName =
+      pendingProviderAction === 'preview'
+        ? 'open-settings-provider-preview'
+        : 'open-settings-provider-save';
+
+    window.dispatchEvent(new CustomEvent(eventName));
+    setPendingProviderAction(null);
+  }, [settingsDisplayMode, settingsDialogOpen, activeTab, pendingProviderAction]);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       {/* Custom Title Bar for Windows/Linux */}
-      <WindowTitleBar onOpenSettings={toggleSettings} />
+      <WindowTitleBar onOpenSettings={openSettings} />
 
       {/* Main Layout */}
       <div className={`flex flex-1 overflow-hidden ${resizing ? 'select-none' : ''}`}>
@@ -1221,7 +1264,7 @@ export default function App() {
                     refetchBranches();
                   }}
                   onInitGit={handleInitGit}
-                  onOpenSettings={toggleSettings}
+                  onOpenSettings={openSettings}
                   collapsed={false}
                   onCollapse={() => setRepositoryCollapsed(true)}
                   groups={sortedGroups}
@@ -1266,7 +1309,7 @@ export default function App() {
                     onAddRepository={handleAddRepository}
                     onRemoveRepository={handleRemoveRepository}
                     onReorderRepositories={handleReorderRepositories}
-                    onOpenSettings={toggleSettings}
+                    onOpenSettings={openSettings}
                     collapsed={false}
                     onCollapse={() => setRepositoryCollapsed(true)}
                     groups={sortedGroups}
@@ -1389,7 +1432,7 @@ export default function App() {
           activeWorktreePath={activeWorktree?.path}
           onToggleRepository={() => setRepositoryCollapsed((prev) => !prev)}
           onToggleWorktree={() => setWorktreeCollapsed((prev) => !prev)}
-          onOpenSettings={toggleSettings}
+          onOpenSettings={openSettings}
           onSwitchRepo={handleSelectRepo}
           onSwitchWorktree={handleSelectWorktree}
         />

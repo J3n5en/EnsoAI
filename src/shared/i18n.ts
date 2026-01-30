@@ -410,8 +410,8 @@ export const zhTranslations: Record<string, string> = {
   'New sessions use the default agent. Long-press the plus to pick another enabled agent. Only Claude supports session persistence for now.':
     '新建会话使用默认 Agent，长按加号可选择其他已启用的 Agent。目前仅 Claude 支持会话持久化。',
   'No custom agents yet': '暂无自定义 Agent',
-  Preview: '预览',
   'Remote branches': '远程分支',
+  Preview: '预览',
   Save: '保存',
   "Don't Save": '不保存',
   'Save failed': '保存失败',

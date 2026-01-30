@@ -8,6 +8,7 @@ import {
   LoaderCircleIcon,
   TriangleAlertIcon,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -140,6 +141,27 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                     />
                   </div>
                 </div>
+                {(toast.actions?.length ?? 0) > 0 && (
+                  <div className="flex items-center gap-1" data-slot="toast-actions">
+                    {toast.actions?.map((action) => (
+                      <Toast.Action
+                        key={action.label?.toString() ?? Math.random()}
+                        className={buttonVariants({
+                          size: 'xs',
+                          variant: action.variant ?? 'default',
+                        })}
+                        data-slot="toast-action"
+                        onClick={(event) => {
+                          action.onClick?.();
+                          toast.onClose?.(event);
+                        }}
+                      >
+                        {action.label}
+                      </Toast.Action>
+                    ))}
+                  </div>
+                )}
+
                 {toast.actionProps && (
                   <Toast.Action className={buttonVariants({ size: 'xs' })} data-slot="toast-action">
                     {toast.actionProps.children}
@@ -220,6 +242,27 @@ function AnchoredToasts() {
                         />
                       </div>
                     </div>
+                    {(toast.actions?.length ?? 0) > 0 && (
+                      <div className="flex items-center gap-1" data-slot="toast-actions">
+                        {toast.actions?.map((action) => (
+                          <Toast.Action
+                            key={action.label?.toString() ?? Math.random()}
+                            className={buttonVariants({
+                              size: 'xs',
+                              variant: action.variant ?? 'default',
+                            })}
+                            data-slot="toast-action"
+                            onClick={(event) => {
+                              action.onClick?.();
+                              toast.onClose?.(event);
+                            }}
+                          >
+                            {action.label}
+                          </Toast.Action>
+                        ))}
+                      </div>
+                    )}
+
                     {toast.actionProps && (
                       <Toast.Action
                         className={buttonVariants({ size: 'xs' })}
@@ -241,11 +284,18 @@ function AnchoredToasts() {
 
 type ToastType = 'error' | 'warning' | 'success' | 'info' | 'loading';
 
+type ToastAction = {
+  label: ReactNode;
+  onClick?: () => void;
+  variant?: 'default' | 'outline' | 'ghost';
+};
+
 interface ToastOptions {
   type?: ToastType;
   title: string;
   description?: string;
   timeout?: number;
+  actions?: ToastAction[];
   actionProps?: { children: React.ReactNode };
 }
 

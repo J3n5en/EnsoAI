@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle,
   Circle,
+  Eye,
   GripVertical,
   Pencil,
   Plus,
@@ -14,6 +15,14 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toastManager } from '@/components/ui/toast';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
@@ -157,6 +166,7 @@ export function ProviderList({ className }: ProviderListProps) {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editingProvider, setEditingProvider] = React.useState<ClaudeProvider | null>(null);
   const [saveFromCurrent, setSaveFromCurrent] = React.useState(false);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
 
   // 读取当前 Claude settings（窗口空闲时停止轮询）
   const { data: claudeData } = useQuery({
@@ -242,16 +252,39 @@ export function ProviderList({ className }: ProviderListProps) {
     setDialogOpen(true);
   };
 
+  React.useEffect(() => {
+    const handlePreviewOpen = () => setPreviewOpen(true);
+    const handleSaveOpen = () => {
+      setEditingProvider(null);
+      setSaveFromCurrent(true);
+      setDialogOpen(true);
+    };
+
+    window.addEventListener('open-settings-provider-preview', handlePreviewOpen);
+    window.addEventListener('open-settings-provider-save', handleSaveOpen);
+
+    return () => {
+      window.removeEventListener('open-settings-provider-preview', handlePreviewOpen);
+      window.removeEventListener('open-settings-provider-save', handleSaveOpen);
+    };
+  }, []);
+
   return (
     <div className={cn('space-y-3', className)}>
       {/* 当前配置状态 */}
       {hasUnsavedConfig && claudeData?.extracted && (
         <div className="flex items-center justify-between rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 px-3 py-2">
           <span className="text-sm text-muted-foreground">{t('Current config not saved')}</span>
-          <Button variant="outline" size="sm" onClick={handleSaveFromCurrent}>
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {t('Save')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="xs" className="h-6" onClick={() => setPreviewOpen(true)}>
+              <Eye className="mr-1 h-3.5 w-3.5" />
+              {t('Preview')}
+            </Button>
+            <Button variant="outline" size="xs" className="h-6" onClick={handleSaveFromCurrent}>
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+              {t('Save')}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -296,6 +329,47 @@ export function ProviderList({ className }: ProviderListProps) {
         provider={editingProvider}
         initialValues={saveFromCurrent ? claudeData?.extracted : undefined}
       />
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogPopup className="max-w-xl" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>{t('Preview')}</DialogTitle>
+          </DialogHeader>
+          <DialogPanel>
+            <pre className="max-h-[420px] whitespace-pre-wrap rounded-md bg-muted/60 p-3 text-xs text-muted-foreground">
+              {JSON.stringify(
+                {
+                  env: {
+                    ANTHROPIC_BASE_URL: claudeData?.settings?.env?.ANTHROPIC_BASE_URL,
+                    ANTHROPIC_AUTH_TOKEN: claudeData?.settings?.env?.ANTHROPIC_AUTH_TOKEN,
+                    ANTHROPIC_SMALL_FAST_MODEL:
+                      claudeData?.settings?.env?.ANTHROPIC_SMALL_FAST_MODEL,
+                    ANTHROPIC_DEFAULT_SONNET_MODEL:
+                      claudeData?.settings?.env?.ANTHROPIC_DEFAULT_SONNET_MODEL,
+                    ANTHROPIC_DEFAULT_OPUS_MODEL:
+                      claudeData?.settings?.env?.ANTHROPIC_DEFAULT_OPUS_MODEL,
+                    ANTHROPIC_DEFAULT_HAIKU_MODEL:
+                      claudeData?.settings?.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+                  },
+                  model: claudeData?.settings?.model,
+                },
+                null,
+                2
+              )}
+            </pre>
+          </DialogPanel>
+          <DialogFooter variant="default">
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" className="h-8" onClick={handleSaveFromCurrent}>
+                {t('Save')}
+              </Button>
+              <Button size="sm" className="h-8" onClick={() => setPreviewOpen(false)}>
+                {t('Close')}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 }

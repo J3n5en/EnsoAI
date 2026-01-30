@@ -79,6 +79,7 @@ export function MainContent({
   onToggleSettings,
 }: MainContentProps) {
   const { t } = useI18n();
+  const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const setSettingsDisplayMode = useSettingsStore((s) => s.setSettingsDisplayMode);
 
   // Diff Review Modal state
@@ -482,34 +483,36 @@ export function MainContent({
           />
         </div>
         {/* Settings tab */}
-        <div
-          className={cn(
-            'absolute inset-0 bg-background',
-            activeTab === 'settings' ? 'z-10' : 'invisible pointer-events-none z-0'
-          )}
-        >
-          <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <h1 className="text-lg font-medium">{t('Settings')}</h1>
-              <button
-                type="button"
-                onClick={() => setSettingsDisplayMode('draggable-modal')}
-                className="flex h-6 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                title={t('Switch to floating mode')}
-              >
-                <RectangleEllipsis className="h-3.5 w-3.5" />
-                {t('Switch to floating mode')}
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <SettingsContent
-                activeCategory={settingsCategory}
-                onCategoryChange={onCategoryChange}
-                scrollToProvider={scrollToProvider}
-              />
+        {settingsDisplayMode === 'tab' && (
+          <div
+            className={cn(
+              'absolute inset-0 bg-background',
+              activeTab === 'settings' ? 'z-10' : 'invisible pointer-events-none z-0'
+            )}
+          >
+            <div className="h-full flex flex-col">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <h1 className="text-lg font-medium">{t('Settings')}</h1>
+                <button
+                  type="button"
+                  onClick={() => setSettingsDisplayMode('draggable-modal')}
+                  className="flex h-6 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                  title={t('Switch to floating mode')}
+                >
+                  <RectangleEllipsis className="h-3.5 w-3.5" />
+                  {t('Switch to floating mode')}
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <SettingsContent
+                  activeCategory={settingsCategory}
+                  onCategoryChange={onCategoryChange}
+                  scrollToProvider={scrollToProvider}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Diff Review Modal */}
