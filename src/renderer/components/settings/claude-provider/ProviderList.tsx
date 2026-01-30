@@ -44,6 +44,7 @@ interface ProviderItemProps {
   provider: ClaudeProvider;
   isActive: boolean;
   isDisabled: boolean;
+  enableProviderDisableFeature: boolean;
   onSwitch: (provider: ClaudeProvider) => void;
   onToggleEnabled: (provider: ClaudeProvider, e: React.MouseEvent) => void;
   onEdit: (provider: ClaudeProvider) => void;
@@ -55,6 +56,7 @@ function ProviderItem({
   provider,
   isActive,
   isDisabled,
+  enableProviderDisableFeature,
   onSwitch,
   onToggleEnabled,
   onEdit,
@@ -63,6 +65,9 @@ function ProviderItem({
 }: ProviderItemProps) {
   const controls = useDragControls();
   const isDraggingRef = React.useRef(false);
+
+  // 当 enableProviderDisableFeature 为 false 时，视为所有 Provider 都启用
+  const effectiveIsDisabled = enableProviderDisableFeature ? isDisabled : false;
 
   return (
     <Reorder.Item
@@ -74,7 +79,7 @@ function ProviderItem({
         'group flex items-center justify-between rounded-md px-3 py-2 transition-colors',
         isActive
           ? 'bg-accent text-accent-foreground'
-          : isDisabled
+          : effectiveIsDisabled
             ? 'opacity-60'
             : 'cursor-pointer hover:bg-accent/50'
       )}
@@ -84,10 +89,10 @@ function ProviderItem({
           isDraggingRef.current = false;
           return;
         }
-        !isActive && !isDisabled && onSwitch(provider);
+        !isActive && !effectiveIsDisabled && onSwitch(provider);
       }}
       onKeyDown={(e) => {
-        if (!isActive && !isDisabled && (e.key === 'Enter' || e.key === ' ')) {
+        if (!isActive && !effectiveIsDisabled && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           onSwitch(provider);
         }
@@ -115,27 +120,34 @@ function ProviderItem({
         )}
 
         <span
-          className={cn('text-sm font-medium', isDisabled && 'text-muted-foreground line-through')}
+          className={cn(
+            'text-sm font-medium',
+            effectiveIsDisabled && 'text-muted-foreground line-through'
+          )}
         >
           {provider.name}
         </span>
       </div>
 
       <div className="flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger>
-            <Button variant="ghost" size="icon-xs" onClick={(e) => onToggleEnabled(provider, e)}>
-              {isDisabled ? (
-                <Check className="h-3.5 w-3.5 text-muted-foreground" />
-              ) : (
-                <Ban className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipPopup>
-            {isDisabled ? t('Click to enable this Provider') : t('Click to disable this Provider')}
-          </TooltipPopup>
-        </Tooltip>
+        {enableProviderDisableFeature && (
+          <Tooltip>
+            <TooltipTrigger>
+              <Button variant="ghost" size="icon-xs" onClick={(e) => onToggleEnabled(provider, e)}>
+                {isDisabled ? (
+                  <Check className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <Ban className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipPopup>
+              {isDisabled
+                ? t('Click to enable this Provider')
+                : t('Click to disable this Provider')}
+            </TooltipPopup>
+          </Tooltip>
+        )}
 
         <Button
           variant="ghost"
@@ -170,6 +182,9 @@ export function ProviderList({ className }: ProviderListProps) {
   const providers = useSettingsStore((s) => s.claudeCodeIntegration.providers);
   const removeClaudeProvider = useSettingsStore((s) => s.removeClaudeProvider);
   const shouldPoll = useShouldPoll();
+  const enableProviderDisableFeature = useSettingsStore(
+    (s) => s.claudeCodeIntegration.enableProviderDisableFeature
+  );
 
   const setClaudeProviderEnabled = useSettingsStore((s) => s.setClaudeProviderEnabled);
   const setClaudeProviderOrder = useSettingsStore((s) => s.setClaudeProviderOrder);
@@ -312,6 +327,7 @@ export function ProviderList({ className }: ProviderListProps) {
                 provider={provider}
                 isActive={isActive}
                 isDisabled={isDisabled}
+                enableProviderDisableFeature={enableProviderDisableFeature}
                 onSwitch={handleSwitch}
                 onToggleEnabled={handleToggleEnabled}
                 onEdit={handleEdit}

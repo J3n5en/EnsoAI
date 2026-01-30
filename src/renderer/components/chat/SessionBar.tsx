@@ -121,6 +121,7 @@ interface ProviderMenuItemProps {
   onApplyProvider: (provider: ClaudeProvider) => void;
   onCloseMenu: () => void;
   setClaudeProviderEnabled: (id: string, enabled: boolean) => void;
+  enableProviderDisableFeature: boolean;
   t: (key: string) => string;
 }
 
@@ -134,14 +135,17 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
   onApplyProvider,
   onCloseMenu,
   setClaudeProviderEnabled,
+  enableProviderDisableFeature,
   t,
 }: ProviderMenuItemProps) {
+  const effectiveIsDisabled = enableProviderDisableFeature ? isDisabled : false;
+
   const handleSwitch = useCallback(() => {
-    if (!isActive && !isDisabled) {
+    if (!isActive && !effectiveIsDisabled) {
       onApplyProvider(provider);
       onCloseMenu();
     }
-  }, [isActive, isDisabled, provider, onApplyProvider, onCloseMenu]);
+  }, [isActive, effectiveIsDisabled, provider, onApplyProvider, onCloseMenu]);
 
   const handleToggleEnabled = useCallback(
     (e: React.MouseEvent) => {
@@ -166,13 +170,13 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
     <div
       className={cn(
         'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
-        isDisabled && 'opacity-50'
+        effectiveIsDisabled && 'opacity-50'
       )}
     >
       <button
         type="button"
         onClick={handleSwitch}
-        disabled={isPending || isDisabled}
+        disabled={isPending || effectiveIsDisabled}
         className={cn(
           'flex flex-1 items-center gap-2 whitespace-nowrap text-left',
           isPending && 'cursor-not-allowed'
@@ -183,24 +187,26 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
         ) : (
           <Circle className="h-4 w-4 shrink-0" />
         )}
-        <span className={cn(isDisabled && 'line-through')}>{provider.name}</span>
+        <span className={cn(effectiveIsDisabled && 'line-through')}>{provider.name}</span>
       </button>
 
       {/* 禁用/启用按钮 */}
-      <Tooltip>
-        <TooltipTrigger>
-          <button
-            type="button"
-            onClick={handleToggleEnabled}
-            className="shrink-0 rounded p-0.5 opacity-60 hover:opacity-100"
-          >
-            {isDisabled ? <Check className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
-          </button>
-        </TooltipTrigger>
-        <TooltipPopup side="right">
-          {isDisabled ? t('Click to enable this Provider') : t('Click to disable this Provider')}
-        </TooltipPopup>
-      </Tooltip>
+      {enableProviderDisableFeature && (
+        <Tooltip>
+          <TooltipTrigger>
+            <button
+              type="button"
+              onClick={handleToggleEnabled}
+              className="shrink-0 rounded p-0.5 opacity-60 hover:opacity-100"
+            >
+              {isDisabled ? <Check className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipPopup side="right">
+            {isDisabled ? t('Click to enable this Provider') : t('Click to disable this Provider')}
+          </TooltipPopup>
+        </Tooltip>
+      )}
     </div>
   );
 });
@@ -410,6 +416,9 @@ export function SessionBar({
     (s) => s.claudeCodeIntegration.showProviderSwitcher ?? true
   );
   const setClaudeProviderEnabled = useSettingsStore((s) => s.setClaudeProviderEnabled);
+  const enableProviderDisableFeature = useSettingsStore(
+    (s) => s.claudeCodeIntegration.enableProviderDisableFeature ?? true
+  );
 
   const { data: claudeData } = useQuery({
     queryKey: ['claude-settings'],
@@ -915,7 +924,7 @@ export function SessionBar({
                     >
                       <div className="rounded-lg border bg-popover p-1 shadow-lg">
                         <div className="flex items-center justify-between px-2 py-1">
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
                             {t('Select Provider')}
                           </span>
                           <Tooltip>
@@ -951,6 +960,7 @@ export function SessionBar({
                               onApplyProvider={handleApplyProvider}
                               onCloseMenu={handleCloseProviderMenu}
                               setClaudeProviderEnabled={setClaudeProviderEnabled}
+                              enableProviderDisableFeature={enableProviderDisableFeature}
                               t={t}
                             />
                           );

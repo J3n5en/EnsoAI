@@ -254,6 +254,7 @@ export interface ClaudeCodeIntegrationSettings {
   statusLineEnabled: boolean; // Enable Status Line hook for displaying agent status
   statusLineFields: StatusLineFieldSettings; // Which fields to display in status line
   showProviderSwitcher: boolean; // Show provider switcher in SessionBar
+  enableProviderDisableFeature: boolean; // Enable/disable the provider temporary disable feature
   providers: import('@shared/types').ClaudeProvider[];
 }
 
@@ -265,6 +266,7 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   statusLineEnabled: false, // Disable Status Line hook by default
   statusLineFields: defaultStatusLineFieldSettings,
   showProviderSwitcher: true,
+  enableProviderDisableFeature: false,
   providers: [],
 };
 

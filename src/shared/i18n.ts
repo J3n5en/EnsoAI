@@ -906,6 +906,8 @@ export const zhTranslations: Record<string, string> = {
   'Haiku Model': 'Haiku 模型',
   'Provider switched': '已切换 Provider',
   'Provider Switcher': 'Provider 切换器',
+  'Provider Disable Feature': 'Provider 临时禁用',
+  'Allow temporarily disabling individual providers': '允许临时禁用单个 Provider',
   'Show provider switcher in SessionBar for quick switching':
     '在 SessionBar 上显示 Provider 切换器，方便快速切换',
   'Select Provider': 'Switch Provider',
