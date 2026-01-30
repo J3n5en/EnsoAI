@@ -62,6 +62,7 @@ function ProviderItem({
   t,
 }: ProviderItemProps) {
   const controls = useDragControls();
+  const isDraggingRef = React.useRef(false);
 
   return (
     <Reorder.Item
@@ -77,7 +78,14 @@ function ProviderItem({
             ? 'opacity-60'
             : 'cursor-pointer hover:bg-accent/50'
       )}
-      onClick={() => !isActive && !isDisabled && onSwitch(provider)}
+      onClick={() => {
+        // 如果刚刚在拖拽手柄上释放，不触发选中
+        if (isDraggingRef.current) {
+          isDraggingRef.current = false;
+          return;
+        }
+        !isActive && !isDisabled && onSwitch(provider);
+      }}
       onKeyDown={(e) => {
         if (!isActive && !isDisabled && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
@@ -91,7 +99,10 @@ function ProviderItem({
           role="button"
           tabIndex={0}
           aria-label={t('Drag to reorder')}
-          onPointerDown={(e) => controls.start(e)}
+          onPointerDown={(e) => {
+            isDraggingRef.current = true;
+            controls.start(e);
+          }}
           className="cursor-grab text-muted-foreground active:cursor-grabbing"
         >
           <GripVertical className="h-4 w-4" />
@@ -342,8 +353,6 @@ export function ProviderList({ className }: ProviderListProps) {
                   env: {
                     ANTHROPIC_BASE_URL: claudeData?.settings?.env?.ANTHROPIC_BASE_URL,
                     ANTHROPIC_AUTH_TOKEN: claudeData?.settings?.env?.ANTHROPIC_AUTH_TOKEN,
-                    ANTHROPIC_SMALL_FAST_MODEL:
-                      claudeData?.settings?.env?.ANTHROPIC_SMALL_FAST_MODEL,
                     ANTHROPIC_DEFAULT_SONNET_MODEL:
                       claudeData?.settings?.env?.ANTHROPIC_DEFAULT_SONNET_MODEL,
                     ANTHROPIC_DEFAULT_OPUS_MODEL:
@@ -351,7 +360,6 @@ export function ProviderList({ className }: ProviderListProps) {
                     ANTHROPIC_DEFAULT_HAIKU_MODEL:
                       claudeData?.settings?.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL,
                   },
-                  model: claudeData?.settings?.model,
                 },
                 null,
                 2

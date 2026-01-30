@@ -200,7 +200,8 @@ export function readClaudeSettings(): ClaudeSettings | null {
 
 /**
  * 从当前 settings.json 提取 Provider 相关字段
- * 用于"保存为新配置"功能
+ * 用于配置匹配和"保存为新配置"功能
+ * 注意：不提取 model 和 smallFastModel 字段，因为这些字段会被用户临时切换模型而改变
  */
 export function extractProviderFromSettings(): Partial<ClaudeProvider> | null {
   const settings = readClaudeSettings();
@@ -211,8 +212,6 @@ export function extractProviderFromSettings(): Partial<ClaudeProvider> | null {
   return {
     baseUrl: settings.env.ANTHROPIC_BASE_URL,
     authToken: settings.env.ANTHROPIC_AUTH_TOKEN,
-    model: settings.model,
-    smallFastModel: settings.env.ANTHROPIC_SMALL_FAST_MODEL,
     defaultSonnetModel: settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
     defaultOpusModel: settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
     defaultHaikuModel: settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,

@@ -27,11 +27,11 @@ export function isClaudeProviderMatch(
   const authToken = normalizeValue(current.authToken);
   if (!baseUrl || !authToken) return false;
 
+  // 仅匹配 Base URL、Auth Token 和三个默认模型字段
+  // 忽略 model 和 smallFastModel，因为用户切换模型时会修改 model 字段导致匹配失败
   return (
     normalizeValue(provider.baseUrl) === baseUrl &&
     normalizeValue(provider.authToken) === authToken &&
-    normalizeValue(provider.model) === normalizeValue(current.model) &&
-    normalizeValue(provider.smallFastModel) === normalizeValue(current.smallFastModel) &&
     normalizeValue(provider.defaultSonnetModel) === normalizeValue(current.defaultSonnetModel) &&
     normalizeValue(provider.defaultOpusModel) === normalizeValue(current.defaultOpusModel) &&
     normalizeValue(provider.defaultHaikuModel) === normalizeValue(current.defaultHaikuModel)
