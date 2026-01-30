@@ -905,7 +905,7 @@ export const zhTranslations: Record<string, string> = {
   'Provider Switcher': 'Provider 切换器',
   'Show provider switcher in SessionBar for quick switching':
     '在 SessionBar 上显示 Provider 切换器，方便快速切换',
-  'Select Provider': '选择 Claude Provider',
+  'Select Provider': 'Switch Provider',
   'Click to enable this Provider': '单击启用该 Provider',
   'Click to disable this Provider': '单击临时禁用该 Provider',
   'Switch failed': '切换失败',
