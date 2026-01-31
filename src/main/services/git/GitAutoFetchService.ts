@@ -16,6 +16,11 @@ class GitAutoFetchService {
   private onFocusHandler: (() => void) | null = null;
 
   init(window: BrowserWindow): void {
+    // 防止重复初始化导致多个事件监听器
+    if (this.mainWindow) {
+      console.warn('GitAutoFetchService already initialized');
+      return;
+    }
     this.mainWindow = window;
 
     // 窗口获得焦点时检查（带防抖）
