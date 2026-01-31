@@ -61,7 +61,7 @@ import {
 import { addToast, toastManager } from './components/ui/toast';
 import { MergeEditor, MergeWorktreeDialog } from './components/worktree';
 import { useEditor } from './hooks/useEditor';
-import { useGitBranches, useGitInit } from './hooks/useGit';
+import { useAutoFetchListener, useGitBranches, useGitInit } from './hooks/useGit';
 import {
   useWorktreeCreate,
   useWorktreeList,
@@ -87,6 +87,10 @@ initCloneProgressListener();
 
 export default function App() {
   const { t } = useI18n();
+
+  // Listen for auto-fetch completion events to refresh git status
+  useAutoFetchListener();
+
   // Per-worktree tab state: { [worktreePath]: TabId }
   const [worktreeTabMap, setWorktreeTabMap] = useState<Record<string, TabId>>(getStoredTabMap);
   // Per-repo worktree state: { [repoPath]: worktreePath }
