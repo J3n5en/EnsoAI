@@ -32,6 +32,9 @@ export const IPC_CHANNELS = {
   GIT_CLONE: 'git:clone',
   GIT_CLONE_PROGRESS: 'git:clone:progress',
   GIT_VALIDATE_URL: 'git:validate-url',
+  // Git Auto Fetch
+  GIT_AUTO_FETCH_SET_ENABLED: 'git:autoFetch:setEnabled',
+  GIT_AUTO_FETCH_COMPLETED: 'git:autoFetch:completed',
 
   // Worktree
   WORKTREE_LIST: 'worktree:list',

@@ -1,6 +1,7 @@
 import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
+  ArrowDown,
   ChevronRight,
   Copy,
   FolderGit2,
@@ -8,6 +9,7 @@ import {
   FolderOpen,
   GitBranch,
   GitMerge,
+  Loader2,
   PanelLeftClose,
   Plus,
   RefreshCw,
@@ -48,6 +50,7 @@ import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/u
 import { RepoItemWithGlow } from '@/components/ui/glow-wrappers';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useGitPull, useGitStatus } from '@/hooks/useGit';
 import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
 import { useWorktreeListMultiple } from '@/hooks/useWorktree';
@@ -1137,6 +1140,38 @@ function WorktreeTreeItem({
   // Check if any session in this worktree has outputting or unread state
   const outputState = useWorktreeOutputState(worktree.path);
 
+  // Get git status for behind count
+  const { data: gitStatus, refetch: refetchStatus } = useGitStatus(worktree.path, isActive);
+  const behindCount = gitStatus?.behind ?? 0;
+
+  // Pull mutation for syncing with remote
+  const pullMutation = useGitPull();
+
+  const handlePull = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (pullMutation.isPending || behindCount === 0) return;
+
+      try {
+        await pullMutation.mutateAsync({ workdir: worktree.path });
+        refetchStatus();
+        toastManager.add({
+          type: 'success',
+          title: t('Pull successful'),
+          description: t('Pulled {{count}} commits from remote', { count: behindCount }),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toastManager.add({
+          type: 'error',
+          title: t('Pull failed'),
+          description: message,
+        });
+      }
+    },
+    [pullMutation, worktree.path, behindCount, refetchStatus, t]
+  );
+
   const handleCopyPath = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(worktree.path);
@@ -1240,6 +1275,23 @@ function WorktreeTreeItem({
             {t('Main')}
           </span>
         ) : null}
+        {/* Behind count - remote commits not yet pulled, click to pull */}
+        {(behindCount > 0 || pullMutation.isPending) && (
+          <button
+            type="button"
+            onClick={handlePull}
+            disabled={pullMutation.isPending}
+            className="relative z-10 flex items-center gap-0.5 shrink-0 text-[10px] text-orange-500 dark:text-orange-400 hover:text-orange-600 dark:hover:text-orange-300 transition-colors disabled:opacity-50"
+            title={t('{{count}} commits behind', { count: behindCount })}
+          >
+            {pullMutation.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ArrowDown className="h-3 w-3" />
+            )}
+            {behindCount}
+          </button>
+        )}
         {/* Activity counts and diff stats */}
         {hasActivity && (
           <div className="relative z-10 flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">

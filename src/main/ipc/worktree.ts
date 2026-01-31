@@ -8,6 +8,7 @@ import {
 } from '@shared/types';
 import { ipcMain } from 'electron';
 import { updateClaudeWorkspaceFolders } from '../services/claude/ClaudeIdeBridge';
+import { gitAutoFetchService } from '../services/git/GitAutoFetchService';
 import { WorktreeService } from '../services/git/WorktreeService';
 import { stopWatchersInDirectory } from './files';
 import { ptyManager } from './terminal';
@@ -32,7 +33,15 @@ export function clearAllWorktreeServices(): void {
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.WORKTREE_LIST, async (_, workdir: string) => {
     const service = getWorktreeService(workdir);
-    return service.list();
+    const worktrees = await service.list();
+
+    // Register all worktrees with auto-fetch service
+    gitAutoFetchService.clearWorktrees();
+    for (const wt of worktrees) {
+      gitAutoFetchService.registerWorktree(wt.path);
+    }
+
+    return worktrees;
   });
 
   ipcMain.handle(
@@ -49,6 +58,9 @@ export function registerWorktreeHandlers(): void {
       // Stop all resources using the worktree directory before removal
       await stopWatchersInDirectory(options.path);
       ptyManager.destroyByWorkdir(options.path);
+
+      // Unregister from auto-fetch service
+      gitAutoFetchService.unregisterWorktree(options.path);
 
       // Wait for processes to fully terminate
       await new Promise((resolve) => setTimeout(resolve, 1000));

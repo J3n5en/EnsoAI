@@ -11,6 +11,7 @@ import {
   startCodeReview as startCodeReviewService,
   stopCodeReview as stopCodeReviewService,
 } from '../services/ai';
+import { gitAutoFetchService } from '../services/git/GitAutoFetchService';
 import { GitService } from '../services/git/GitService';
 
 const gitServices = new Map<string, GitService>();
@@ -371,4 +372,9 @@ export function registerGitHandlers(): void {
       }
     }
   );
+
+  // Git Auto Fetch
+  ipcMain.handle(IPC_CHANNELS.GIT_AUTO_FETCH_SET_ENABLED, async (_, enabled: boolean) => {
+    gitAutoFetchService.setEnabled(enabled);
+  });
 }

@@ -28,6 +28,7 @@ import { registerClaudeBridgeIpcHandlers } from './services/claude/ClaudeIdeBrid
 import { unwatchClaudeSettings } from './services/claude/ClaudeProviderManager';
 import { isAllowedLocalFilePath } from './services/files/LocalFileAccess';
 import { checkGitInstalled } from './services/git/checkGit';
+import { gitAutoFetchService } from './services/git/GitAutoFetchService';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
 import { createMainWindow } from './windows/MainWindow';
@@ -264,6 +265,9 @@ app.whenReady().then(async () => {
   // Initialize auto-updater
   await initAutoUpdater(mainWindow);
 
+  // Initialize git auto-fetch service
+  gitAutoFetchService.init(mainWindow);
+
   const handleNewWindow = () => {
     createMainWindow();
   };
@@ -302,6 +306,7 @@ app.on('will-quit', (event) => {
   event.preventDefault();
   console.log('[app] Will quit, cleaning up...');
   unwatchClaudeSettings();
+  gitAutoFetchService.cleanup();
   cleanupAllResources()
     .catch((err) => console.error('[app] Cleanup error:', err))
     .finally(() => {
@@ -327,6 +332,7 @@ function handleShutdownSignal(signal: string): void {
   console.log(`[app] Received ${signal}, exiting...`);
   // Sync cleanup: kill child processes immediately
   unwatchClaudeSettings();
+  gitAutoFetchService.cleanup();
   cleanupAllResourcesSync();
   // Use app.exit() to bypass will-quit handler (already cleaned up)
   app.exit(0);

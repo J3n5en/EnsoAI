@@ -164,6 +164,14 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.GIT_CLONE_PROGRESS, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.GIT_CLONE_PROGRESS, handler);
     },
+    // Git Auto Fetch
+    setAutoFetchEnabled: (enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_AUTO_FETCH_SET_ENABLED, enabled),
+    onAutoFetchCompleted: (callback: (data: { timestamp: number }) => void): (() => void) => {
+      const handler = (_: unknown, data: { timestamp: number }) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.GIT_AUTO_FETCH_COMPLETED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.GIT_AUTO_FETCH_COMPLETED, handler);
+    },
   },
 
   // Worktree
