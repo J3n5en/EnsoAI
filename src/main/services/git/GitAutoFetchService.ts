@@ -94,6 +94,20 @@ class GitAutoFetchService {
       try {
         const git = new GitService(path);
         await git.fetch();
+
+        // 并行 fetch 已初始化的子模块（带超时控制）
+        const submodules = await git.listSubmodules();
+        const submodulePromises = submodules
+          .filter((s) => s.initialized)
+          .map((s) =>
+            Promise.race([
+              git.fetchSubmodule(s.path),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000)),
+            ]).catch((err) => {
+              console.debug(`Auto fetch submodule failed for ${s.path}:`, err);
+            })
+          );
+        await Promise.all(submodulePromises);
       } catch (error) {
         // 静默失败，不打扰用户
         console.debug(`Auto fetch failed for ${path}:`, error);

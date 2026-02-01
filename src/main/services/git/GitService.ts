@@ -13,7 +13,9 @@ import type {
   GitBranch,
   GitLogEntry,
   GitStatus,
+  GitSubmodule,
   PullRequest,
+  SubmoduleStatus,
 } from '@shared/types';
 import simpleGit, { type SimpleGit, type StatusResult } from 'simple-git';
 import { getProxyEnvVars } from '../proxy/ProxyConfig';
@@ -170,82 +172,24 @@ export class GitService {
 
   async getFileChanges(): Promise<FileChangesResult> {
     const status: StatusResult = await this.git.status();
-    const changes: FileChange[] = [];
+
+    // 使用共享方法解析状态
+    const allChanges = this.parseStatusToChanges(status);
 
     // Directories to ignore (commonly large and should be in .gitignore)
     const ignoredPrefixes = ['node_modules/', '.pnpm/', 'dist/', 'out/', '.next/', 'build/'];
     const skippedDirsSet = new Set<string>();
 
-    const checkIgnored = (filePath: string): boolean => {
+    // 过滤忽略的目录
+    const changes = allChanges.filter((change) => {
       for (const prefix of ignoredPrefixes) {
-        if (filePath.startsWith(prefix)) {
+        if (change.path.startsWith(prefix)) {
           skippedDirsSet.add(prefix.slice(0, -1)); // Remove trailing slash
-          return true;
+          return false;
         }
       }
-      return false;
-    };
-
-    // Build a map of renamed files for quick lookup
-    const renamedMap = new Map<string, string>();
-    for (const rename of status.renamed) {
-      renamedMap.set(rename.to, rename.from);
-    }
-
-    // Use status.files for precise file status detection
-    // Each file has 'index' (staging area vs HEAD) and 'working_dir' (working tree vs index)
-    for (const file of status.files) {
-      const filePath = file.path;
-
-      // Skip files in ignored directories (performance optimization)
-      if (checkIgnored(filePath)) {
-        continue;
-      }
-
-      const indexStatus = file.index;
-      const workingDirStatus = file.working_dir;
-
-      // Check index status (staged changes) - compare staging area to HEAD
-      // Valid index statuses: M (modified), A (added), D (deleted), R (renamed), C (copied), U (conflict)
-      if (indexStatus && indexStatus !== ' ' && indexStatus !== '?') {
-        let fileStatus: FileChangeStatus;
-        if (indexStatus === 'A') fileStatus = 'A';
-        else if (indexStatus === 'D') fileStatus = 'D';
-        else if (indexStatus === 'R') fileStatus = 'R';
-        else if (indexStatus === 'C') fileStatus = 'C';
-        else if (indexStatus === 'U')
-          fileStatus = 'X'; // Conflict
-        else fileStatus = 'M';
-
-        const change: FileChange = {
-          path: filePath,
-          status: fileStatus,
-          staged: true,
-        };
-        if (renamedMap.has(filePath)) {
-          change.originalPath = renamedMap.get(filePath);
-        }
-        changes.push(change);
-      }
-
-      // Check working_dir status (unstaged changes) - compare working tree to index
-      // Valid working_dir statuses: M (modified), D (deleted), ? (untracked), U (conflict)
-      if (workingDirStatus && workingDirStatus !== ' ') {
-        let fileStatus: FileChangeStatus;
-        if (workingDirStatus === '?')
-          fileStatus = 'U'; // Untracked
-        else if (workingDirStatus === 'D') fileStatus = 'D';
-        else if (workingDirStatus === 'U')
-          fileStatus = 'X'; // Conflict
-        else fileStatus = 'M';
-
-        changes.push({
-          path: filePath,
-          status: fileStatus,
-          staged: false,
-        });
-      }
-    }
+      return true;
+    });
 
     const skippedDirs = skippedDirsSet.size > 0 ? Array.from(skippedDirsSet) : undefined;
     return { changes, skippedDirs };
@@ -526,6 +470,382 @@ export class GitService {
         `Failed to fetch PR #${prNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  // Submodule methods
+
+  /**
+   * List all submodules in the repository
+   */
+  async listSubmodules(): Promise<GitSubmodule[]> {
+    const submodules: GitSubmodule[] = [];
+
+    try {
+      // Get submodule status using git submodule status
+      const statusOutput = await this.git.raw(['submodule', 'status', '--recursive']);
+
+      if (!statusOutput.trim()) {
+        return [];
+      }
+
+      // Parse status output
+      // Format: [+-U ]<sha1> <path> (<describe>)
+      // - = not initialized, + = different commit, U = merge conflict, space = clean
+      const lines = statusOutput.trim().split('\n');
+
+      for (const line of lines) {
+        const match = line.match(/^([-+U ])?([a-f0-9]+)\s+(\S+)(?:\s+\((.+)\))?$/);
+        if (!match) continue;
+
+        const [, statusChar, head, subPath] = match;
+        const initialized = statusChar !== '-';
+
+        // Determine status
+        let status: SubmoduleStatus;
+        if (!initialized) {
+          status = 'uninitialized';
+        } else if (statusChar === '+') {
+          status = 'outdated';
+        } else if (statusChar === 'U') {
+          status = 'modified';
+        } else {
+          status = 'clean';
+        }
+
+        // Get URL and branch from .gitmodules
+        let url = '';
+        let branch: string | undefined;
+
+        try {
+          url = await this.git.raw(['config', '-f', '.gitmodules', `submodule.${subPath}.url`]);
+          url = url.trim();
+        } catch {
+          // URL not found in .gitmodules
+        }
+
+        try {
+          branch = await this.git.raw([
+            'config',
+            '-f',
+            '.gitmodules',
+            `submodule.${subPath}.branch`,
+          ]);
+          branch = branch.trim() || undefined;
+        } catch {
+          // Branch not specified
+        }
+
+        submodules.push({
+          name: subPath.split('/').pop() || subPath,
+          path: subPath,
+          url,
+          branch,
+          head,
+          status,
+          initialized,
+          // 默认值，后续会更新
+          tracking: undefined,
+          ahead: 0,
+          behind: 0,
+          hasChanges: false,
+          stagedCount: 0,
+          unstagedCount: 0,
+        });
+      }
+
+      // 为已初始化的子模块获取详细状态
+      for (const submodule of submodules) {
+        if (submodule.initialized) {
+          try {
+            const subGit = simpleGit(path.join(this.workdir, submodule.path)).env({
+              ...process.env,
+              ...getProxyEnvVars(),
+              PATH: getEnhancedPath(),
+            });
+            const subStatus = await subGit.status();
+            submodule.branch = subStatus.current || undefined;
+            submodule.tracking = subStatus.tracking || undefined;
+            submodule.ahead = subStatus.ahead;
+            submodule.behind = subStatus.behind;
+            submodule.hasChanges = !subStatus.isClean();
+            submodule.stagedCount = subStatus.staged.length;
+            submodule.unstagedCount =
+              subStatus.modified.length + subStatus.deleted.length + subStatus.not_added.length;
+          } catch (error) {
+            console.debug(`Failed to get status for submodule ${submodule.path}:`, error);
+            // 子模块状态获取失败，保持默认值
+          }
+        }
+      }
+    } catch (error) {
+      // No submodules or error reading them
+      console.debug('Failed to list submodules:', error);
+    }
+
+    return submodules;
+  }
+
+  /**
+   * Initialize submodules
+   */
+  async initSubmodules(recursive = true): Promise<void> {
+    await this.git.submoduleInit();
+    if (recursive) {
+      await this.git.submoduleUpdate(['--init', '--recursive']);
+    }
+  }
+
+  /**
+   * Update submodules to the commit recorded in the superproject
+   */
+  async updateSubmodules(recursive = true): Promise<void> {
+    const args = recursive ? ['--recursive'] : [];
+    await this.git.submoduleUpdate(args);
+  }
+
+  /**
+   * Sync submodule URLs from .gitmodules to .git/config
+   */
+  async syncSubmodules(): Promise<void> {
+    await this.git.raw(['submodule', 'sync', '--recursive']);
+  }
+
+  /**
+   * 获取子模块的 Git 实例
+   */
+  private getSubmoduleGit(submodulePath: string): SimpleGit {
+    // Validate path to prevent path traversal attacks
+    const absolutePath = path.resolve(this.workdir, submodulePath);
+    const relativePath = path.relative(this.workdir, absolutePath);
+
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      throw new Error('Invalid submodule path: path traversal detected');
+    }
+
+    return simpleGit(absolutePath).env({
+      ...process.env,
+      ...getProxyEnvVars(),
+      PATH: getEnhancedPath(),
+    });
+  }
+
+  /**
+   * Fetch 单个子模块
+   */
+  async fetchSubmodule(submodulePath: string): Promise<void> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    await subGit.fetch();
+  }
+
+  /**
+   * Pull 单个子模块
+   */
+  async pullSubmodule(submodulePath: string): Promise<void> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    await subGit.pull();
+  }
+
+  /**
+   * Push 单个子模块
+   */
+  async pushSubmodule(submodulePath: string): Promise<void> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    await subGit.push();
+  }
+
+  /**
+   * 在子模块中提交
+   */
+  async commitSubmodule(submodulePath: string, message: string): Promise<string> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    const result = await subGit.commit(message);
+    return result.commit;
+  }
+
+  /**
+   * 暂存子模块文件
+   */
+  async stageSubmodule(submodulePath: string, paths: string[]): Promise<void> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    await subGit.add(paths);
+  }
+
+  /**
+   * 取消暂存子模块文件
+   */
+  async unstageSubmodule(submodulePath: string, paths: string[]): Promise<void> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    await subGit.reset(['HEAD', '--', ...paths]);
+  }
+
+  /**
+   * 丢弃子模块文件变更
+   */
+  async discardSubmodule(submodulePath: string, paths: string[]): Promise<void> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    const submoduleDir = path.join(this.workdir, submodulePath);
+    const status = await subGit.status();
+
+    const trackedPaths: string[] = [];
+    const untrackedPaths: string[] = [];
+
+    for (const filePath of paths) {
+      // 检查符号链接
+      const initialPath = path.join(submoduleDir, filePath);
+      const initialStats = await fs.lstat(initialPath).catch(() => null);
+      if (initialStats?.isSymbolicLink()) {
+        throw new Error(`Cannot discard symbolic links: ${filePath}`);
+      }
+
+      if (status.not_added.includes(filePath)) {
+        untrackedPaths.push(initialPath);
+      } else {
+        trackedPaths.push(filePath);
+      }
+    }
+
+    // 删除 untracked 文件/目录
+    for (const absolutePath of untrackedPaths) {
+      const stat = await fs.stat(absolutePath).catch(() => null);
+      if (stat?.isDirectory()) {
+        await fs.rm(absolutePath, { recursive: true });
+      } else {
+        await fs.unlink(absolutePath);
+      }
+    }
+
+    // 恢复 tracked 文件
+    if (trackedPaths.length > 0) {
+      await subGit.checkout(['--', ...trackedPaths]);
+    }
+  }
+
+  /**
+   * 从 git status 结果解析文件变更列表（共用逻辑）
+   */
+  private parseStatusToChanges(status: StatusResult): FileChange[] {
+    const changes: FileChange[] = [];
+
+    // Build a map of renamed files for quick lookup
+    const renamedMap = new Map<string, string>();
+    for (const rename of status.renamed) {
+      renamedMap.set(rename.to, rename.from);
+    }
+
+    // Use status.files for precise file status detection
+    for (const file of status.files) {
+      const filePath = file.path;
+      const indexStatus = file.index;
+      const workingDirStatus = file.working_dir;
+
+      // Check index status (staged changes)
+      if (indexStatus && indexStatus !== ' ' && indexStatus !== '?') {
+        let fileStatus: FileChangeStatus;
+        if (indexStatus === 'A') fileStatus = 'A';
+        else if (indexStatus === 'D') fileStatus = 'D';
+        else if (indexStatus === 'R') fileStatus = 'R';
+        else if (indexStatus === 'C') fileStatus = 'C';
+        else if (indexStatus === 'U') fileStatus = 'X';
+        else fileStatus = 'M';
+
+        const change: FileChange = { path: filePath, status: fileStatus, staged: true };
+        if (renamedMap.has(filePath)) {
+          change.originalPath = renamedMap.get(filePath);
+        }
+        changes.push(change);
+      }
+
+      // Check working_dir status (unstaged changes)
+      if (workingDirStatus && workingDirStatus !== ' ') {
+        let fileStatus: FileChangeStatus;
+        if (workingDirStatus === '?') fileStatus = 'U';
+        else if (workingDirStatus === 'D') fileStatus = 'D';
+        else if (workingDirStatus === 'U') fileStatus = 'X';
+        else fileStatus = 'M';
+
+        changes.push({ path: filePath, status: fileStatus, staged: false });
+      }
+    }
+
+    return changes;
+  }
+
+  /**
+   * 获取子模块的文件变更列表
+   */
+  async getSubmoduleChanges(submodulePath: string): Promise<FileChange[]> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    const status = await subGit.status();
+    return this.parseStatusToChanges(status);
+  }
+
+  /**
+   * 获取子模块文件的 diff
+   */
+  async getSubmoduleFileDiff(
+    submodulePath: string,
+    filePath: string,
+    staged: boolean
+  ): Promise<FileDiff> {
+    // Validate submodule path
+    const fullSubPath = path.resolve(this.workdir, submodulePath);
+    const relativeSubPath = path.relative(this.workdir, fullSubPath);
+    if (relativeSubPath.startsWith('..') || path.isAbsolute(relativeSubPath)) {
+      throw new Error('Invalid submodule path: path traversal detected');
+    }
+
+    // Validate file path within submodule
+    const fullFilePath = path.resolve(fullSubPath, filePath);
+    const relativeFilePath = path.relative(fullSubPath, fullFilePath);
+    if (relativeFilePath.startsWith('..') || path.isAbsolute(relativeFilePath)) {
+      throw new Error('Invalid file path: path traversal detected');
+    }
+
+    let original = '';
+    let modified = '';
+
+    try {
+      // 获取 HEAD 版本
+      original = await gitShow(fullSubPath, `HEAD:${filePath}`);
+    } catch {
+      // 新文件，没有 HEAD 版本
+    }
+
+    try {
+      if (staged) {
+        // 暂存区版本
+        modified = await gitShow(fullSubPath, `:${filePath}`);
+      } else {
+        // 工作区版本
+        modified = await fs.readFile(fullFilePath).then((buffer) => decodeBuffer(buffer));
+      }
+    } catch {
+      // 删除的文件
+    }
+
+    return { path: filePath, original, modified };
+  }
+
+  /**
+   * 获取子模块的分支列表
+   */
+  async getSubmoduleBranches(submodulePath: string): Promise<GitBranch[]> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    const result = await subGit.branch(['-a', '-v']);
+    return Object.entries(result.branches).map(([name, info]) => ({
+      name,
+      current: info.current,
+      commit: info.commit,
+      label: info.label,
+    }));
+  }
+
+  /**
+   * 切换子模块分支
+   */
+  async checkoutSubmoduleBranch(submodulePath: string, branch: string): Promise<void> {
+    const subGit = this.getSubmoduleGit(submodulePath);
+    await subGit.checkout(branch);
   }
 
   // Static methods for clone operations
