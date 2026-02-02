@@ -11,6 +11,8 @@ import { useI18n } from '@/i18n';
 import {
   type AIProvider,
   defaultBranchNameGeneratorSettings,
+  defaultCommitPromptEn,
+  defaultCommitPromptZh,
   type ReasoningEffort,
   useSettingsStore,
 } from '@/stores/settings';
@@ -56,7 +58,7 @@ function getDefaultModel(provider: AIProvider): string {
 }
 
 export function AISettings() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const {
     commitMessageGenerator,
     setCommitMessageGenerator,
@@ -251,6 +253,46 @@ export function AISettings() {
                   </SelectPopup>
                 </Select>
                 <p className="text-xs text-muted-foreground">{t('Timeout in seconds')}</p>
+              </div>
+            </div>
+
+            {/* Commit Prompt */}
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium">{t('Commit Prompt')}</span>
+              <div className="space-y-1.5">
+                <textarea
+                  value={commitMessageGenerator.prompt}
+                  onChange={(e) => setCommitMessageGenerator({ prompt: e.target.value })}
+                  maxLength={4000}
+                  className="w-full h-40 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder={t(
+                    'Enter a prompt template for generating commit messages.\nAvailable variables:\n• {recent_commits} - Recent commit messages\n• {staged_stat} - Staged changes statistics\n• {staged_diff} - Staged changes diff'
+                  )}
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {t('Customize the AI prompt for generating commit messages')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          t(
+                            'This will restore the default AI prompt for generating commit messages. Your custom prompt will be lost.'
+                          )
+                        )
+                      ) {
+                        setCommitMessageGenerator({
+                          prompt: locale === 'zh' ? defaultCommitPromptZh : defaultCommitPromptEn,
+                        });
+                      }
+                    }}
+                    className="text-xs text-muted-foreground hover:text-primary underline"
+                  >
+                    {t('Restore default prompt')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

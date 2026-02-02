@@ -9,7 +9,8 @@ export type SettingsCategory =
   | 'agent'
   | 'ai'
   | 'integration'
-  | 'hapi';
+  | 'hapi'
+  | 'webInspector';
 
 export const fontWeightOptions: { value: FontWeight; label: string }[] = [
   { value: 'normal', label: 'Normal' },

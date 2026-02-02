@@ -50,6 +50,7 @@ export function CommitBox({
         provider: commitMessageGenerator.provider,
         model: commitMessageGenerator.model,
         reasoningEffort: commitMessageGenerator.reasoningEffort,
+        prompt: commitMessageGenerator.prompt,
       });
 
       if (result.success && result.message) {

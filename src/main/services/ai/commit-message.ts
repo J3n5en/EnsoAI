@@ -9,6 +9,7 @@ export interface CommitMessageOptions {
   provider: AIProvider;
   model: ModelId;
   reasoningEffort?: ReasoningEffort;
+  prompt?: string; // Custom prompt template
 }
 
 export interface CommitMessageResult {
@@ -28,7 +29,15 @@ function runGit(cmd: string, cwd: string): string {
 export async function generateCommitMessage(
   options: CommitMessageOptions
 ): Promise<CommitMessageResult> {
-  const { workdir, maxDiffLines, timeout, provider, model, reasoningEffort } = options;
+  const {
+    workdir,
+    maxDiffLines,
+    timeout,
+    provider,
+    model,
+    reasoningEffort,
+    prompt: customPrompt,
+  } = options;
 
   const recentCommits = runGit('git --no-pager log -5 --format="%s"', workdir);
   const stagedStat = runGit('git --no-pager diff --cached --stat', workdir);
@@ -37,7 +46,20 @@ export async function generateCommitMessage(
   const truncatedDiff =
     stagedDiff.split('\n').slice(0, maxDiffLines).join('\n') || '(no staged changes detected)';
 
-  const prompt = `你无法调用任何工具，我消息里已经包含了所有你需要的信息，无需解释，直接返回一句简短的 commit message。
+  // Build prompt - use custom template or default
+  // Use single-pass replacement to avoid injection from git content containing placeholders
+  const variables: Record<string, string> = {
+    '{recent_commits}': recentCommits || '(no recent commits)',
+    '{staged_stat}': stagedStat || '(no stats)',
+    '{staged_diff}': truncatedDiff,
+  };
+
+  const prompt = customPrompt
+    ? customPrompt.replace(
+        /\{recent_commits\}|\{staged_stat\}|\{staged_diff\}/g,
+        (match) => variables[match] ?? match
+      )
+    : `你无法调用任何工具，我消息里已经包含了所有你需要的信息，无需解释，直接返回一句简短的 commit message。
 
 参考风格：
 ${recentCommits || '(no recent commits)'}

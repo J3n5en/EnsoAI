@@ -209,6 +209,7 @@ export function registerGitHandlers(): void {
         provider: string;
         model: string;
         reasoningEffort?: string;
+        prompt?: string;
       }
     ): Promise<{ success: boolean; message?: string; error?: string }> => {
       const resolved = validateWorkdir(workdir);
@@ -219,6 +220,7 @@ export function registerGitHandlers(): void {
         provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
+        prompt: options.prompt,
       });
     }
   );

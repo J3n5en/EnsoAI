@@ -279,7 +279,51 @@ export interface CommitMessageGeneratorSettings {
   provider: AIProvider;
   model: string; // Dynamic based on provider
   reasoningEffort?: ReasoningEffort; // For Codex CLI
+  prompt: string; // Custom prompt template
 }
+
+// Default prompts for different languages
+export const defaultCommitPromptZh = `你是一个 Git commit message 生成助手。请根据以下信息生成规范的 commit message。
+
+要求：
+1. 遵循 Conventional Commits 规范
+2. 格式：<type>(<scope>): <description>
+3. type 包括：feat, fix, docs, style, refactor, perf, test, chore, ci, build
+4. scope 可选，表示影响范围
+5. description 使用中文，简洁明了
+6. 如果变更较复杂，可以添加正文说明
+
+参考最近的提交风格：
+{recent_commits}
+
+变更摘要：
+{staged_stat}
+
+变更详情：
+{staged_diff}
+
+请直接输出 commit message，无需解释。`;
+
+export const defaultCommitPromptEn = `You are a Git commit message generator. Generate a commit message based on the following information.
+
+Requirements:
+1. Follow Conventional Commits specification
+2. Format: <type>(<scope>): <description>
+3. Types: feat, fix, docs, style, refactor, perf, test, chore, ci, build
+4. Scope is optional, indicates the affected area
+5. Description should be concise and clear
+6. Add body for complex changes
+
+Reference recent commit style:
+{recent_commits}
+
+Changes summary:
+{staged_stat}
+
+Changes detail:
+{staged_diff}
+
+Output the commit message directly, no explanation needed.`;
 
 export const defaultCommitMessageGeneratorSettings: CommitMessageGeneratorSettings = {
   enabled: true,
@@ -287,6 +331,7 @@ export const defaultCommitMessageGeneratorSettings: CommitMessageGeneratorSettin
   timeout: 120,
   provider: 'claude-code',
   model: 'haiku',
+  prompt: defaultCommitPromptZh,
 };
 
 export interface CodeReviewSettings {
@@ -541,6 +586,8 @@ interface SettingsState {
   favoriteTerminalThemes: string[];
   // Quick Terminal settings
   quickTerminal: QuickTerminalSettings;
+  // Web Inspector settings
+  webInspectorEnabled: boolean;
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -621,6 +668,8 @@ interface SettingsState {
   setQuickTerminalModalPosition: (position: { x: number; y: number } | null) => void;
   setQuickTerminalModalSize: (size: { width: number; height: number } | null) => void;
   setQuickTerminalOpen: (open: boolean) => void;
+  // Web Inspector methods
+  setWebInspectorEnabled: (enabled: boolean) => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -697,6 +746,8 @@ export const useSettingsStore = create<SettingsState>()(
         modalSize: null,
         isOpen: false,
       },
+      // Web Inspector defaults
+      webInspectorEnabled: false,
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -1008,6 +1059,20 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           quickTerminal: { ...state.quickTerminal, isOpen: open },
         })),
+      // Web Inspector methods
+      setWebInspectorEnabled: async (enabled) => {
+        set({ webInspectorEnabled: enabled });
+        // Notify main process to start/stop Web Inspector server
+        if (enabled) {
+          const result = await window.electronAPI.webInspector.start();
+          if (!result.success) {
+            console.error('[WebInspector] Failed to start:', result.error);
+            set({ webInspectorEnabled: false });
+          }
+        } else {
+          await window.electronAPI.webInspector.stop();
+        }
+      },
     }),
     {
       name: 'enso-settings',
@@ -1171,6 +1236,13 @@ export const useSettingsStore = create<SettingsState>()(
         if (state) {
           if (state.proxySettings) {
             window.electronAPI.app.setProxy(state.proxySettings);
+          }
+
+          // Auto-start Web Inspector server if it was enabled
+          if (state.webInspectorEnabled) {
+            window.electronAPI.webInspector.start().catch((error) => {
+              console.error('[WebInspector] Failed to auto-start:', error);
+            });
           }
 
           // TODO: Remove this cleanup block after v1.0 release (along with xtermKeybindings migration)

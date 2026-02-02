@@ -926,7 +926,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
               className="relative h-full overflow-hidden"
               style={{
                 width:
-                  previewMode === 'off'
+                  !isMarkdown || previewMode === 'off'
                     ? '100%'
                     : previewMode === 'split'
                       ? `${100 - previewWidth}%`

@@ -39,6 +39,10 @@ interface AddRepositoryDialogProps {
   onAddLocal: (path: string, groupId: string | null) => void;
   onCloneComplete: (path: string, groupId: string | null) => void;
   onCreateGroup: (name: string, emoji: string, color: string) => RepositoryGroup;
+  /** Pre-filled local path (e.g., from drag-and-drop) */
+  initialLocalPath?: string;
+  /** Callback to clear the initial local path after it's been used */
+  onClearInitialLocalPath?: () => void;
 }
 
 export function AddRepositoryDialog({
@@ -49,6 +53,8 @@ export function AddRepositoryDialog({
   onAddLocal,
   onCloneComplete,
   onCreateGroup,
+  initialLocalPath,
+  onClearInitialLocalPath,
 }: AddRepositoryDialogProps) {
   const { t } = useI18n();
 
@@ -88,6 +94,15 @@ export function AddRepositoryDialog({
     prevOpenRef.current = open;
     prevDefaultGroupIdRef.current = defaultGroupId;
   }, [open, defaultGroupId, selectedGroupId]);
+
+  // Handle initial local path from drag-and-drop
+  React.useEffect(() => {
+    if (open && initialLocalPath) {
+      setMode('local');
+      setLocalPath(initialLocalPath);
+      onClearInitialLocalPath?.();
+    }
+  }, [open, initialLocalPath, onClearInitialLocalPath]);
 
   // Local mode state
   const [localPath, setLocalPath] = React.useState('');
