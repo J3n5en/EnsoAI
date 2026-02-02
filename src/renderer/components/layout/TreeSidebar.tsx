@@ -627,8 +627,9 @@ export function TreeSidebar({
                           <span className="shrink-0 w-5 h-5 flex items-center justify-center">
                             <ChevronRight
                               className={cn(
-                                'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
-                                isExpanded && 'rotate-90'
+                                'h-3.5 w-3.5 transition-transform duration-200',
+                                isExpanded && 'rotate-90',
+                                isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
                               )}
                             />
                           </span>
@@ -679,7 +680,14 @@ export function TreeSidebar({
                                 }}
                                 title={t('New Worktree')}
                               >
-                                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                                <Plus
+                                  className={cn(
+                                    'h-3.5 w-3.5',
+                                    isSelected
+                                      ? 'text-accent-foreground/70'
+                                      : 'text-muted-foreground'
+                                  )}
+                                />
                               </button>
                             }
                           />
@@ -695,13 +703,21 @@ export function TreeSidebar({
                             }}
                             title={t('Repository Settings')}
                           >
-                            <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Settings2
+                              className={cn(
+                                'h-3.5 w-3.5',
+                                isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
+                              )}
+                            />
                           </button>
                         </div>
 
                         {/* Row 3: Path */}
                         <span
-                          className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
+                          className={cn(
+                            'relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs [direction:rtl] [text-align:left]',
+                            isSelected ? 'text-accent-foreground/60' : 'text-muted-foreground'
+                          )}
                           title={repo.path}
                         >
                           {repo.path}
@@ -1308,7 +1324,12 @@ function WorktreeTreeItem({
         )}
         {/* Activity counts and diff stats */}
         {hasActivity && (
-          <div className="relative z-10 flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+          <div
+            className={cn(
+              'relative z-10 flex items-center gap-1.5 shrink-0 text-[10px]',
+              isActive ? 'text-accent-foreground/70' : 'text-muted-foreground'
+            )}
+          >
             {activity.agentCount > 0 && (
               <span className="flex items-center gap-0.5">
                 <Sparkles className="h-3 w-3" />
