@@ -68,6 +68,34 @@ export function useFileDrop<T extends HTMLElement>({
 }
 
 /**
+ * Parse a file:// URI to a local file path.
+ * Handles both Unix and Windows formats:
+ * - Unix: file:///path/to/file → /path/to/file
+ * - Windows: file:///C:/path/to/file → C:/path/to/file
+ */
+function fileUriToPath(uri: string): string {
+  try {
+    const url = new URL(uri);
+    let pathname = decodeURIComponent(url.pathname);
+    // On Windows, pathname starts with /C:/..., need to remove leading slash
+    if (/^\/[A-Za-z]:/.test(pathname)) {
+      pathname = pathname.slice(1);
+    }
+    return pathname;
+  } catch {
+    // Fallback for malformed URIs
+    return '';
+  }
+}
+
+/**
+ * Normalize path separators to forward slashes for consistent comparison.
+ */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+/**
  * Extract file paths from a DataTransfer, supporting:
  * 1. Native file drops (dataTransfer.files + Electron webUtils)
  * 2. URI list drops (text/uri-list from VS Code, etc.)
@@ -98,13 +126,9 @@ function resolveDroppedPaths(dt: DataTransfer, cwd?: string): string[] {
         // Skip comments and empty lines per RFC 2483
         if (!trimmed || trimmed.startsWith('#')) continue;
         if (trimmed.startsWith('file://')) {
-          try {
-            const decoded = decodeURIComponent(trimmed.replace(/^file:\/\//, ''));
-            if (decoded) {
-              paths.push(decoded);
-            }
-          } catch {
-            // malformed URI
+          const decoded = fileUriToPath(trimmed);
+          if (decoded) {
+            paths.push(decoded);
           }
         }
       }
@@ -112,9 +136,12 @@ function resolveDroppedPaths(dt: DataTransfer, cwd?: string): string[] {
   }
 
   // Convert absolute paths to relative when inside cwd
+  // Normalize separators for cross-platform compatibility
+  const normalizedCwd = cwd ? normalizePath(cwd) : '';
   return paths.map((p) => {
-    if (cwd && p.startsWith(`${cwd}/`)) {
-      return p.substring(cwd.length + 1);
+    const normalizedPath = normalizePath(p);
+    if (normalizedCwd && normalizedPath.startsWith(`${normalizedCwd}/`)) {
+      return normalizedPath.substring(normalizedCwd.length + 1);
     }
     return p;
   });
