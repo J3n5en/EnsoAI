@@ -1,7 +1,7 @@
 // PDF.js CDN URL (从 CDN 动态加载，不打包到应用中)
-const PDFJS_CDN_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.11.0/build/pdf.min.mjs';
+const PDFJS_CDN_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.624/build/pdf.min.mjs';
 const PDFJS_WORKER_CDN_URL =
-  'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.11.0/build/pdf.worker.min.mjs';
+  'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.624/build/pdf.worker.min.mjs';
 
 // PDF.js 类型定义
 export interface PDFDocumentProxy {
