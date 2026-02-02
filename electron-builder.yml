@@ -70,6 +70,9 @@ files:
   - "!node_modules/web-tree-sitter/**"
   - "!node_modules/khroma/**"
   - "!node_modules/dompurify/**"
+  # PDF.js (~5MB) - loaded from CDN at runtime
+  - "!node_modules/pdfjs-dist/**"
+  - "!node_modules/react-pdf/**"
 
 asar: true
 asarUnpack:
