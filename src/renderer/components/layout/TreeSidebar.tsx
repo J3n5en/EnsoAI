@@ -101,6 +101,8 @@ interface TreeSidebarProps {
   onSwitchWorktreeByPath?: (path: string) => Promise<void> | void;
   /** Ref callback to expose toggleSelectedRepoExpanded function */
   toggleSelectedRepoExpandedRef?: React.MutableRefObject<(() => void) | null>;
+  /** Whether a file is being dragged over the sidebar (from App.tsx global handler) */
+  isFileDragOver?: boolean;
 }
 
 export function TreeSidebar({
@@ -138,6 +140,7 @@ export function TreeSidebar({
   onSwitchTab,
   onSwitchWorktreeByPath,
   toggleSelectedRepoExpandedRef,
+  isFileDragOver,
 }: TreeSidebarProps) {
   const { t, tNode } = useI18n();
   const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
@@ -465,7 +468,12 @@ export function TreeSidebar({
   );
 
   return (
-    <aside className="flex h-full w-full flex-col border-r bg-background">
+    <aside
+      className={cn(
+        'flex h-full w-full flex-col border-r bg-background transition-colors',
+        isFileDragOver && 'bg-primary/10'
+      )}
+    >
       {/* Header */}
       <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
         <div className="flex items-center gap-1">
