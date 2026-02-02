@@ -11,6 +11,7 @@ import {
   startCodeReview as startCodeReviewService,
   stopCodeReview as stopCodeReviewService,
 } from '../services/ai';
+import { gitAutoFetchService } from '../services/git/GitAutoFetchService';
 import { GitService } from '../services/git/GitService';
 
 const gitServices = new Map<string, GitService>();
@@ -369,6 +370,140 @@ export function registerGitHandlers(): void {
           error: error instanceof Error ? error.message : 'Clone failed',
         };
       }
+    }
+  );
+
+  // Git Auto Fetch
+  ipcMain.handle(IPC_CHANNELS.GIT_AUTO_FETCH_SET_ENABLED, async (_, enabled: boolean) => {
+    gitAutoFetchService.setEnabled(enabled);
+  });
+
+  // Git Submodule - List
+  ipcMain.handle(IPC_CHANNELS.GIT_SUBMODULE_LIST, async (_, workdir: string) => {
+    const git = getGitService(workdir);
+    return git.listSubmodules();
+  });
+
+  // Git Submodule - Init
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_INIT,
+    async (_, workdir: string, recursive?: boolean) => {
+      const git = getGitService(workdir);
+      await git.initSubmodules(recursive);
+    }
+  );
+
+  // Git Submodule - Update
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_UPDATE,
+    async (_, workdir: string, recursive?: boolean) => {
+      const git = getGitService(workdir);
+      await git.updateSubmodules(recursive);
+    }
+  );
+
+  // Git Submodule - Sync
+  ipcMain.handle(IPC_CHANNELS.GIT_SUBMODULE_SYNC, async (_, workdir: string) => {
+    const git = getGitService(workdir);
+    await git.syncSubmodules();
+  });
+
+  // Git Submodule - Fetch
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_FETCH,
+    async (_, workdir: string, submodulePath: string) => {
+      const git = getGitService(workdir);
+      await git.fetchSubmodule(submodulePath);
+    }
+  );
+
+  // Git Submodule - Pull
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_PULL,
+    async (_, workdir: string, submodulePath: string) => {
+      const git = getGitService(workdir);
+      await git.pullSubmodule(submodulePath);
+    }
+  );
+
+  // Git Submodule - Push
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_PUSH,
+    async (_, workdir: string, submodulePath: string) => {
+      const git = getGitService(workdir);
+      await git.pushSubmodule(submodulePath);
+    }
+  );
+
+  // Git Submodule - Commit
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_COMMIT,
+    async (_, workdir: string, submodulePath: string, message: string) => {
+      const git = getGitService(workdir);
+      return git.commitSubmodule(submodulePath, message);
+    }
+  );
+
+  // Git Submodule - Stage
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_STAGE,
+    async (_, workdir: string, submodulePath: string, paths: string[]) => {
+      const git = getGitService(workdir);
+      await git.stageSubmodule(submodulePath, paths);
+    }
+  );
+
+  // Git Submodule - Unstage
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_UNSTAGE,
+    async (_, workdir: string, submodulePath: string, paths: string[]) => {
+      const git = getGitService(workdir);
+      await git.unstageSubmodule(submodulePath, paths);
+    }
+  );
+
+  // Git Submodule - Discard
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_DISCARD,
+    async (_, workdir: string, submodulePath: string, paths: string[]) => {
+      const git = getGitService(workdir);
+      await git.discardSubmodule(submodulePath, paths);
+    }
+  );
+
+  // Git Submodule - Changes
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_CHANGES,
+    async (_, workdir: string, submodulePath: string) => {
+      const git = getGitService(workdir);
+      return git.getSubmoduleChanges(submodulePath);
+    }
+  );
+
+  // Git Submodule - File Diff
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_FILE_DIFF,
+    async (_, workdir: string, submodulePath: string, filePath: string, staged: boolean) => {
+      const git = getGitService(workdir);
+      return git.getSubmoduleFileDiff(submodulePath, filePath, staged);
+    }
+  );
+
+  // Git Submodule - Branches
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_BRANCHES,
+    async (_, workdir: string, submodulePath: string) => {
+      const git = getGitService(workdir);
+      return git.getSubmoduleBranches(submodulePath);
+    }
+  );
+
+  // Git Submodule - Checkout
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_SUBMODULE_CHECKOUT,
+    async (_, workdir: string, submodulePath: string, branch: string) => {
+      const git = getGitService(workdir);
+      await git.checkoutSubmoduleBranch(submodulePath, branch);
     }
   );
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ShellTerminal } from '@/components/terminal/ShellTerminal';
 import { useResizable } from '@/hooks/useResizable';
+import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -28,7 +29,12 @@ export function QuickTerminalModal({
   const setModalPosition = useSettingsStore((s) => s.setQuickTerminalModalPosition);
   const setModalSize = useSettingsStore((s) => s.setQuickTerminalModalSize);
   const xtermKeybindings = useSettingsStore((s) => s.xtermKeybindings);
+  const terminalTheme = useSettingsStore((s) => s.terminalTheme);
   const { getAllQuickTerminalCwds } = useTerminalStore();
+
+  const terminalBgColor = useMemo(() => {
+    return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
+  }, [terminalTheme]);
 
   // 组件挂载时生成唯一 ID，用于强制重新创建 ShellTerminal
   // 使用 useRef 确保整个组件生命周期内 ID 不变
@@ -273,7 +279,7 @@ export function QuickTerminalModal({
         </div>
 
         {/* 终端内容区 - 渲染所有已激活的 worktree，用 CSS 控制显示 */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 p-2" style={{ backgroundColor: terminalBgColor }}>
           {Array.from(renderedCwds).map((terminalCwd) => (
             <div
               key={`terminal-${mountIdRef.current}-${terminalCwd}`}

@@ -28,6 +28,7 @@ import { registerClaudeBridgeIpcHandlers } from './services/claude/ClaudeIdeBrid
 import { unwatchClaudeSettings } from './services/claude/ClaudeProviderManager';
 import { isAllowedLocalFilePath } from './services/files/LocalFileAccess';
 import { checkGitInstalled } from './services/git/checkGit';
+import { gitAutoFetchService } from './services/git/GitAutoFetchService';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
 import { createMainWindow } from './windows/MainWindow';
@@ -35,6 +36,21 @@ import { createMainWindow } from './windows/MainWindow';
 let mainWindow: BrowserWindow | null = null;
 let pendingOpenPath: string | null = null;
 let cleanupWindowHandlers: (() => void) | null = null;
+
+const isDev = !app.isPackaged;
+
+function sanitizeProfileName(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  return trimmed.replace(/[^a-zA-Z0-9._-]+/g, '-');
+}
+
+// In dev mode, use an isolated userData dir to avoid clashing with the packaged app.
+// This prevents Chromium/Electron profile locking from causing an "empty" localStorage in later instances.
+if (isDev) {
+  const profile = sanitizeProfileName(process.env.ENSOAI_PROFILE || '') || 'dev';
+  app.setPath('userData', join(app.getPath('appData'), `${app.getName()}-${profile}`));
+}
 
 // Register URL scheme handler (must be done before app is ready)
 if (process.defaultApp) {
@@ -118,23 +134,21 @@ app.on('open-url', (event, url) => {
   }
 });
 
-// Windows/Linux: Handle second instance (skip in dev mode to allow multiple instances)
-const isDev = !app.isPackaged;
-if (!isDev) {
-  const gotTheLock = app.requestSingleInstanceLock();
-  if (!gotTheLock) {
-    app.quit();
-  } else {
-    app.on('second-instance', (_, commandLine) => {
-      // Focus existing window
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.focus();
-      }
-      // Handle command line from second instance
-      handleCommandLineArgs(commandLine);
-    });
-  }
+// Handle second instance (single-instance per userData profile).
+// In dev mode, set `ENSOAI_PROFILE` to run multiple isolated instances.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_, commandLine) => {
+    // Focus existing window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    // Handle command line from second instance
+    handleCommandLineArgs(commandLine);
+  });
 }
 
 function readStoredLanguage(): Locale {
@@ -264,6 +278,9 @@ app.whenReady().then(async () => {
   // Initialize auto-updater
   await initAutoUpdater(mainWindow);
 
+  // Initialize git auto-fetch service
+  gitAutoFetchService.init(mainWindow);
+
   const handleNewWindow = () => {
     createMainWindow();
   };
@@ -302,6 +319,7 @@ app.on('will-quit', (event) => {
   event.preventDefault();
   console.log('[app] Will quit, cleaning up...');
   unwatchClaudeSettings();
+  gitAutoFetchService.cleanup();
   cleanupAllResources()
     .catch((err) => console.error('[app] Cleanup error:', err))
     .finally(() => {
@@ -327,6 +345,7 @@ function handleShutdownSignal(signal: string): void {
   console.log(`[app] Received ${signal}, exiting...`);
   // Sync cleanup: kill child processes immediately
   unwatchClaudeSettings();
+  gitAutoFetchService.cleanup();
   cleanupAllResourcesSync();
   // Use app.exit() to bypass will-quit handler (already cleaned up)
   app.exit(0);

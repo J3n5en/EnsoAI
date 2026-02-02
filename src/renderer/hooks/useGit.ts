@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useRepositoryStore } from '@/stores/repository';
 import { useShouldPoll } from './useWindowFocus';
 
@@ -147,6 +148,7 @@ export function useGitPull() {
     },
     onSuccess: (_, { workdir }) => {
       queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'branches', workdir] });
       queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
       queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', workdir] });
     },
@@ -178,4 +180,24 @@ export function useGitInit() {
       queryClient.invalidateQueries({ queryKey: ['worktree', 'list', workdir] });
     },
   });
+}
+
+/**
+ * Hook to listen for auto-fetch completion events and refresh git status.
+ * Should be called once at the app root level.
+ */
+export function useAutoFetchListener() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const cleanup = window.electronAPI.git.onAutoFetchCompleted(() => {
+      // Invalidate all git status queries to refresh behind/ahead counts
+      queryClient.invalidateQueries({ queryKey: ['git', 'status'] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'branches'] });
+      queryClient.invalidateQueries({ queryKey: ['worktree', 'list'] });
+      queryClient.invalidateQueries({ queryKey: ['worktree', 'listMultiple'] });
+    });
+
+    return cleanup;
+  }, [queryClient]);
 }

@@ -32,6 +32,26 @@ export const IPC_CHANNELS = {
   GIT_CLONE: 'git:clone',
   GIT_CLONE_PROGRESS: 'git:clone:progress',
   GIT_VALIDATE_URL: 'git:validate-url',
+  // Git Auto Fetch
+  GIT_AUTO_FETCH_SET_ENABLED: 'git:autoFetch:setEnabled',
+  GIT_AUTO_FETCH_COMPLETED: 'git:autoFetch:completed',
+
+  // Git Submodule
+  GIT_SUBMODULE_LIST: 'git:submodule:list',
+  GIT_SUBMODULE_INIT: 'git:submodule:init',
+  GIT_SUBMODULE_UPDATE: 'git:submodule:update',
+  GIT_SUBMODULE_SYNC: 'git:submodule:sync',
+  GIT_SUBMODULE_FETCH: 'git:submodule:fetch',
+  GIT_SUBMODULE_PULL: 'git:submodule:pull',
+  GIT_SUBMODULE_PUSH: 'git:submodule:push',
+  GIT_SUBMODULE_COMMIT: 'git:submodule:commit',
+  GIT_SUBMODULE_STAGE: 'git:submodule:stage',
+  GIT_SUBMODULE_UNSTAGE: 'git:submodule:unstage',
+  GIT_SUBMODULE_DISCARD: 'git:submodule:discard',
+  GIT_SUBMODULE_CHANGES: 'git:submodule:changes',
+  GIT_SUBMODULE_FILE_DIFF: 'git:submodule:file-diff',
+  GIT_SUBMODULE_BRANCHES: 'git:submodule:branches',
+  GIT_SUBMODULE_CHECKOUT: 'git:submodule:checkout',
 
   // Worktree
   WORKTREE_LIST: 'worktree:list',

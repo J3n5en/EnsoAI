@@ -825,7 +825,7 @@ export function DiffReviewModal({
       for (const c of comments) {
         const lineRef =
           c.startLine === c.endLine ? `L${c.startLine}` : `L${c.startLine}-L${c.endLine}`;
-        lines.push(`@${filePath}#${lineRef}`);
+        lines.push(`${filePath}#${lineRef}`);
         lines.push(`User comment: "${c.text}"`);
         lines.push('');
       }

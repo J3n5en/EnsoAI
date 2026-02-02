@@ -1,6 +1,7 @@
 import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
+  ArrowDown,
   ChevronRight,
   Copy,
   FolderGit2,
@@ -8,6 +9,7 @@ import {
   FolderOpen,
   GitBranch,
   GitMerge,
+  Loader2,
   PanelLeftClose,
   Plus,
   RefreshCw,
@@ -48,6 +50,7 @@ import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/u
 import { RepoItemWithGlow } from '@/components/ui/glow-wrappers';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useGitPull, useGitStatus } from '@/hooks/useGit';
 import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
 import { useWorktreeListMultiple } from '@/hooks/useWorktree';
@@ -761,6 +764,7 @@ export function TreeSidebar({
                                 key={worktree.path}
                                 worktree={worktree}
                                 repoPath={repo.path}
+                                branches={branches}
                                 isActive={activeWorktree?.path === worktree.path}
                                 onClick={() => {
                                   // Select repo if not already selected
@@ -1096,6 +1100,7 @@ interface WorktreeTreeItemProps {
   onDrop?: (e: React.DragEvent) => void;
   showDropIndicator?: boolean;
   dropDirection?: 'top' | 'bottom' | null;
+  branches?: GitBranchType[];
 }
 
 function WorktreeTreeItem({
@@ -1113,6 +1118,7 @@ function WorktreeTreeItem({
   onDrop,
   showDropIndicator,
   dropDirection,
+  branches = [],
 }: WorktreeTreeItemProps) {
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1123,6 +1129,13 @@ function WorktreeTreeItem({
   const branchDisplay = worktree.branch || t('Detached');
   const isPrunable = worktree.prunable;
   const glowEnabled = useGlowEffectEnabled();
+
+  // Check if branch is merged to main
+  const isMerged = useMemo(() => {
+    if (!worktree.branch || isMain) return false;
+    const branch = branches.find((b) => b.name === worktree.branch);
+    return branch?.merged === true;
+  }, [worktree.branch, isMain, branches]);
 
   // Subscribe to activity store
   const activities = useWorktreeActivityStore((s) => s.activities);
@@ -1136,6 +1149,38 @@ function WorktreeTreeItem({
 
   // Check if any session in this worktree has outputting or unread state
   const outputState = useWorktreeOutputState(worktree.path);
+
+  // Get git status for behind count
+  const { data: gitStatus, refetch: refetchStatus } = useGitStatus(worktree.path, isActive);
+  const behindCount = gitStatus?.behind ?? 0;
+
+  // Pull mutation for syncing with remote
+  const pullMutation = useGitPull();
+
+  const handlePull = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (pullMutation.isPending || behindCount === 0) return;
+
+      try {
+        await pullMutation.mutateAsync({ workdir: worktree.path });
+        refetchStatus();
+        toastManager.add({
+          type: 'success',
+          title: t('Pull successful'),
+          description: t('Pulled {{count}} commits from remote', { count: behindCount }),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toastManager.add({
+          type: 'error',
+          title: t('Pull failed'),
+          description: message,
+        });
+      }
+    },
+    [pullMutation, worktree.path, behindCount, refetchStatus, t]
+  );
 
   const handleCopyPath = useCallback(async () => {
     try {
@@ -1239,7 +1284,28 @@ function WorktreeTreeItem({
           <span className="relative z-10 shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
             {t('Main')}
           </span>
+        ) : isMerged ? (
+          <span className="relative z-10 shrink-0 rounded bg-success/20 px-1 py-0.5 text-[9px] font-medium uppercase text-success-foreground">
+            {t('Merged')}
+          </span>
         ) : null}
+        {/* Behind count - remote commits not yet pulled, click to pull */}
+        {(behindCount > 0 || pullMutation.isPending) && (
+          <button
+            type="button"
+            onClick={handlePull}
+            disabled={pullMutation.isPending}
+            className="relative z-10 flex items-center gap-0.5 shrink-0 text-[10px] text-orange-500 dark:text-orange-400 hover:text-orange-600 dark:hover:text-orange-300 transition-colors disabled:opacity-50"
+            title={t('{{count}} commits behind', { count: behindCount })}
+          >
+            {pullMutation.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ArrowDown className="h-3 w-3" />
+            )}
+            {behindCount}
+          </button>
+        )}
         {/* Activity counts and diff stats */}
         {hasActivity && (
           <div className="relative z-10 flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">

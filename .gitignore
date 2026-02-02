@@ -32,3 +32,4 @@ dist*/
 build/cer.p12
 
 .omc/
+.worktrees

@@ -34,6 +34,7 @@ import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/i18n';
+import { Z_INDEX } from '@/lib/z-index';
 import { useSettingsStore } from '@/stores/settings';
 
 // Get display name for branch (remove remotes/ prefix for remote branches)
@@ -178,10 +179,14 @@ export function CreateWorktreeDialog({
 
   // Keep input value in sync when dropdown is closed
   React.useEffect(() => {
-    if (!baseBranchOpen && baseBranch) {
+    if (baseBranchOpen) {
+      // Clear search when opening to show all branches
+      setBaseBranchQuery('');
+    } else if (baseBranch) {
+      // Restore branch label when closing
       setBaseBranchQuery(getBranchLabel(baseBranch));
     }
-  }, [baseBranch, baseBranchOpen, getBranchLabel]);
+  }, [baseBranchOpen, baseBranch, getBranchLabel]);
 
   const loadPullRequests = React.useCallback(async () => {
     setPrsLoading(true);
@@ -458,6 +463,11 @@ export function CreateWorktreeDialog({
                     }}
                     inputValue={baseBranchQuery}
                     onInputValueChange={(value) => {
+                      // Allow clearing when dropdown is open (for showing all branches)
+                      if (value === '' && baseBranchOpen) {
+                        setBaseBranchQuery('');
+                        return;
+                      }
                       // Ignore empty string during initialization if we already have a query
                       if (value === '' && baseBranchQuery && baseBranchInitializedRef.current) {
                         return;
@@ -472,7 +482,7 @@ export function CreateWorktreeDialog({
                       startAddon={<GitBranch className="h-4 w-4" />}
                       showTrigger
                     />
-                    <ComboboxPopup>
+                    <ComboboxPopup zIndex={Z_INDEX.NESTED_MODAL_CONTENT}>
                       <ComboboxEmpty>{t('No branches found')}</ComboboxEmpty>
                       <ComboboxList>
                         {(group: BranchGroup) => (
@@ -583,7 +593,7 @@ export function CreateWorktreeDialog({
                             startAddon={<GitPullRequest className="h-4 w-4" />}
                             showTrigger
                           />
-                          <ComboboxPopup>
+                          <ComboboxPopup zIndex={Z_INDEX.NESTED_MODAL_CONTENT}>
                             <ComboboxEmpty>{t('No pull requests found')}</ComboboxEmpty>
                             <ComboboxList>
                               {(item: PrItem) => (

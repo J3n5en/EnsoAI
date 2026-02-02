@@ -48,6 +48,7 @@ const fileIconMap: Record<string, LucideIcon> = {
   // Documents
   md: FileText,
   txt: FileText,
+  pdf: FileText,
   // Shell/Scripts
   sh: Terminal,
   bash: Terminal,
@@ -119,6 +120,8 @@ export function getFileIconColor(name: string, isDirectory: boolean): string {
       return 'text-pink-500';
     case 'md':
       return 'text-sky-500';
+    case 'pdf':
+      return 'text-red-500';
     case 'svg':
     case 'png':
     case 'jpg':
@@ -135,4 +138,10 @@ export function isImageFile(path: string | null | undefined): boolean {
   if (!path) return false;
   const ext = path.split('.').pop()?.toLowerCase() || '';
   return imageExtensions.includes(ext);
+}
+
+export function isPdfFile(path: string | null | undefined): boolean {
+  if (!path) return false;
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  return ext === 'pdf';
 }

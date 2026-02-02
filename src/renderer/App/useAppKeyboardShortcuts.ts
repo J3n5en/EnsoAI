@@ -131,10 +131,15 @@ export function useAppKeyboardShortcuts({
   // Listen for workspace panel toggle shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (shouldSkipShortcut(e)) return;
+      // Skip IME composition and keybinding recording
+      if (e.isComposing) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.hasAttribute('data-keybinding-recording')) return;
 
       const bindings = useSettingsStore.getState().workspaceKeybindings;
 
+      // Handle workspace toggle shortcuts before input/textarea checks
+      // This keeps them working even when xterm/Agent input has focus
       if (matchesKeybinding(e, bindings.toggleWorktree)) {
         e.preventDefault();
         onToggleWorktree();
@@ -151,6 +156,13 @@ export function useAppKeyboardShortcuts({
         e.preventDefault();
         onSwitchActiveWorktree();
         return;
+      }
+
+      // For other shortcuts, skip if target is input/textarea
+      if (target) {
+        const tagName = target.tagName.toLowerCase();
+        if (tagName === 'input' || tagName === 'textarea') return;
+        if (target.isContentEditable) return;
       }
     };
 

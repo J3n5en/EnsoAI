@@ -11,6 +11,7 @@ import type {
   ContentSearchResult,
   CustomAgent,
   DetectedApp,
+  FileChange,
   FileChangeEvent,
   FileChangesResult,
   FileDiff,
@@ -22,6 +23,7 @@ import type {
   GitBranch,
   GitLogEntry,
   GitStatus,
+  GitSubmodule,
   GitWorktree,
   McpServer,
   McpServerConfig,
@@ -164,6 +166,60 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.GIT_CLONE_PROGRESS, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.GIT_CLONE_PROGRESS, handler);
     },
+    // Git Auto Fetch
+    setAutoFetchEnabled: (enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_AUTO_FETCH_SET_ENABLED, enabled),
+    onAutoFetchCompleted: (callback: (data: { timestamp: number }) => void): (() => void) => {
+      const handler = (_: unknown, data: { timestamp: number }) => callback(data);
+      ipcRenderer.on(IPC_CHANNELS.GIT_AUTO_FETCH_COMPLETED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.GIT_AUTO_FETCH_COMPLETED, handler);
+    },
+    // Git Submodule
+    listSubmodules: (workdir: string): Promise<GitSubmodule[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_LIST, workdir),
+    initSubmodules: (workdir: string, recursive?: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_INIT, workdir, recursive),
+    updateSubmodules: (workdir: string, recursive?: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_UPDATE, workdir, recursive),
+    syncSubmodules: (workdir: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_SYNC, workdir),
+    fetchSubmodule: (workdir: string, submodulePath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_FETCH, workdir, submodulePath),
+    pullSubmodule: (workdir: string, submodulePath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_PULL, workdir, submodulePath),
+    pushSubmodule: (workdir: string, submodulePath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_PUSH, workdir, submodulePath),
+    commitSubmodule: (workdir: string, submodulePath: string, message: string): Promise<string> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_COMMIT, workdir, submodulePath, message),
+    stageSubmodule: (workdir: string, submodulePath: string, paths: string[]): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_STAGE, workdir, submodulePath, paths),
+    unstageSubmodule: (workdir: string, submodulePath: string, paths: string[]): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_UNSTAGE, workdir, submodulePath, paths),
+    discardSubmodule: (workdir: string, submodulePath: string, paths: string[]): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_DISCARD, workdir, submodulePath, paths),
+    getSubmoduleChanges: (workdir: string, submodulePath: string): Promise<FileChange[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_CHANGES, workdir, submodulePath),
+    getSubmoduleFileDiff: (
+      workdir: string,
+      submodulePath: string,
+      filePath: string,
+      staged: boolean
+    ): Promise<FileDiff> =>
+      ipcRenderer.invoke(
+        IPC_CHANNELS.GIT_SUBMODULE_FILE_DIFF,
+        workdir,
+        submodulePath,
+        filePath,
+        staged
+      ),
+    getSubmoduleBranches: (workdir: string, submodulePath: string): Promise<GitBranch[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_BRANCHES, workdir, submodulePath),
+    checkoutSubmoduleBranch: (
+      workdir: string,
+      submodulePath: string,
+      branch: string
+    ): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_SUBMODULE_CHECKOUT, workdir, submodulePath, branch),
   },
 
   // Worktree

@@ -47,7 +47,7 @@ export function getKeyFromEvent(e: KeyboardEvent): string {
 // Check if a keyboard event matches a keybinding
 export function matchesKeybinding(e: KeyboardEvent, binding: TerminalKeybinding): boolean {
   const key = getKeyFromEvent(e);
-  const keyMatch = key === binding.key.toLowerCase();
+  const keyMatch = key.toLowerCase() === binding.key.toLowerCase();
   const ctrlMatch = binding.ctrl ? e.ctrlKey : !e.ctrlKey;
   const altMatch = binding.alt ? e.altKey : !e.altKey;
   const shiftMatch = binding.shift ? e.shiftKey : !e.shiftKey;

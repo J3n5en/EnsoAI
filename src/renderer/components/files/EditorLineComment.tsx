@@ -150,8 +150,8 @@ export function useEditorLineComment({
 
       // Send comment to terminal
       const message = text
-        ? `@${displayPath}#L${lineNumber}\nUser comment: "${text}"`
-        : `@${displayPath}#L${lineNumber}`;
+        ? `${displayPath}#L${lineNumber}\nUser comment: "${text}"`
+        : `${displayPath}#L${lineNumber}`;
       write(sessionId, `${message}\r`);
 
       // Close comment form

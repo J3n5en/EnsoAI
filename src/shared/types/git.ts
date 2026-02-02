@@ -16,6 +16,7 @@ export interface GitBranch {
   current: boolean;
   commit: string;
   label: string;
+  merged?: boolean;
 }
 
 export interface GitLogEntry {
@@ -107,4 +108,29 @@ export interface CloneResult {
 export interface ValidateUrlResult {
   valid: boolean;
   repoName?: string;
+}
+
+// Git Submodule types
+export type SubmoduleStatus =
+  | 'clean' // 干净
+  | 'modified' // 有本地修改
+  | 'outdated' // 需要更新
+  | 'uninitialized'; // 未初始化
+
+export interface GitSubmodule {
+  name: string;
+  path: string;
+  url: string;
+  branch?: string;
+  head: string;
+  status: SubmoduleStatus;
+  initialized: boolean;
+  // 远程同步状态
+  tracking?: string;
+  ahead: number;
+  behind: number;
+  // 本地变更状态
+  hasChanges: boolean;
+  stagedCount: number;
+  unstagedCount: number;
 }

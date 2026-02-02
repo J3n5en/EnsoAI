@@ -21,7 +21,6 @@ import { useTerminalStore } from '@/stores/terminal';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
-import { QuickTerminalButton } from './QuickTerminalButton';
 import { QuickTerminalModal } from './QuickTerminalModal';
 import type { Session } from './SessionBar';
 import { StatusLine } from './StatusLine';
@@ -1339,6 +1338,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
               onSessionRename={handleRenameSession}
               onSessionReorder={(from, to) => handleReorderSessions(group.id, from, to)}
               onGroupClick={() => handleGroupClick(group.id)}
+              quickTerminalOpen={quickTerminalOpen}
+              quickTerminalHasProcess={hasRunningProcess}
+              onToggleQuickTerminal={quickTerminalEnabled ? handleToggleQuickTerminal : undefined}
             />
             {/* Status Line at bottom of each group - only render container when enabled */}
             {statusLineEnabled && (
@@ -1352,15 +1354,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           </div>
         );
       })}
-      {/* Quick Terminal Button - 只在当前 panel 激活时显示 */}
-      {isActive && quickTerminalEnabled && (
-        <QuickTerminalButton
-          containerRef={panelRef}
-          isOpen={quickTerminalOpen}
-          hasRunningProcess={hasRunningProcess}
-          onClick={handleToggleQuickTerminal}
-        />
-      )}
       {/* Quick Terminal Modal - 始终挂载以保持 terminal 运行状态 */}
       {quickTerminalEnabled && (
         <QuickTerminalModal

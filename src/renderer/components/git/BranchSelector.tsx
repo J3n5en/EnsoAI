@@ -1,6 +1,7 @@
 import type { GitBranch as GitBranchType } from '@shared/types';
 import { GitBranch, Plus, RefreshCw, Search } from 'lucide-react';
 import * as React from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -76,9 +77,16 @@ export function BranchSelector({
               </div>
               {localBranches.map((branch) => (
                 <SelectItem key={branch.name} value={branch.name}>
-                  <div className="flex items-center gap-2">
-                    {branch.current && <span className="h-2 w-2 rounded-full bg-green-500" />}
-                    <span className="truncate">{branch.name}</span>
+                  <div className="flex items-center gap-2 w-full">
+                    {branch.current && (
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{branch.name}</span>
+                    {branch.merged && (
+                      <Badge variant="success" size="sm" className="shrink-0">
+                        MERGED
+                      </Badge>
+                    )}
                   </div>
                 </SelectItem>
               ))}
@@ -93,7 +101,16 @@ export function BranchSelector({
               </div>
               {remoteBranches.map((branch) => (
                 <SelectItem key={branch.name} value={branch.name}>
-                  <span className="truncate">{branch.name.replace('remotes/', '')}</span>
+                  <div className="flex items-center gap-2 w-full">
+                    <span className="min-w-0 flex-1 truncate">
+                      {branch.name.replace('remotes/', '')}
+                    </span>
+                    {branch.merged && (
+                      <Badge variant="success" size="sm" className="shrink-0">
+                        MERGED
+                      </Badge>
+                    )}
+                  </div>
                 </SelectItem>
               ))}
             </>

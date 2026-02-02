@@ -13,6 +13,8 @@ import langSvelte from 'shiki/langs/svelte.mjs';
 import langVue from 'shiki/langs/vue.mjs';
 import themeVitesseDark from 'shiki/themes/vitesse-dark.mjs';
 import themeVitesseLight from 'shiki/themes/vitesse-light.mjs';
+// Import ini language for .env file syntax highlighting
+import 'monaco-editor/esm/vs/basic-languages/ini/ini.contribution';
 
 // Configure Monaco workers for Electron environment
 self.MonacoEnvironment = {
@@ -52,6 +54,7 @@ const preloadLanguages = [
   'shell',
   'sql',
   'graphql',
+  'ini', // For .env files
 ];
 for (const lang of preloadLanguages) {
   try {
@@ -61,6 +64,13 @@ for (const lang of preloadLanguages) {
     // Language may not be supported by Monaco, skip silently
   }
 }
+
+// Register .env file extensions to use ini syntax highlighting
+monaco.languages.register({
+  id: 'ini',
+  extensions: ['.env', '.env.local', '.env.development', '.env.production', '.env.test'],
+  filenames: ['.env'],
+});
 
 // Languages to highlight with Shiki (not natively supported by Monaco)
 const SHIKI_LANGUAGES = ['vue', 'svelte', 'astro'];

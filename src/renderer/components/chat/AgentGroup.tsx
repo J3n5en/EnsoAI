@@ -22,6 +22,10 @@ interface AgentGroupProps {
   onSessionRename: (sessionId: string, name: string) => void;
   onSessionReorder: (fromIndex: number, toIndex: number) => void;
   onGroupClick: () => void;
+  // Quick Terminal props
+  quickTerminalOpen?: boolean;
+  quickTerminalHasProcess?: boolean;
+  onToggleQuickTerminal?: () => void;
 }
 
 export function AgentGroup({
@@ -38,6 +42,9 @@ export function AgentGroup({
   onSessionRename,
   onSessionReorder,
   onGroupClick,
+  quickTerminalOpen,
+  quickTerminalHasProcess,
+  onToggleQuickTerminal,
 }: AgentGroupProps) {
   const { t } = useI18n();
   const [showAgentMenu, setShowAgentMenu] = useState(false);
@@ -151,6 +158,9 @@ export function AgentGroup({
       onNewSessionWithAgent={onSessionNewWithAgent}
       onRenameSession={onSessionRename}
       onReorderSessions={onSessionReorder}
+      quickTerminalOpen={quickTerminalOpen}
+      quickTerminalHasProcess={quickTerminalHasProcess}
+      onToggleQuickTerminal={onToggleQuickTerminal}
     />
   );
 }

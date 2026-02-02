@@ -199,6 +199,8 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
     }
   }, [content, t]);
 
+  const isCurrentRepo = reviewRepoPath === repoPath || reviewRepoPath === null;
+
   const handleMinimize = useCallback(() => {
     minimize();
     onOpenChange(false);
@@ -209,6 +211,18 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
     reset();
     onOpenChange(false);
   }, [reset, onOpenChange]);
+
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      // When clicking backdrop to close, minimize instead if review is in progress
+      if (!newOpen && status !== 'idle' && status !== 'error' && isCurrentRepo) {
+        handleMinimize();
+      } else {
+        onOpenChange(newOpen);
+      }
+    },
+    [status, isCurrentRepo, handleMinimize, onOpenChange]
+  );
 
   const handleContinueConversation = useCallback(() => {
     if (reviewSessionId) {
@@ -254,10 +268,8 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
     }
   };
 
-  const isCurrentRepo = reviewRepoPath === repoPath || reviewRepoPath === null;
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogPopup className="max-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
