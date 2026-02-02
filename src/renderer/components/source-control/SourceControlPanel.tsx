@@ -472,6 +472,14 @@ export function SourceControlPanel({
                           })}
                         </div>
                       )}
+                      {fileChangesResult?.truncated && (
+                        <div className="mx-2 mt-2 rounded-md bg-muted/50 border px-3 py-2 text-xs text-muted-foreground">
+                          {t('Too many changes, showing first {{count}}.', {
+                            count:
+                              fileChangesResult.truncatedLimit ?? fileChangesResult.changes.length,
+                          })}
+                        </div>
+                      )}
                       <div className="flex-1 overflow-hidden min-h-0">
                         <ChangesList
                           staged={staged}

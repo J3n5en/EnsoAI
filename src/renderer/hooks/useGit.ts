@@ -16,7 +16,10 @@ export function useGitStatus(workdir: string | null, isActive = true) {
       return status;
     },
     enabled: !!workdir,
-    refetchInterval: isActive && shouldPoll ? 5000 : false,
+    refetchInterval: (query) => {
+      if (!isActive || !shouldPoll) return false;
+      return query.state.data?.truncated ? 60000 : 5000;
+    },
     refetchIntervalInBackground: false,
   });
 }

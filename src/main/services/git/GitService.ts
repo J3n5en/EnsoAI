@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { exec, spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -24,6 +24,26 @@ import { decodeBuffer, gitShow } from './encoding';
 
 const execAsync = promisify(exec);
 
+const MAX_GIT_STATUS_ENTRIES = 5000;
+const MAX_GIT_FILE_CHANGES = 5000;
+const GIT_STATUS_STREAM_TIMEOUT_MS = 15000;
+
+type PorcelainBranchInfo = {
+  current: string | null;
+  tracking: string | null;
+  ahead: number;
+  behind: number;
+};
+
+type LimitedGitStatus = PorcelainBranchInfo & {
+  staged: string[];
+  modified: string[];
+  deleted: string[];
+  untracked: string[];
+  conflicted: string[];
+  truncated: boolean;
+};
+
 export class GitService {
   private git: SimpleGit;
   private workdir: string;
@@ -37,19 +57,224 @@ export class GitService {
     this.workdir = workdir;
   }
 
-  async getStatus(): Promise<GitStatus> {
-    const status: StatusResult = await this.git.status();
+  private getGitEnv(): NodeJS.ProcessEnv {
     return {
-      isClean: status.isClean(),
-      current: status.current,
-      tracking: status.tracking,
-      ahead: status.ahead,
-      behind: status.behind,
-      staged: status.staged,
-      modified: status.modified,
-      deleted: status.deleted,
-      untracked: status.not_added,
-      conflicted: status.conflicted,
+      ...process.env,
+      ...getProxyEnvVars(),
+      PATH: getEnhancedPath(),
+    };
+  }
+
+  private async readPorcelainV2Limited(maxEntries: number): Promise<LimitedGitStatus> {
+    const branchInfo: PorcelainBranchInfo = {
+      current: null,
+      tracking: null,
+      ahead: 0,
+      behind: 0,
+    };
+
+    const staged: string[] = [];
+    const modified: string[] = [];
+    const deleted: string[] = [];
+    const untracked: string[] = [];
+    const conflicted: string[] = [];
+
+    let entries = 0;
+    let truncated = false;
+    let remainder = '';
+    let stderr = '';
+    let pendingRename: { xy: string } | null = null;
+
+    const killIfTruncated = (proc: ReturnType<typeof spawn>) => {
+      if (!truncated) return;
+      if (!proc.killed) proc.kill('SIGTERM');
+    };
+
+    const processRecord = (recordRaw: string, proc: ReturnType<typeof spawn>) => {
+      const record = recordRaw.trim();
+      if (!record) return;
+
+      if (pendingRename) {
+        const p = record;
+        const xy = pendingRename.xy;
+        pendingRename = null;
+
+        const x = xy[0] ?? '.';
+        const y = xy[1] ?? '.';
+
+        if (x !== '.' && x !== '?' && x !== '!') {
+          staged.push(p);
+        }
+
+        if (y === 'D') {
+          deleted.push(p);
+        } else if (y !== '.' && y !== '?' && y !== '!' && y !== 'U') {
+          modified.push(p);
+        }
+
+        if (x === 'U' || y === 'U') {
+          conflicted.push(p);
+        }
+
+        entries++;
+        if (entries >= maxEntries) {
+          truncated = true;
+          killIfTruncated(proc);
+        }
+        return;
+      }
+
+      if (record.startsWith('# ')) {
+        const parts = record.split(' ');
+        const key = parts[1];
+        if (key === 'branch.head') {
+          const head = parts.slice(2).join(' ');
+          branchInfo.current = head === '(detached)' ? null : head || null;
+        } else if (key === 'branch.upstream') {
+          branchInfo.tracking = parts.slice(2).join(' ') || null;
+        } else if (key === 'branch.ab') {
+          const aheadToken = parts[2] || '+0';
+          const behindToken = parts[3] || '-0';
+          branchInfo.ahead = Number.parseInt(aheadToken.replace(/^\+/, ''), 10) || 0;
+          branchInfo.behind = Number.parseInt(behindToken.replace(/^-/, ''), 10) || 0;
+        }
+        return;
+      }
+
+      if (entries >= maxEntries) {
+        truncated = true;
+        killIfTruncated(proc);
+        return;
+      }
+
+      if (record.startsWith('? ')) {
+        const p = record.slice(2);
+        if (p) untracked.push(p);
+        entries++;
+        if (entries >= maxEntries) {
+          truncated = true;
+          killIfTruncated(proc);
+        }
+        return;
+      }
+
+      if (record.startsWith('! ')) {
+        return;
+      }
+
+      const type = record[0];
+      if (type !== '1' && type !== '2' && type !== 'u') {
+        return;
+      }
+
+      const parts = record.split(' ');
+      const xy = parts[1] ?? '..';
+      const p = parts[parts.length - 1] ?? '';
+      if (!p) return;
+
+      if (type === '2') {
+        pendingRename = { xy };
+        return;
+      }
+
+      const x = xy[0] ?? '.';
+      const y = xy[1] ?? '.';
+
+      if (type === 'u' || x === 'U' || y === 'U') {
+        conflicted.push(p);
+      }
+
+      if (x !== '.' && x !== '?' && x !== '!') {
+        staged.push(p);
+      }
+
+      if (y === 'D') {
+        deleted.push(p);
+      } else if (y !== '.' && y !== '?' && y !== '!' && y !== 'U') {
+        modified.push(p);
+      }
+
+      entries++;
+      if (entries >= maxEntries) {
+        truncated = true;
+        killIfTruncated(proc);
+      }
+    };
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(
+        'git',
+        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
+        { cwd: this.workdir, env: this.getGitEnv() }
+      );
+
+      const timeout = setTimeout(() => {
+        truncated = true;
+        if (!proc.killed) proc.kill('SIGKILL');
+      }, GIT_STATUS_STREAM_TIMEOUT_MS);
+
+      proc.stdout.on('data', (chunk: Buffer) => {
+        if (truncated) return;
+        remainder += chunk.toString('utf8');
+        const records = remainder.split('\0');
+        remainder = records.pop() ?? '';
+        for (const record of records) {
+          processRecord(record, proc);
+          if (truncated) break;
+        }
+      });
+
+      proc.stderr.on('data', (chunk: Buffer) => {
+        if (stderr.length > 8192) return;
+        stderr += chunk.toString('utf8');
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout);
+        if (!truncated && code && code !== 0) {
+          reject(new Error(stderr.trim() || `git status failed (${code})`));
+          return;
+        }
+        resolve({
+          ...branchInfo,
+          staged,
+          modified,
+          deleted,
+          untracked,
+          conflicted,
+          truncated,
+        });
+      });
+    });
+  }
+
+  async getStatus(): Promise<GitStatus> {
+    const limited = await this.readPorcelainV2Limited(MAX_GIT_STATUS_ENTRIES);
+    const totalListed =
+      limited.staged.length +
+      limited.modified.length +
+      limited.deleted.length +
+      limited.untracked.length +
+      limited.conflicted.length;
+
+    return {
+      isClean: totalListed === 0 && !limited.truncated,
+      current: limited.current,
+      tracking: limited.tracking,
+      ahead: limited.ahead,
+      behind: limited.behind,
+      staged: limited.staged,
+      modified: limited.modified,
+      deleted: limited.deleted,
+      untracked: limited.untracked,
+      conflicted: limited.conflicted,
+      truncated: limited.truncated,
+      truncatedLimit: limited.truncated ? MAX_GIT_STATUS_ENTRIES : undefined,
     };
   }
 
@@ -260,28 +485,181 @@ export class GitService {
   }
 
   async getFileChanges(): Promise<FileChangesResult> {
-    const status: StatusResult = await this.git.status();
-
-    // 使用共享方法解析状态
-    const allChanges = this.parseStatusToChanges(status);
-
-    // Directories to ignore (commonly large and should be in .gitignore)
     const ignoredPrefixes = ['node_modules/', '.pnpm/', 'dist/', 'out/', '.next/', 'build/'];
     const skippedDirsSet = new Set<string>();
 
-    // 过滤忽略的目录
-    const changes = allChanges.filter((change) => {
+    const changes: FileChange[] = [];
+    let truncated = false;
+    let remainder = '';
+    let stderr = '';
+    let pendingRename: { xy: string; originalPath?: string } | null = null;
+
+    const env = this.getGitEnv();
+
+    const shouldSkip = (p: string) => {
       for (const prefix of ignoredPrefixes) {
-        if (change.path.startsWith(prefix)) {
-          skippedDirsSet.add(prefix.slice(0, -1)); // Remove trailing slash
-          return false;
+        if (p.startsWith(prefix)) {
+          skippedDirsSet.add(prefix.slice(0, -1));
+          return true;
         }
       }
-      return true;
+      return false;
+    };
+
+    const pushIndexChange = (statusChar: string, filePath: string, originalPath?: string) => {
+      if (changes.length >= MAX_GIT_FILE_CHANGES) {
+        truncated = true;
+        return;
+      }
+
+      let status: FileChangeStatus;
+      if (statusChar === 'A') status = 'A';
+      else if (statusChar === 'D') status = 'D';
+      else if (statusChar === 'R') status = 'R';
+      else if (statusChar === 'C') status = 'C';
+      else if (statusChar === 'U') status = 'X';
+      else status = 'M';
+
+      const change: FileChange = { path: filePath, status, staged: true };
+      if (originalPath) change.originalPath = originalPath;
+      changes.push(change);
+    };
+
+    const pushWorkingChange = (statusChar: string, filePath: string) => {
+      if (changes.length >= MAX_GIT_FILE_CHANGES) {
+        truncated = true;
+        return;
+      }
+
+      let status: FileChangeStatus;
+      if (statusChar === 'D') status = 'D';
+      else if (statusChar === 'U') status = 'X';
+      else status = 'M';
+
+      changes.push({ path: filePath, status, staged: false });
+    };
+
+    const processRecord = (recordRaw: string, proc: ReturnType<typeof spawn>) => {
+      const record = recordRaw.trim();
+      if (!record) return;
+      if (record.startsWith('# ') || record.startsWith('! ')) return;
+
+      if (pendingRename) {
+        const filePath = record;
+        const { xy, originalPath } = pendingRename;
+        pendingRename = null;
+
+        if (!filePath || shouldSkip(filePath)) return;
+
+        const indexStatus = xy[0] ?? '.';
+        const workingDirStatus = xy[1] ?? '.';
+
+        if (indexStatus !== '.' && indexStatus !== '?' && indexStatus !== '!') {
+          pushIndexChange(indexStatus, filePath, originalPath);
+        }
+        if (workingDirStatus !== '.' && workingDirStatus !== ' ') {
+          pushWorkingChange(workingDirStatus, filePath);
+        }
+
+        if (truncated && !proc.killed) proc.kill('SIGTERM');
+        return;
+      }
+
+      if (changes.length >= MAX_GIT_FILE_CHANGES) {
+        truncated = true;
+        if (!proc.killed) proc.kill('SIGTERM');
+        return;
+      }
+
+      if (record.startsWith('? ')) {
+        const p = record.slice(2);
+        if (!p || shouldSkip(p)) return;
+        changes.push({ path: p, status: 'U', staged: false });
+        if (changes.length >= MAX_GIT_FILE_CHANGES) {
+          truncated = true;
+          if (!proc.killed) proc.kill('SIGTERM');
+        }
+        return;
+      }
+
+      const type = record[0];
+      if (type !== '1' && type !== '2' && type !== 'u') return;
+
+      const parts = record.split(' ');
+      const xy = parts[1] ?? '..';
+      const p = parts[parts.length - 1] ?? '';
+      if (!p) return;
+
+      const indexStatus = xy[0] ?? '.';
+      const workingDirStatus = xy[1] ?? '.';
+
+      if (type === '2') {
+        pendingRename = { xy, originalPath: p };
+        return;
+      }
+
+      if (shouldSkip(p)) return;
+
+      if (indexStatus !== '.' && indexStatus !== '?' && indexStatus !== '!') {
+        pushIndexChange(indexStatus, p);
+      }
+      if (workingDirStatus !== '.' && workingDirStatus !== ' ') {
+        pushWorkingChange(workingDirStatus, p);
+      }
+
+      if (truncated && !proc.killed) proc.kill('SIGTERM');
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        'git',
+        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
+        { cwd: this.workdir, env }
+      );
+
+      const timeout = setTimeout(() => {
+        truncated = true;
+        if (!proc.killed) proc.kill('SIGKILL');
+      }, GIT_STATUS_STREAM_TIMEOUT_MS);
+
+      proc.stdout.on('data', (chunk: Buffer) => {
+        if (truncated) return;
+        remainder += chunk.toString('utf8');
+        const records = remainder.split('\0');
+        remainder = records.pop() ?? '';
+        for (const record of records) {
+          processRecord(record, proc);
+          if (truncated) break;
+        }
+      });
+
+      proc.stderr.on('data', (chunk: Buffer) => {
+        if (stderr.length > 8192) return;
+        stderr += chunk.toString('utf8');
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout);
+        if (!truncated && code && code !== 0) {
+          reject(new Error(stderr.trim() || `git status failed (${code})`));
+          return;
+        }
+        resolve();
+      });
     });
 
     const skippedDirs = skippedDirsSet.size > 0 ? Array.from(skippedDirsSet) : undefined;
-    return { changes, skippedDirs };
+    return {
+      changes,
+      skippedDirs,
+      truncated,
+      truncatedLimit: truncated ? MAX_GIT_FILE_CHANGES : undefined,
+    };
   }
 
   async getFileDiff(filePath: string, staged: boolean): Promise<FileDiff> {
