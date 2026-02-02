@@ -280,11 +280,12 @@ export function applyTerminalThemeToApp(themeName: string, syncDarkMode = true):
   root.style.setProperty('--muted', mutedBg);
   root.style.setProperty('--muted-foreground', mutedFg);
 
-  // Accent - use blue (more neutral than cyan)
+  // Accent - use blue mixed with background for softer appearance
   const accentColor = isDark ? theme.brightBlue : theme.blue;
-  const isAccentDark = getLuminance(accentColor) < 0.5;
-  root.style.setProperty('--accent', accentColor);
-  root.style.setProperty('--accent-foreground', isAccentDark ? '#ffffff' : '#000000');
+  const softAccent = mixColors(theme.background, accentColor, 0.3);
+  const isSoftAccentDark = getLuminance(softAccent) < 0.5;
+  root.style.setProperty('--accent', softAccent);
+  root.style.setProperty('--accent-foreground', isSoftAccentDark ? '#ffffff' : '#000000');
 
   // Semantic colors
   root.style.setProperty('--destructive', theme.red);
