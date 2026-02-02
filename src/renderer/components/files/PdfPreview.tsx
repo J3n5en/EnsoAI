@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getPDFJS, type PDFDocumentProxy } from './pdfSetup';
@@ -10,6 +10,19 @@ interface PdfPreviewProps {
 }
 
 type ZoomMode = 'fit-width' | 'fit-page' | 'custom';
+
+function normalizeForUrlPath(path: string): string {
+  let normalized = path.replace(/\\/g, '/');
+
+  // Windows drive path (C:/...) needs a leading slash in URL pathname (/C:/...)
+  if (/^[a-zA-Z]:\//.test(normalized)) {
+    normalized = `/${normalized}`;
+  } else if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+
+  return normalized;
+}
 
 export function PdfPreview({ path }: PdfPreviewProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
@@ -24,6 +37,13 @@ export function PdfPreview({ path }: PdfPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
 
+  // Convert file path to local-file:// URL (Electron custom protocol)
+  const pdfUrl = useMemo(() => {
+    const url = new URL('local-file://');
+    url.pathname = normalizeForUrlPath(path);
+    return url.toString();
+  }, [path]);
+
   // 加载 PDF 文档
   useEffect(() => {
     let cancelled = false;
@@ -36,12 +56,9 @@ export function PdfPreview({ path }: PdfPreviewProps) {
       try {
         const pdfjs = await getPDFJS();
 
-        // 读取文件内容
-        const fileData = await window.electronAPI.file.read(path);
-        const uint8Array = new TextEncoder().encode(fileData.content);
-
+        // 使用 local-file:// 协议加载 PDF
         const loadingTask = pdfjs.getDocument({
-          data: uint8Array,
+          url: pdfUrl,
         });
 
         const doc = await loadingTask.promise;
@@ -68,7 +85,7 @@ export function PdfPreview({ path }: PdfPreviewProps) {
         currentDoc.destroy();
       }
     };
-  }, [path]);
+  }, [pdfUrl]);
 
   // 渲染当前页
   const renderPage = useCallback(
