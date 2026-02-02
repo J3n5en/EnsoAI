@@ -31,6 +31,7 @@ import { checkGitInstalled } from './services/git/checkGit';
 import { gitAutoFetchService } from './services/git/GitAutoFetchService';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
+import { webInspectorServer } from './services/webInspector';
 import { createMainWindow } from './windows/MainWindow';
 
 let mainWindow: BrowserWindow | null = null;
@@ -252,6 +253,9 @@ app.whenReady().then(async () => {
 
   mainWindow = createMainWindow();
 
+  // Set main window for Web Inspector server (for IPC communication)
+  webInspectorServer.setMainWindow(mainWindow);
+
   // Register window control handlers (must be after mainWindow is created)
   cleanupWindowHandlers = registerWindowHandlers(mainWindow);
 
@@ -261,6 +265,7 @@ app.whenReady().then(async () => {
       cleanupWindowHandlers();
       cleanupWindowHandlers = null;
     }
+    webInspectorServer.setMainWindow(null);
     mainWindow = null;
   });
   // Initialize Claude Provider Watcher
