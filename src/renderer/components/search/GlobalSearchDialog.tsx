@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPortal, DialogViewport } from '@/components/ui/dialog';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { Z_INDEX } from '@/lib/z-index';
 import { SearchPreviewPanel } from './SearchPreviewPanel';
 import { SearchResultList } from './SearchResultList';
 import { type SearchMode, useGlobalSearch } from './useGlobalSearch';
@@ -159,8 +160,11 @@ export function GlobalSearchDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        <DialogBackdrop />
-        <DialogViewport className="grid-rows-[1fr_auto_1fr]">
+        <DialogBackdrop style={{ zIndex: Z_INDEX.MODAL_BACKDROP }} />
+        <DialogViewport
+          className="grid-rows-[1fr_auto_1fr]"
+          style={{ zIndex: Z_INDEX.MODAL_CONTENT }}
+        >
           <DialogPrimitive.Popup
             className="no-drag pointer-events-auto relative row-start-2 flex min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-xl"
             style={{ height: '70vh' }}

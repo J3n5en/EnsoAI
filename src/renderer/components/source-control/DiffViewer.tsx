@@ -225,8 +225,8 @@ export function DiffViewer({
 
       // Send comment to terminal
       const message = text
-        ? `@${file.path}#L${lineNumber}\nUser comment: "${text}"`
-        : `@${file.path}#L${lineNumber}`;
+        ? `${file.path}#L${lineNumber}\nUser comment: "${text}"`
+        : `${file.path}#L${lineNumber}`;
       write(sessionId, `${message}\r`);
 
       // Close comment form
@@ -465,14 +465,14 @@ export function DiffViewer({
               return;
             }
 
-            // Format: @path#L1-L10 or @path#L5
+            // Format: path#L1-L10 or path#L5
             const lineRef =
               selection.startLineNumber === selection.endLineNumber
                 ? `L${selection.startLineNumber}`
                 : `L${selection.startLineNumber}-L${selection.endLineNumber}`;
             const message = text
-              ? `@${file.path}#${lineRef}\nUser comment: "${text}"`
-              : `@${file.path}#${lineRef}`;
+              ? `${file.path}#${lineRef}\nUser comment: "${text}"`
+              : `${file.path}#${lineRef}`;
             write(sessionId, `${message}\r`);
 
             // Close comment widget

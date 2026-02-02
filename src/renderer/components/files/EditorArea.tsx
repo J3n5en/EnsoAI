@@ -492,14 +492,14 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
               return;
             }
 
-            // Format: @path#L1-L10 or @path#L5
+            // Format: path#L1-L10 or path#L5
             const lineRef =
               selection.startLineNumber === selection.endLineNumber
                 ? `L${selection.startLineNumber}`
                 : `L${selection.startLineNumber}-L${selection.endLineNumber}`;
             const message = text
-              ? `@${displayPath}#${lineRef}\nUser comment: "${text}"`
-              : `@${displayPath}#${lineRef}`;
+              ? `${displayPath}#${lineRef}\nUser comment: "${text}"`
+              : `${displayPath}#${lineRef}`;
             write(sessionId, `${message}\r`);
 
             // Close comment widget
