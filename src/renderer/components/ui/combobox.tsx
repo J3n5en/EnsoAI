@@ -12,9 +12,11 @@ import { Z_INDEX } from '@/lib/z-index';
 const ComboboxContext = React.createContext<{
   chipsRef: React.RefObject<Element | null> | null;
   multiple: boolean;
+  rootRef: React.RefObject<HTMLDivElement | null> | null;
 }>({
   chipsRef: null,
   multiple: false,
+  rootRef: null,
 });
 
 type ComboboxRootProps<ItemValue, Multiple extends boolean | undefined> = Parameters<
@@ -25,9 +27,12 @@ function Combobox<ItemValue, Multiple extends boolean | undefined = false>(
   props: ComboboxPrimitive.Root.Props<ItemValue, Multiple>
 ) {
   const chipsRef = React.useRef<Element | null>(null);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
   return (
-    <ComboboxContext.Provider value={{ chipsRef, multiple: !!props.multiple }}>
-      <ComboboxPrimitive.Root {...(props as ComboboxRootProps<ItemValue, Multiple>)} />
+    <ComboboxContext.Provider value={{ chipsRef, multiple: !!props.multiple, rootRef }}>
+      <div ref={rootRef} className="contents">
+        <ComboboxPrimitive.Root {...(props as ComboboxRootProps<ItemValue, Multiple>)} />
+      </div>
     </ComboboxContext.Provider>
   );
 }
@@ -131,14 +136,32 @@ function ComboboxPopup({
   sideOffset?: number;
   zIndex?: number;
 }) {
-  const { chipsRef } = React.useContext(ComboboxContext);
+  const { chipsRef, rootRef } = React.useContext(ComboboxContext);
+
+  // Detect modal context by checking if the combobox root is inside a dialog
+  const computedZIndex = React.useMemo(() => {
+    if (zIndex !== undefined) return zIndex;
+
+    const rootEl = rootRef?.current;
+    if (!rootEl) return Z_INDEX.DROPDOWN;
+
+    // Check if inside a nested modal first
+    const nestedModal = rootEl.closest('[data-slot="dialog-popup"] [data-slot="dialog-popup"]');
+    if (nestedModal) return Z_INDEX.DROPDOWN_IN_NESTED_MODAL;
+
+    // Check if inside a modal
+    const modal = rootEl.closest('[data-slot="dialog-popup"]');
+    if (modal) return Z_INDEX.DROPDOWN_IN_MODAL;
+
+    return Z_INDEX.DROPDOWN;
+  }, [zIndex, rootRef]);
 
   return (
     <ComboboxPrimitive.Portal>
       <ComboboxPrimitive.Positioner
         anchor={chipsRef}
         className="select-none"
-        style={{ zIndex: zIndex ?? Z_INDEX.DROPDOWN }}
+        style={{ zIndex: computedZIndex }}
         data-slot="combobox-positioner"
         sideOffset={sideOffset}
       >
