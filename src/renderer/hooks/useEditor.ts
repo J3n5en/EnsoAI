@@ -33,7 +33,9 @@ export function useEditor() {
 
   const saveFile = useMutation({
     mutationFn: async (path: string) => {
-      const file = tabs.find((f) => f.path === path);
+      // Get latest tabs from store to avoid stale closure issue
+      const currentTabs = useEditorStore.getState().tabs;
+      const file = currentTabs.find((f) => f.path === path);
       if (!file) throw new Error('File not found');
       await window.electronAPI.file.write(path, file.content, file.encoding);
       markFileSaved(path);
