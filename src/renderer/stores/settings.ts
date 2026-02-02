@@ -541,6 +541,8 @@ interface SettingsState {
   favoriteTerminalThemes: string[];
   // Quick Terminal settings
   quickTerminal: QuickTerminalSettings;
+  // Web Inspector settings
+  webInspectorEnabled: boolean;
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -621,6 +623,8 @@ interface SettingsState {
   setQuickTerminalModalPosition: (position: { x: number; y: number } | null) => void;
   setQuickTerminalModalSize: (size: { width: number; height: number } | null) => void;
   setQuickTerminalOpen: (open: boolean) => void;
+  // Web Inspector methods
+  setWebInspectorEnabled: (enabled: boolean) => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -697,6 +701,8 @@ export const useSettingsStore = create<SettingsState>()(
         modalSize: null,
         isOpen: false,
       },
+      // Web Inspector defaults
+      webInspectorEnabled: false,
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -1008,6 +1014,20 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({
           quickTerminal: { ...state.quickTerminal, isOpen: open },
         })),
+      // Web Inspector methods
+      setWebInspectorEnabled: async (enabled) => {
+        set({ webInspectorEnabled: enabled });
+        // Notify main process to start/stop Web Inspector server
+        if (enabled) {
+          const result = await window.electronAPI.webInspector.start();
+          if (!result.success) {
+            console.error('[WebInspector] Failed to start:', result.error);
+            set({ webInspectorEnabled: false });
+          }
+        } else {
+          await window.electronAPI.webInspector.stop();
+        }
+      },
     }),
     {
       name: 'enso-settings',

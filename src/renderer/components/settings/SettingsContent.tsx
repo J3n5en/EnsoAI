@@ -1,4 +1,14 @@
-import { Bot, FileCode, Keyboard, Link, Palette, Settings, Share2, Sparkles } from 'lucide-react';
+import {
+  Bot,
+  FileCode,
+  Globe,
+  Keyboard,
+  Link,
+  Palette,
+  Settings,
+  Share2,
+  Sparkles,
+} from 'lucide-react';
 import * as React from 'react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -11,6 +21,7 @@ import { GeneralSettings } from './GeneralSettings';
 import { HapiSettings } from './HapiSettings';
 import { IntegrationSettings } from './IntegrationSettings';
 import { KeybindingsSettings } from './KeybindingsSettings';
+import { WebInspectorSettings } from './WebInspectorSettings';
 
 interface SettingsContentProps {
   activeCategory?: SettingsCategory;
@@ -46,6 +57,7 @@ export function SettingsContent({
     { id: 'ai', icon: Sparkles, label: t('AI') },
     { id: 'integration', icon: Link, label: t('Claude Integration') },
     { id: 'hapi', icon: Share2, label: t('Remote Sharing') },
+    { id: 'webInspector', icon: Globe, label: t('Web Inspector') },
   ];
 
   return (
@@ -82,6 +94,7 @@ export function SettingsContent({
           <IntegrationSettings scrollToProvider={scrollToProvider} />
         )}
         {activeCategory === 'hapi' && <HapiSettings />}
+        {activeCategory === 'webInspector' && <WebInspectorSettings />}
       </div>
     </div>
   );

@@ -62,6 +62,7 @@ import { addToast, toastManager } from './components/ui/toast';
 import { MergeEditor, MergeWorktreeDialog } from './components/worktree';
 import { useEditor } from './hooks/useEditor';
 import { useAutoFetchListener, useGitBranches, useGitInit } from './hooks/useGit';
+import { useWebInspector } from './hooks/useWebInspector';
 import {
   useWorktreeCreate,
   useWorktreeList,
@@ -343,6 +344,9 @@ export default function App() {
       switchWorktreePathRef.current?.(nextWorktreePath);
     }, [activeWorktree?.path]),
   });
+
+  // Web Inspector: listen for element inspection data and write to active agent terminal
+  useWebInspector(activeWorktree?.path, selectedRepo ?? undefined);
 
   // Handle terminal file link navigation
   useEffect(() => {

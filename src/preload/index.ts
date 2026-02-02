@@ -44,6 +44,7 @@ import type {
   WorktreeRemoveOptions,
 } from '@shared/types';
 import { IPC_CHANNELS } from '@shared/types';
+import type { InspectPayload, WebInspectorStatus } from '@shared/types/webInspector';
 import { contextBridge, ipcRenderer, shell, webUtils } from 'electron';
 import pkg from '../../package.json';
 
@@ -804,6 +805,24 @@ const electronAPI = {
       ) => callback(status);
       ipcRenderer.on(IPC_CHANNELS.CLOUDFLARED_STATUS_CHANGED, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.CLOUDFLARED_STATUS_CHANGED, handler);
+    },
+  },
+
+  // Web Inspector
+  webInspector: {
+    start: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('web-inspector:start'),
+    stop: (): Promise<void> => ipcRenderer.invoke('web-inspector:stop'),
+    status: (): Promise<WebInspectorStatus> => ipcRenderer.invoke('web-inspector:status'),
+    onStatusChange: (callback: (status: WebInspectorStatus) => void): (() => void) => {
+      const handler = (_: unknown, status: WebInspectorStatus) => callback(status);
+      ipcRenderer.on('web-inspector:status-change', handler);
+      return () => ipcRenderer.off('web-inspector:status-change', handler);
+    },
+    onData: (callback: (data: InspectPayload) => void): (() => void) => {
+      const handler = (_: unknown, data: InspectPayload) => callback(data);
+      ipcRenderer.on('web-inspector:data', handler);
+      return () => ipcRenderer.off('web-inspector:data', handler);
     },
   },
 
