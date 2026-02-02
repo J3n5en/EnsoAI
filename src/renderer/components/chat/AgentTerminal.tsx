@@ -4,6 +4,7 @@ import {
   TerminalSearchBar,
   type TerminalSearchBarRef,
 } from '@/components/terminal/TerminalSearchBar';
+import { useFileDrop } from '@/hooks/useFileDrop';
 import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
@@ -674,6 +675,20 @@ export function AgentTerminal({
     };
   }, []);
 
+  // Handle external file drop (from OS file manager, VS Code, etc.)
+  const terminalWrapperRef = useFileDrop<HTMLDivElement>({
+    cwd,
+    onDrop: useCallback(
+      (paths: string[]) => {
+        if (paths.length > 0 && write) {
+          write(paths.map((p) => `@${p}`).join(' '));
+          terminal?.focus();
+        }
+      },
+      [write, terminal]
+    ),
+  });
+
   // Handle click to activate group
   const handleClick = useCallback(() => {
     if (!isActive) {
@@ -684,6 +699,7 @@ export function AgentTerminal({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: click is for focus activation
     <div
+      ref={terminalWrapperRef}
       className="relative h-full w-full"
       style={{ backgroundColor: settings.theme.background, contain: 'strict' }}
       onClick={handleClick}
