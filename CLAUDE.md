@@ -12,6 +12,11 @@ UI 开发必须遵循 `docs/design-system.md`，核心要点：
 - **文本截断**：`min-w-0 flex-1 truncate` + 固定元素 `shrink-0`
 - **Monaco**：本地 worker、主题同步终端配色
 
+## 代码注释规范
+
+- **语言**：所有代码注释必须使用英文
+- **风格**：简洁明了，避免冗余描述
+
 ## 提交信息规范
 
 本项目使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范，Release Notes 会根据前缀自动分类。
