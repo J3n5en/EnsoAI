@@ -139,6 +139,22 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
             />
           </div>
 
+          {/* Ask User Question Notification */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">{t('Ask User Question Notification')}</span>
+              <p className="text-xs text-muted-foreground">
+                {t('Notify when Claude asks a question (requires PermissionRequest hook)')}
+              </p>
+            </div>
+            <Switch
+              checked={claudeCodeIntegration.permissionRequestHookEnabled}
+              onCheckedChange={(checked) =>
+                setClaudeCodeIntegration({ permissionRequestHookEnabled: checked })
+              }
+            />
+          </div>
+
           {/* Status Line */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">

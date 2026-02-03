@@ -251,6 +251,7 @@ export interface ClaudeCodeIntegrationSettings {
   selectionChangedDebounce: number; // in milliseconds
   atMentionedKeybinding: TerminalKeybinding;
   stopHookEnabled: boolean; // Enable Stop hook for precise agent completion notifications
+  permissionRequestHookEnabled: boolean; // Enable PermissionRequest hook for AskUserQuestion notifications
   statusLineEnabled: boolean; // Enable Status Line hook for displaying agent status
   statusLineFields: StatusLineFieldSettings; // Which fields to display in status line
   showProviderSwitcher: boolean; // Show provider switcher in SessionBar
@@ -263,6 +264,7 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   selectionChangedDebounce: 300,
   atMentionedKeybinding: { key: 'm', meta: true, shift: true }, // Cmd/Ctrl+Shift+M
   stopHookEnabled: true, // Enable Stop hook for precise agent completion notifications
+  permissionRequestHookEnabled: true, // Enable PermissionRequest hook for AskUserQuestion notifications
   statusLineEnabled: false, // Disable Status Line hook by default
   statusLineFields: defaultStatusLineFieldSettings,
   showProviderSwitcher: true,

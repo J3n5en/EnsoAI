@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
   // Agent
   AGENT_LIST: 'agent:list',
   AGENT_STOP_NOTIFICATION: 'agent:stop:notification',
+  AGENT_ASK_USER_QUESTION_NOTIFICATION: 'agent:askUserQuestion:notification',
   AGENT_STATUS_UPDATE: 'agent:status:update',
 
   // App
@@ -168,6 +169,8 @@ export const IPC_CHANNELS = {
   MCP_STOP_HOOK_SET: 'mcp:stopHook:set',
   MCP_STATUSLINE_HOOK_SET: 'mcp:statusLineHook:set',
   MCP_STATUSLINE_HOOK_STATUS: 'mcp:statusLineHook:status',
+  MCP_PERMISSION_REQUEST_HOOK_SET: 'mcp:permissionRequestHook:set',
+  MCP_PERMISSION_REQUEST_HOOK_STATUS: 'mcp:permissionRequestHook:status',
 
   // Claude Provider
   CLAUDE_PROVIDER_READ_SETTINGS: 'claude:provider:readSettings',

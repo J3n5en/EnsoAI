@@ -595,6 +595,34 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     return unsubscribe;
   }, [allSessions, t, groups, activeGroupId, cwd, isActive, setOutputState]);
 
+  // 监听 Claude AskUserQuestion 通知
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.notification.onAskUserQuestion(
+      ({ sessionId, toolInput }) => {
+        const session = allSessions.find((s) => s.id === sessionId);
+        if (session) {
+          const agentName = AGENT_INFO[session.agentId]?.name || session.agentCommand;
+
+          // Extract first question text if available
+          let questionPreview = '需要回答问题';
+          if (toolInput && typeof toolInput === 'object' && 'questions' in toolInput) {
+            const questions = (toolInput as { questions: Array<{ question: string }> }).questions;
+            if (questions?.[0]?.question) {
+              questionPreview = questions[0].question;
+            }
+          }
+
+          window.electronAPI.notification.show({
+            title: `${agentName} 等待输入`,
+            body: questionPreview,
+            sessionId,
+          });
+        }
+      }
+    );
+    return unsubscribe;
+  }, [allSessions]);
+
   // 监听 Claude status line 更新
   useEffect(() => {
     const unsubscribe = initAgentStatusListener();

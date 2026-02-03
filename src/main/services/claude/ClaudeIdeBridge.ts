@@ -7,10 +7,13 @@ import { IPC_CHANNELS } from '@shared/types';
 import { BrowserWindow, ipcMain } from 'electron';
 import { type RawData, type WebSocket, WebSocketServer } from 'ws';
 import {
+  ensurePermissionRequestHook,
   ensureStatusLineHook,
   ensureStopHook,
   isClaudeInstalled,
+  isPermissionRequestHookInstalled,
   isStatusLineHookInstalled,
+  removePermissionRequestHook,
   removeStatusLineHook,
   removeStopHook,
 } from './ClaudeHookManager';
@@ -210,8 +213,8 @@ export async function startClaudeIdeBridge(
   let currentWorkspaceFolders = [...initialFolders];
 
   const httpServer = http.createServer((req, res) => {
-    // Handle POST /agent-stop for Claude stop hook notifications
-    if (req.method === 'POST' && req.url === '/agent-stop') {
+    // Handle POST /agent-hook for Claude hook notifications (Stop, PermissionRequest, etc.)
+    if (req.method === 'POST' && req.url === '/agent-hook') {
       let body = '';
       req.on('data', (chunk) => {
         body += chunk.toString();
@@ -221,10 +224,23 @@ export async function startClaudeIdeBridge(
           const data = JSON.parse(body);
           const sessionId = data.session_id;
           if (sessionId) {
-            // Broadcast to all windows
-            for (const window of BrowserWindow.getAllWindows()) {
-              if (!window.isDestroyed()) {
-                window.webContents.send(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, { sessionId });
+            // Check if this is an AskUserQuestion event (from PermissionRequest hook)
+            if (data.tool_name === 'AskUserQuestion' && data.tool_input) {
+              // Broadcast AskUserQuestion notification
+              for (const window of BrowserWindow.getAllWindows()) {
+                if (!window.isDestroyed()) {
+                  window.webContents.send(IPC_CHANNELS.AGENT_ASK_USER_QUESTION_NOTIFICATION, {
+                    sessionId,
+                    toolInput: data.tool_input,
+                  });
+                }
+              }
+            } else {
+              // Broadcast agent stop notification
+              for (const window of BrowserWindow.getAllWindows()) {
+                if (!window.isDestroyed()) {
+                  window.webContents.send(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, { sessionId });
+                }
               }
             }
           }
@@ -247,6 +263,7 @@ export async function startClaudeIdeBridge(
       req.on('end', () => {
         try {
           const data = JSON.parse(body);
+
           const sessionId = data.session_id;
           if (sessionId) {
             // Broadcast status update to all windows
@@ -583,6 +600,17 @@ export function setStatusLineHookEnabled(enabled: boolean): boolean {
   }
 }
 
+/**
+ * Enable or disable the PermissionRequest hook for AskUserQuestion notifications
+ */
+export function setPermissionRequestHookEnabled(enabled: boolean): boolean {
+  if (enabled) {
+    return ensurePermissionRequestHook();
+  } else {
+    return removePermissionRequestHook();
+  }
+}
+
 // Register IPC handlers for bridge control
 export function registerClaudeBridgeIpcHandlers(): void {
   ipcMain.handle(
@@ -606,5 +634,13 @@ export function registerClaudeBridgeIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.MCP_STATUSLINE_HOOK_STATUS, () => {
     return isStatusLineHookInstalled();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MCP_PERMISSION_REQUEST_HOOK_SET, (_, enabled: boolean) => {
+    return setPermissionRequestHookEnabled(enabled);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MCP_PERMISSION_REQUEST_HOOK_STATUS, () => {
+    return isPermissionRequestHookInstalled();
   });
 }
