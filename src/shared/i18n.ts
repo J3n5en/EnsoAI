@@ -303,6 +303,8 @@ export const zhTranslations: Record<string, string> = {
   'Select a Worktree to view changes': '选择一个 Worktree 以查看更改',
   'Select a file to view changes': '选择一个文件以查看更改',
   'Select file to view diff': '从左侧选择文件以查看更改',
+  'Send to Session': '发送到会话',
+  'Sent to session': '已发送到会话',
   Settings: '设置',
   'Settings...': '设置...',
   Shell: 'Shell',

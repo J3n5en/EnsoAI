@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { FileCode } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { normalizePath } from '@/App/storage';
 import { GlobalSearchDialog, type SearchMode } from '@/components/search';
 import {
   Empty,
@@ -9,7 +10,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import { toastManager } from '@/components/ui/toast';
+import { addToast, toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
 import { requestUnsavedChoice } from '@/stores/unsavedPrompt';
 
@@ -23,6 +24,7 @@ declare global {
 import { useEditor } from '@/hooks/useEditor';
 import { useFileTree } from '@/hooks/useFileTree';
 import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { EditorArea, type EditorAreaRef } from './EditorArea';
 import {
   type ConflictInfo,
@@ -142,6 +144,30 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   const handleToggleFileTree = useCallback(() => {
     setIsFileTreeCollapsed((prev) => !prev);
   }, []);
+
+  // Send file path to current session
+  const terminalWrite = useTerminalWriteStore((state) => state.write);
+  const terminalFocus = useTerminalWriteStore((state) => state.focus);
+  const handleSendToSession = useCallback(
+    (path: string) => {
+      if (!sessionId) return;
+      // Convert to relative path if within rootPath, otherwise use full path
+      let displayPath = path;
+      const normalizedRoot = rootPath ? normalizePath(rootPath) : '';
+      if (normalizedRoot && path.startsWith(normalizedRoot + '/')) {
+        displayPath = path.slice(normalizedRoot.length + 1);
+      }
+      terminalWrite(sessionId, `@${displayPath} `);
+      terminalFocus(sessionId);
+      addToast({
+        type: 'success',
+        title: t('Sent to session'),
+        description: `@${displayPath}`,
+        timeout: 2000,
+      });
+    },
+    [sessionId, rootPath, terminalWrite, terminalFocus, t]
+  );
 
   // Panel resize handlers
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -665,6 +691,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
               rootPath={rootPath}
               isCollapsed={isFileTreeCollapsed}
               onToggleCollapse={handleToggleFileTree}
+              onSendToSession={sessionId ? handleSendToSession : undefined}
             />
             {/* Resize handle */}
             <div

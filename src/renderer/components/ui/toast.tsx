@@ -7,6 +7,7 @@ import {
   InfoIcon,
   LoaderCircleIcon,
   TriangleAlertIcon,
+  XIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -167,6 +168,14 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                     {toast.actionProps.children}
                   </Toast.Action>
                 )}
+
+                <Toast.Close
+                  aria-label="Close notification"
+                  className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  data-slot="toast-close"
+                >
+                  <XIcon className="h-4 w-4" />
+                </Toast.Close>
               </Toast.Content>
             </Toast.Root>
           );

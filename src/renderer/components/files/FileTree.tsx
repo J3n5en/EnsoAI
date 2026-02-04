@@ -7,6 +7,7 @@ import {
   FilePlus,
   FolderPlus,
   Loader2,
+  MessageSquarePlus,
   PanelLeftClose,
   Pencil,
   RefreshCw,
@@ -63,6 +64,7 @@ interface FileTreeProps {
   onFileDeleted?: (path: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onSendToSession?: (path: string) => void;
 }
 
 export function FileTree({
@@ -85,6 +87,7 @@ export function FileTree({
   onFileDeleted,
   isCollapsed: _isCollapsed,
   onToggleCollapse,
+  onSendToSession,
 }: FileTreeProps) {
   const { t } = useI18n();
   const [editingPath, setEditingPath] = useState<string | null>(null);
@@ -1206,6 +1209,7 @@ export function FileTree({
             onCopy={handleCopy}
             onCut={handleCut}
             onPaste={handlePaste}
+            onSendToSession={onSendToSession}
           />
         ))}
       </div>
@@ -1252,6 +1256,7 @@ export function FileTree({
       {/* Root directory context menu */}
       <Menu open={rootMenuOpen} onOpenChange={setRootMenuOpen}>
         <MenuPopup
+          className="min-w-48"
           style={{
             position: 'fixed',
             left: rootMenuPosition.x,
@@ -1373,6 +1378,7 @@ interface FileTreeNodeComponentProps {
   onCopy?: (path: string, name: string, isDirectory: boolean) => void;
   onCut?: (path: string, name: string, isDirectory: boolean) => void;
   onPaste?: (targetPath: string, targetIsDirectory: boolean) => void;
+  onSendToSession?: (path: string) => void;
 }
 
 // 压缩链中的节点信息
@@ -1434,6 +1440,7 @@ function FileTreeNodeComponent({
   onCopy,
   onCut,
   onPaste,
+  onSendToSession,
 }: FileTreeNodeComponentProps) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1730,6 +1737,7 @@ function FileTreeNodeComponent({
       {/* Context Menu */}
       <Menu open={menuOpen} onOpenChange={setMenuOpen}>
         <MenuPopup
+          className="min-w-48"
           style={{
             position: 'fixed',
             left: menuPosition.x,
@@ -1808,6 +1816,12 @@ function FileTreeNodeComponent({
                 : t('Reveal in Explorer')}
             </MenuItem>
           )}
+          {onSendToSession && (
+            <MenuItem onClick={() => onSendToSession(actualNode.path)}>
+              <MessageSquarePlus className="h-4 w-4" />
+              {t('Send to Session')}
+            </MenuItem>
+          )}
           <MenuSeparator />
           <MenuItem variant="destructive" onClick={() => onDelete(actualNode.path)}>
             <Trash2 className="h-4 w-4" />
@@ -1857,6 +1871,7 @@ function FileTreeNodeComponent({
                 onCopy={onCopy}
                 onCut={onCut}
                 onPaste={onPaste}
+                onSendToSession={onSendToSession}
               />
             ))}
           </motion.div>
