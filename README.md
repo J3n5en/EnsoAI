@@ -201,7 +201,7 @@ Quick access to all actions via `Cmd+Shift+P`:
 - **Editor**: Monaco Editor
 - **Terminal**: xterm.js + node-pty
 - **Git**: simple-git
-- **Database**: better-sqlite3
+- **Database**: sqlite3
 
 ---
 

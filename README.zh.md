@@ -200,7 +200,7 @@ pnpm build:linux  # Linux
 - **编辑器**: Monaco Editor
 - **终端**: xterm.js + node-pty
 - **Git**: simple-git
-- **数据库**: better-sqlite3
+- **数据库**: sqlite3
 
 ---
 

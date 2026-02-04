@@ -82,10 +82,14 @@ function queryDatabase(dbPath: string, sql: string): Promise<{ value: string } |
   return new Promise((resolve, reject) => {
     const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
       if (err) return reject(err);
-      db.get(sql, (err, row: { value: string } | undefined) => {
-        db.close();
-        if (err) return reject(err);
-        resolve(row);
+      db.get(sql, (queryErr, row: { value: string } | undefined) => {
+        db.close((closeErr) => {
+          if (closeErr) {
+            console.warn(`[RecentProjects] Failed to close database ${dbPath}:`, closeErr);
+          }
+          if (queryErr) return reject(queryErr);
+          resolve(row);
+        });
       });
     });
   });
