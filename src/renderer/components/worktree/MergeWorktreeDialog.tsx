@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/select';
 import { addToast } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
+import { Z_INDEX } from '@/lib/z-index';
 
 interface MergeWorktreeDialogProps {
   open: boolean;
@@ -183,7 +184,7 @@ export function MergeWorktreeDialog({
                 <SelectTrigger>
                   <SelectValue>{targetBranch || t('Choose target branch...')}</SelectValue>
                 </SelectTrigger>
-                <SelectPopup>
+                <SelectPopup zIndex={Z_INDEX.DROPDOWN_IN_MODAL}>
                   {availableBranches.map((branch) => (
                     <SelectItem key={branch.name} value={branch.name}>
                       <GitBranch className="mr-2 h-4 w-4" />
@@ -210,7 +211,7 @@ export function MergeWorktreeDialog({
                     {strategyOptions.find((s) => s.value === strategy)?.label}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectPopup>
+                <SelectPopup zIndex={Z_INDEX.DROPDOWN_IN_MODAL}>
                   {strategyOptions.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       <div className="flex flex-col">
