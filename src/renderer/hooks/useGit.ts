@@ -92,6 +92,7 @@ export function useGitCheckout() {
       queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
       queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', workdir] });
       queryClient.invalidateQueries({ queryKey: ['git', 'submodules', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', workdir] });
     },
   });
 }

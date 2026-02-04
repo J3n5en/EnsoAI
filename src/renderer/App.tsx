@@ -10,7 +10,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { consumeClaudeProviderSwitch, isClaudeProviderMatch } from '@/lib/claudeProvider';
 import { normalizeHexColor } from '@/lib/colors';
-import { cn } from '@/lib/utils';
 import {
   ALL_GROUP_ID,
   DEFAULT_GROUP_COLOR,
@@ -1039,15 +1038,25 @@ export default function App() {
       const savedTab = worktreeTabMap[worktree.path] || 'chat';
       setActiveTab(savedTab);
 
-      // Fetch remote and refresh git data for the new worktree
-      window.electronAPI.git.fetch(worktree.path).catch(() => {
-        // Silent fail - fetch errors are not critical
-      });
+      // Immediately refresh local git data
       queryClient.invalidateQueries({ queryKey: ['git', 'status', worktree.path] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'branches', worktree.path] });
       queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', worktree.path] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', worktree.path] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log', worktree.path] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', worktree.path] });
       queryClient.invalidateQueries({ queryKey: ['git', 'submodules', worktree.path] });
       queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', worktree.path] });
+
+      // Fetch remote then refresh branch data
+      window.electronAPI.git
+        .fetch(worktree.path)
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['git', 'branches', worktree.path] });
+          queryClient.invalidateQueries({ queryKey: ['git', 'status', worktree.path] });
+        })
+        .catch(() => {
+          // Silent fail - fetch errors are not critical
+        });
     },
     [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t, queryClient]
   );
@@ -1069,12 +1078,34 @@ export default function App() {
             setActiveWorktree(found);
             const savedTab = worktreeTabMap[found.path] || 'chat';
             setActiveTab(savedTab);
+
+            // Refresh git data for the switched worktree
+            queryClient.invalidateQueries({ queryKey: ['git', 'status', found.path] });
+            queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', found.path] });
+            queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', found.path] });
+            queryClient.invalidateQueries({ queryKey: ['git', 'log', found.path] });
+            queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', found.path] });
+            queryClient.invalidateQueries({ queryKey: ['git', 'submodules', found.path] });
+            queryClient.invalidateQueries({
+              queryKey: ['git', 'submodule', 'changes', found.path],
+            });
+
+            // Fetch remote then refresh branch data
+            window.electronAPI.git
+              .fetch(found.path)
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['git', 'branches', found.path] });
+                queryClient.invalidateQueries({ queryKey: ['git', 'status', found.path] });
+              })
+              .catch(() => {
+                // Silent fail
+              });
             return;
           }
         } catch {}
       }
     },
-    [worktrees, repositories, worktreeTabMap, handleSelectWorktree]
+    [worktrees, repositories, worktreeTabMap, handleSelectWorktree, queryClient]
   );
 
   // Assign to ref for use in keyboard shortcut callback
