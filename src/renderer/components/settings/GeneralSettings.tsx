@@ -3,6 +3,18 @@ import type { ShellInfo } from '@shared/types';
 import { Columns3, FolderOpen, RefreshCw, TreePine } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { useI18n } from '@/i18n';
+import { cn } from '@/lib/utils';
+import { type LayoutMode, type TerminalRenderer, useSettingsStore } from '@/stores/settings';
 
 // Parse shell arguments string, supporting single/double quotes for paths with spaces
 function parseShellArgs(input: string): string[] {
@@ -35,18 +47,6 @@ function stringifyShellArgs(args: string[]): string {
     })
     .join(' ');
 }
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectItem,
-  SelectPopup,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { useI18n } from '@/i18n';
-import { cn } from '@/lib/utils';
-import { type LayoutMode, type TerminalRenderer, useSettingsStore } from '@/stores/settings';
 
 interface UpdateStatus {
   status: 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
@@ -149,7 +149,6 @@ export function GeneralSettings() {
 
   const [shells, setShells] = React.useState<ShellInfo[]>([]);
   const [loadingShells, setLoadingShells] = React.useState(true);
-  const _isWindows = window.electronAPI?.env.platform === 'win32';
   const appVersion = window.electronAPI?.env.appVersion || '0.0.0';
 
   // Update status state
@@ -229,9 +228,9 @@ export function GeneralSettings() {
     });
   }, [customArgsText, shellConfig, setShellConfig]);
 
-  const isWin = window.electronAPI?.env.platform === 'win32';
-  const shellPathPlaceholder = isWin ? 'cmd.exe' : '/bin/bash';
-  const shellArgsPlaceholder = isWin ? '/k "C:\\Program Files\\init.bat"' : "-l -c '/usr/local/bin/app'";
+  const isWindows = window.electronAPI?.env.platform === 'win32';
+  const shellPathPlaceholder = isWindows ? 'cmd.exe' : '/bin/bash';
+  const shellArgsPlaceholder = isWindows ? '/k "C:\\Program Files\\init.bat"' : "-l -c '/usr/local/bin/app'";
 
   return (
     <div className="space-y-6">
