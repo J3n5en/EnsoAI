@@ -126,6 +126,9 @@ export default function App() {
   // Ref for cross-repo worktree switching (defined later)
   const switchWorktreePathRef = useRef<((path: string) => void) | null>(null);
 
+  // Ref to track current worktree path for fetch race condition prevention
+  const currentWorktreePathRef = useRef<string | null>(null);
+
   // Settings page state (used in MainContent)
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
     try {
@@ -979,6 +982,43 @@ export default function App() {
     // Editor state will be synced by useEffect
   };
 
+  // Helper function to refresh git data for a worktree
+  const refreshGitData = useCallback(
+    (worktreePath: string) => {
+      // Update ref to track current worktree for race condition prevention
+      currentWorktreePathRef.current = worktreePath;
+
+      // Immediately refresh local git data
+      const localKeys = [
+        'status',
+        'file-changes',
+        'file-diff',
+        'log',
+        'log-infinite',
+        'submodules',
+      ];
+      for (const key of localKeys) {
+        queryClient.invalidateQueries({ queryKey: ['git', key, worktreePath] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', worktreePath] });
+
+      // Fetch remote then refresh branch data (with race condition check)
+      window.electronAPI.git
+        .fetch(worktreePath)
+        .then(() => {
+          // Only refresh if this is still the current worktree
+          if (currentWorktreePathRef.current === worktreePath) {
+            queryClient.invalidateQueries({ queryKey: ['git', 'branches', worktreePath] });
+            queryClient.invalidateQueries({ queryKey: ['git', 'status', worktreePath] });
+          }
+        })
+        .catch(() => {
+          // Silent fail - fetch errors are not critical
+        });
+    },
+    [queryClient]
+  );
+
   const handleSelectWorktree = useCallback(
     async (worktree: GitWorktree) => {
       if (editorSettings.autoSave === 'off') {
@@ -1038,27 +1078,10 @@ export default function App() {
       const savedTab = worktreeTabMap[worktree.path] || 'chat';
       setActiveTab(savedTab);
 
-      // Immediately refresh local git data
-      queryClient.invalidateQueries({ queryKey: ['git', 'status', worktree.path] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', worktree.path] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', worktree.path] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'log', worktree.path] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', worktree.path] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'submodules', worktree.path] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', worktree.path] });
-
-      // Fetch remote then refresh branch data
-      window.electronAPI.git
-        .fetch(worktree.path)
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['git', 'branches', worktree.path] });
-          queryClient.invalidateQueries({ queryKey: ['git', 'status', worktree.path] });
-        })
-        .catch(() => {
-          // Silent fail - fetch errors are not critical
-        });
+      // Refresh git data for the new worktree
+      refreshGitData(worktree.path);
     },
-    [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t, queryClient]
+    [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t, refreshGitData]
   );
 
   const handleSwitchWorktreePath = useCallback(
@@ -1080,32 +1103,13 @@ export default function App() {
             setActiveTab(savedTab);
 
             // Refresh git data for the switched worktree
-            queryClient.invalidateQueries({ queryKey: ['git', 'status', found.path] });
-            queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', found.path] });
-            queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', found.path] });
-            queryClient.invalidateQueries({ queryKey: ['git', 'log', found.path] });
-            queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', found.path] });
-            queryClient.invalidateQueries({ queryKey: ['git', 'submodules', found.path] });
-            queryClient.invalidateQueries({
-              queryKey: ['git', 'submodule', 'changes', found.path],
-            });
-
-            // Fetch remote then refresh branch data
-            window.electronAPI.git
-              .fetch(found.path)
-              .then(() => {
-                queryClient.invalidateQueries({ queryKey: ['git', 'branches', found.path] });
-                queryClient.invalidateQueries({ queryKey: ['git', 'status', found.path] });
-              })
-              .catch(() => {
-                // Silent fail
-              });
+            refreshGitData(found.path);
             return;
           }
         } catch {}
       }
     },
-    [worktrees, repositories, worktreeTabMap, handleSelectWorktree, queryClient]
+    [worktrees, repositories, worktreeTabMap, handleSelectWorktree, refreshGitData]
   );
 
   // Assign to ref for use in keyboard shortcut callback
