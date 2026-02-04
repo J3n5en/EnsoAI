@@ -55,7 +55,7 @@ interface WorktreePanelProps {
   onRemoveWorktree: (
     worktree: GitWorktree,
     options?: { deleteBranch?: boolean; force?: boolean }
-  ) => Promise<void>;
+  ) => void;
   onMergeWorktree?: (worktree: GitWorktree) => void;
   onReorderWorktrees?: (fromIndex: number, toIndex: number) => void;
   onRefresh: () => void;
@@ -93,7 +93,6 @@ export function WorktreePanel({
   const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(null);
   const [deleteBranch, setDeleteBranch] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Drag reorder
   const draggedIndexRef = useRef<number | null>(null);
@@ -430,43 +429,19 @@ export function WorktreePanel({
             )}
           </div>
           <AlertDialogFooter>
-            <AlertDialogClose
-              render={
-                <Button variant="outline" disabled={isDeleting}>
-                  {t('Cancel')}
-                </Button>
-              }
-            />
+            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
             <Button
               variant="destructive"
-              disabled={isDeleting}
-              onClick={async () => {
+              onClick={() => {
                 if (worktreeToDelete) {
-                  setIsDeleting(true);
-                  try {
-                    await onRemoveWorktree(worktreeToDelete, { deleteBranch, force: forceDelete });
-                    setWorktreeToDelete(null);
-                    setDeleteBranch(false);
-                    setForceDelete(false);
-                  } catch (err) {
-                    const message = err instanceof Error ? err.message : String(err);
-                    const hasUncommitted = message.includes('modified or untracked');
-                    toastManager.add({
-                      type: 'error',
-                      title: t('Delete failed'),
-                      description: hasUncommitted
-                        ? t(
-                            'This directory contains uncommitted changes. Please check "Force delete".'
-                          )
-                        : message,
-                    });
-                  } finally {
-                    setIsDeleting(false);
-                  }
+                  onRemoveWorktree(worktreeToDelete, { deleteBranch, force: forceDelete });
+                  setWorktreeToDelete(null);
+                  setDeleteBranch(false);
+                  setForceDelete(false);
                 }
               }}
             >
-              {isDeleting ? t('Deleting...') : t('Delete')}
+              {t('Delete')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>

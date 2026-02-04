@@ -257,7 +257,7 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     onError,
   } = options;
 
-  const gitDiff = runGit('git --no-pager diff HEAD', workdir);
+  const gitDiff = runGit('git --no-pager diff HEAD --submodule=diff', workdir);
   const defaultBranch = getDefaultBranch(workdir);
   let gitLog = runGit(`git --no-pager log origin/${defaultBranch}..HEAD --oneline`, workdir);
   if (!gitLog) {

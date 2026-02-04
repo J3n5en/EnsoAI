@@ -1,6 +1,18 @@
 import { DiffEditor } from '@monaco-editor/react';
-import type { FileChange } from '@shared/types';
-import { FileCode, Loader2, MessageSquare, Plus, Send, X } from 'lucide-react';
+import type { FileChange, GitSubmodule } from '@shared/types';
+import {
+  ChevronDown,
+  ChevronRight,
+  Expand,
+  FileCode,
+  FolderGit2,
+  Loader2,
+  MessageSquare,
+  Plus,
+  Send,
+  Shrink,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CommentForm } from '@/components/files/EditorLineComment';
@@ -16,6 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFileChanges, useFileDiff } from '@/hooks/useSourceControl';
+import { useSubmoduleChanges, useSubmoduleFileDiff, useSubmodules } from '@/hooks/useSubmodules';
 import { useI18n } from '@/i18n';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
 import { cn } from '@/lib/utils';
@@ -35,10 +48,16 @@ interface DiffReviewModalProps {
 interface CommentData {
   id: string;
   filePath: string;
+  submodulePath?: string; // 子模块路径，用于区分主仓库和子模块
   startLine: number;
   endLine: number;
   text: string;
   timestamp: Date;
+}
+
+// 扩展 FileChange 类型，支持子模块
+interface ExtendedFileChange extends FileChange {
+  submodulePath?: string; // 子模块路径
 }
 
 function getStatusColor(status: FileChange['status']): string {
@@ -136,6 +155,105 @@ function defineMonacoDiffTheme(terminalThemeName: string) {
   });
 }
 
+// Submodule Group Component
+interface SubmoduleGroupProps {
+  submodule: GitSubmodule;
+  rootPath: string;
+  expanded: boolean;
+  onToggle: () => void;
+  selectedFile: ExtendedFileChange | null;
+  onSelectFile: (file: ExtendedFileChange) => void;
+  allComments: CommentData[];
+}
+
+function SubmoduleGroup({
+  submodule,
+  rootPath,
+  expanded,
+  onToggle,
+  selectedFile,
+  onSelectFile,
+  allComments,
+}: SubmoduleGroupProps) {
+  const { data: changes } = useSubmoduleChanges(rootPath, submodule.path);
+
+  const submoduleCommentCount = allComments.filter(
+    (c) => c.submodulePath === submodule.path
+  ).length;
+
+  return (
+    <div className="mt-1">
+      {/* 子模块标题 */}
+      <button
+        type="button"
+        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-sm hover:bg-accent/50 text-left"
+        onClick={onToggle}
+      >
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
+        <FolderGit2 className="h-4 w-4 shrink-0 text-yellow-500" />
+        <span className="flex-1 truncate font-medium">{submodule.name}</span>
+        {submoduleCommentCount > 0 && (
+          <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-xs text-primary">
+            {submoduleCommentCount}
+          </span>
+        )}
+        <span className="text-xs text-muted-foreground">
+          {submodule.stagedCount + submodule.unstagedCount}
+        </span>
+      </button>
+
+      {/* 子模块文件列表 */}
+      {expanded && changes && changes.length > 0 && (
+        <div className="pl-4">
+          {changes.map((file) => {
+            const fileCommentCount = allComments.filter(
+              (c) => c.filePath === file.path && c.submodulePath === submodule.path
+            ).length;
+            const extendedFile: ExtendedFileChange = {
+              ...file,
+              submodulePath: submodule.path,
+            };
+            const isSelected =
+              selectedFile?.path === file.path &&
+              selectedFile?.staged === file.staged &&
+              selectedFile?.submodulePath === submodule.path;
+
+            return (
+              <button
+                key={`${submodule.path}-${file.path}-${file.staged}`}
+                type="button"
+                className={cn(
+                  'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 text-left',
+                  isSelected && 'bg-accent'
+                )}
+                onClick={() => onSelectFile(extendedFile)}
+              >
+                <FileCode className={cn('h-4 w-4 shrink-0', getStatusColor(file.status))} />
+                <span className="flex-1 truncate">{file.path.split('/').pop()}</span>
+                {fileCommentCount > 0 && (
+                  <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-xs text-primary">
+                    {fileCommentCount}
+                  </span>
+                )}
+                <span
+                  className={cn('text-xs shrink-0', getStatusColor(file.status))}
+                  title={getStatusLabel(file.status)}
+                >
+                  {file.status}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Comment Display Component
 function CommentItem({ comment, onDelete }: { comment: CommentData; onDelete: () => void }) {
   const { t } = useI18n();
@@ -179,10 +297,12 @@ export function DiffReviewModal({
   const write = useTerminalWriteStore((state) => state.write);
   const focus = useTerminalWriteStore((state) => state.focus);
 
-  const [selectedFile, setSelectedFile] = useState<FileChange | null>(null);
+  const [selectedFile, setSelectedFile] = useState<ExtendedFileChange | null>(null);
   const [allComments, setAllComments] = useState<CommentData[]>([]);
   const [isThemeReady, setIsThemeReady] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
+  const [expandedSubmodules, setExpandedSubmodules] = useState<Set<string>>(new Set());
+  const [isMaximized, setIsMaximized] = useState(true);
 
   // Editor refs
   const editorRef = useRef<DiffEditorInstance | null>(null);
@@ -216,15 +336,36 @@ export function DiffReviewModal({
     open
   );
 
-  // Fetch diff for selected file
-  const { data: diff, isLoading: isLoadingDiff } = useFileDiff(
+  // Fetch submodules
+  const { data: submodules } = useSubmodules(open ? (rootPath ?? null) : null);
+
+  // 获取有变更的子模块
+  const submodulesWithChanges = useMemo(() => {
+    if (!submodules) return [];
+    return submodules.filter((s) => s.hasChanges);
+  }, [submodules]);
+
+  // Fetch diff for selected file (主仓库)
+  const { data: mainDiff, isLoading: isLoadingMainDiff } = useFileDiff(
     rootPath ?? null,
-    selectedFile?.path ?? null,
+    selectedFile && !selectedFile.submodulePath ? selectedFile.path : null,
     selectedFile?.staged ?? false
   );
 
-  // All changes (staged + unstaged)
-  const allChanges = useMemo(() => {
+  // Fetch diff for selected file (子模块)
+  const { data: submoduleDiff, isLoading: isLoadingSubmoduleDiff } = useSubmoduleFileDiff(
+    rootPath ?? null,
+    selectedFile?.submodulePath ?? null,
+    selectedFile?.submodulePath ? selectedFile.path : null,
+    selectedFile?.staged ?? false
+  );
+
+  // 合并 diff 数据
+  const diff = selectedFile?.submodulePath ? submoduleDiff : mainDiff;
+  const isLoadingDiff = selectedFile?.submodulePath ? isLoadingSubmoduleDiff : isLoadingMainDiff;
+
+  // All changes (staged + unstaged) - 主仓库
+  const mainRepoChanges = useMemo(() => {
     if (!changesData?.changes) return [];
     return changesData.changes;
   }, [changesData]);
@@ -232,7 +373,9 @@ export function DiffReviewModal({
   // Comments for current file
   const currentFileComments = useMemo(() => {
     if (!selectedFile) return [];
-    return allComments.filter((c) => c.filePath === selectedFile.path);
+    return allComments.filter(
+      (c) => c.filePath === selectedFile.path && c.submodulePath === selectedFile.submodulePath
+    );
   }, [allComments, selectedFile]);
 
   // Define theme on mount
@@ -245,10 +388,10 @@ export function DiffReviewModal({
 
   // Auto-select first file
   useEffect(() => {
-    if (open && allChanges.length > 0 && !selectedFile) {
-      setSelectedFile(allChanges[0]);
+    if (open && mainRepoChanges.length > 0 && !selectedFile) {
+      setSelectedFile(mainRepoChanges[0]);
     }
-  }, [open, allChanges, selectedFile]);
+  }, [open, mainRepoChanges, selectedFile]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -279,6 +422,7 @@ export function DiffReviewModal({
       setSelectedFile(null);
       setAllComments([]);
       setEditorReady(false);
+      setExpandedSubmodules(new Set());
       setHoveredLine(null);
       setCommentingLine(null);
     }
@@ -346,6 +490,7 @@ export function DiffReviewModal({
       const newComment: CommentData = {
         id: crypto.randomUUID(),
         filePath: selectedFile.path,
+        submodulePath: selectedFile.submodulePath,
         startLine,
         endLine,
         text,
@@ -812,11 +957,14 @@ export function DiffReviewModal({
       return;
     }
 
-    // Group comments by file
+    // Group comments by file (including submodule path)
     const byFile = new Map<string, CommentData[]>();
     for (const comment of allComments) {
-      const existing = byFile.get(comment.filePath) || [];
-      byFile.set(comment.filePath, [...existing, comment]);
+      const key = comment.submodulePath
+        ? `${comment.submodulePath}/${comment.filePath}`
+        : comment.filePath;
+      const existing = byFile.get(key) || [];
+      byFile.set(key, [...existing, comment]);
     }
 
     // Build message
@@ -843,19 +991,52 @@ export function DiffReviewModal({
     }, 100);
   }, [sessionId, allComments, write, onOpenChange, onSend, focus]);
 
-  const isEmpty = allChanges.length === 0;
+  // 切换子模块展开/折叠
+  const toggleSubmodule = useCallback((submodulePath: string) => {
+    setExpandedSubmodules((prev) => {
+      const next = new Set(prev);
+      if (next.has(submodulePath)) {
+        next.delete(submodulePath);
+      } else {
+        next.add(submodulePath);
+      }
+      return next;
+    });
+  }, []);
+
+  const isEmpty = mainRepoChanges.length === 0 && submodulesWithChanges.length === 0;
   const hasComments = allComments.length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-[90vw] w-[1200px] h-[90vh] flex flex-col">
+    <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
+      <DialogPopup
+        className={
+          isMaximized
+            ? 'max-w-[98vw] w-[98vw] h-[95vh] flex flex-col'
+            : 'max-w-[90vw] w-[1200px] h-[90vh] flex flex-col'
+        }
+      >
+        {/* Maximize button in top right corner */}
+        <button
+          type="button"
+          onClick={() => setIsMaximized(!isMaximized)}
+          className="absolute end-12 top-2.5 z-50 flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+          title={isMaximized ? t('Restore') : t('Maximize')}
+        >
+          {isMaximized ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+        </button>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
             <span>{t('Diff Review')}</span>
-            {allChanges.length > 0 && (
+            {(mainRepoChanges.length > 0 || submodulesWithChanges.length > 0) && (
               <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
-                {allChanges.length} {t('files')}
+                {mainRepoChanges.length +
+                  submodulesWithChanges.reduce(
+                    (acc, s) => acc + s.stagedCount + s.unstagedCount,
+                    0
+                  )}{' '}
+                {t('files')}
               </span>
             )}
             {hasComments && (
@@ -883,9 +1064,10 @@ export function DiffReviewModal({
                 </div>
               ) : (
                 <div className="py-1">
-                  {allChanges.map((file) => {
+                  {/* 主仓库文件 */}
+                  {mainRepoChanges.map((file) => {
                     const fileCommentCount = allComments.filter(
-                      (c) => c.filePath === file.path
+                      (c) => c.filePath === file.path && !c.submodulePath
                     ).length;
                     return (
                       <button
@@ -895,6 +1077,7 @@ export function DiffReviewModal({
                           'flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent/50 text-left',
                           selectedFile?.path === file.path &&
                             selectedFile?.staged === file.staged &&
+                            !selectedFile?.submodulePath &&
                             'bg-accent'
                         )}
                         onClick={() => setSelectedFile(file)}
@@ -915,6 +1098,20 @@ export function DiffReviewModal({
                       </button>
                     );
                   })}
+
+                  {/* 子模块分组 */}
+                  {submodulesWithChanges.map((submodule) => (
+                    <SubmoduleGroup
+                      key={submodule.path}
+                      submodule={submodule}
+                      rootPath={rootPath ?? ''}
+                      expanded={expandedSubmodules.has(submodule.path)}
+                      onToggle={() => toggleSubmodule(submodule.path)}
+                      selectedFile={selectedFile}
+                      onSelectFile={setSelectedFile}
+                      allComments={allComments}
+                    />
+                  ))}
                 </div>
               )}
             </ScrollArea>

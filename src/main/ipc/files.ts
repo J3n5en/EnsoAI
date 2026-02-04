@@ -59,6 +59,7 @@ function detectEncoding(buffer: Buffer): { encoding: string; confidence: number 
 }
 
 const watchers = new Map<string, FileWatcher>();
+const watcherCleanups = new Map<string, () => void>();
 
 /**
  * Stop all file watchers for paths under the given directory
@@ -69,8 +70,10 @@ export async function stopWatchersInDirectory(dirPath: string): Promise<void> {
   for (const [path, watcher] of watchers.entries()) {
     const normalizedPath = path.replace(/\\/g, '/').toLowerCase();
     if (normalizedPath === normalizedDir || normalizedPath.startsWith(`${normalizedDir}/`)) {
+      watcherCleanups.get(path)?.();
       await watcher.stop();
       watchers.delete(path);
+      watcherCleanups.delete(path);
     }
   }
 }
@@ -204,21 +207,78 @@ export function registerFileHandlers(): void {
       return;
     }
 
-    const watcher = new FileWatcher(dirPath, (eventType, path) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send(IPC_CHANNELS.FILE_CHANGE, { type: eventType, path });
+    const MAX_PENDING_EVENTS = 5000;
+    const MAX_FLUSH_EVENTS = 500;
+    const FLUSH_DELAY_MS = 100;
+
+    const pendingEvents = new Map<string, 'create' | 'update' | 'delete'>();
+    let bulkMode = false;
+    let flushTimer: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
       }
+      pendingEvents.clear();
+      bulkMode = false;
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        if (window.isDestroyed()) {
+          cleanup();
+          return;
+        }
+
+        if (bulkMode || pendingEvents.size > MAX_FLUSH_EVENTS) {
+          const normalizedDir = dirPath.replace(/\\/g, '/');
+          window.webContents.send(IPC_CHANNELS.FILE_CHANGE, {
+            type: 'update',
+            path: `${normalizedDir}/.enso-bulk`,
+          });
+        } else {
+          for (const [path, type] of pendingEvents) {
+            window.webContents.send(IPC_CHANNELS.FILE_CHANGE, { type, path });
+          }
+        }
+
+        pendingEvents.clear();
+        bulkMode = false;
+      }, FLUSH_DELAY_MS);
+    };
+
+    const watcher = new FileWatcher(dirPath, (eventType, changedPath) => {
+      if (window.isDestroyed()) return;
+
+      if (bulkMode) {
+        scheduleFlush();
+        return;
+      }
+
+      const normalized = changedPath.replace(/\\/g, '/');
+      pendingEvents.set(normalized, eventType);
+      if (pendingEvents.size > MAX_PENDING_EVENTS) {
+        bulkMode = true;
+        pendingEvents.clear();
+      }
+      scheduleFlush();
     });
 
     await watcher.start();
     watchers.set(dirPath, watcher);
+    watcherCleanups.set(dirPath, cleanup);
   });
 
   ipcMain.handle(IPC_CHANNELS.FILE_WATCH_STOP, async (_, dirPath: string) => {
     const watcher = watchers.get(dirPath);
     if (watcher) {
+      watcherCleanups.get(dirPath)?.();
       await watcher.stop();
       watchers.delete(dirPath);
+      watcherCleanups.delete(dirPath);
     }
   });
 
@@ -428,6 +488,10 @@ export async function stopAllFileWatchers(): Promise<void> {
   }
   await Promise.all(stopPromises);
   watchers.clear();
+  for (const cleanup of watcherCleanups.values()) {
+    cleanup();
+  }
+  watcherCleanups.clear();
 }
 
 /**
@@ -439,4 +503,8 @@ export function stopAllFileWatchersSync(): void {
     watcher.stop().catch(() => {});
   }
   watchers.clear();
+  for (const cleanup of watcherCleanups.values()) {
+    cleanup();
+  }
+  watcherCleanups.clear();
 }

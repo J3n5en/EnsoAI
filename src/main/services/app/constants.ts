@@ -78,6 +78,8 @@ export const MAC_APPS: KnownApp[] = [
 
   // System
   { name: 'Finder', bundleId: 'com.apple.finder', category: AppCategory.Finder },
+  { name: 'QSpace Pro', bundleId: 'com.jinghaoshe.qspace.pro', category: AppCategory.Finder },
+  { name: 'Antigravity', bundleId: 'com.google.antigravity', category: AppCategory.Editor },
 ];
 
 // Windows known apps

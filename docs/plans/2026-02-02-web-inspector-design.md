@@ -39,7 +39,7 @@ Web Inspector 是一个浏览器元素检查工具，通过油猴脚本在浏览
 | IPC 处理 | `src/main/ipc/webInspector.ts` | 注册 IPC handlers |
 | IPC 注册 | `src/main/ipc/index.ts` | 导入新模块 |
 | 渲染进程监听 | `src/renderer/hooks/useWebInspector.ts` | 监听数据并写入终端 |
-| 油猴脚本 | `script/web-inspector.user.js` | 修改后的脚本 |
+| 油猴脚本 | `scripts/web-inspector.user.js` | 浏览器端脚本 |
 
 ## 数据结构
 

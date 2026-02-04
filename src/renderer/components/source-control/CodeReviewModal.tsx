@@ -2,17 +2,30 @@ import {
   AlertCircle,
   CheckCircle,
   Copy,
+  Expand,
   Loader2,
   MessageSquare,
   Minimize2,
+  RefreshCw,
   Send,
+  Shrink,
+  Square,
   XCircle,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Components } from 'react-markdown';
 import Markdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
 import {
@@ -127,6 +140,8 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
   const { t } = useI18n();
   const { content, status, error, startReview, reset } = useCodeReview({ repoPath });
   const codeReviewSettings = useSettingsStore((s) => s.codeReview);
+  const [isMaximized, setIsMaximized] = useState(true);
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
 
   const reviewRepoPath = useCodeReviewContinueStore((s) => s.review.repoPath);
   const reviewSessionId = useCodeReviewContinueStore((s) => s.review.sessionId); // For continue conversation
@@ -163,7 +178,7 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
   useEffect(() => {
     if (autoScrollRef.current && scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector(
-        '[data-radix-scroll-area-viewport]'
+        '[data-slot="scroll-area-viewport"]'
       );
       if (scrollContainer) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
@@ -173,7 +188,7 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    const scrollContainer = target.querySelector('[data-radix-scroll-area-viewport]');
+    const scrollContainer = target.querySelector('[data-slot="scroll-area-viewport"]');
     if (scrollContainer) {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
       autoScrollRef.current = scrollHeight - scrollTop - clientHeight < 50;
@@ -206,7 +221,29 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
     onOpenChange(false);
   }, [minimize, onOpenChange]);
 
-  const handleClose = useCallback(() => {
+  const handleRestart = useCallback(() => {
+    const isReviewInProgress = status === 'streaming' || status === 'initializing';
+    if (isReviewInProgress) {
+      setShowRestartConfirm(true);
+      return;
+    }
+    stopCodeReview();
+    reset();
+    // Use queueMicrotask to ensure reset() state updates are flushed
+    // before startReview() checks the status (which must be 'idle')
+    queueMicrotask(() => startReview());
+  }, [reset, startReview, status]);
+
+  const handleConfirmRestart = useCallback(() => {
+    setShowRestartConfirm(false);
+    stopCodeReview();
+    reset();
+    // Use queueMicrotask to ensure reset() state updates are flushed
+    // before startReview() checks the status (which must be 'idle')
+    queueMicrotask(() => startReview());
+  }, [reset, startReview]);
+
+  const handleStop = useCallback(() => {
     stopCodeReview();
     reset();
     onOpenChange(false);
@@ -236,8 +273,8 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
     write(sessionId, `${content}\r`);
     focus(sessionId);
     requestChatTabSwitch();
-    onOpenChange(false);
-  }, [sessionId, hasWriter, content, write, focus, requestChatTabSwitch, onOpenChange]);
+    handleMinimize();
+  }, [sessionId, hasWriter, content, write, focus, requestChatTabSwitch, handleMinimize]);
 
   const StatusIcon = () => {
     switch (status) {
@@ -269,82 +306,121 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogPopup className="max-w-4xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <StatusIcon />
-            <span>
-              {t('Code Review')}
-              <span className="text-muted-foreground font-normal">
-                ({codeReviewSettings.provider}/{codeReviewSettings.model})
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal>
+        <DialogPopup
+          className={
+            isMaximized
+              ? 'max-w-[98vw] w-[98vw] h-[95vh] flex flex-col'
+              : 'max-w-4xl max-h-[85vh] flex flex-col'
+          }
+        >
+          {/* Maximize button in top right corner */}
+          <button
+            type="button"
+            onClick={() => setIsMaximized(!isMaximized)}
+            className="absolute end-12 top-2.5 z-50 flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+            title={isMaximized ? t('Restore') : t('Maximize')}
+          >
+            {isMaximized ? <Shrink className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+          </button>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <StatusIcon />
+              <span>
+                {t('Code Review')}
+                <span className="text-muted-foreground font-normal">
+                  ({codeReviewSettings.provider}/{codeReviewSettings.model})
+                </span>
               </span>
-            </span>
-          </DialogTitle>
-          <DialogDescription>{statusText()}</DialogDescription>
-        </DialogHeader>
+            </DialogTitle>
+            <DialogDescription>{statusText()}</DialogDescription>
+          </DialogHeader>
 
-        <div ref={scrollAreaRef} className="flex-1 min-h-0 overflow-hidden" onScroll={handleScroll}>
-          <ScrollArea className="h-full max-h-[60vh]">
-            <div className="px-6 py-4">
-              {error ? (
-                <div className="flex items-center gap-2 text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{error}</span>
-                </div>
-              ) : content ? (
-                <div className="text-sm text-foreground select-text">
-                  <Markdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    components={markdownComponents}
-                  >
-                    {content}
-                  </Markdown>
-                </div>
-              ) : status === 'initializing' ? (
-                <div className="flex items-center justify-center py-8 text-muted-foreground">
-                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  <span>{t('Starting code review...')}</span>
-                </div>
-              ) : null}
-            </div>
-          </ScrollArea>
-        </div>
+          <div
+            ref={scrollAreaRef}
+            className="flex-1 min-h-0 overflow-hidden"
+            onScroll={handleScroll}
+          >
+            <ScrollArea className="h-full">
+              <div className="px-6 py-4">
+                {error ? (
+                  <div className="flex items-center gap-2 text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{error}</span>
+                  </div>
+                ) : content ? (
+                  <div className="text-sm text-foreground select-text">
+                    <Markdown
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
+                      components={markdownComponents}
+                    >
+                      {content}
+                    </Markdown>
+                  </div>
+                ) : status === 'initializing' ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                    <span>{t('Starting code review...')}</span>
+                  </div>
+                ) : null}
+              </div>
+            </ScrollArea>
+          </div>
 
-        <DialogFooter className="border-t">
-          {content && (
-            <Button variant="outline" onClick={handleCopy}>
-              <Copy className="h-4 w-4 mr-2" />
-              {t('Copy')}
-            </Button>
-          )}
-          {status !== 'idle' && status !== 'error' && isCurrentRepo && (
-            <Button variant="outline" onClick={handleMinimize}>
-              <Minimize2 className="h-4 w-4 mr-2" />
-              {t('Minimize')}
-            </Button>
-          )}
-          {codeReviewSettings.provider === 'claude-code' && status === 'complete' && content && (
-            <Button variant="outline" onClick={handleContinueConversation}>
-              <MessageSquare className="h-4 w-4 mr-2" />
-              {t('Continue Conversation')}
-            </Button>
-          )}
-          {content && sessionId && (
-            <Button variant="outline" onClick={handleSendToCurrentSession} disabled={!hasWriter}>
-              <Send className="h-4 w-4 mr-2" />
-              发送到当前会话
-            </Button>
-          )}
-          <DialogClose
-            render={
-              <Button variant="outline" onClick={handleClose}>
-                {t('Close')}
+          <DialogFooter className="border-t">
+            {content && (
+              <Button variant="outline" onClick={handleCopy}>
+                <Copy className="h-4 w-4 mr-2" />
+                {t('Copy')}
               </Button>
-            }
-          />
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
+            )}
+            {status !== 'idle' && status !== 'error' && isCurrentRepo && (
+              <Button variant="outline" onClick={handleMinimize}>
+                <Minimize2 className="h-4 w-4 mr-2" />
+                {t('Minimize')}
+              </Button>
+            )}
+            {codeReviewSettings.provider === 'claude-code' && status === 'complete' && content && (
+              <Button variant="outline" onClick={handleContinueConversation}>
+                <MessageSquare className="h-4 w-4 mr-2" />
+                {t('Continue Conversation')}
+              </Button>
+            )}
+            {content && sessionId && (
+              <Button variant="outline" onClick={handleSendToCurrentSession} disabled={!hasWriter}>
+                <Send className="h-4 w-4 mr-2" />
+                {t('Send to Current Session')}
+              </Button>
+            )}
+            {(status === 'streaming' || status === 'initializing') && (
+              <Button variant="outline" onClick={handleStop}>
+                <Square className="h-4 w-4 mr-2" />
+                {t('Stop')}
+              </Button>
+            )}
+            <Button onClick={handleRestart}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              {t('Re-review')}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+
+      <AlertDialog open={showRestartConfirm} onOpenChange={setShowRestartConfirm}>
+        <AlertDialogPopup zIndexLevel="nested">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('Confirm Restart')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('Review in progress. Are you sure you want to restart?')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            <Button onClick={handleConfirmRestart}>{t('Restart')}</Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+    </>
   );
 }

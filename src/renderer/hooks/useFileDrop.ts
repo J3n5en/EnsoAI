@@ -135,14 +135,16 @@ function resolveDroppedPaths(dt: DataTransfer, cwd?: string): string[] {
     }
   }
 
-  // Convert absolute paths to relative when inside cwd
+  // Convert to relative path if inside cwd, otherwise keep absolute path
   // Normalize separators for cross-platform compatibility
   const normalizedCwd = cwd ? normalizePath(cwd) : '';
   return paths.map((p) => {
     const normalizedPath = normalizePath(p);
     if (normalizedCwd && normalizedPath.startsWith(`${normalizedCwd}/`)) {
+      // File is inside current repo → use relative path
       return normalizedPath.substring(normalizedCwd.length + 1);
     }
-    return p;
+    // File is outside current repo → use absolute path
+    return normalizedPath;
   });
 }

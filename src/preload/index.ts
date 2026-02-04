@@ -515,6 +515,14 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, handler);
     },
+    onAskUserQuestion: (
+      callback: (data: { sessionId: string; toolInput: unknown }) => void
+    ): (() => void) => {
+      const handler = (_: unknown, data: { sessionId: string; toolInput: unknown }) =>
+        callback(data);
+      ipcRenderer.on(IPC_CHANNELS.AGENT_ASK_USER_QUESTION_NOTIFICATION, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_ASK_USER_QUESTION_NOTIFICATION, handler);
+    },
     onAgentStatusUpdate: (
       callback: (data: {
         sessionId: string;

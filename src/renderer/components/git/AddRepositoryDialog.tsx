@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/i18n';
+import { Z_INDEX } from '@/lib/z-index';
 import { useCloneTasksStore } from '@/stores/cloneTasks';
 
 type AddMode = 'local' | 'remote';
@@ -384,7 +385,7 @@ export function AddRepositoryDialog({
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        <SelectPopup>
+        <SelectPopup zIndex={Z_INDEX.DROPDOWN_IN_MODAL}>
           <SelectItem value="">{t('No Group')}</SelectItem>
           {groups.length > 0 && <SelectSeparator />}
           {groups.map((group) => (

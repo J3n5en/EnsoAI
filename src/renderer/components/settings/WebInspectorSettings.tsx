@@ -145,7 +145,7 @@ export function WebInspectorSettings() {
           <li>{t('Enable Web Inspector above')}</li>
           <li>{t('Open any webpage with the userscript installed')}</li>
           <li>{t('Click the userscript manager icon and select "Enable Web Inspector"')}</li>
-          <li>{t('Click the 🎯 button on the webpage')}</li>
+          <li>{t('Click the Enso button on the webpage')}</li>
           <li>{t('Click on any element to inspect')}</li>
           <li>{t('Element info will be sent to your active agent session')}</li>
         </ol>

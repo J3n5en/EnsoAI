@@ -1150,27 +1150,62 @@ export default function App() {
     }
   };
 
-  const handleRemoveWorktree = async (
+  const handleRemoveWorktree = (
     worktree: GitWorktree,
     options?: { deleteBranch?: boolean; force?: boolean }
   ) => {
     if (!selectedRepo) return;
-    await removeWorktreeMutation.mutateAsync({
-      workdir: selectedRepo,
-      options: {
-        path: worktree.path,
-        force: worktree.prunable || options?.force, // prunable or user-selected force delete
-        deleteBranch: options?.deleteBranch,
-        branch: worktree.branch || undefined,
-      },
+
+    // Show loading toast
+    const toastId = toastManager.add({
+      type: 'loading',
+      title: t('Deleting...'),
+      description: worktree.branch || worktree.path,
+      timeout: 0,
     });
-    // Clear editor state for the removed worktree
-    clearEditorWorktreeState(worktree.path);
-    // Clear selection if the active worktree was removed.
-    if (activeWorktree?.path === worktree.path) {
-      setActiveWorktree(null);
-    }
-    refetchBranches();
+
+    // Execute deletion asynchronously (non-blocking)
+    removeWorktreeMutation
+      .mutateAsync({
+        workdir: selectedRepo,
+        options: {
+          path: worktree.path,
+          force: worktree.prunable || options?.force,
+          deleteBranch: options?.deleteBranch,
+          branch: worktree.branch || undefined,
+        },
+      })
+      .then(() => {
+        // Clear editor state for the removed worktree
+        clearEditorWorktreeState(worktree.path);
+        // Clear selection if the active worktree was removed
+        if (activeWorktree?.path === worktree.path) {
+          setActiveWorktree(null);
+        }
+        refetchBranches();
+
+        // Show success toast
+        toastManager.close(toastId);
+        toastManager.add({
+          type: 'success',
+          title: t('Worktree deleted'),
+          description: worktree.branch || worktree.path,
+        });
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        const hasUncommitted = message.includes('modified or untracked');
+
+        // Show error toast
+        toastManager.close(toastId);
+        toastManager.add({
+          type: 'error',
+          title: t('Delete failed'),
+          description: hasUncommitted
+            ? t('This directory contains uncommitted changes. Please check "Force delete".')
+            : message,
+        });
+      });
   };
 
   const handleInitGit = async () => {

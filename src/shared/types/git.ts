@@ -9,6 +9,11 @@ export interface GitStatus {
   deleted: string[];
   untracked: string[];
   conflicted: string[];
+  /**
+   * 变更数量过大时，为避免卡顿/内存暴涨，仅返回前 N 条文件路径。
+   */
+  truncated?: boolean;
+  truncatedLimit?: number;
 }
 
 export interface GitBranch {
@@ -51,6 +56,11 @@ export interface FileChange {
 export interface FileChangesResult {
   changes: FileChange[];
   skippedDirs?: string[]; // Directories skipped for performance (e.g., node_modules not in .gitignore)
+  /**
+   * 变更数量过大时，为避免卡顿/内存暴涨，仅返回前 N 条变更。
+   */
+  truncated?: boolean;
+  truncatedLimit?: number;
 }
 
 export interface FileDiff {
