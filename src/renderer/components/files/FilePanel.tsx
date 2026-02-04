@@ -73,6 +73,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
     refresh,
     handleExternalDrop,
     resolveConflictsAndContinue,
+    revealFile,
   } = useFileTree({ rootPath, enabled: !!rootPath, isActive });
 
   const {
@@ -110,6 +111,17 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   const handleRecordOperations = useCallback((addFn: (operations: any[]) => void) => {
     addOperationsRef.current = addFn;
   }, []);
+
+  // Auto-sync file tree selection with active tab (like VSCode's "Auto Reveal")
+  useEffect(() => {
+    if (!activeTab?.path || !rootPath) return;
+
+    // Update selected file path to match active tab
+    setSelectedFilePath(activeTab.path);
+
+    // Expand parent directories to reveal the file
+    revealFile(activeTab.path);
+  }, [activeTab?.path, rootPath, revealFile]);
 
   // Handle file deleted (from undo operation)
   const handleFileDeleted = useCallback(

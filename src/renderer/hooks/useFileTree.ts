@@ -30,6 +30,12 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
   // Build tree structure with expanded directories
   const [tree, setTree] = useState<FileTreeNode[]>([]);
 
+  // Use refs to access state in callbacks without stale closure issues
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
+  const expandedPathsRef = useRef(expandedPaths);
+  expandedPathsRef.current = expandedPaths;
+
   // Update tree when root files change - merge to preserve loaded children
   useEffect(() => {
     if (rootFiles) {
@@ -91,7 +97,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         return;
       }
 
-      const newExpanded = new Set(expandedPaths);
+      const newExpanded = new Set(expandedPathsRef.current);
 
       if (newExpanded.has(path)) {
         // 折叠时，同时折叠所有被压缩的子目录
@@ -122,7 +128,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
           return [targetPath];
         };
 
-        const pathsToCollapse = collectCompactedPaths(tree, path);
+        const pathsToCollapse = collectCompactedPaths(treeRef.current, path);
         for (const p of pathsToCollapse) {
           newExpanded.delete(p);
         }
@@ -164,8 +170,9 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
 
         newExpanded.add(path);
         setExpandedPaths(newExpanded);
+        expandedPathsRef.current = newExpanded; // Sync ref immediately
 
-        if (needsLoad(tree)) {
+        if (needsLoad(treeRef.current)) {
           setTree((current) => markLoading(current));
 
           try {
@@ -196,14 +203,15 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             }
 
             // 更新展开状态
-            setExpandedPaths((prev) => {
-              const next = new Set(prev);
-              for (const p of allPaths) next.add(p);
-              return next;
-            });
+            const nextExpanded = new Set(expandedPathsRef.current);
+            for (const p of allPaths) nextExpanded.add(p);
+            expandedPathsRef.current = nextExpanded; // Sync ref immediately
+            setExpandedPaths(nextExpanded);
 
             // 更新树
-            setTree((current) => updateTreeWithChain(current, path, finalChildren));
+            const newTree = updateTreeWithChain(treeRef.current, path, finalChildren);
+            treeRef.current = newTree; // Sync ref immediately
+            setTree(newTree);
           } catch (error) {
             // 加载失败时回滚状态
             setExpandedPaths((prev) => {
@@ -217,12 +225,8 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         }
       }
     },
-    [expandedPaths, loadChildren, tree, updateTreeWithChain]
+    [loadChildren, updateTreeWithChain]
   );
-
-  // Use ref to access expandedPaths in effect without causing re-runs
-  const expandedPathsRef = useRef(expandedPaths);
-  expandedPathsRef.current = expandedPaths;
 
   // 递归更新树中某个目录的 children
   const refreshNodeChildren = useCallback(
@@ -515,6 +519,41 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     }
   }, [isActive, refresh]);
 
+  // Reveal a file in the tree by expanding all parent directories
+  const revealFile = useCallback(
+    async (filePath: string) => {
+      if (!rootPath || !filePath.startsWith(rootPath)) return;
+
+      // Get relative path and split into parts
+      const relativePath = filePath.slice(rootPath.length).replace(/^\//, '');
+      if (!relativePath) return;
+
+      const parts = relativePath.split('/');
+      // Remove the file name, keep only directories
+      parts.pop();
+
+      if (parts.length === 0) return;
+
+      // Build paths for each parent directory
+      let currentPath = rootPath;
+      const pathsToExpand: string[] = [];
+
+      for (const part of parts) {
+        currentPath = `${currentPath}/${part}`;
+        // Use ref to get current expanded state (avoids stale closure)
+        if (!expandedPathsRef.current.has(currentPath)) {
+          pathsToExpand.push(currentPath);
+        }
+      }
+
+      // Expand each path sequentially (toggleExpand handles loading)
+      for (const path of pathsToExpand) {
+        await toggleExpand(path);
+      }
+    },
+    [rootPath, toggleExpand]
+  );
+
   return {
     tree,
     isLoading: isRootLoading,
@@ -527,6 +566,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     refresh,
     handleExternalDrop,
     resolveConflictsAndContinue,
+    revealFile,
   };
 }
 
