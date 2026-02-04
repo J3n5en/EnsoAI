@@ -1,4 +1,4 @@
-import type { FileChange, GitSubmodule } from '@shared/types';
+import type { GitSubmodule } from '@shared/types';
 import { joinPath } from '@shared/utils/path';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -50,6 +50,7 @@ interface SubmoduleSectionProps {
   onFileClick: (file: { path: string; staged: boolean; submodulePath: string }) => void;
   selectedCommitFile?: string | null;
   onCommitFileClick?: (hash: string, filePath: string, submodulePath: string) => void;
+  onClearCommitSelection?: () => void;
 }
 
 export function SubmoduleSection({
@@ -61,6 +62,7 @@ export function SubmoduleSection({
   onFileClick,
   selectedCommitFile,
   onCommitFileClick,
+  onClearCommitSelection,
 }: SubmoduleSectionProps) {
   const { t, tNode } = useI18n();
 
@@ -103,10 +105,20 @@ export function SubmoduleSection({
   );
 
   // Handle commit click - toggle expansion
-  const handleCommitClick = useCallback((hash: string) => {
-    setSelectedCommitHash(hash);
-    setExpandedCommitHash((prev) => (prev === hash ? null : hash));
-  }, []);
+  const handleCommitClick = useCallback(
+    (hash: string) => {
+      if (expandedCommitHash === hash) {
+        // Collapse if already expanded
+        setExpandedCommitHash(null);
+        setSelectedCommitHash(null);
+      } else {
+        // Expand new commit
+        setExpandedCommitHash(hash);
+        setSelectedCommitHash(hash);
+      }
+    },
+    [expandedCommitHash]
+  );
 
   // Handle file click in commit history
   const handleHistoryFileClick = useCallback(
@@ -119,12 +131,17 @@ export function SubmoduleSection({
   );
 
   // Handle tab change - clear selection state
-  const handleTabChange = useCallback((tab: 'changes' | 'history') => {
-    setActiveTab(tab);
-    // Clear history selection state when switching tabs
-    setSelectedCommitHash(null);
-    setExpandedCommitHash(null);
-  }, []);
+  const handleTabChange = useCallback(
+    (tab: 'changes' | 'history') => {
+      setActiveTab(tab);
+      // Clear history selection state when switching tabs
+      setSelectedCommitHash(null);
+      setExpandedCommitHash(null);
+      // Notify parent to clear commit selection
+      onClearCommitSelection?.();
+    },
+    [onClearCommitSelection]
+  );
 
   // Confirmation dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -484,7 +501,11 @@ export function SubmoduleSection({
                       isLoading={commitsLoading}
                       isFetchingNextPage={isFetchingNextPage}
                       hasNextPage={hasNextPage}
-                      onLoadMore={() => fetchNextPage()}
+                      onLoadMore={() => {
+                        if (hasNextPage && !isFetchingNextPage) {
+                          fetchNextPage();
+                        }
+                      }}
                       expandedCommitHash={expandedCommitHash}
                       commitFiles={commitFiles}
                       commitFilesLoading={commitFilesLoading}

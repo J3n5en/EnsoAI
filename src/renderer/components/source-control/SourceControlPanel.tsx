@@ -680,6 +680,7 @@ export function SourceControlPanel({
                         : null
                     }
                     onCommitFileClick={handleSubmoduleCommitFileClick}
+                    onClearCommitSelection={() => setSelectedSubmoduleCommit(null)}
                   />
                 ))}
             </motion.div>

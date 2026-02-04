@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "allow": ["Bash(npx tsc:*)", "Skill(commit)", "Bash(git push:*)", "Bash(gh pr create:*)"]
+  }
+}

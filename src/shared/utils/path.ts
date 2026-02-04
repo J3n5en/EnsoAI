@@ -19,5 +19,5 @@ export function normalizePath(p: string): string {
  * @returns Joined and normalized path
  */
 export function joinPath(...segments: string[]): string {
-  return segments.filter(Boolean).join('/').replace(/\/+/g, '/');
+  return segments.filter(Boolean).join('/').replace(/\\/g, '/').replace(/\/+/g, '/');
 }
