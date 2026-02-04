@@ -76,26 +76,6 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 /**
- * Query SQLite database asynchronously.
- */
-function queryDatabase(dbPath: string, sql: string): Promise<{ value: string } | undefined> {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
-      if (err) return reject(err);
-      db.get(sql, (queryErr, row: { value: string } | undefined) => {
-        db.close((closeErr) => {
-          if (closeErr) {
-            console.warn(`[RecentProjects] Failed to close database ${dbPath}:`, closeErr);
-          }
-          if (queryErr) return reject(queryErr);
-          resolve(row);
-        });
-      });
-    });
-  });
-}
-
-/**
  * Read recent projects from an editor's state.vscdb database.
  */
 async function readEditorProjects(editor: EditorConfig): Promise<RecentEditorProject[]> {
@@ -103,10 +83,24 @@ async function readEditorProjects(editor: EditorConfig): Promise<RecentEditorPro
   if (!(await pathExists(dbPath))) return [];
 
   try {
-    const row = await queryDatabase(
-      dbPath,
-      "SELECT value FROM ItemTable WHERE key = 'history.recentlyOpenedPathsList'"
-    );
+    const row = await new Promise<{ value: string } | undefined>((resolve, reject) => {
+      const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
+        if (err) return reject(err);
+        db.get(
+          'SELECT value FROM ItemTable WHERE key = ?',
+          ['history.recentlyOpenedPathsList'],
+          (queryErr, row: { value: string } | undefined) => {
+            db.close((closeErr) => {
+              if (closeErr) {
+                console.warn(`[RecentProjects] Failed to close database ${dbPath}:`, closeErr);
+              }
+              if (queryErr) return reject(queryErr);
+              resolve(row);
+            });
+          }
+        );
+      });
+    });
 
     if (!row?.value) return [];
 
@@ -179,6 +173,10 @@ export async function getRecentProjects(): Promise<RecentEditorProject[]> {
       cachedProjects = projects;
       cacheTimestamp = Date.now();
       return projects;
+    })
+    .catch((err) => {
+      console.error('[RecentProjects] Failed to fetch recent projects:', err);
+      return cachedProjects ?? [];
     })
     .finally(() => {
       refreshPromise = null;
