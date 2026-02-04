@@ -1,7 +1,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { RecentEditorProject } from '@shared/types';
 import Database from 'better-sqlite3';
 
@@ -235,20 +235,31 @@ export async function getRecentProjects(): Promise<RecentEditorProject[]> {
 
 /**
  * Validate a local path for use as a repository.
+ * Security: Only allows paths under user's home directory to prevent arbitrary path probing.
  */
-export function validateLocalPath(path: string): {
+export function validateLocalPath(inputPath: string): {
   exists: boolean;
   isDirectory: boolean;
   isGitRepo: boolean;
 } {
-  if (!existsSync(path)) {
+  // Normalize path to prevent traversal attacks (../)
+  const normalizedPath = resolve(inputPath);
+  const home = homedir();
+  const sep = process.platform === 'win32' ? '\\' : '/';
+
+  // Security: Only allow paths under user's home directory
+  if (!normalizedPath.startsWith(home + sep) && normalizedPath !== home) {
+    return { exists: false, isDirectory: false, isGitRepo: false };
+  }
+
+  if (!existsSync(normalizedPath)) {
     return { exists: false, isDirectory: false, isGitRepo: false };
   }
 
   try {
-    const stats = statSync(path);
+    const stats = statSync(normalizedPath);
     const isDirectory = stats.isDirectory();
-    const isGitRepo = isDirectory && existsSync(join(path, '.git'));
+    const isGitRepo = isDirectory && existsSync(join(normalizedPath, '.git'));
 
     return { exists: true, isDirectory, isGitRepo };
   } catch {
