@@ -1,8 +1,17 @@
-import type { CloneProgress } from '@shared/types';
+import type { CloneProgress, RecentEditorProject, ValidateLocalPathResult } from '@shared/types';
 import { FolderOpen, Globe, Loader2, Minus, Plus } from 'lucide-react';
+import { matchSorter } from 'match-sorter';
 import * as React from 'react';
 import type { RepositoryGroup } from '@/App/constants';
 import { CreateGroupDialog } from '@/components/group';
+import {
+  Autocomplete,
+  AutocompleteEmpty,
+  AutocompleteInput,
+  AutocompleteItem,
+  AutocompleteList,
+  AutocompletePopup,
+} from '@/components/ui/autocomplete';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -26,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 import { Z_INDEX } from '@/lib/z-index';
 import { useCloneTasksStore } from '@/stores/cloneTasks';
@@ -107,6 +117,9 @@ export function AddRepositoryDialog({
 
   // Local mode state
   const [localPath, setLocalPath] = React.useState('');
+  const [recentProjects, setRecentProjects] = React.useState<RecentEditorProject[]>([]);
+  const [pathValidation, setPathValidation] = React.useState<ValidateLocalPathResult | null>(null);
+  const [isValidating, setIsValidating] = React.useState(false);
 
   // Remote mode state
   const [remoteUrl, setRemoteUrl] = React.useState('');
@@ -167,6 +180,58 @@ export function AddRepositoryDialog({
     }
   }, [activeTaskProgress]);
 
+  // Load recent projects when dialog opens
+  React.useEffect(() => {
+    if (open) {
+      window.electronAPI.appDetector
+        .getRecentProjects()
+        .then(setRecentProjects)
+        .catch(() => setRecentProjects([]));
+    }
+  }, [open]);
+
+  // Debounced path validation (300ms, matching URL validation)
+  React.useEffect(() => {
+    if (!localPath.trim()) {
+      setPathValidation(null);
+      setIsValidating(false);
+      return;
+    }
+
+    setIsValidating(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await window.electronAPI.git.validateLocalPath(localPath.trim());
+        setPathValidation(result);
+      } catch {
+        setPathValidation(null);
+      } finally {
+        setIsValidating(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [localPath]);
+
+  // Filter function for autocomplete - fuzzy match path
+  const filterProject = React.useCallback((project: RecentEditorProject, query: string) => {
+    if (!query) return true;
+    const results = matchSorter([project.path], query, {
+      threshold: matchSorter.rankings.CONTAINS,
+    });
+    return results.length > 0;
+  }, []);
+
+  // Format path for display - replace home directory with ~
+  const formatPathDisplay = React.useCallback((fullPath: string) => {
+    const homeMatch = fullPath.match(/^(\/Users\/[^/]+|\/home\/[^/]+)/);
+    if (homeMatch) {
+      return fullPath.replace(homeMatch[1], '~');
+    }
+    return fullPath;
+  }, []);
+
   const handleSelectLocalPath = async () => {
     try {
       const selectedPath = await window.electronAPI.dialog.openDirectory();
@@ -200,6 +265,10 @@ export function AddRepositoryDialog({
     if (mode === 'local') {
       if (!localPath) {
         setError(t('Please select a local repository directory'));
+        return;
+      }
+      if (pathValidation && !pathValidation.isGitRepo) {
+        setError(t('Not a Git repository'));
         return;
       }
       onAddLocal(localPath, groupIdToSave);
@@ -298,6 +367,8 @@ export function AddRepositoryDialog({
     groupSelectionTouchedRef.current = false;
     setSelectedGroupId(defaultGroupId || '');
     setLocalPath('');
+    setPathValidation(null);
+    setIsValidating(false);
     setRemoteUrl('');
     setTargetDir('');
     setRepoName('');
@@ -326,7 +397,9 @@ export function AddRepositoryDialog({
 
   const isSubmitDisabled = () => {
     if (isCloning) return true;
-    if (mode === 'local') return !localPath;
+    if (mode === 'local') {
+      return !localPath || isValidating || (pathValidation !== null && !pathValidation.isGitRepo);
+    }
     return !isValidUrl || !targetDir || !repoName.trim();
   };
 
@@ -434,24 +507,75 @@ export function AddRepositoryDialog({
               <TabsContent value="local" className="mt-4 space-y-4">
                 <Field>
                   <FieldLabel>{t('Repository directory')}</FieldLabel>
-                  <div className="flex w-full gap-2">
-                    <Input
-                      value={localPath}
-                      readOnly
-                      placeholder={t('Select a local Git repository...')}
-                      className="min-w-0 flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleSelectLocalPath}
-                      className="shrink-0"
-                    >
-                      {t('Browse')}
-                    </Button>
-                  </div>
+                  <Autocomplete
+                    value={localPath}
+                    onValueChange={(v) => {
+                      setLocalPath(v ?? '');
+                      setError(null);
+                    }}
+                    items={recentProjects}
+                    filter={filterProject}
+                    itemToStringValue={(item) => item.path}
+                  >
+                    <div className="flex w-full gap-2">
+                      <AutocompleteInput
+                        placeholder={t('Type a path or select from recent projects...')}
+                        className="min-w-0 flex-1"
+                        showClear={!!localPath}
+                        showTrigger
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleSelectLocalPath}
+                        className="shrink-0"
+                      >
+                        {t('Browse')}
+                      </Button>
+                    </div>
+                    <AutocompletePopup zIndex={Z_INDEX.DROPDOWN_IN_MODAL}>
+                      <AutocompleteEmpty>{t('No matching projects found')}</AutocompleteEmpty>
+                      <AutocompleteList>
+                        {(project: RecentEditorProject) => (
+                          <AutocompleteItem key={project.path} value={project}>
+                            <Tooltip>
+                              <TooltipTrigger className="min-w-0 flex-1 truncate text-left text-sm">
+                                {formatPathDisplay(project.path)}
+                              </TooltipTrigger>
+                              <TooltipPopup side="right" sideOffset={8}>
+                                {project.path}
+                              </TooltipPopup>
+                            </Tooltip>
+                          </AutocompleteItem>
+                        )}
+                      </AutocompleteList>
+                    </AutocompletePopup>
+                  </Autocomplete>
                   <FieldDescription>
-                    {t('Select an existing Git repository on your computer.')}
+                    {isValidating && (
+                      <span className="text-muted-foreground">{t('Validating...')}</span>
+                    )}
+                    {!isValidating && pathValidation && !pathValidation.exists && (
+                      <span className="text-destructive">{t('Path does not exist')}</span>
+                    )}
+                    {!isValidating &&
+                      pathValidation &&
+                      pathValidation.exists &&
+                      !pathValidation.isDirectory && (
+                        <span className="text-destructive">{t('Path is not a directory')}</span>
+                      )}
+                    {!isValidating &&
+                      pathValidation &&
+                      pathValidation.isDirectory &&
+                      !pathValidation.isGitRepo && (
+                        <span className="text-yellow-600">{t('Not a Git repository')}</span>
+                      )}
+                    {!isValidating && pathValidation && pathValidation.isGitRepo && (
+                      <span className="text-green-600">✓ {t('Valid Git repository')}</span>
+                    )}
+                    {!localPath &&
+                      !isValidating &&
+                      t('Select an existing Git repository on your computer.')}
                   </FieldDescription>
                 </Field>
 

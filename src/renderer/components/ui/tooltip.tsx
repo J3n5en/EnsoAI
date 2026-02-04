@@ -1,8 +1,8 @@
 'use client';
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
-
 import { cn } from '@/lib/utils';
+import { Z_INDEX } from '@/lib/z-index';
 
 const TooltipCreateHandle = TooltipPrimitive.createHandle;
 
@@ -19,18 +19,21 @@ function TooltipPopup({
   align = 'center',
   sideOffset = 4,
   side = 'top',
+  zIndex,
   children,
   ...props
 }: TooltipPrimitive.Popup.Props & {
   align?: TooltipPrimitive.Positioner.Props['align'];
   side?: TooltipPrimitive.Positioner.Props['side'];
   sideOffset?: TooltipPrimitive.Positioner.Props['sideOffset'];
+  zIndex?: number;
 }) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
         align={align}
-        className="z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom,transform] data-instant:transition-none"
+        className="h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom,transform] data-instant:transition-none"
+        style={{ zIndex: zIndex ?? Z_INDEX.TOOLTIP }}
         data-slot="tooltip-positioner"
         side={side}
         sideOffset={sideOffset}

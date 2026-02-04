@@ -77,14 +77,17 @@ function AutocompletePopup({
   className,
   children,
   sideOffset = 4,
+  zIndex,
   ...props
 }: AutocompletePrimitive.Popup.Props & {
   sideOffset?: number;
+  zIndex?: number;
 }) {
   return (
     <AutocompletePrimitive.Portal>
       <AutocompletePrimitive.Positioner
         className="z-[55] select-none"
+        style={zIndex ? { zIndex } : undefined}
         data-slot="autocomplete-positioner"
         sideOffset={sideOffset}
       >

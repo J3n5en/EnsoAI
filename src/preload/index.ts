@@ -32,10 +32,12 @@ import type {
   MergeState,
   ProxySettings,
   PullRequest,
+  RecentEditorProject,
   ShellConfig,
   ShellInfo,
   TerminalCreateOptions,
   TerminalResizeOptions,
+  ValidateLocalPathResult,
   ValidateUrlResult,
   WorktreeCreateOptions,
   WorktreeMergeCleanupOptions,
@@ -161,6 +163,8 @@ const electronAPI = {
     // Git Clone
     validateUrl: (url: string): Promise<ValidateUrlResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_VALIDATE_URL, url),
+    validateLocalPath: (path: string): Promise<ValidateLocalPathResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_VALIDATE_LOCAL_PATH, path),
     clone: (remoteUrl: string, targetPath: string): Promise<CloneResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CLONE, remoteUrl, targetPath),
     onCloneProgress: (callback: (progress: CloneProgress) => void): (() => void) => {
@@ -432,6 +436,8 @@ const electronAPI = {
     ): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_WITH, path, bundleId, options),
     getIcon: (bundleId: string): Promise<string | undefined> =>
       ipcRenderer.invoke(IPC_CHANNELS.APP_GET_ICON, bundleId),
+    getRecentProjects: (): Promise<RecentEditorProject[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.APP_RECENT_PROJECTS),
   },
 
   // CLI Detector

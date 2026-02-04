@@ -1048,6 +1048,13 @@ export const zhTranslations: Record<string, string> = {
     '无法连接到远程仓库，请检查网络',
   'Invalid Git URL format. Please enter a valid HTTPS or SSH URL.':
     'Git URL 格式无效，请输入有效的 HTTPS 或 SSH URL',
+  // Local path validation
+  'Type a path or select from recent projects...': '输入路径或从最近项目中选择...',
+  'No matching projects found': '未找到匹配的项目',
+  'Path does not exist': '路径不存在',
+  'Path is not a directory': '路径不是目录',
+  'Valid Git repository': '有效的 Git 仓库',
+  'Validating...': '验证中...',
   // Clone Tasks
   'Clone Tasks': '克隆任务',
   'No clone tasks': '暂无克隆任务',

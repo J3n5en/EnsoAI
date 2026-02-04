@@ -132,6 +132,10 @@ export const IPC_CHANNELS = {
   APP_DETECT: 'app:detect',
   APP_OPEN_WITH: 'app:openWith',
   APP_GET_ICON: 'app:getIcon',
+  APP_RECENT_PROJECTS: 'app:recentProjects',
+
+  // Git Validate Local Path
+  GIT_VALIDATE_LOCAL_PATH: 'git:validate-local-path',
 
   // CLI Detector
   CLI_DETECT: 'cli:detect',
