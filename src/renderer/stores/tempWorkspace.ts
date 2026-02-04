@@ -31,6 +31,15 @@ interface TempWorkspaceState {
   rehydrate: () => Promise<void>;
 }
 
+let rehydratePromise: Promise<void> | null = null;
+
+function getErrorCode(err: unknown): string | null {
+  if (err && typeof err === 'object' && 'code' in err) {
+    return String((err as { code?: string }).code || '');
+  }
+  return null;
+}
+
 export const useTempWorkspaceStore = create<TempWorkspaceState>((set, get) => ({
   items: loadFromStorage(),
   renameTargetId: null,
@@ -57,17 +66,28 @@ export const useTempWorkspaceStore = create<TempWorkspaceState>((set, get) => ({
   openRename: (id) => set({ renameTargetId: id }),
   openDelete: (id) => set({ deleteTargetId: id }),
   rehydrate: async () => {
-    const items = loadFromStorage();
-    const filtered: TempWorkspaceItem[] = [];
-    for (const item of items) {
-      try {
-        await window.electronAPI.file.list(item.path);
-        filtered.push(item);
-      } catch {
-        // Skip missing or inaccessible directories
-      }
+    if (rehydratePromise) {
+      await rehydratePromise;
+      return;
     }
-    saveToStorage(filtered);
-    set({ items: filtered });
+    rehydratePromise = (async () => {
+      const items = loadFromStorage();
+      const results = await Promise.allSettled(
+        items.map((item) => window.electronAPI.file.list(item.path))
+      );
+      const filtered = items.filter((_item, index) => {
+        const result = results[index];
+        if (result.status === 'fulfilled') return true;
+        const code = getErrorCode(result.reason);
+        return code !== 'ENOENT' && code !== 'ENOTDIR';
+      });
+      saveToStorage(filtered);
+      set({ items: filtered });
+    })();
+    try {
+      await rehydratePromise;
+    } finally {
+      rehydratePromise = null;
+    }
   },
 }));

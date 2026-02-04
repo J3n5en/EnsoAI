@@ -271,7 +271,7 @@ export default function App() {
   const homeDir = window.electronAPI?.env.HOME || '';
   const effectiveTempBasePath =
     defaultTemporaryPath || [homeDir, 'ensoai', 'temporary'].join(pathSep);
-  const tempBasePathDisplay = (() => {
+  const tempBasePathDisplay = useMemo(() => {
     if (!effectiveTempBasePath) return '';
     let display = effectiveTempBasePath.replace(/\\/g, '/');
     if (display.startsWith('/')) {
@@ -281,7 +281,7 @@ export default function App() {
       display = `${display}/`;
     }
     return display;
-  })();
+  }, [effectiveTempBasePath]);
 
   // Panel resize hook
   const { repositoryWidth, worktreeWidth, treeSidebarWidth, resizing, handleResizeStart } =
@@ -1198,7 +1198,10 @@ export default function App() {
       closeAgentSessions(target.path);
       closeTerminalSessions(target.path);
 
-      const result = await window.electronAPI.tempWorkspace.remove(target.path);
+      const result = await window.electronAPI.tempWorkspace.remove(
+        target.path,
+        effectiveTempBasePath
+      );
       if (!result.ok) {
         toastManager.close(toastId);
         toastManager.add({
@@ -1239,6 +1242,7 @@ export default function App() {
       removeTempWorkspace,
       tempWorkspaces,
       t,
+      effectiveTempBasePath,
     ]
   );
 

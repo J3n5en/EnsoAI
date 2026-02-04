@@ -283,8 +283,8 @@ const electronAPI = {
   tempWorkspace: {
     create: (basePath?: string): Promise<TempWorkspaceCreateResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.TEMP_WORKSPACE_CREATE, basePath),
-    remove: (dirPath: string): Promise<TempWorkspaceRemoveResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.TEMP_WORKSPACE_REMOVE, dirPath),
+    remove: (dirPath: string, basePath?: string): Promise<TempWorkspaceRemoveResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TEMP_WORKSPACE_REMOVE, dirPath, basePath),
     checkPath: (dirPath: string): Promise<TempWorkspaceCheckResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.TEMP_WORKSPACE_CHECK_PATH, dirPath),
   },

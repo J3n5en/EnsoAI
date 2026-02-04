@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { access, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import {
@@ -48,6 +48,45 @@ function mapError(err: unknown, fallbackCode = 'UNKNOWN'): { code: string; messa
   return { code: fallbackCode, message: err instanceof Error ? err.message : String(err) };
 }
 
+function resolveBasePath(rawBasePath?: string): string {
+  return rawBasePath?.trim()
+    ? path.resolve(expandHome(rawBasePath.trim()))
+    : path.join(homedir(), 'ensoai', 'temporary');
+}
+
+function isSubPath(basePath: string, targetPath: string): boolean {
+  const relative = path.relative(basePath, targetPath);
+  if (!relative || relative === '') return false;
+  return !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+async function resolveSafePath(rawPath: string): Promise<string> {
+  const resolved = path.resolve(expandHome(rawPath));
+  try {
+    return await realpath(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+async function removeWithRetries(dirPath: string, attempts = 3): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await rm(dirPath, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      lastError = err;
+      const { code } = mapError(err);
+      if (!['EBUSY', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(code) || attempt === attempts - 1) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 80 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 async function checkPathWritable(dirPath: string): Promise<TempWorkspaceCheckResult> {
   try {
     await mkdir(dirPath, { recursive: true });
@@ -75,9 +114,7 @@ export function registerTempWorkspaceHandlers(): void {
     IPC_CHANNELS.TEMP_WORKSPACE_CREATE,
     async (_event, rawBasePath?: string): Promise<TempWorkspaceCreateResult> => {
       try {
-        const basePath = rawBasePath?.trim()
-          ? path.resolve(expandHome(rawBasePath.trim()))
-          : path.join(homedir(), 'ensoai', 'temporary');
+        const basePath = resolveBasePath(rawBasePath);
         const baseCheck = await checkPathWritable(basePath);
         if (!baseCheck.ok) {
           return baseCheck;
@@ -138,13 +175,23 @@ export function registerTempWorkspaceHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.TEMP_WORKSPACE_REMOVE,
-    async (_event, dirPath: string): Promise<TempWorkspaceRemoveResult> => {
+    async (_event, dirPath: string, rawBasePath?: string): Promise<TempWorkspaceRemoveResult> => {
       try {
-        await stopWatchersInDirectory(dirPath);
-        ptyManager.destroyByWorkdir(dirPath);
-        unregisterAuthorizedWorkdir(dirPath);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        await rm(dirPath, { recursive: true, force: true });
+        const basePath = await resolveSafePath(resolveBasePath(rawBasePath));
+        const resolvedDirPath = await resolveSafePath(dirPath);
+        const rootPath = path.parse(resolvedDirPath).root;
+        if (resolvedDirPath === rootPath || !isSubPath(basePath, resolvedDirPath)) {
+          return {
+            ok: false,
+            code: 'INVALID_PATH',
+            message: 'Path is outside the temp workspace directory',
+          };
+        }
+
+        await stopWatchersInDirectory(resolvedDirPath);
+        await Promise.resolve(ptyManager.destroyByWorkdir(resolvedDirPath));
+        unregisterAuthorizedWorkdir(resolvedDirPath);
+        await removeWithRetries(resolvedDirPath);
         return { ok: true };
       } catch (err) {
         const { code, message } = mapError(err, 'REMOVE_FAILED');

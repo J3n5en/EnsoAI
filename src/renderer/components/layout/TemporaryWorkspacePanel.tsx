@@ -1,21 +1,17 @@
 import type { TempWorkspaceItem } from '@shared/types';
 import { motion } from 'framer-motion';
 import {
-  Copy,
   FolderGit2,
-  FolderOpen,
   GitBranch,
   PanelLeftClose,
-  Pencil,
   Plus,
   RefreshCw,
   Search,
   Sparkles,
   Terminal,
-  Trash2,
-  X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { TempWorkspaceContextMenu } from '@/components/temp-workspace/TempWorkspaceContextMenu';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -24,7 +20,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import { toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
 import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
@@ -170,10 +165,7 @@ function TemporaryWorkspaceItemRow({
   const { t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const menuRef = useRef<HTMLDivElement>(null);
   const activities = useWorktreeActivityStore((s) => s.activities);
-  const closeAgentSessions = useWorktreeActivityStore((s) => s.closeAgentSessions);
-  const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
   const activity = activities[item.path] || { agentCount: 0, terminalCount: 0 };
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
 
@@ -182,23 +174,6 @@ function TemporaryWorkspaceItemRow({
     setMenuPosition({ x: e.clientX, y: e.clientY });
     setMenuOpen(true);
   };
-
-  useEffect(() => {
-    if (!menuOpen || !menuRef.current) return;
-    const rect = menuRef.current.getBoundingClientRect();
-    let { x, y } = menuPosition;
-    const viewportHeight = window.innerHeight;
-    const viewportWidth = window.innerWidth;
-    if (y + rect.height > viewportHeight - 8) {
-      y = Math.max(8, viewportHeight - rect.height - 8);
-    }
-    if (x + rect.width > viewportWidth - 8) {
-      x = Math.max(8, viewportWidth - rect.width - 8);
-    }
-    if (x !== menuPosition.x || y !== menuPosition.y) {
-      setMenuPosition({ x, y });
-    }
-  }, [menuOpen, menuPosition]);
 
   return (
     <>
@@ -249,130 +224,14 @@ function TemporaryWorkspaceItemRow({
         )}
       </button>
 
-      {menuOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-50"
-            onClick={() => setMenuOpen(false)}
-            onKeyDown={(e) => e.key === 'Escape' && setMenuOpen(false)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setMenuOpen(false);
-            }}
-            role="presentation"
-          />
-          <div
-            ref={menuRef}
-            className="fixed z-50 min-w-40 rounded-lg border bg-popover p-1 shadow-lg"
-            style={{ left: menuPosition.x, top: menuPosition.y }}
-          >
-            {activity.agentCount > 0 && activity.terminalCount > 0 && (
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
-                onClick={() => {
-                  setMenuOpen(false);
-                  closeAgentSessions(item.path);
-                  closeTerminalSessions(item.path);
-                }}
-              >
-                <X className="h-4 w-4" />
-                {t('Close All Sessions')}
-              </button>
-            )}
-            {activity.agentCount > 0 && (
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
-                onClick={() => {
-                  setMenuOpen(false);
-                  closeAgentSessions(item.path);
-                }}
-              >
-                <X className="h-4 w-4" />
-                <Sparkles className="h-4 w-4" />
-                {t('Close Agent Sessions')}
-              </button>
-            )}
-            {activity.terminalCount > 0 && (
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
-                onClick={() => {
-                  setMenuOpen(false);
-                  closeTerminalSessions(item.path);
-                }}
-              >
-                <X className="h-4 w-4" />
-                <Terminal className="h-4 w-4" />
-                {t('Close Terminal Sessions')}
-              </button>
-            )}
-            {hasActivity && <div className="my-1 h-px bg-border" />}
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
-              onClick={() => {
-                setMenuOpen(false);
-                window.electronAPI.shell.openPath(item.path);
-              }}
-            >
-              <FolderOpen className="h-4 w-4" />
-              {t('Open folder')}
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
-              onClick={async () => {
-                setMenuOpen(false);
-                try {
-                  await navigator.clipboard.writeText(item.path);
-                  toastManager.add({
-                    title: t('Copied'),
-                    description: t('Path copied to clipboard'),
-                    type: 'success',
-                    timeout: 2000,
-                  });
-                } catch (err) {
-                  const message = err instanceof Error ? err.message : String(err);
-                  toastManager.add({
-                    title: t('Copy failed'),
-                    description: message || t('Failed to copy content'),
-                    type: 'error',
-                    timeout: 3000,
-                  });
-                }
-              }}
-            >
-              <Copy className="h-4 w-4" />
-              {t('Copy Path')}
-            </button>
-            <div className="my-1 h-px bg-border" />
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent/50"
-              onClick={() => {
-                setMenuOpen(false);
-                onRequestRename();
-              }}
-            >
-              <Pencil className="h-4 w-4" />
-              {t('Rename')}
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                setMenuOpen(false);
-                onRequestDelete();
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-              {t('Delete')}
-            </button>
-          </div>
-        </>
-      )}
+      <TempWorkspaceContextMenu
+        open={menuOpen}
+        position={menuPosition}
+        path={item.path}
+        onClose={() => setMenuOpen(false)}
+        onRename={onRequestRename}
+        onDelete={onRequestDelete}
+      />
     </>
   );
 }
