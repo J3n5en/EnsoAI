@@ -12,10 +12,10 @@ import { useSettingsStore } from '@/stores/settings';
 import '@xterm/xterm/css/xterm.css';
 
 // Regex to match file paths with optional line:column
-// Matches: path/to/file.ts:42 or path/to/file.ts:42:10 or ./file.ts:10
-// Note: longer extensions must come before shorter ones (tsx before ts, jsx before js, etc.)
+// Matches: path/to/file.ts:42 or path/to/file.ts:42:10 or ./file.ts:10 or @src/file.ts:42
+// Note: longer extensions must come before shorter ones (tsx before ts, jsx before js, json before js, etc.)
 const FILE_PATH_REGEX =
-  /(?:^|[\s'"({[])((?:\.{1,2}\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:tsx|ts|jsx|js|mjs|cjs|json|scss|css|less|html|vue|svelte|md|yaml|yml|toml|py|go|rs|java|cpp|hpp|c|h|rb|php|bash|zsh|sh))(?::(\d+))?(?::(\d+))?/g;
+  /(?:^|[\s'"({[@])((?:\.{1,2}\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:tsx|ts|jsx|json|mjs|cjs|js|scss|css|less|html|vue|svelte|md|yaml|yml|toml|py|go|rs|java|cpp|hpp|c|h|rb|php|bash|zsh|sh))(?::(\d+))?(?::(\d+))?/g;
 
 // Check if data contains visible characters (not just ANSI control sequences)
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
