@@ -273,8 +273,8 @@ export function AddRepositoryDialog({
         setError(t('Please select a local repository directory'));
         return;
       }
-      if (pathValidation && !pathValidation.isGitRepo) {
-        setError(t('Not a Git repository'));
+      if (pathValidation && !pathValidation.isDirectory) {
+        setError(t('Path is not a directory'));
         return;
       }
       onAddLocal(localPath, groupIdToSave);
@@ -404,7 +404,7 @@ export function AddRepositoryDialog({
   const isSubmitDisabled = () => {
     if (isCloning) return true;
     if (mode === 'local') {
-      return !localPath || isValidating || (pathValidation !== null && !pathValidation.isGitRepo);
+      return !localPath || isValidating || (pathValidation !== null && !pathValidation.isDirectory);
     }
     return !isValidUrl || !targetDir || !repoName.trim();
   };
@@ -570,18 +570,10 @@ export function AddRepositoryDialog({
                       !pathValidation.isDirectory && (
                         <span className="text-destructive">{t('Path is not a directory')}</span>
                       )}
-                    {!isValidating &&
-                      pathValidation &&
-                      pathValidation.isDirectory &&
-                      !pathValidation.isGitRepo && (
-                        <span className="text-yellow-600">{t('Not a Git repository')}</span>
-                      )}
-                    {!isValidating && pathValidation && pathValidation.isGitRepo && (
-                      <span className="text-green-600">✓ {t('Valid Git repository')}</span>
+                    {!isValidating && pathValidation && pathValidation.isDirectory && (
+                      <span className="text-green-600">✓ {t('Valid directory')}</span>
                     )}
-                    {!localPath &&
-                      !isValidating &&
-                      t('Select an existing Git repository on your computer.')}
+                    {!localPath && !isValidating && t('Select a local directory on your computer.')}
                   </FieldDescription>
                 </Field>
 

@@ -27,5 +27,4 @@ export interface RecentEditorProject {
 export interface ValidateLocalPathResult {
   exists: boolean;
   isDirectory: boolean;
-  isGitRepo: boolean;
 }

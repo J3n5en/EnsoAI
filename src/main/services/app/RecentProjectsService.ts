@@ -240,7 +240,6 @@ export async function getRecentProjects(): Promise<RecentEditorProject[]> {
 export function validateLocalPath(inputPath: string): {
   exists: boolean;
   isDirectory: boolean;
-  isGitRepo: boolean;
 } {
   // Normalize path to prevent traversal attacks (../)
   const normalizedPath = resolve(inputPath);
@@ -249,20 +248,17 @@ export function validateLocalPath(inputPath: string): {
 
   // Security: Only allow paths under user's home directory
   if (!normalizedPath.startsWith(home + sep) && normalizedPath !== home) {
-    return { exists: false, isDirectory: false, isGitRepo: false };
+    return { exists: false, isDirectory: false };
   }
 
   if (!existsSync(normalizedPath)) {
-    return { exists: false, isDirectory: false, isGitRepo: false };
+    return { exists: false, isDirectory: false };
   }
 
   try {
     const stats = statSync(normalizedPath);
-    const isDirectory = stats.isDirectory();
-    const isGitRepo = isDirectory && existsSync(join(normalizedPath, '.git'));
-
-    return { exists: true, isDirectory, isGitRepo };
+    return { exists: true, isDirectory: stats.isDirectory() };
   } catch {
-    return { exists: false, isDirectory: false, isGitRepo: false };
+    return { exists: false, isDirectory: false };
   }
 }
