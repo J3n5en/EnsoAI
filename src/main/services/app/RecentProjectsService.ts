@@ -6,6 +6,8 @@ import sqlite3 from 'sqlite3';
 
 // Cache with TTL (5 minutes)
 const CACHE_TTL_MS = 5 * 60 * 1000;
+// SQLite busy timeout (ms) - wait for locks instead of failing immediately
+const BUSY_TIMEOUT_MS = 3000;
 // Limit entries per editor to balance history completeness vs memory/performance
 // 50 entries covers typical usage (~1 month of active projects for most users)
 const MAX_ENTRIES_PER_EDITOR = 50;
@@ -86,6 +88,7 @@ async function readEditorProjects(editor: EditorConfig): Promise<RecentEditorPro
     const row = await new Promise<{ value: string } | undefined>((resolve, reject) => {
       const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
         if (err) return reject(err);
+        db.configure('busyTimeout', BUSY_TIMEOUT_MS);
         db.get(
           'SELECT value FROM ItemTable WHERE key = ?',
           ['history.recentlyOpenedPathsList'],
