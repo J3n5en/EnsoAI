@@ -397,7 +397,8 @@ export class GitService {
     });
   }
 
-  async getLog(maxCount = 50, skip = 0): Promise<GitLogEntry[]> {
+  async getLog(maxCount = 50, skip = 0, submodulePath?: string): Promise<GitLogEntry[]> {
+    const git = this.getGitInstance(submodulePath);
     const options: string[] = [
       `-n${maxCount}`,
       '--pretty=format:%H%x01%ai%x01%an%x01%ae%x01%s%x01%D',
@@ -408,7 +409,7 @@ export class GitService {
 
     let result: string;
     try {
-      result = await this.git.raw(['log', ...options]);
+      result = await git.raw(['log', ...options]);
     } catch (error) {
       // Empty repo (no commits yet) - return empty array
       if (error instanceof Error && error.message.includes('does not have any commits yet')) {
@@ -762,16 +763,17 @@ export class GitService {
     return this.git.show([hash, '--pretty=format:%H%n%an%n%ae%n%ad%n%s%n%b', '--stat']);
   }
 
-  async getCommitFiles(hash: string): Promise<CommitFileChange[]> {
+  async getCommitFiles(hash: string, submodulePath?: string): Promise<CommitFileChange[]> {
+    const git = this.getGitInstance(submodulePath);
     // Use cat-file to reliably detect merge commits (check parent count)
-    const commitInfo = await this.git.catFile(['-p', hash]);
+    const commitInfo = await git.catFile(['-p', hash]);
     const isMergeCommit = (commitInfo.match(/^parent /gm) ?? []).length >= 2;
 
     const files: CommitFileChange[] = [];
 
     if (isMergeCommit) {
       // Merge commit: use git diff to compare with first parent
-      const mergeDiff = await this.git.diff([`${hash}^1`, hash, '--name-status']);
+      const mergeDiff = await git.diff([`${hash}^1`, hash, '--name-status']);
       const diffLines = mergeDiff.split('\n').filter((line) => line.trim());
 
       for (const line of diffLines) {
@@ -790,7 +792,7 @@ export class GitService {
       }
     } else {
       // Regular commit: use show --name-status
-      const commitShow = await this.git.show([hash, '--name-status', '--pretty=format:%P']);
+      const commitShow = await git.show([hash, '--name-status', '--pretty=format:%P']);
       const lines = commitShow.split('\n').filter((line) => line.trim());
 
       for (const line of lines) {
@@ -826,25 +828,27 @@ export class GitService {
   async getCommitDiff(
     hash: string,
     filePath: string,
-    status?: FileChangeStatus
+    status?: FileChangeStatus,
+    submodulePath?: string
   ): Promise<FileDiff> {
+    const git = this.getGitInstance(submodulePath);
     let originalContent = '';
     let modifiedContent = '';
 
     // Handle different file statuses
     if (status === 'A') {
       // Added file: original is empty, get from current commit
-      modifiedContent = await this.git.show([`${hash}:${filePath}`]).catch(() => '');
+      modifiedContent = await git.show([`${hash}:${filePath}`]).catch(() => '');
       originalContent = '';
     } else if (status === 'D') {
       // Deleted file: modified is empty, get from parent commit
-      originalContent = await this.git.show([`${hash}^:${filePath}`]).catch(() => '');
+      originalContent = await git.show([`${hash}^:${filePath}`]).catch(() => '');
       modifiedContent = '';
     } else {
       // Modified or other: get from both parent and current commit
       const parentHash = `${hash}^`;
-      originalContent = await this.git.show([`${parentHash}:${filePath}`]).catch(() => '');
-      modifiedContent = await this.git.show([`${hash}:${filePath}`]).catch(() => '');
+      originalContent = await git.show([`${parentHash}:${filePath}`]).catch(() => '');
+      modifiedContent = await git.show([`${hash}:${filePath}`]).catch(() => '');
     }
 
     return {
@@ -1083,6 +1087,15 @@ export class GitService {
    */
   async syncSubmodules(): Promise<void> {
     await this.git.raw(['submodule', 'sync', '--recursive']);
+  }
+
+  /**
+   * Get Git instance for main repo or submodule
+   * @param submodulePath Optional submodule path
+   * @returns SimpleGit instance
+   */
+  private getGitInstance(submodulePath?: string): SimpleGit {
+    return submodulePath ? this.getSubmoduleGit(submodulePath) : this.git;
   }
 
   /**

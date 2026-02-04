@@ -69,9 +69,9 @@ export function registerGitHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.GIT_LOG,
-    async (_, workdir: string, maxCount?: number, skip?: number) => {
+    async (_, workdir: string, maxCount?: number, skip?: number, submodulePath?: string) => {
       const git = getGitService(workdir);
-      return git.getLog(maxCount, skip);
+      return git.getLog(maxCount, skip, submodulePath);
     }
   );
 
@@ -180,16 +180,26 @@ export function registerGitHandlers(): void {
     return git.showCommit(hash);
   });
 
-  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT_FILES, async (_, workdir: string, hash: string) => {
-    const git = getGitService(workdir);
-    return git.getCommitFiles(hash);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_COMMIT_FILES,
+    async (_, workdir: string, hash: string, submodulePath?: string) => {
+      const git = getGitService(workdir);
+      return git.getCommitFiles(hash, submodulePath);
+    }
+  );
 
   ipcMain.handle(
     IPC_CHANNELS.GIT_COMMIT_DIFF,
-    async (_, workdir: string, hash: string, filePath: string, status?: FileChangeStatus) => {
+    async (
+      _,
+      workdir: string,
+      hash: string,
+      filePath: string,
+      status?: FileChangeStatus,
+      submodulePath?: string
+    ) => {
       const git = getGitService(workdir);
-      return git.getCommitDiff(hash, filePath, status);
+      return git.getCommitDiff(hash, filePath, status, submodulePath);
     }
   );
 

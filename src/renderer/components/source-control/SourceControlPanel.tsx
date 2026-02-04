@@ -1,3 +1,4 @@
+import { joinPath } from '@shared/utils/path';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowDown,
@@ -84,6 +85,13 @@ export function SourceControlPanel({
   const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
   const [selectedCommitFile, setSelectedCommitFile] = useState<string | null>(null);
   const [expandedCommitHash, setExpandedCommitHash] = useState<string | null>(null);
+
+  // Submodule commit history state
+  const [selectedSubmoduleCommit, setSelectedSubmoduleCommit] = useState<{
+    hash: string;
+    filePath: string | null;
+    submodulePath: string;
+  } | null>(null);
 
   const {
     data: fileChangesResult,
@@ -225,6 +233,15 @@ export function SourceControlPanel({
     selectedFileStatus
   );
 
+  // Submodule commit diff
+  const { data: submoduleCommitDiff, isLoading: submoduleCommitDiffLoading } = useCommitDiff(
+    rootPath ?? null,
+    selectedSubmoduleCommit?.hash ?? null,
+    selectedSubmoduleCommit?.filePath ?? null,
+    undefined,
+    selectedSubmoduleCommit?.submodulePath ?? null
+  );
+
   const { selectedFile, setSelectedFile, setNavigationDirection } = useSourceControlStore();
 
   const staged = useMemo(() => changes?.filter((c) => c.staged) ?? [], [changes]);
@@ -309,6 +326,19 @@ export function SourceControlPanel({
   const handleCommitFileClick = useCallback(
     (filePath: string) => {
       setSelectedCommitFile(filePath);
+      setNavigationDirection('next');
+    },
+    [setNavigationDirection]
+  );
+
+  // Handle file click in submodule commit history view
+  const handleSubmoduleCommitFileClick = useCallback(
+    (hash: string, filePath: string, submodulePath: string) => {
+      setSelectedSubmoduleCommit({ hash, filePath, submodulePath });
+      // Clear other selections
+      setSelectedCommitHash(null);
+      setSelectedCommitFile(null);
+      setSelectedSubmoduleFile(null);
       setNavigationDirection('next');
     },
     [setNavigationDirection]
@@ -644,6 +674,12 @@ export function SourceControlPanel({
                     onToggle={() => handleSubmoduleToggle(submodule.path)}
                     selectedFile={selectedSubmoduleFile}
                     onFileClick={handleSubmoduleFileClick}
+                    selectedCommitFile={
+                      selectedSubmoduleCommit?.submodulePath === submodule.path
+                        ? selectedSubmoduleCommit.filePath
+                        : null
+                    }
+                    onCommitFileClick={handleSubmoduleCommitFileClick}
                   />
                 ))}
             </motion.div>
@@ -680,10 +716,21 @@ export function SourceControlPanel({
                 sessionId={sessionId}
               />
             </div>
+          ) : selectedSubmoduleCommit?.filePath ? (
+            <div className="flex-1 overflow-hidden">
+              <CommitDiffViewer
+                rootPath={joinPath(rootPath, selectedSubmoduleCommit.submodulePath)}
+                fileDiff={submoduleCommitDiff}
+                filePath={selectedSubmoduleCommit.filePath}
+                isActive={isActive}
+                isLoading={submoduleCommitDiffLoading}
+                sessionId={sessionId}
+              />
+            </div>
           ) : selectedSubmoduleFile ? (
             <div className="flex-1 overflow-hidden">
               <DiffViewer
-                rootPath={`${rootPath}/${selectedSubmoduleFile.submodulePath}`.replace(/\\/g, '/')}
+                rootPath={joinPath(rootPath, selectedSubmoduleFile.submodulePath)}
                 file={{ path: selectedSubmoduleFile.path, staged: selectedSubmoduleFile.staged }}
                 diff={submoduleFileDiff ?? undefined}
                 skipFetch={true}

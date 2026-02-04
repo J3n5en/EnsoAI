@@ -1,4 +1,5 @@
 import type { FileChange, GitSubmodule } from '@shared/types';
+import { joinPath } from '@shared/utils/path';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowDown,
@@ -6,6 +7,7 @@ import {
   ChevronDown,
   FolderGit2,
   GitBranch,
+  History,
   Loader2,
   RefreshCw,
 } from 'lucide-react';
@@ -21,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { toastManager } from '@/components/ui/toast';
+import { useCommitFiles, useGitHistoryInfinite } from '@/hooks/useGitHistory';
 import {
   useCommitSubmodule,
   useDiscardSubmodule,
@@ -36,6 +39,7 @@ import { heightVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { ChangesList } from './ChangesList';
 import { CommitBox } from './CommitBox';
+import { CommitHistoryList } from './CommitHistoryList';
 
 interface SubmoduleSectionProps {
   submodule: GitSubmodule;
@@ -44,6 +48,8 @@ interface SubmoduleSectionProps {
   onToggle: () => void;
   selectedFile: { path: string; staged: boolean; submodulePath?: string } | null;
   onFileClick: (file: { path: string; staged: boolean; submodulePath: string }) => void;
+  selectedCommitFile?: string | null;
+  onCommitFileClick?: (hash: string, filePath: string, submodulePath: string) => void;
 }
 
 export function SubmoduleSection({
@@ -53,6 +59,8 @@ export function SubmoduleSection({
   onToggle,
   selectedFile,
   onFileClick,
+  selectedCommitFile,
+  onCommitFileClick,
 }: SubmoduleSectionProps) {
   const { t, tNode } = useI18n();
 
@@ -69,6 +77,54 @@ export function SubmoduleSection({
   const discardMutation = useDiscardSubmodule();
 
   const isSyncing = fetchMutation.isPending || pullMutation.isPending || pushMutation.isPending;
+
+  // Tab state: 'changes' or 'history'
+  const [activeTab, setActiveTab] = useState<'changes' | 'history'>('changes');
+
+  // History state
+  const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
+  const [expandedCommitHash, setExpandedCommitHash] = useState<string | null>(null);
+
+  // History hooks - pass submodulePath to reuse main repo hooks
+  const {
+    data: commitsData,
+    isLoading: commitsLoading,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useGitHistoryInfinite(rootPath, 20, submodule.path);
+
+  const commits = commitsData?.pages.flat() ?? [];
+
+  const { data: commitFiles = [], isLoading: commitFilesLoading } = useCommitFiles(
+    rootPath,
+    expandedCommitHash,
+    submodule.path
+  );
+
+  // Handle commit click - toggle expansion
+  const handleCommitClick = useCallback((hash: string) => {
+    setSelectedCommitHash(hash);
+    setExpandedCommitHash((prev) => (prev === hash ? null : hash));
+  }, []);
+
+  // Handle file click in commit history
+  const handleHistoryFileClick = useCallback(
+    (filePath: string) => {
+      if (onCommitFileClick && expandedCommitHash) {
+        onCommitFileClick(expandedCommitHash, filePath, submodule.path);
+      }
+    },
+    [onCommitFileClick, expandedCommitHash, submodule.path]
+  );
+
+  // Handle tab change - clear selection state
+  const handleTabChange = useCallback((tab: 'changes' | 'history') => {
+    setActiveTab(tab);
+    // Clear history selection state when switching tabs
+    setSelectedCommitHash(null);
+    setExpandedCommitHash(null);
+  }, []);
 
   // Confirmation dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -357,33 +413,86 @@ export function SubmoduleSection({
               </div>
             ) : (
               <>
-                {/* Changes List */}
-                <div className="flex-1 overflow-hidden min-h-0">
-                  <ChangesList
-                    staged={staged}
-                    unstaged={unstaged}
-                    selectedFile={getSelectedFile()}
-                    onFileClick={handleFileClick}
-                    onStage={handleStage}
-                    onUnstage={handleUnstage}
-                    onDiscard={handleDiscard}
-                    onDeleteUntracked={handleDeleteUntracked}
-                    onRefresh={() => {
-                      handleFetch();
-                      refetch();
-                    }}
-                    isRefreshing={isLoading || fetchMutation.isPending}
-                    repoPath={`${rootPath}/${submodule.path}`.replace(/\\/g, '/')}
-                  />
+                {/* Tab Switcher */}
+                <div className="flex items-center gap-1 px-4 py-1.5 border-b border-border/50">
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('changes')}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2 py-1 text-xs rounded-sm transition-colors',
+                      activeTab === 'changes'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                    )}
+                  >
+                    {t('Changes')}
+                    {changes.length > 0 && <span className="text-[10px]">({changes.length})</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('history')}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2 py-1 text-xs rounded-sm transition-colors',
+                      activeTab === 'history'
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                    )}
+                  >
+                    <History className="h-3 w-3" />
+                    {t('History')}
+                  </button>
                 </div>
 
-                {/* Commit Box */}
-                <CommitBox
-                  stagedCount={staged.length}
-                  onCommit={handleCommit}
-                  isCommitting={commitMutation.isPending}
-                  rootPath={`${rootPath}/${submodule.path}`.replace(/\\/g, '/')}
-                />
+                {/* Tab Content */}
+                {activeTab === 'changes' ? (
+                  <>
+                    {/* Changes List */}
+                    <div className="flex-1 overflow-hidden min-h-0">
+                      <ChangesList
+                        staged={staged}
+                        unstaged={unstaged}
+                        selectedFile={getSelectedFile()}
+                        onFileClick={handleFileClick}
+                        onStage={handleStage}
+                        onUnstage={handleUnstage}
+                        onDiscard={handleDiscard}
+                        onDeleteUntracked={handleDeleteUntracked}
+                        onRefresh={() => {
+                          handleFetch();
+                          refetch();
+                        }}
+                        isRefreshing={isLoading || fetchMutation.isPending}
+                        repoPath={joinPath(rootPath, submodule.path)}
+                      />
+                    </div>
+
+                    {/* Commit Box */}
+                    <CommitBox
+                      stagedCount={staged.length}
+                      onCommit={handleCommit}
+                      isCommitting={commitMutation.isPending}
+                      rootPath={joinPath(rootPath, submodule.path)}
+                    />
+                  </>
+                ) : (
+                  /* History List */
+                  <div className="flex-1 overflow-hidden min-h-0">
+                    <CommitHistoryList
+                      commits={commits}
+                      selectedHash={selectedCommitHash}
+                      onCommitClick={handleCommitClick}
+                      isLoading={commitsLoading}
+                      isFetchingNextPage={isFetchingNextPage}
+                      hasNextPage={hasNextPage}
+                      onLoadMore={() => fetchNextPage()}
+                      expandedCommitHash={expandedCommitHash}
+                      commitFiles={commitFiles}
+                      commitFilesLoading={commitFilesLoading}
+                      selectedFile={selectedCommitFile}
+                      onFileClick={handleHistoryFileClick}
+                    />
+                  </div>
+                )}
               </>
             )}
           </motion.div>
