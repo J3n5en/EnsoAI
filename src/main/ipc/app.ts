@@ -35,8 +35,8 @@ export function registerAppHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.APP_TEST_PROXY, (_, proxyUrl: string) => testProxy(proxyUrl));
 
-  ipcMain.handle(IPC_CHANNELS.APP_RECENT_PROJECTS, () => {
-    return getRecentProjects();
+  ipcMain.handle(IPC_CHANNELS.APP_RECENT_PROJECTS, async () => {
+    return await getRecentProjects();
   });
 
   ipcMain.handle(IPC_CHANNELS.GIT_VALIDATE_LOCAL_PATH, (_, path: string) => {

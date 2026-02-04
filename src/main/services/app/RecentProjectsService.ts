@@ -1,11 +1,15 @@
 import { existsSync, statSync } from 'node:fs';
+import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { RecentEditorProject } from '@shared/types';
 import Database from 'better-sqlite3';
 
-// Permanent cache - only cleared when app closes
+// Cache with TTL (5 minutes)
+const CACHE_TTL_MS = 5 * 60 * 1000;
 let cachedProjects: RecentEditorProject[] | null = null;
+let cacheTimestamp = 0;
+let refreshPromise: Promise<RecentEditorProject[]> | null = null;
 
 interface EditorConfig {
   name: string;
@@ -53,12 +57,25 @@ function getStoragePath(editor: EditorConfig): string {
 }
 
 /**
- * Read recent projects from an editor's state.vscdb database.
+ * Check if a path exists (async).
  */
-function readEditorProjects(editor: EditorConfig): RecentEditorProject[] {
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Read recent projects from an editor's state.vscdb database.
+ * Database read is sync (better-sqlite3), but wrapped in async for path checks.
+ */
+async function readEditorProjects(editor: EditorConfig): Promise<RecentEditorProject[]> {
   const dbPath = getStoragePath(editor);
 
-  if (!existsSync(dbPath)) {
+  if (!(await pathExists(dbPath))) {
     return [];
   }
 
@@ -81,6 +98,9 @@ function readEditorProjects(editor: EditorConfig): RecentEditorProject[] {
       const entries = data.entries || [];
       const projects: RecentEditorProject[] = [];
 
+      // Collect all paths first, then batch check existence
+      const candidates: { path: string; editor: EditorConfig }[] = [];
+
       for (const entry of entries) {
         // Only process folder URIs (not files or remote)
         const folderUri = entry.folderUri;
@@ -102,16 +122,22 @@ function readEditorProjects(editor: EditorConfig): RecentEditorProject[] {
           const normalizedPath =
             process.platform === 'win32' && fsPath.startsWith('/') ? fsPath.slice(1) : fsPath;
 
-          // Verify path exists
-          if (existsSync(normalizedPath)) {
-            projects.push({
-              path: normalizedPath,
-              editorName: editor.name,
-              editorBundleId: editor.bundleId,
-            });
-          }
+          candidates.push({ path: normalizedPath, editor });
         } catch {
           // Skip invalid URIs
+        }
+      }
+
+      // Batch check path existence in parallel
+      const existsResults = await Promise.all(candidates.map((c) => pathExists(c.path)));
+
+      for (let i = 0; i < candidates.length; i++) {
+        if (existsResults[i]) {
+          projects.push({
+            path: candidates[i].path,
+            editorName: editor.name,
+            editorBundleId: editor.bundleId,
+          });
         }
       }
 
@@ -137,22 +163,16 @@ function normalizePathForDedup(inputPath: string): string {
 }
 
 /**
- * Get recent projects from all supported editors.
- * Results are deduplicated by path (first occurrence wins).
- * Uses permanent in-memory cache (cleared only when app closes).
+ * Internal function to fetch and deduplicate projects from all editors.
  */
-export function getRecentProjects(): RecentEditorProject[] {
-  // Return cached data if available
-  if (cachedProjects) {
-    return cachedProjects;
-  }
+async function fetchRecentProjects(): Promise<RecentEditorProject[]> {
+  // Read from all editors in parallel
+  const results = await Promise.all(EDITOR_CONFIGS.map((editor) => readEditorProjects(editor)));
 
   const seenPaths = new Set<string>();
   const allProjects: RecentEditorProject[] = [];
 
-  for (const editor of EDITOR_CONFIGS) {
-    const projects = readEditorProjects(editor);
-
+  for (const projects of results) {
     for (const project of projects) {
       // Deduplicate across editors (case-insensitive on Windows/macOS)
       const normalizedPath = normalizePathForDedup(project.path);
@@ -163,10 +183,54 @@ export function getRecentProjects(): RecentEditorProject[] {
     }
   }
 
-  // Store in permanent cache
-  cachedProjects = allProjects;
-
   return allProjects;
+}
+
+/**
+ * Get recent projects from all supported editors.
+ * Results are deduplicated by path (first occurrence wins).
+ * Uses TTL cache (5 min) with stale-while-revalidate pattern.
+ */
+export async function getRecentProjects(): Promise<RecentEditorProject[]> {
+  const now = Date.now();
+  const isCacheValid = cachedProjects && now - cacheTimestamp < CACHE_TTL_MS;
+
+  // Cache hit - return immediately
+  if (isCacheValid) {
+    return cachedProjects!;
+  }
+
+  // Cache stale but exists - return stale data and refresh in background
+  if (cachedProjects && !refreshPromise) {
+    refreshPromise = fetchRecentProjects()
+      .then((projects) => {
+        cachedProjects = projects;
+        cacheTimestamp = Date.now();
+        return projects;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+    return cachedProjects;
+  }
+
+  // No cache or already refreshing - wait for fresh data
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  // First load - fetch and cache
+  refreshPromise = fetchRecentProjects()
+    .then((projects) => {
+      cachedProjects = projects;
+      cacheTimestamp = Date.now();
+      return projects;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
 }
 
 /**
