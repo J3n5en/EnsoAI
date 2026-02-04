@@ -567,6 +567,13 @@ export function SessionBar({
     const newInstalled = new Set<string>();
 
     for (const agentId of enabledAgentIds) {
+      // Default agent is always considered installed (no detection needed)
+      // This ensures the default agent shows in menu even if user never ran detection
+      if (agentSettings[agentId]?.isDefault) {
+        newInstalled.add(agentId);
+        continue;
+      }
+
       // Handle Hapi agents: check if base CLI is detected as installed
       if (agentId.endsWith('-hapi')) {
         if (!hapiSettings.enabled) continue;

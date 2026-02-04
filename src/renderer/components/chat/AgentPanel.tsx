@@ -284,6 +284,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     const newInstalled = new Set<string>();
 
     for (const agentId of enabledAgentIds) {
+      // Default agent is always considered installed (no detection needed)
+      // This ensures the default agent shows in menu even if user never ran detection
+      if (agentSettings[agentId]?.isDefault) {
+        newInstalled.add(agentId);
+        continue;
+      }
+
       // Handle Hapi agents: check if base CLI is detected as installed
       if (agentId.endsWith('-hapi')) {
         if (!hapiSettings.enabled) continue;
@@ -1179,7 +1186,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 {t('New Session')}
               </Button>
               {showAgentMenu && enabledAgents.length > 0 && (
-                <div className="absolute left-1/2 -translate-x-1/2 top-full pt-1 z-50 min-w-40">
+                <div className="absolute left-0 top-full pt-1 z-50 min-w-40 text-left">
                   <div className="rounded-lg border bg-popover p-1 shadow-lg">
                     <div className="px-2 py-1 text-xs text-muted-foreground">
                       {t('Select Agent')}
