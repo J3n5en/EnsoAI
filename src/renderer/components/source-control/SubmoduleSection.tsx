@@ -6,7 +6,6 @@ import {
   ArrowUp,
   ChevronDown,
   FolderGit2,
-  GitBranch,
   History,
   Loader2,
   RefreshCw,
@@ -25,18 +24,21 @@ import { Button } from '@/components/ui/button';
 import { toastManager } from '@/components/ui/toast';
 import { useCommitFiles, useGitHistoryInfinite } from '@/hooks/useGitHistory';
 import {
+  useCheckoutSubmoduleBranch,
   useCommitSubmodule,
   useDiscardSubmodule,
   useFetchSubmodule,
   usePullSubmodule,
   usePushSubmodule,
   useStageSubmodule,
+  useSubmoduleBranches,
   useSubmoduleChanges,
   useUnstageSubmodule,
 } from '@/hooks/useSubmodules';
 import { useI18n } from '@/i18n';
 import { heightVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { BranchSwitcher } from './BranchSwitcher';
 import { ChangesList } from './ChangesList';
 import { CommitBox } from './CommitBox';
 import { CommitHistoryList } from './CommitHistoryList';
@@ -103,6 +105,14 @@ export function SubmoduleSection({
     expandedCommitHash,
     submodule.path
   );
+
+  // Branch switching
+  const {
+    data: branches = [],
+    isLoading: branchesLoading,
+    refetch: refetchBranches,
+  } = useSubmoduleBranches(rootPath, submodule.path);
+  const checkoutMutation = useCheckoutSubmoduleBranch();
 
   // Handle commit click - toggle expansion
   const handleCommitClick = useCallback(
@@ -297,6 +307,35 @@ export function SubmoduleSection({
     }
   };
 
+  // Branch checkout handler
+  const handleBranchCheckout = useCallback(
+    async (branch: string) => {
+      try {
+        await checkoutMutation.mutateAsync({
+          workdir: rootPath,
+          submodulePath: submodule.path,
+          branch,
+        });
+        refetch();
+        refetchBranches();
+        toastManager.add({
+          title: t('Branch switched'),
+          description: t('Branch switched to {{branch}}', { branch }),
+          type: 'success',
+          timeout: 3000,
+        });
+      } catch (error) {
+        toastManager.add({
+          title: t('Failed to switch branch'),
+          description: error instanceof Error ? error.message : String(error),
+          type: 'error',
+          timeout: 5000,
+        });
+      }
+    },
+    [rootPath, submodule.path, checkoutMutation, refetch, refetchBranches, t]
+  );
+
   const handleFileClick = (file: { path: string; staged: boolean }) => {
     onFileClick({ ...file, submodulePath: submodule.path });
   };
@@ -321,30 +360,34 @@ export function SubmoduleSection({
         <button
           type="button"
           onClick={onToggle}
-          className="flex flex-1 items-center gap-2 px-4 py-2 text-left focus:outline-none"
+          className="flex flex-1 min-w-0 items-center gap-2 px-4 py-2 text-left focus:outline-none"
         >
           <ChevronDown
             className={cn(
-              'h-4 w-4 text-muted-foreground/60 group-hover:text-foreground transition-all duration-200',
+              'h-4 w-4 shrink-0 text-muted-foreground/60 group-hover:text-foreground transition-all duration-200',
               !expanded && '-rotate-90'
             )}
           />
-          <FolderGit2 className="h-4 w-4 text-yellow-500" />
-          <span className="text-sm font-medium truncate">{submodule.name}</span>
-
-          {/* Branch info */}
-          {submodule.branch && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <GitBranch className="h-3 w-3" />
-              {submodule.branch}
-            </span>
-          )}
+          <FolderGit2 className="h-4 w-4 shrink-0 text-yellow-500" />
+          <span className="text-sm font-medium min-w-0 truncate" title={submodule.name}>
+            {submodule.name}
+          </span>
 
           {/* Changes count */}
           {changes.length > 0 && (
-            <span className="text-xs text-muted-foreground">({changes.length})</span>
+            <span className="text-xs text-muted-foreground shrink-0">({changes.length})</span>
           )}
         </button>
+
+        {/* Branch Switcher */}
+        <BranchSwitcher
+          currentBranch={submodule.branch ?? null}
+          branches={branches}
+          onCheckout={handleBranchCheckout}
+          isLoading={branchesLoading}
+          isCheckingOut={checkoutMutation.isPending}
+          size="sm"
+        />
 
         {/* Sync buttons */}
         <div className="flex items-center gap-1 mr-2">

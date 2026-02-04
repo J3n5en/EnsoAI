@@ -5,11 +5,11 @@ import type {
   WorktreeMergeOptions,
   WorktreeMergeResult,
 } from '@shared/types';
+import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { consumeClaudeProviderSwitch, isClaudeProviderMatch } from '@/lib/claudeProvider';
 import { normalizeHexColor } from '@/lib/colors';
-import { cn } from '@/lib/utils';
 import {
   ALL_GROUP_ID,
   DEFAULT_GROUP_COLOR,
@@ -89,6 +89,7 @@ initCloneProgressListener();
 
 export default function App() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
 
   // Listen for auto-fetch completion events to refresh git status
   useAutoFetchListener();
@@ -124,6 +125,9 @@ export default function App() {
 
   // Ref for cross-repo worktree switching (defined later)
   const switchWorktreePathRef = useRef<((path: string) => void) | null>(null);
+
+  // Ref to track current worktree path for fetch race condition prevention
+  const currentWorktreePathRef = useRef<string | null>(null);
 
   // Settings page state (used in MainContent)
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
@@ -978,6 +982,43 @@ export default function App() {
     // Editor state will be synced by useEffect
   };
 
+  // Helper function to refresh git data for a worktree
+  const refreshGitData = useCallback(
+    (worktreePath: string) => {
+      // Update ref to track current worktree for race condition prevention
+      currentWorktreePathRef.current = worktreePath;
+
+      // Immediately refresh local git data
+      const localKeys = [
+        'status',
+        'file-changes',
+        'file-diff',
+        'log',
+        'log-infinite',
+        'submodules',
+      ];
+      for (const key of localKeys) {
+        queryClient.invalidateQueries({ queryKey: ['git', key, worktreePath] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', worktreePath] });
+
+      // Fetch remote then refresh branch data (with race condition check)
+      window.electronAPI.git
+        .fetch(worktreePath)
+        .then(() => {
+          // Only refresh if this is still the current worktree
+          if (currentWorktreePathRef.current === worktreePath) {
+            queryClient.invalidateQueries({ queryKey: ['git', 'branches', worktreePath] });
+            queryClient.invalidateQueries({ queryKey: ['git', 'status', worktreePath] });
+          }
+        })
+        .catch(() => {
+          // Silent fail - fetch errors are not critical
+        });
+    },
+    [queryClient]
+  );
+
   const handleSelectWorktree = useCallback(
     async (worktree: GitWorktree) => {
       if (editorSettings.autoSave === 'off') {
@@ -1036,8 +1077,11 @@ export default function App() {
       // Restore the new worktree's tab state (default to 'chat')
       const savedTab = worktreeTabMap[worktree.path] || 'chat';
       setActiveTab(savedTab);
+
+      // Refresh git data for the new worktree
+      refreshGitData(worktree.path);
     },
-    [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t]
+    [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t, refreshGitData]
   );
 
   const handleSwitchWorktreePath = useCallback(
@@ -1057,12 +1101,15 @@ export default function App() {
             setActiveWorktree(found);
             const savedTab = worktreeTabMap[found.path] || 'chat';
             setActiveTab(savedTab);
+
+            // Refresh git data for the switched worktree
+            refreshGitData(found.path);
             return;
           }
         } catch {}
       }
     },
-    [worktrees, repositories, worktreeTabMap, handleSelectWorktree]
+    [worktrees, repositories, worktreeTabMap, handleSelectWorktree, refreshGitData]
   );
 
   // Assign to ref for use in keyboard shortcut callback

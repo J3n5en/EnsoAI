@@ -84,8 +84,15 @@ export function useGitCheckout() {
       await window.electronAPI.git.checkout(workdir, branch);
     },
     onSuccess: (_, { workdir }) => {
+      // Invalidate all git-related queries after branch switch
       queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
       queryClient.invalidateQueries({ queryKey: ['git', 'branches', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodules', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', workdir] });
     },
   });
 }
