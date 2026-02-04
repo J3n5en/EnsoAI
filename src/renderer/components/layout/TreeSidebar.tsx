@@ -144,6 +144,7 @@ export function TreeSidebar({
 }: TreeSidebarProps) {
   const { t, tNode } = useI18n();
   const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
+  const hideGroups = useSettingsStore((s) => s.hideGroups);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRepoList, setExpandedRepoList] = useState<string[]>([]);
 
@@ -505,15 +506,17 @@ export function TreeSidebar({
         </div>
       </div>
 
-      <GroupSelector
-        groups={groups}
-        activeGroupId={activeGroupId}
-        repositoryCounts={repositoryCounts}
-        totalCount={repositories.length}
-        onSelectGroup={onSwitchGroup}
-        onEditGroup={() => setEditGroupDialogOpen(true)}
-        onAddGroup={() => setCreateGroupDialogOpen(true)}
-      />
+      {!hideGroups && (
+        <GroupSelector
+          groups={groups}
+          activeGroupId={activeGroupId}
+          repositoryCounts={repositoryCounts}
+          totalCount={repositories.length}
+          onSelectGroup={onSwitchGroup}
+          onEditGroup={() => setEditGroupDialogOpen(true)}
+          onAddGroup={() => setCreateGroupDialogOpen(true)}
+        />
+      )}
 
       <div className="px-3 py-2">
         <div className="flex h-8 items-center gap-2 rounded-lg border bg-background px-2">
@@ -650,7 +653,7 @@ export function TreeSidebar({
                           </span>
 
                           {/* Group Tag */}
-                          {group && (
+                          {!hideGroups && group && (
                             <span
                               className="shrink-0 inline-flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px]"
                               style={{
@@ -905,7 +908,7 @@ export function TreeSidebar({
               {t('Repository Settings')}
             </button>
 
-            {onMoveToGroup && groups.length > 0 && (
+            {!hideGroups && onMoveToGroup && groups.length > 0 && (
               <MoveToGroupSubmenu
                 groups={groups}
                 currentGroupId={repoMenuTarget?.groupId}

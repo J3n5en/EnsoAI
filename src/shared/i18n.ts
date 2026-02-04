@@ -657,6 +657,8 @@ export const zhTranslations: Record<string, string> = {
   'Quick Terminal': '快捷终端',
   'Enable Quick Terminal': '启用快捷终端',
   'Show floating terminal button for quick access': '显示浮动终端按钮以便快速访问',
+  'Hide Groups': '隐藏分组',
+  'Hide group management panel and show all repositories': '隐藏分组管理面板，显示所有仓库',
   'Auto-completion settings': '自动补全设置',
   'Auto brackets': '自动括号',
   'Auto quotes': '自动引号',

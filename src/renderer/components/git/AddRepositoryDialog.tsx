@@ -39,6 +39,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 import { Z_INDEX } from '@/lib/z-index';
 import { useCloneTasksStore } from '@/stores/cloneTasks';
+import { useSettingsStore } from '@/stores/settings';
 
 type AddMode = 'local' | 'remote';
 
@@ -68,6 +69,7 @@ export function AddRepositoryDialog({
   onClearInitialLocalPath,
 }: AddRepositoryDialogProps) {
   const { t } = useI18n();
+  const hideGroups = useSettingsStore((s) => s.hideGroups);
 
   // Progress stage display labels (使用 t() 支持国际化，useMemo 避免重复创建)
   const stageLabels = React.useMemo<Record<string, string>>(
@@ -260,7 +262,8 @@ export function AddRepositoryDialog({
     e.preventDefault();
     setError(null);
 
-    const groupIdToSave = selectedGroupId ? selectedGroupId : null;
+    // When groups are hidden, always save without group
+    const groupIdToSave = hideGroups ? null : selectedGroupId ? selectedGroupId : null;
 
     if (mode === 'local') {
       if (!localPath) {
@@ -571,7 +574,7 @@ export function AddRepositoryDialog({
                   </FieldDescription>
                 </Field>
 
-                {groupSelect}
+                {!hideGroups && groupSelect}
               </TabsContent>
 
               {/* Remote Repository Tab */}
@@ -633,7 +636,7 @@ export function AddRepositoryDialog({
                   </FieldDescription>
                 </Field>
 
-                {groupSelect}
+                {!hideGroups && groupSelect}
 
                 {/* Clone Progress */}
                 {isCloning && (

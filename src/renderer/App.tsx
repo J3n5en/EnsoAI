@@ -260,6 +260,7 @@ export default function App() {
   const autoUpdateEnabled = useSettingsStore((s) => s.autoUpdateEnabled);
   const editorSettings = useSettingsStore((s) => s.editorSettings);
   const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
+  const hideGroups = useSettingsStore((s) => s.hideGroups);
 
   // Panel resize hook
   const { repositoryWidth, worktreeWidth, treeSidebarWidth, resizing, handleResizeStart } =
@@ -757,6 +758,14 @@ export default function App() {
     setActiveGroupId(groupId);
     saveActiveGroupId(groupId);
   }, []);
+
+  // Auto-switch to ALL when hideGroups is enabled
+  useEffect(() => {
+    if (hideGroups && activeGroupId !== ALL_GROUP_ID) {
+      setActiveGroupId(ALL_GROUP_ID);
+      saveActiveGroupId(ALL_GROUP_ID);
+    }
+  }, [hideGroups, activeGroupId]);
 
   const handleMoveToGroup = useCallback(
     (repoPath: string, targetGroupId: string | null) => {
