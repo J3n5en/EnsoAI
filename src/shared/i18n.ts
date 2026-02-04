@@ -294,6 +294,7 @@ export const zhTranslations: Record<string, string> = {
   'Switch to TAB mode': '切换为标签模式',
   Select: '选择',
   'Select Agent': '选择 Agent',
+  'Manage Agents': '管理 Agents',
   'Select all': '全选',
   'Select base branch': '请选择基于哪个分支创建',
   'Select branch': '选择分支...',

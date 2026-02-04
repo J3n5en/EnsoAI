@@ -1,4 +1,4 @@
-import { Plus, Sparkles } from 'lucide-react';
+import { Plus, Settings, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { normalizePath, pathsEqual } from '@/App/storage';
 import { ResizeHandle } from '@/components/terminal/ResizeHandle';
@@ -10,6 +10,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
@@ -1188,8 +1189,24 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
               {showAgentMenu && enabledAgents.length > 0 && (
                 <div className="absolute left-0 top-full pt-1 z-50 min-w-40 text-left">
                   <div className="rounded-lg border bg-popover p-1 shadow-lg">
-                    <div className="px-2 py-1 text-xs text-muted-foreground">
-                      {t('Select Agent')}
+                    <div className="flex items-center justify-between px-2 py-1">
+                      <span className="text-xs text-muted-foreground">{t('Select Agent')}</span>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAgentMenu(false);
+                              window.dispatchEvent(new CustomEvent('open-settings-agent'));
+                            }}
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                          >
+                            <Settings className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipPopup side="right">{t('Manage Agents')}</TooltipPopup>
+                      </Tooltip>
                     </div>
                     {[...enabledAgents]
                       .sort((a, b) => {

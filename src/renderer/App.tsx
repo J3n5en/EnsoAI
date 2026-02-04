@@ -366,6 +366,19 @@ export default function App() {
     };
   }, [openSettings]);
 
+  // Listen for 'open-settings-agent' event from SessionBar/AgentPanel
+  useEffect(() => {
+    const handleOpenSettingsAgent = () => {
+      setSettingsCategory('agent');
+      openSettings();
+    };
+
+    window.addEventListener('open-settings-agent', handleOpenSettingsAgent);
+    return () => {
+      window.removeEventListener('open-settings-agent', handleOpenSettingsAgent);
+    };
+  }, [openSettings]);
+
   // Keyboard shortcuts
   useAppKeyboardShortcuts({
     activeWorktreePath: activeWorktree?.path,
