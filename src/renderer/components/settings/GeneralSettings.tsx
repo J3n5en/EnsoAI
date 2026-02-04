@@ -3,6 +3,38 @@ import type { ShellInfo } from '@shared/types';
 import { Columns3, FolderOpen, RefreshCw, TreePine } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
+
+// Parse shell arguments string, supporting single/double quotes for paths with spaces
+function parseShellArgs(input: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let quoteChar = '';
+  for (const ch of input) {
+    if (!quoteChar && (ch === '"' || ch === "'")) {
+      quoteChar = ch;
+    } else if (ch === quoteChar) {
+      quoteChar = '';
+    } else if (ch === ' ' && !quoteChar) {
+      if (current) args.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current) args.push(current);
+  return args;
+}
+
+function stringifyShellArgs(args: string[]): string {
+  return args
+    .map((a) => {
+      if (a.includes(' ') || a.includes('"') || a.includes("'")) {
+        return `"${a.replace(/"/g, '\\"')}"`;
+      }
+      return a;
+    })
+    .join(' ');
+}
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -180,6 +212,26 @@ export function GeneralSettings() {
 
   const availableShells = shells.filter((s) => s.available);
   const currentShell = shells.find((s) => s.id === shellConfig.shellType);
+  const isCustomShell = shellConfig.shellType === 'custom';
+
+  const [customArgsText, setCustomArgsText] = React.useState(() =>
+    stringifyShellArgs(shellConfig.customShellArgs || []),
+  );
+
+  React.useEffect(() => {
+    setCustomArgsText(stringifyShellArgs(shellConfig.customShellArgs || []));
+  }, [shellConfig.customShellArgs]);
+
+  const commitCustomArgs = React.useCallback(() => {
+    setShellConfig({
+      ...shellConfig,
+      customShellArgs: parseShellArgs(customArgsText),
+    });
+  }, [customArgsText, shellConfig, setShellConfig]);
+
+  const isWin = window.electronAPI?.env.platform === 'win32';
+  const shellPathPlaceholder = isWin ? 'cmd.exe' : '/bin/bash';
+  const shellArgsPlaceholder = isWin ? '/k "C:\\Program Files\\init.bat"' : "-l -c '/usr/local/bin/app'";
 
   return (
     <div className="space-y-6">
@@ -320,7 +372,9 @@ export function GeneralSettings() {
               onValueChange={(v) => setShellConfig({ ...shellConfig, shellType: v as never })}
             >
               <SelectTrigger className="w-64">
-                <SelectValue>{currentShell?.name || shellConfig.shellType}</SelectValue>
+                <SelectValue>
+                  {isCustomShell ? t('Custom') : (currentShell?.name || shellConfig.shellType)}
+                </SelectValue>
               </SelectTrigger>
               <SelectPopup>
                 {availableShells.map((shell) => (
@@ -335,8 +389,33 @@ export function GeneralSettings() {
                     </div>
                   </SelectItem>
                 ))}
+                <SelectItem value="custom">
+                  <span>{t('Custom')}</span>
+                </SelectItem>
               </SelectPopup>
             </Select>
+          )}
+          {isCustomShell && (
+            <div className="space-y-2 mt-2">
+              <Input
+                className="w-64"
+                placeholder={t('Shell path (e.g. {{example}})', { example: shellPathPlaceholder })}
+                value={shellConfig.customShellPath || ''}
+                onChange={(e) =>
+                  setShellConfig({ ...shellConfig, customShellPath: e.target.value })
+                }
+              />
+              <Input
+                className="w-64"
+                placeholder={t('Arguments (e.g. {{example}})', { example: shellArgsPlaceholder })}
+                value={customArgsText}
+                onChange={(e) => setCustomArgsText(e.target.value)}
+                onBlur={commitCustomArgs}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitCustomArgs();
+                }}
+              />
+            </div>
           )}
           <p className="text-xs text-muted-foreground">{t('Apply on new terminals')}</p>
         </div>
