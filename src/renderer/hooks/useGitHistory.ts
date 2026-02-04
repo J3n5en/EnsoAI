@@ -29,6 +29,7 @@ export function useGitHistoryInfinite(
       if (!workdir) return [];
       const skip = (pageParam ?? 0) as number;
       const count = initialCount;
+      // Use || to treat empty string as no submodule (empty string should be undefined)
       return window.electronAPI.git.getLog(workdir, count, skip, submodulePath || undefined);
     },
     enabled: !!workdir,
@@ -58,6 +59,7 @@ export function useCommitFiles(
     queryKey: ['git', 'commit-files', workdir, hash, submodulePath],
     queryFn: async () => {
       if (!workdir || !hash) return [];
+      // Use || to treat empty string as no submodule
       return window.electronAPI.git.getCommitFiles(workdir, hash, submodulePath || undefined);
     },
     enabled: !!workdir && !!hash,
@@ -88,7 +90,7 @@ export function useCommitDiff(
         hash,
         filePath,
         status,
-        submodulePath || undefined
+        submodulePath || undefined // Use || to treat empty string as no submodule
       );
     },
     enabled: !!workdir && !!hash && !!filePath,

@@ -1,3 +1,4 @@
+import { normalizePath } from '@shared/utils/path';
 import { useEffect, useRef } from 'react';
 
 interface UseFileDropOptions {
@@ -86,13 +87,6 @@ function fileUriToPath(uri: string): string {
     // Fallback for malformed URIs
     return '';
   }
-}
-
-/**
- * Normalize path separators to forward slashes for consistent comparison.
- */
-function normalizePath(p: string): string {
-  return p.replace(/\\/g, '/');
 }
 
 /**

@@ -87,19 +87,19 @@ export function SubmoduleSection({
   const [selectedCommitHash, setSelectedCommitHash] = useState<string | null>(null);
   const [expandedCommitHash, setExpandedCommitHash] = useState<string | null>(null);
 
-  // History hooks - pass submodulePath to reuse main repo hooks
+  // History hooks - only fetch when History tab is active
   const {
     data: commitsData,
     isLoading: commitsLoading,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useGitHistoryInfinite(rootPath, 20, submodule.path);
+  } = useGitHistoryInfinite(activeTab === 'history' ? rootPath : null, 20, submodule.path);
 
   const commits = commitsData?.pages.flat() ?? [];
 
   const { data: commitFiles = [], isLoading: commitFilesLoading } = useCommitFiles(
-    rootPath,
+    activeTab === 'history' ? rootPath : null,
     expandedCommitHash,
     submodule.path
   );

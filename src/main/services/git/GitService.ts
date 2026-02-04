@@ -1099,7 +1099,7 @@ export class GitService {
   }
 
   /**
-   * 获取子模块的 Git 实例
+   * Get Git instance for a submodule
    */
   private getSubmoduleGit(submodulePath: string): SimpleGit {
     // Validate path to prevent path traversal attacks
@@ -1186,7 +1186,7 @@ export class GitService {
   }
 
   /**
-   * 在子模块中提交
+   * Commit changes in a submodule
    */
   async commitSubmodule(submodulePath: string, message: string): Promise<string> {
     const subGit = this.getSubmoduleGit(submodulePath);
@@ -1303,7 +1303,7 @@ export class GitService {
   }
 
   /**
-   * 获取子模块的文件变更列表
+   * Get file changes list for a submodule
    */
   async getSubmoduleChanges(submodulePath: string): Promise<FileChange[]> {
     const subGit = this.getSubmoduleGit(submodulePath);
@@ -1312,7 +1312,7 @@ export class GitService {
   }
 
   /**
-   * 获取子模块文件的 diff
+   * Get file diff for a submodule
    */
   async getSubmoduleFileDiff(
     submodulePath: string,
@@ -1359,7 +1359,7 @@ export class GitService {
   }
 
   /**
-   * 获取子模块的分支列表
+   * Get branch list for a submodule
    */
   async getSubmoduleBranches(submodulePath: string): Promise<GitBranch[]> {
     const subGit = this.getSubmoduleGit(submodulePath);
