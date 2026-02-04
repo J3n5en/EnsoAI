@@ -1057,7 +1057,6 @@ export const zhTranslations: Record<string, string> = {
   'Path is not a directory': '路径不是目录',
   'Valid directory': '目录有效',
   'Select a local directory on your computer.': '选择计算机上的本地目录。',
-  'Valid Git repository': '有效的 Git 仓库',
   'Validating...': '验证中...',
   // Clone Tasks
   'Clone Tasks': '克隆任务',
