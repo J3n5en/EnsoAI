@@ -667,29 +667,49 @@ export function TreeSidebar({
                           )}
 
                           {/* Create Worktree Button */}
-                          <CreateWorktreeDialog
-                            branches={branches}
-                            projectName={repo.name}
-                            workdir={workdir}
-                            isLoading={isCreating}
-                            onSubmit={async (options) => {
-                              await onCreateWorktree(options);
-                              refetchExpandedWorktrees();
-                            }}
-                            trigger={
-                              <button
-                                type="button"
-                                className="shrink-0 p-1 rounded hover:bg-muted"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.currentTarget.blur();
-                                }}
-                                title={t('New Worktree')}
-                              >
-                                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-                              </button>
-                            }
-                          />
+                          {isSelected ? (
+                            // Selected repo: open dialog directly with current branches
+                            <CreateWorktreeDialog
+                              branches={branches}
+                              projectName={repo.name}
+                              workdir={workdir}
+                              isLoading={isCreating}
+                              onSubmit={async (options) => {
+                                await onCreateWorktree(options);
+                                refetchExpandedWorktrees();
+                              }}
+                              trigger={
+                                <button
+                                  type="button"
+                                  className="shrink-0 p-1 rounded hover:bg-muted"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.currentTarget.blur();
+                                  }}
+                                  title={t('New Worktree')}
+                                >
+                                  <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                                </button>
+                              }
+                            />
+                          ) : (
+                            // Non-selected repo: switch to repo first, then open dialog
+                            <button
+                              type="button"
+                              className="shrink-0 p-1 rounded hover:bg-muted"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.currentTarget.blur();
+                                // Switch to this repo and trigger dialog open after branches load
+                                setRepoMenuTarget(repo);
+                                onSelectRepo(repo.path);
+                                setPendingCreateWorktree(true);
+                              }}
+                              title={t('New Worktree')}
+                            >
+                              <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                            </button>
+                          )}
 
                           {/* Repository Settings Button */}
                           <button
