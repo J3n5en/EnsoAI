@@ -225,15 +225,9 @@ export function AddRepositoryDialog({
 
   // Format path for display - replace home directory with ~
   const formatPathDisplay = React.useCallback((fullPath: string) => {
-    // Unix-style paths: /Users/xxx or /home/xxx
-    const unixHomeMatch = fullPath.match(/^(\/Users\/[^/]+|\/home\/[^/]+)/);
-    if (unixHomeMatch) {
-      return fullPath.replace(unixHomeMatch[1], '~');
-    }
-    // Windows-style paths: C:\Users\xxx
-    const windowsHomeMatch = fullPath.match(/^([A-Za-z]:\\Users\\[^\\]+)/);
-    if (windowsHomeMatch) {
-      return fullPath.replace(windowsHomeMatch[1], '~');
+    const home = window.electronAPI.env.HOME;
+    if (home && fullPath.startsWith(home)) {
+      return '~' + fullPath.slice(home.length);
     }
     return fullPath;
   }, []);
