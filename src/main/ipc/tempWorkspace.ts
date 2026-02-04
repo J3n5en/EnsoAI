@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import {
@@ -88,16 +89,20 @@ async function removeWithRetries(dirPath: string, attempts = 3): Promise<void> {
 }
 
 async function checkPathWritable(dirPath: string): Promise<TempWorkspaceCheckResult> {
+  let testFile: string | null = null;
   try {
     await mkdir(dirPath, { recursive: true });
-    const testFile = path.join(dirPath, `.ensoai-permission-${Date.now()}.tmp`);
+    testFile = path.join(dirPath, `.ensoai-permission-${randomUUID()}.tmp`);
     await writeFile(testFile, 'test', { encoding: 'utf-8' });
     await access(testFile, constants.R_OK | constants.W_OK);
-    await rm(testFile, { force: true });
     return { ok: true };
   } catch (err) {
     const { code, message } = mapError(err, 'EACCES');
     return { ok: false, code, message };
+  } finally {
+    if (testFile) {
+      await rm(testFile, { force: true }).catch(() => {});
+    }
   }
 }
 
@@ -188,9 +193,35 @@ export function registerTempWorkspaceHandlers(): void {
           };
         }
 
+        const parentDir = path.dirname(resolvedDirPath);
+        if (parentDir !== basePath) {
+          return {
+            ok: false,
+            code: 'INVALID_PATH',
+            message: 'Only direct children can be removed',
+          };
+        }
+
+        const dirStat = await lstat(dirPath);
+        if (dirStat.isSymbolicLink()) {
+          return {
+            ok: false,
+            code: 'INVALID_PATH',
+            message: 'Symlink paths are not allowed',
+          };
+        }
+
         await stopWatchersInDirectory(resolvedDirPath);
         await Promise.resolve(ptyManager.destroyByWorkdir(resolvedDirPath));
         unregisterAuthorizedWorkdir(resolvedDirPath);
+        const recheckedPath = await resolveSafePath(dirPath);
+        if (recheckedPath !== resolvedDirPath || path.dirname(recheckedPath) !== basePath) {
+          return {
+            ok: false,
+            code: 'INVALID_PATH',
+            message: 'Path changed during removal',
+          };
+        }
         await removeWithRetries(resolvedDirPath);
         return { ok: true };
       } catch (err) {

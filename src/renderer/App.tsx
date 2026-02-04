@@ -269,8 +269,10 @@ export default function App() {
   const isWindows = window.electronAPI?.env.platform === 'win32';
   const pathSep = isWindows ? '\\' : '/';
   const homeDir = window.electronAPI?.env.HOME || '';
-  const effectiveTempBasePath =
-    defaultTemporaryPath || [homeDir, 'ensoai', 'temporary'].join(pathSep);
+  const effectiveTempBasePath = useMemo(
+    () => defaultTemporaryPath || [homeDir, 'ensoai', 'temporary'].join(pathSep),
+    [defaultTemporaryPath, homeDir, pathSep]
+  );
   const tempBasePathDisplay = useMemo(() => {
     if (!effectiveTempBasePath) return '';
     let display = effectiveTempBasePath.replace(/\\/g, '/');

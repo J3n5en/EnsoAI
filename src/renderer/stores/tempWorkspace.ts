@@ -67,7 +67,11 @@ export const useTempWorkspaceStore = create<TempWorkspaceState>((set, get) => ({
   openDelete: (id) => set({ deleteTargetId: id }),
   rehydrate: async () => {
     if (rehydratePromise) {
-      await rehydratePromise;
+      try {
+        await rehydratePromise;
+      } catch (err) {
+        console.error('Temp Session rehydrate failed', err);
+      }
       return;
     }
     rehydratePromise = (async () => {
@@ -86,6 +90,8 @@ export const useTempWorkspaceStore = create<TempWorkspaceState>((set, get) => ({
     })();
     try {
       await rehydratePromise;
+    } catch (err) {
+      console.error('Temp Session rehydrate failed', err);
     } finally {
       rehydratePromise = null;
     }

@@ -1,5 +1,5 @@
 import { Copy, FolderOpen, Pencil, Sparkles, Terminal, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
@@ -35,10 +35,10 @@ export function TempWorkspaceContextMenu({
     setMenuPosition(position);
   }, [open, position]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || !menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
-    let { x, y } = menuPosition;
+    let { x, y } = position;
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
     if (y + rect.height > viewportHeight - 8) {
@@ -47,10 +47,8 @@ export function TempWorkspaceContextMenu({
     if (x + rect.width > viewportWidth - 8) {
       x = Math.max(8, viewportWidth - rect.width - 8);
     }
-    if (x !== menuPosition.x || y !== menuPosition.y) {
-      setMenuPosition({ x, y });
-    }
-  }, [open, menuPosition]);
+    setMenuPosition({ x, y });
+  }, [open, position]);
 
   const handleCopyPath = useCallback(async () => {
     try {
