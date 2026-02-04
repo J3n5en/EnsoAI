@@ -2,6 +2,15 @@ import type { Locale } from '@shared/i18n';
 import type { ShellInfo } from '@shared/types';
 import { Columns3, FolderOpen, RefreshCw, TreePine } from 'lucide-react';
 import * as React from 'react';
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -50,6 +59,12 @@ export function GeneralSettings() {
     setAutoCreateSessionOnActivate,
     quickTerminal,
     setQuickTerminalEnabled,
+    temporaryWorkspaceEnabled,
+    setTemporaryWorkspaceEnabled,
+    defaultTemporaryPath,
+    setDefaultTemporaryPath,
+    autoCreateSessionOnTempActivate,
+    setAutoCreateSessionOnTempActivate,
   } = useSettingsStore();
   const { t, locale } = useI18n();
 
@@ -129,6 +144,7 @@ export function GeneralSettings() {
   >('idle');
   const [proxyTestLatency, setProxyTestLatency] = React.useState<number | null>(null);
   const [proxyTestError, setProxyTestError] = React.useState<string | null>(null);
+  const [tempPathDialogOpen, setTempPathDialogOpen] = React.useState(false);
 
   const handleTestProxy = React.useCallback(async () => {
     if (!proxySettings.server) return;
@@ -158,6 +174,17 @@ export function GeneralSettings() {
     },
     [setProxySettings]
   );
+
+  const handleSelectTempPath = React.useCallback(async () => {
+    const result = await window.electronAPI.dialog.openDirectory();
+    if (!result) return;
+    const check = await window.electronAPI.tempWorkspace.checkPath(result);
+    if (check.ok) {
+      setDefaultTemporaryPath(result);
+      return;
+    }
+    setTempPathDialogOpen(true);
+  }, [setDefaultTemporaryPath]);
 
   React.useEffect(() => {
     window.electronAPI.shell.detect().then((detected) => {
@@ -240,19 +267,6 @@ export function GeneralSettings() {
       </div>
 
       {/* Auto-create session */}
-      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
-        <span className="text-sm font-medium">{t('Auto-create session')}</span>
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            {t('Automatically create Agent/Terminal session when activating a worktree')}
-          </p>
-          <Switch
-            checked={autoCreateSessionOnActivate}
-            onCheckedChange={setAutoCreateSessionOnActivate}
-          />
-        </div>
-      </div>
-
       {/* Quick Terminal */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
         <span className="text-sm font-medium">{t('Quick Terminal')}</span>
@@ -265,8 +279,83 @@ export function GeneralSettings() {
       </div>
 
       <div className="border-t pt-4">
+        <h3 className="text-lg font-medium">{t('Temp Session')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Temp Session settings')}</p>
+      </div>
+
+      {/* Temp Session */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Temp Session')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Show Temp Session entry for quick scratch sessions')}
+          </p>
+          <Switch
+            checked={temporaryWorkspaceEnabled}
+            onCheckedChange={setTemporaryWorkspaceEnabled}
+          />
+        </div>
+      </div>
+
+      {/* Temp Session Auto-create */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Auto-create session')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Automatically create Agent/Terminal Session when activating a temp session')}
+          </p>
+          <Switch
+            checked={autoCreateSessionOnTempActivate}
+            onCheckedChange={setAutoCreateSessionOnTempActivate}
+            disabled={!temporaryWorkspaceEnabled}
+          />
+        </div>
+      </div>
+
+      {/* Temp Session Path */}
+      <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+        <span className="text-sm font-medium mt-2">{t('Save location')}</span>
+        <div className="space-y-1.5">
+          <div className="flex gap-2">
+            <Input
+              value={defaultTemporaryPath}
+              onChange={(e) => setDefaultTemporaryPath(e.target.value)}
+              placeholder="~/ensoai/temporary"
+              className="flex-1"
+              disabled={!temporaryWorkspaceEnabled}
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleSelectTempPath}
+              disabled={!temporaryWorkspaceEnabled}
+            >
+              <FolderOpen className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t('Default directory for new temp sessions. Leave empty to use ~/ensoai/temporary')}
+          </p>
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
         <h3 className="text-lg font-medium">{t('Worktree')}</h3>
         <p className="text-sm text-muted-foreground">{t('Git worktree save location settings')}</p>
+      </div>
+
+      {/* Auto-create session */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Auto-create session')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Automatically create Agent/Terminal session when activating a worktree')}
+          </p>
+          <Switch
+            checked={autoCreateSessionOnActivate}
+            onCheckedChange={setAutoCreateSessionOnActivate}
+          />
+        </div>
       </div>
 
       {/* Default Worktree Path */}
@@ -614,6 +703,25 @@ export function GeneralSettings() {
           <Switch checked={autoUpdateEnabled} onCheckedChange={setAutoUpdateEnabled} />
         </div>
       </div>
+
+      <AlertDialog open={tempPathDialogOpen} onOpenChange={setTempPathDialogOpen}>
+        <AlertDialogPopup className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('Directory unavailable')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('This directory is not readable or writable. Please choose another location.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose asChild>
+              <Button variant="outline">{t('Cancel')}</Button>
+            </AlertDialogClose>
+            <AlertDialogClose asChild>
+              <Button onClick={handleSelectTempPath}>{t('Choose directory')}</Button>
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
     </div>
   );
 }

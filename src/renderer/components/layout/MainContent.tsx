@@ -450,6 +450,7 @@ export function MainContent({
           )}
         >
           <TerminalPanel
+            repoPath={effectiveRepoPath ?? undefined}
             cwd={effectiveWorktreePath ?? undefined}
             isActive={activeTab === 'terminal' && hasActiveWorktree}
           />

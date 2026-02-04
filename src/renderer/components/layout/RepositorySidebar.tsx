@@ -1,7 +1,15 @@
 import { LayoutGroup, motion } from 'framer-motion';
-import { FolderGit2, FolderMinus, PanelLeftClose, Plus, Search, Settings2 } from 'lucide-react';
+import {
+  Clock,
+  FolderGit2,
+  FolderMinus,
+  PanelLeftClose,
+  Plus,
+  Search,
+  Settings2,
+} from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ALL_GROUP_ID, type RepositoryGroup, type TabId } from '@/App/constants';
+import { ALL_GROUP_ID, type RepositoryGroup, type TabId, TEMP_REPO_ID } from '@/App/constants';
 import {
   CreateGroupDialog,
   GroupEditDialog,
@@ -63,6 +71,8 @@ interface RepositorySidebarProps {
   onSwitchWorktreeByPath?: (path: string) => Promise<void> | void;
   /** Whether a file is being dragged over the sidebar (from App.tsx global handler) */
   isFileDragOver?: boolean;
+  temporaryWorkspaceEnabled?: boolean;
+  tempBasePath?: string;
 }
 
 export function RepositorySidebar({
@@ -87,6 +97,8 @@ export function RepositorySidebar({
   onSwitchTab,
   onSwitchWorktreeByPath,
   isFileDragOver,
+  temporaryWorkspaceEnabled = false,
+  tempBasePath = '',
 }: RepositorySidebarProps) {
   const { t, tNode } = useI18n();
   const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
@@ -262,6 +274,35 @@ export function RepositorySidebar({
 
       {/* Repository List */}
       <div className="flex-1 overflow-auto p-2">
+        {temporaryWorkspaceEnabled && (
+          <div className="mb-2">
+            <RepoItemWithGlow repoPath={TEMP_REPO_ID}>
+              <button
+                type="button"
+                onClick={() => onSelectRepo(TEMP_REPO_ID)}
+                className={cn(
+                  'group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
+                  selectedRepo === TEMP_REPO_ID ? 'text-accent-foreground' : 'hover:bg-accent/50'
+                )}
+              >
+                {selectedRepo === TEMP_REPO_ID && (
+                  <motion.div
+                    layoutId="repo-sidebar-temp-highlight"
+                    className="absolute inset-0 rounded-lg bg-accent"
+                    transition={springFast}
+                  />
+                )}
+                <div className="relative z-10 flex w-full items-center gap-2">
+                  <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-medium">{t('Temp Session')}</span>
+                </div>
+                <span className="relative z-10 pl-6 text-xs text-muted-foreground">
+                  {tempBasePath || t('Quick scratch sessions')}
+                </span>
+              </button>
+            </RepoItemWithGlow>
+          </div>
+        )}
         {filteredRepos.length === 0 && searchQuery.length > 0 ? (
           <Empty className="h-full border-0">
             <EmptyMedia variant="icon">

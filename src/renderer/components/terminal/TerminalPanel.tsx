@@ -1,5 +1,6 @@
 import { Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TEMP_REPO_ID } from '@/App/constants';
 import { cleanPath, normalizePath } from '@/App/storage';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +24,7 @@ import type { TerminalGroup as TerminalGroupType, TerminalTab } from './types';
 import { getNextTabName } from './types';
 
 interface TerminalPanelProps {
+  repoPath?: string;
   cwd?: string;
   isActive?: boolean;
 }
@@ -49,7 +51,7 @@ function createInitialGroupState(originalPath = ''): GroupState {
 // Per-worktree state
 type WorktreeGroupStates = Record<string, GroupState>;
 
-export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
+export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanelProps) {
   const { t } = useI18n();
   const [worktreeStates, setWorktreeStates] = useState<WorktreeGroupStates>({});
   // Global terminal IDs to keep terminals mounted across group moves
@@ -57,6 +59,9 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
   const xtermKeybindings = useSettingsStore((state) => state.xtermKeybindings);
   const autoCreateSessionOnActivate = useSettingsStore(
     (state) => state.autoCreateSessionOnActivate
+  );
+  const autoCreateSessionOnTempActivate = useSettingsStore(
+    (state) => state.autoCreateSessionOnTempActivate
   );
   const terminalTheme = useSettingsStore((state) => state.terminalTheme);
   const terminalBgColor = useMemo(() => {
@@ -686,13 +691,16 @@ export function TerminalPanel({ cwd, isActive = false }: TerminalPanelProps) {
     handleGroupEmpty,
   ]);
 
+  const shouldAutoCreateSession =
+    repoPath === TEMP_REPO_ID ? autoCreateSessionOnTempActivate : autoCreateSessionOnActivate;
+
   // Auto-create first terminal when panel becomes active and empty (if enabled in settings)
   // Skip if there's a pending init script - let that create the terminal instead
   useEffect(() => {
-    if (autoCreateSessionOnActivate && isActive && cwd && groups.length === 0 && !pendingScript) {
+    if (shouldAutoCreateSession && isActive && cwd && groups.length === 0 && !pendingScript) {
       handleNewTerminal();
     }
-  }, [autoCreateSessionOnActivate, isActive, cwd, groups.length, handleNewTerminal, pendingScript]);
+  }, [shouldAutoCreateSession, isActive, cwd, groups.length, handleNewTerminal, pendingScript]);
 
   useEffect(() => {
     if (!pendingScript || !cwd) return;
