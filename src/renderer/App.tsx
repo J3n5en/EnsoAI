@@ -5,6 +5,7 @@ import type {
   WorktreeMergeOptions,
   WorktreeMergeResult,
 } from '@shared/types';
+import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { consumeClaudeProviderSwitch, isClaudeProviderMatch } from '@/lib/claudeProvider';
@@ -89,6 +90,7 @@ initCloneProgressListener();
 
 export default function App() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
 
   // Listen for auto-fetch completion events to refresh git status
   useAutoFetchListener();
@@ -1023,8 +1025,18 @@ export default function App() {
       // Restore the new worktree's tab state (default to 'chat')
       const savedTab = worktreeTabMap[worktree.path] || 'chat';
       setActiveTab(savedTab);
+
+      // Fetch remote and refresh git data for the new worktree
+      window.electronAPI.git.fetch(worktree.path).catch(() => {
+        // Silent fail - fetch errors are not critical
+      });
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', worktree.path] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'branches', worktree.path] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', worktree.path] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodules', worktree.path] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', worktree.path] });
     },
-    [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t]
+    [activeWorktree, activeTab, worktreeTabMap, editorSettings.autoSave, t, queryClient]
   );
 
   const handleSwitchWorktreePath = useCallback(
