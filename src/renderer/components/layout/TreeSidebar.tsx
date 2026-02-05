@@ -634,7 +634,7 @@ export function TreeSidebar({
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2, ease: 'easeInOut' }}
-                  className="ml-4 mt-1 space-y-0.5 overflow-hidden"
+                  className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
                 >
                   {sortedTempWorkspaces.length === 0 ? (
                     <div className="py-2 px-2 text-xs text-muted-foreground">
@@ -716,10 +716,7 @@ export function TreeSidebar({
                 const workdir = mainWorktree?.path || repo.path;
 
                 return (
-                  <div
-                    key={repo.path}
-                    className={cn('relative rounded-lg', isSelected && 'pb-2 pr-4')}
-                  >
+                  <div key={repo.path} className={cn('relative rounded-lg', isSelected && 'pb-2')}>
                     {/* Sliding highlight background for selected repo */}
                     {isSelected && (
                       <motion.div
@@ -883,7 +880,7 @@ export function TreeSidebar({
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2, ease: 'easeInOut' }}
-                          className="ml-4 mt-1 space-y-0.5 overflow-hidden"
+                          className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
                         >
                           {repoError ? (
                             <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
@@ -1449,7 +1446,7 @@ function WorktreeTreeItem({
         onClick={onClick}
         onContextMenu={handleContextMenu}
         className={cn(
-          'relative flex w-full items-center gap-2 rounded-lg pl-5 pr-2 py-1.5 text-left transition-colors text-sm',
+          'relative flex w-full items-center gap-2 rounded-lg pl-3 pr-2 py-1.5 text-left transition-colors text-sm',
           isPrunable && 'opacity-50',
           isActive
             ? 'border border-primary bg-primary/10'
