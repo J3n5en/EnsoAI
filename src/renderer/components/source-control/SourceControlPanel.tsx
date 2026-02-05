@@ -548,7 +548,23 @@ export function SourceControlPanel({
         for (const path of confirmAction.paths) {
           await window.electronAPI.file.delete(`${selectedRepoPath}/${path}`, { recursive: false });
         }
-        stageMutation.mutate({ workdir: selectedRepoPath, paths: [] });
+        if (selectedSubmodulePath && rootPath) {
+          await Promise.all([
+            queryClient.invalidateQueries({
+              queryKey: ['git', 'submodule', 'changes', rootPath, selectedSubmodulePath],
+            }),
+            queryClient.invalidateQueries({ queryKey: ['git', 'submodules', rootPath] }),
+            queryClient.invalidateQueries({
+              queryKey: ['git', 'submodule', 'diff', rootPath, selectedSubmodulePath],
+            }),
+          ]);
+        } else if (rootPath) {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', rootPath] }),
+            queryClient.invalidateQueries({ queryKey: ['git', 'status', rootPath] }),
+            queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', rootPath] }),
+          ]);
+        }
       }
 
       if (selectedFile && confirmAction.paths.includes(selectedFile.path)) {
@@ -570,8 +586,10 @@ export function SourceControlPanel({
     discardMutation,
     selectedFile,
     setSelectedFile,
-    stageMutation,
     t,
+    rootPath,
+    queryClient,
+    selectedSubmodulePath,
   ]);
 
   const handleCommit = useCallback(

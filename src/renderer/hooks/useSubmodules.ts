@@ -138,6 +138,9 @@ export function useStageSubmodule() {
       queryClient.invalidateQueries({
         queryKey: ['git', 'submodule', 'changes', workdir, submodulePath],
       });
+      queryClient.invalidateQueries({
+        queryKey: ['git', 'submodule', 'diff', workdir, submodulePath],
+      });
       queryClient.invalidateQueries({ queryKey: ['git', 'submodules', workdir] });
     },
   });
@@ -161,6 +164,9 @@ export function useUnstageSubmodule() {
     onSuccess: (_, { workdir, submodulePath }) => {
       queryClient.invalidateQueries({
         queryKey: ['git', 'submodule', 'changes', workdir, submodulePath],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['git', 'submodule', 'diff', workdir, submodulePath],
       });
       queryClient.invalidateQueries({ queryKey: ['git', 'submodules', workdir] });
     },
