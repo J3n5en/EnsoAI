@@ -463,9 +463,8 @@ export function SourceControlPanel({
   const { width: panelWidth, isResizing, containerRef, handleMouseDown } = usePanelResize();
 
   // Get the working directory for the selected repo
-  const selectedRepoPath = selectedSubmodulePath
-    ? joinPath(rootPath!, selectedSubmodulePath)
-    : rootPath;
+  const selectedRepoPath =
+    selectedSubmodulePath && rootPath ? joinPath(rootPath, selectedSubmodulePath) : rootPath;
 
   // Git mutations
   const stageMutation = useGitStage();
@@ -951,10 +950,10 @@ export function SourceControlPanel({
                 sessionId={sessionId}
               />
             </div>
-          ) : selectedSubmoduleFile ? (
+          ) : selectedSubmoduleFile && rootPath ? (
             <div className="flex-1 overflow-hidden">
               <DiffViewer
-                rootPath={joinPath(rootPath!, selectedSubmoduleFile.submodulePath)}
+                rootPath={joinPath(rootPath, selectedSubmoduleFile.submodulePath)}
                 file={{ path: selectedSubmoduleFile.path, staged: selectedSubmoduleFile.staged }}
                 diff={submoduleFileDiff ?? undefined}
                 skipFetch={true}
