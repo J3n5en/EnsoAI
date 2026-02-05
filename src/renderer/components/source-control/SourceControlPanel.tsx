@@ -2,18 +2,15 @@ import { joinPath } from '@shared/utils/path';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronDown,
-  CloudUpload,
   GitBranch,
   GripVertical,
   History,
-  Loader2,
   PanelLeft,
   PanelLeftClose,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { GitSyncButton } from '@/components/git/GitSyncButton';
 import {
   AlertDialog,
   AlertDialogClose,
@@ -131,7 +128,7 @@ export function SourceControlPanel({
   const { data: submodules = [] } = useSubmodules(rootPath ?? null);
 
   // Submodule file diff - fetch when a submodule file is selected
-  const { data: submoduleFileDiff, isLoading: submoduleDiffLoading } = useSubmoduleFileDiff(
+  const { data: submoduleFileDiff } = useSubmoduleFileDiff(
     rootPath ?? null,
     selectedSubmoduleFile?.submodulePath ?? null,
     selectedSubmoduleFile?.path ?? null,
@@ -629,61 +626,17 @@ export function SourceControlPanel({
                     <span className="text-sm font-medium">{t('History')}</span>
                   </button>
 
-                  {/* Publish Branch Button - when no upstream */}
-                  {!gitStatus?.tracking && gitStatus?.current && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePublish();
-                      }}
-                      disabled={pushMutation.isPending}
-                      className="mr-2 flex h-6 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
-                      title={t('Publish branch to remote')}
-                    >
-                      {pushMutation.isPending ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <>
-                          <CloudUpload className="h-3 w-3" />
-                          <span>{t('Publish')}</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                  {/* Sync Button - when has upstream and ahead/behind */}
-                  {gitStatus?.tracking && (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSync();
-                      }}
-                      disabled={isSyncing}
-                      className="mr-2 flex h-6 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
-                      title={t('Sync with remote')}
-                    >
-                      {isSyncing ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <>
-                          {gitStatus.ahead > 0 && (
-                            <span className="flex items-center gap-0.5 text-blue-500">
-                              <ArrowUp className="h-3 w-3" />
-                              {gitStatus.ahead}
-                            </span>
-                          )}
-                          {gitStatus.behind > 0 && (
-                            <span className="flex items-center gap-0.5 text-orange-500">
-                              <ArrowDown className="h-3 w-3" />
-                              {gitStatus.behind}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </button>
-                  )}
+                  {/* Git Sync Button */}
+                  <GitSyncButton
+                    ahead={gitStatus?.ahead ?? 0}
+                    behind={gitStatus?.behind ?? 0}
+                    tracking={gitStatus?.tracking ?? null}
+                    currentBranch={gitStatus?.current ?? null}
+                    isSyncing={isSyncing}
+                    onSync={handleSync}
+                    onPublish={handlePublish}
+                    className="mr-2"
+                  />
                 </div>
 
                 {/* Collapsible content with AnimatePresence for proper unmounting */}

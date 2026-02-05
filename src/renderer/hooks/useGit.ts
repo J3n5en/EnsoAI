@@ -1,14 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { normalizePath } from '@/App/storage';
 import { useRepositoryStore } from '@/stores/repository';
 import { useShouldPoll } from './useWindowFocus';
 
 export function useGitStatus(workdir: string | null, isActive = true) {
   const setStatus = useRepositoryStore((s) => s.setStatus);
   const shouldPoll = useShouldPoll();
+  const normalizedWorkdir = workdir ? normalizePath(workdir) : null;
 
   return useQuery({
-    queryKey: ['git', 'status', workdir],
+    queryKey: ['git', 'status', normalizedWorkdir],
     queryFn: async () => {
       if (!workdir) return null;
       const status = await window.electronAPI.git.getStatus(workdir);
@@ -26,9 +28,10 @@ export function useGitStatus(workdir: string | null, isActive = true) {
 
 export function useGitBranches(workdir: string | null) {
   const setBranches = useRepositoryStore((s) => s.setBranches);
+  const normalizedWorkdir = workdir ? normalizePath(workdir) : null;
 
   return useQuery({
-    queryKey: ['git', 'branches', workdir],
+    queryKey: ['git', 'branches', normalizedWorkdir],
     queryFn: async () => {
       if (!workdir) return [];
       const branches = await window.electronAPI.git.getBranches(workdir);
@@ -41,9 +44,10 @@ export function useGitBranches(workdir: string | null) {
 
 export function useGitLog(workdir: string | null, maxCount = 50) {
   const setLogs = useRepositoryStore((s) => s.setLogs);
+  const normalizedWorkdir = workdir ? normalizePath(workdir) : null;
 
   return useQuery({
-    queryKey: ['git', 'log', workdir, maxCount],
+    queryKey: ['git', 'log', normalizedWorkdir, maxCount],
     queryFn: async () => {
       if (!workdir) return [];
       const logs = await window.electronAPI.git.getLog(workdir, maxCount);
@@ -70,8 +74,9 @@ export function useGitCommit() {
       return window.electronAPI.git.commit(workdir, message, files);
     },
     onSuccess: (_, { workdir }) => {
-      queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
+      const normalized = normalizePath(workdir);
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log', normalized] });
     },
   });
 }
@@ -84,15 +89,16 @@ export function useGitCheckout() {
       await window.electronAPI.git.checkout(workdir, branch);
     },
     onSuccess: (_, { workdir }) => {
+      const normalized = normalizePath(workdir);
       // Invalidate all git-related queries after branch switch
-      queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'branches', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'submodules', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'branches', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodules', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', normalized] });
     },
   });
 }
@@ -113,7 +119,8 @@ export function useGitCreateBranch() {
       await window.electronAPI.git.createBranch(workdir, name, startPoint);
     },
     onSuccess: (_, { workdir }) => {
-      queryClient.invalidateQueries({ queryKey: ['git', 'branches', workdir] });
+      const normalized = normalizePath(workdir);
+      queryClient.invalidateQueries({ queryKey: ['git', 'branches', normalized] });
     },
   });
 }
@@ -136,7 +143,8 @@ export function useGitPush() {
       await window.electronAPI.git.push(workdir, remote, branch, setUpstream);
     },
     onSuccess: (_, { workdir }) => {
-      queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
+      const normalized = normalizePath(workdir);
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', normalized] });
     },
   });
 }
@@ -157,17 +165,20 @@ export function useGitPull() {
       await window.electronAPI.git.pull(workdir, remote, branch);
     },
     onSuccess: (_, { workdir }) => {
-      queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'branches', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'log', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', workdir] });
+      const normalized = normalizePath(workdir);
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'branches', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'log-infinite', normalized] });
     },
   });
 }
 
 export function useGitDiff(workdir: string | null, staged = false) {
+  const normalizedWorkdir = workdir ? normalizePath(workdir) : null;
+
   return useQuery({
-    queryKey: ['git', 'diff', workdir, staged],
+    queryKey: ['git', 'diff', normalizedWorkdir, staged],
     queryFn: async () => {
       if (!workdir) return '';
       return window.electronAPI.git.getDiff(workdir, { staged });
@@ -184,10 +195,11 @@ export function useGitInit() {
       await window.electronAPI.git.init(workdir);
     },
     onSuccess: (_, workdir) => {
+      const normalized = normalizePath(workdir);
       // Invalidate all git-related queries for this workdir
-      queryClient.invalidateQueries({ queryKey: ['git', 'status', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['git', 'branches', workdir] });
-      queryClient.invalidateQueries({ queryKey: ['worktree', 'list', workdir] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'status', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['git', 'branches', normalized] });
+      queryClient.invalidateQueries({ queryKey: ['worktree', 'list', normalized] });
     },
   });
 }

@@ -6,13 +6,16 @@ import {
   CircleCheckIcon,
   InfoIcon,
   LoaderCircleIcon,
+  SendIcon,
   TriangleAlertIcon,
   XIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { buttonVariants } from '@/components/ui/button';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
 
 const toastManager = Toast.createToastManager();
 const anchoredToastManager = Toast.createToastManager();
@@ -43,6 +46,45 @@ function ToastProvider({ children, position = 'bottom-right', ...props }: ToastP
       {children}
       <Toasts position={position} />
     </Toast.Provider>
+  );
+}
+
+interface SendToSessionButtonProps {
+  title: string;
+  description?: string;
+  onClose?: () => void;
+}
+
+function SendToSessionButton({ title, description, onClose }: SendToSessionButtonProps) {
+  const { t } = useI18n();
+  const activeSessionId = useTerminalWriteStore((s) => s.activeSessionId);
+  const writeToActive = useTerminalWriteStore((s) => s.writeToActive);
+  const focusActive = useTerminalWriteStore((s) => s.focusActive);
+
+  // Only show button if there's an active session
+  if (!activeSessionId) return null;
+
+  const handleClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    const prefix = t('Fix this error:');
+    const errorMessage = description ? `${prefix} ${title}\n${description}` : `${prefix} ${title}`;
+    const sent = writeToActive(`${errorMessage} `);
+    if (sent) {
+      focusActive();
+      onClose?.();
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+      title={t('Send to session')}
+    >
+      <SendIcon className="h-3.5 w-3.5" />
+      <span>{t('Send to session')}</span>
+    </button>
   );
 }
 
@@ -123,7 +165,17 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
               }
               toast={toast}
             >
-              <Toast.Content className="pointer-events-auto flex items-center justify-between gap-1.5 px-3.5 py-3 text-sm transition-opacity duration-250 data-behind:pointer-events-none data-behind:opacity-0 data-expanded:opacity-100">
+              <Toast.Content className="pointer-events-auto relative px-3.5 py-3 text-sm transition-opacity duration-250 data-behind:pointer-events-none data-behind:opacity-0 data-expanded:opacity-100">
+                {/* Close button - top right */}
+                <Toast.Close
+                  aria-label="Close notification"
+                  className="absolute right-2 top-2 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  data-slot="toast-close"
+                >
+                  <XIcon className="h-4 w-4" />
+                </Toast.Close>
+
+                {/* Main content */}
                 <div className="flex min-w-0 gap-2">
                   {Icon && (
                     <div
@@ -134,48 +186,60 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                     </div>
                   )}
 
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <Toast.Title className="truncate font-medium" data-slot="toast-title" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <Toast.Title className="font-medium" data-slot="toast-title" />
                     <Toast.Description
-                      className="max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-muted-foreground"
+                      className="max-h-24 overflow-y-auto whitespace-pre-wrap break-words pr-3.5 text-muted-foreground"
                       data-slot="toast-description"
                     />
                   </div>
                 </div>
-                {(toast.actions?.length ?? 0) > 0 && (
-                  <div className="flex items-center gap-1" data-slot="toast-actions">
-                    {toast.actions?.map((action) => (
+
+                {/* Bottom actions */}
+                {((toast.actions?.length ?? 0) > 0 ||
+                  toast.actionProps ||
+                  toast.type === 'error') && (
+                  <div
+                    className="mt-2 flex items-center justify-end gap-1"
+                    data-slot="toast-actions"
+                  >
+                    {(toast.actions?.length ?? 0) > 0 &&
+                      toast.actions?.map((action) => (
+                        <Toast.Action
+                          key={action.label?.toString() ?? Math.random()}
+                          className={buttonVariants({
+                            size: 'xs',
+                            variant: action.variant ?? 'default',
+                          })}
+                          data-slot="toast-action"
+                          onClick={(event) => {
+                            action.onClick?.();
+                            toast.onClose?.(event);
+                          }}
+                        >
+                          {action.label}
+                        </Toast.Action>
+                      ))}
+
+                    {toast.actionProps && (
                       <Toast.Action
-                        key={action.label?.toString() ?? Math.random()}
-                        className={buttonVariants({
-                          size: 'xs',
-                          variant: action.variant ?? 'default',
-                        })}
+                        className={buttonVariants({ size: 'xs' })}
                         data-slot="toast-action"
-                        onClick={(event) => {
-                          action.onClick?.();
-                          toast.onClose?.(event);
-                        }}
                       >
-                        {action.label}
+                        {toast.actionProps.children}
                       </Toast.Action>
-                    ))}
+                    )}
+
+                    {/* Send to Session button for error toasts */}
+                    {toast.type === 'error' && (
+                      <SendToSessionButton
+                        title={toast.title as string}
+                        description={toast.description as string | undefined}
+                        onClose={() => toastManager.close(toast.id)}
+                      />
+                    )}
                   </div>
                 )}
-
-                {toast.actionProps && (
-                  <Toast.Action className={buttonVariants({ size: 'xs' })} data-slot="toast-action">
-                    {toast.actionProps.children}
-                  </Toast.Action>
-                )}
-
-                <Toast.Close
-                  aria-label="Close notification"
-                  className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  data-slot="toast-close"
-                >
-                  <XIcon className="h-4 w-4" />
-                </Toast.Close>
               </Toast.Content>
             </Toast.Root>
           );

@@ -276,6 +276,7 @@ export const zhTranslations: Record<string, string> = {
   Primary: '主',
   Publish: '发布',
   'Publish branch to remote': '发布分支到远程',
+  'Publish failed': '发布失败',
   'Branch published': '分支已发布',
   'Branch {{branch}} is now tracking origin/{{branch}}':
     '分支 {{branch}} 现在跟踪 origin/{{branch}}',
@@ -360,6 +361,9 @@ export const zhTranslations: Record<string, string> = {
   'Switch to next file': '再按一次切换到下一个文件',
   'Sync terminal theme': '同步终端',
   'Sync completed': '同步完成',
+  'Sync failed': '同步失败',
+  'Send to session': '发送到会话',
+  'Fix this error:': '修复此错误:',
   Synced: '已同步',
   Terminal: '终端',
   'Terminal appearance': '自定义终端外观',
