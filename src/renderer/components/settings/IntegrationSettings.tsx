@@ -157,6 +157,50 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
             />
           </div>
 
+          {/* Enhanced Input */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">{t('Enhanced Input')}</span>
+              <p className="text-xs text-muted-foreground">
+                {t('Enable enhanced input panel with multi-line editing and image support')}
+              </p>
+            </div>
+            <Switch
+              checked={claudeCodeIntegration.enhancedInputEnabled ?? true}
+              onCheckedChange={(checked) =>
+                setClaudeCodeIntegration({ enhancedInputEnabled: checked })
+              }
+            />
+          </div>
+
+          {claudeCodeIntegration.enhancedInputEnabled && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">{t('Auto Popup Enhanced Input')}</span>
+                <p className="text-xs text-muted-foreground">
+                  {claudeCodeIntegration.stopHookEnabled
+                    ? t('Automatically show enhanced input when agent stops')
+                    : t('Requires Enhanced Notification to auto popup on agent stop')}
+                </p>
+              </div>
+              <Switch
+                checked={(claudeCodeIntegration.enhancedInputAutoPopup ?? false) &&
+                  claudeCodeIntegration.stopHookEnabled}
+                disabled={!claudeCodeIntegration.stopHookEnabled}
+                onCheckedChange={(checked) => {
+                  // Auto popup depends on the stop hook event channel.
+                  // If stop hook is disabled, force-disable auto popup to avoid confusing states.
+                  if (!claudeCodeIntegration.stopHookEnabled) {
+                    setClaudeCodeIntegration({ enhancedInputAutoPopup: false });
+                    return;
+                  }
+                  setClaudeCodeIntegration({ enhancedInputAutoPopup: checked });
+                }}
+              />
+            </div>
+          )}
+
+
           {/* Status Line */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">

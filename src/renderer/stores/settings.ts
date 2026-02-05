@@ -258,6 +258,8 @@ export interface ClaudeCodeIntegrationSettings {
   showProviderSwitcher: boolean; // Show provider switcher in SessionBar
   enableProviderDisableFeature: boolean; // Enable/disable the provider temporary disable feature
   providers: import('@shared/types').ClaudeProvider[];
+  enhancedInputEnabled: boolean; // Enable enhanced input panel for Claude Code
+  enhancedInputAutoPopup: boolean; // Auto popup enhanced input when agent stops
 }
 
 export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings = {
@@ -272,6 +274,8 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   showProviderSwitcher: true,
   enableProviderDisableFeature: false,
   providers: [],
+  enhancedInputEnabled: true, // Enable enhanced input by default
+  enhancedInputAutoPopup: false, // Don't auto popup by default
 };
 
 export type { AIProvider, ReasoningEffort } from '@shared/types';

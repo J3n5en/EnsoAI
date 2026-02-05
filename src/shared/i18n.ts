@@ -727,8 +727,22 @@ export const zhTranslations: Record<string, string> = {
   'Enhanced Notification': '增强通知',
   'Use Claude Stop hook for precise agent completion notifications':
     '使用 Claude Stop hook 获取精确的 Agent 完成通知',
-  'Sent to Claude Code': '已发送到 Claude Code',
-  'Send to Claude': '发送到 Claude',
+  'Enhanced Input': '增强输入',
+  'Enable enhanced input panel with multi-line editing and image support':
+    '启用增强输入面板，支持多行编辑和图片',
+  'Select Image': '选择图片',
+  'Image too large': '图片过大',
+  'Max image size is {{size}}MB': '单张图片最大 {{size}}MB',
+  'Too many images': '图片数量过多',
+  'Max images is {{count}}': '最多只能选择 {{count}} 张图片',
+  'Failed to save image': '保存图片失败',
+  'Auto Popup Enhanced Input': '自动弹出增强输入',
+  'Automatically show enhanced input when agent stops': 'Agent 停止时自动显示增强输入',
+  'Requires Enhanced Notification to auto popup on agent stop':
+    '需要开启「增强通知」才能在 Agent 停止时自动弹出',
+  'Type your message... (Shift+Enter for newline)': '输入消息... (Shift+Enter 换行)',
+  'Drag and drop images or paste from clipboard': '拖放图片或从剪贴板粘贴',
+  Send: '发送',
   lines: '行',
   // Commit Message Generator
   'Commit Message Generator': '生成 Commit Message',
@@ -1137,7 +1151,6 @@ export const zhTranslations: Record<string, string> = {
   'Changed Files': '更改的文件',
   'Select a file to view diff': '选择文件以查看差异',
   'Hover over line numbers and click + to add comments': '悬停行号并点击 + 添加评论',
-  Send: '发送',
   You: '你',
   'Add comment': '添加评论',
   'Show split preview': '显示分屏预览',

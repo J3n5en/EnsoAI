@@ -1,5 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { rmSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
+import { app } from 'electron';
 import { type FileEntry, type FileReadResult, IPC_CHANNELS } from '@shared/types';
 import { BrowserWindow, ipcMain, shell } from 'electron';
 import iconv from 'iconv-lite';
@@ -79,6 +81,31 @@ export async function stopWatchersInDirectory(dirPath: string): Promise<void> {
 }
 
 export function registerFileHandlers(): void {
+  // Save file to temp directory (for enhanced input images)
+  ipcMain.handle(
+    'file:save-to-temp',
+    async (_, filename: string, data: Uint8Array): Promise<{ success: boolean; path?: string; error?: string }> => {
+      try {
+        const tempDir = app.getPath('temp');
+        const ensoaiInputDir = join(tempDir, 'ensoai-input');
+        // Allow renderer to preview saved temp images via local-file:// protocol.
+        // Without this, local-file access is denied by default.
+        registerAllowedLocalFileRoot(ensoaiInputDir);
+        await mkdir(ensoaiInputDir, { recursive: true });
+
+        const filePath = join(ensoaiInputDir, filename);
+        await writeFile(filePath, Buffer.from(data));
+
+        return { success: true, path: filePath };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    }
+  );
+
   ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_, filePath: string): Promise<FileReadResult> => {
     const buffer = await readFile(filePath);
     const { encoding: detectedEncoding, confidence } = detectEncoding(buffer);
@@ -507,4 +534,53 @@ export function stopAllFileWatchersSync(): void {
     cleanup();
   }
   watcherCleanups.clear();
+}
+
+/**
+ * Clean up temporary files from ensoai-input directory
+ * Cross-platform compatible with retry logic for Windows file locks
+ */
+export async function cleanupTempFiles(): Promise<void> {
+  try {
+    const tempDir = app.getPath('temp');
+    const ensoaiInputDir = join(tempDir, 'ensoai-input');
+
+    // Use recursive and force options for cross-platform compatibility
+    // force: true - ignore errors if directory doesn't exist
+    // recursive: true - delete directory and all contents
+    await rm(ensoaiInputDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 3, // Retry on Windows file lock issues
+      retryDelay: 100, // Wait 100ms between retries
+    });
+
+    console.log('[files] Cleaned up temp directory:', ensoaiInputDir);
+  } catch (error) {
+    // Don't throw - cleanup failure shouldn't block app startup/shutdown
+    console.warn('[files] Failed to cleanup temp files:', error);
+  }
+}
+
+/**
+ * Synchronous version for signal handlers (SIGINT/SIGTERM)
+ * Cross-platform compatible
+ */
+export function cleanupTempFilesSync(): void {
+  try {
+    const tempDir = app.getPath('temp');
+    const ensoaiInputDir = join(tempDir, 'ensoai-input');
+
+    // Sync version with same options
+    rmSync(ensoaiInputDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
+
+    console.log('[files] Cleaned up temp directory (sync):', ensoaiInputDir);
+  } catch (error) {
+    console.warn('[files] Failed to cleanup temp files (sync):', error);
+  }
 }
