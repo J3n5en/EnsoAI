@@ -62,65 +62,21 @@ export function useAppKeyboardShortcuts({
 
       const bindings = useSettingsStore.getState().mainTabKeybindings;
 
-      // Check main tab shortcuts using e.code BEFORE checking if target is input/textarea
+      // Check main tab shortcuts using matchesKeybinding for each configured binding
       // This allows tab switching to work even when xterm has focus
-      // Use e.code for keyboard layout independence (Option+1 may produce special chars)
-      const isDigit1to4 = e.code >= 'Digit1' && e.code <= 'Digit4';
-      if (isDigit1to4) {
-        const shortcuts = [
-          bindings.switchToAgent,
-          bindings.switchToFile,
-          bindings.switchToTerminal,
-          bindings.switchToSourceControl,
-        ];
-        const tabs: TabId[] = ['chat', 'file', 'terminal', 'source-control'];
-        const index = Number.parseInt(e.code.slice(5), 10) - 1;
-        const binding = shortcuts[index];
+      const tabBindings: { binding: typeof bindings.switchToAgent; tab: TabId }[] = [
+        { binding: bindings.switchToAgent, tab: 'chat' },
+        { binding: bindings.switchToFile, tab: 'file' },
+        { binding: bindings.switchToTerminal, tab: 'terminal' },
+        { binding: bindings.switchToSourceControl, tab: 'source-control' },
+      ];
 
-        if (binding) {
-          // Check if modifier keys match
-          const ctrlMatch = binding.ctrl ? e.ctrlKey : !e.ctrlKey;
-          const altMatch = binding.alt ? e.altKey : !e.altKey;
-          const shiftMatch = binding.shift ? e.shiftKey : !e.shiftKey;
-          const metaMatch = binding.meta ? e.metaKey : !e.metaKey;
-
-          if (ctrlMatch && altMatch && shiftMatch && metaMatch) {
-            e.preventDefault();
-            onTabSwitch(tabs[index]);
-            return;
-          }
+      for (const { binding, tab } of tabBindings) {
+        if (matchesKeybinding(e, binding)) {
+          e.preventDefault();
+          onTabSwitch(tab);
+          return;
         }
-      }
-
-      // For non-digit shortcuts, skip if target is input/textarea
-      if (target) {
-        const tagName = target.tagName.toLowerCase();
-        if (tagName === 'input' || tagName === 'textarea') return;
-        if (target.isContentEditable) return;
-      }
-
-      if (matchesKeybinding(e, bindings.switchToAgent)) {
-        e.preventDefault();
-        onTabSwitch('chat');
-        return;
-      }
-
-      if (matchesKeybinding(e, bindings.switchToFile)) {
-        e.preventDefault();
-        onTabSwitch('file');
-        return;
-      }
-
-      if (matchesKeybinding(e, bindings.switchToTerminal)) {
-        e.preventDefault();
-        onTabSwitch('terminal');
-        return;
-      }
-
-      if (matchesKeybinding(e, bindings.switchToSourceControl)) {
-        e.preventDefault();
-        onTabSwitch('source-control');
-        return;
       }
     };
 
