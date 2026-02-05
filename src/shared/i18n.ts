@@ -686,6 +686,13 @@ export const zhTranslations: Record<string, string> = {
   'Show floating terminal button for quick access': '显示浮动终端按钮以便快速访问',
   'Hide Groups': '隐藏分组',
   'Hide group management panel and show all repositories': '隐藏分组管理面板，显示所有仓库',
+  'Hide Repository': '隐藏仓库',
+  'Hidden repositories will not appear in the sidebar': '隐藏的仓库不会显示在侧边栏中',
+  'Show Repository': '显示仓库',
+  'Manage Repositories': '管理仓库',
+  '{{total}} repositories, {{hidden}} hidden': '共 {{total}} 个仓库，{{hidden}} 个已隐藏',
+  'Tip: Use the list button in the top-left corner to manage hidden repositories':
+    '提示：点击左上角的列表按钮可管理隐藏的仓库',
   'Auto-completion settings': '自动补全设置',
   'Auto brackets': '自动括号',
   'Auto quotes': '自动引号',

@@ -165,11 +165,13 @@ export const pathsEqual = (path1: string, path2: string): boolean => {
 export interface RepositorySettings {
   autoInitWorktree: boolean;
   initScript: string;
+  hidden: boolean;
 }
 
 export const DEFAULT_REPOSITORY_SETTINGS: RepositorySettings = {
   autoInitWorktree: false,
   initScript: '',
+  hidden: false,
 };
 
 export const getStoredRepositorySettings = (): Record<string, RepositorySettings> => {

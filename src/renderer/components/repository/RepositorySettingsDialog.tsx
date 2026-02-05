@@ -1,3 +1,4 @@
+import { CircleHelp } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import {
   DEFAULT_REPOSITORY_SETTINGS,
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 
 interface RepositorySettingsDialogProps {
@@ -57,6 +59,36 @@ export function RepositorySettingsDialog({
 
         <DialogPanel className="space-y-6">
           <div className="space-y-4">
+            {/* Hide Repository */}
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-sm font-medium" htmlFor="hidden-switch">
+                    {t('Hide Repository')}
+                  </label>
+                  <Tooltip>
+                    <TooltipTrigger className="text-muted-foreground hover:text-foreground transition-colors">
+                      <CircleHelp className="h-3.5 w-3.5" />
+                    </TooltipTrigger>
+                    <TooltipPopup>
+                      {t(
+                        'Tip: Use the list button in the top-left corner to manage hidden repositories'
+                      )}
+                    </TooltipPopup>
+                  </Tooltip>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t('Hidden repositories will not appear in the sidebar')}
+                </p>
+              </div>
+              <Switch
+                id="hidden-switch"
+                checked={settings.hidden}
+                onCheckedChange={(checked) => setSettings((prev) => ({ ...prev, hidden: checked }))}
+              />
+            </div>
+
+            {/* Auto-initialize */}
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <label className="text-sm font-medium" htmlFor="auto-init-switch">

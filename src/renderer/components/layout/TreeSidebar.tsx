@@ -14,6 +14,7 @@ import {
   FolderOpen,
   GitBranch,
   GitMerge,
+  List,
   PanelLeftClose,
   Plus,
   RefreshCw,
@@ -32,6 +33,7 @@ import {
   type TabId,
   TEMP_REPO_ID,
 } from '@/App/constants';
+import { getRepositorySettings } from '@/App/storage';
 import { GitSyncButton } from '@/components/git/GitSyncButton';
 import {
   CreateGroupDialog,
@@ -39,6 +41,7 @@ import {
   GroupSelector,
   MoveToGroupSubmenu,
 } from '@/components/group';
+import { RepositoryManagerDialog } from '@/components/repository/RepositoryManagerDialog';
 import { RepositorySettingsDialog } from '@/components/repository/RepositorySettingsDialog';
 import { TempWorkspaceContextMenu } from '@/components/temp-workspace/TempWorkspaceContextMenu';
 import {
@@ -212,6 +215,9 @@ export function TreeSidebar({
   // Repository settings dialog
   const [repoSettingsOpen, setRepoSettingsOpen] = useState(false);
   const [repoSettingsTarget, setRepoSettingsTarget] = useState<Repository | null>(null);
+
+  // Repository manager dialog
+  const [repoManagerOpen, setRepoManagerOpen] = useState(false);
 
   // Create worktree dialog (triggered from context menu)
   const [createWorktreeDialogOpen, setCreateWorktreeDialogOpen] = useState(false);
@@ -475,6 +481,9 @@ export function TreeSidebar({
   const filteredRepos = useMemo(() => {
     let filtered = repositories;
 
+    // Filter hidden repositories
+    filtered = filtered.filter((repo) => !getRepositorySettings(repo.path).hidden);
+
     if (activeGroupId !== ALL_GROUP_ID) {
       filtered = filtered.filter((r) => r.groupId === activeGroupId);
     }
@@ -516,6 +525,15 @@ export function TreeSidebar({
       {/* Header */}
       <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
         <div className="flex items-center gap-1">
+          {/* Manage repositories button */}
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+            onClick={() => setRepoManagerOpen(true)}
+            title={t('Manage Repositories')}
+          >
+            <List className="h-4 w-4" />
+          </button>
           {/* Refresh button */}
           <button
             type="button"
@@ -1201,6 +1219,15 @@ export function TreeSidebar({
           repoName={repoSettingsTarget.name}
         />
       )}
+
+      {/* Repository Manager Dialog */}
+      <RepositoryManagerDialog
+        open={repoManagerOpen}
+        onOpenChange={setRepoManagerOpen}
+        repositories={repositories}
+        onSelectRepo={onSelectRepo}
+        onRemoveRepository={onRemoveRepository}
+      />
 
       <CreateGroupDialog
         open={createGroupDialogOpen}
