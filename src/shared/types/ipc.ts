@@ -66,6 +66,11 @@ export const IPC_CHANNELS = {
   WORKTREE_MERGE_ABORT: 'worktree:merge:abort',
   WORKTREE_MERGE_CONTINUE: 'worktree:merge:continue',
 
+  // Temporary Workspace
+  TEMP_WORKSPACE_CREATE: 'temp:workspace:create',
+  TEMP_WORKSPACE_REMOVE: 'temp:workspace:remove',
+  TEMP_WORKSPACE_CHECK_PATH: 'temp:workspace:checkPath',
+
   // Files
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',

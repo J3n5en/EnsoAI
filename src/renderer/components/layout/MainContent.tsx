@@ -33,6 +33,7 @@ import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { TerminalPanel } from '../terminal';
 
 type LayoutMode = 'columns' | 'tree';
@@ -99,6 +100,12 @@ export function MainContent({
     const firstSession = sessions.find((s) => s.repoPath === repoPath && s.cwd === worktreePath);
     return firstSession?.id ?? null;
   }, [repoPath, worktreePath, sessions, activeIds]);
+
+  // Sync activeSessionId to terminalWrite store for global access (e.g., toast "Send to Session")
+  const setActiveSessionId = useTerminalWriteStore((s) => s.setActiveSessionId);
+  useEffect(() => {
+    setActiveSessionId(activeSessionId);
+  }, [activeSessionId, setActiveSessionId]);
 
   // Tab metadata configuration (excludes 'settings' as it's not shown in the tab bar)
   const tabConfigMap: Record<
@@ -450,6 +457,7 @@ export function MainContent({
           )}
         >
           <TerminalPanel
+            repoPath={effectiveRepoPath ?? undefined}
             cwd={effectiveWorktreePath ?? undefined}
             isActive={activeTab === 'terminal' && hasActiveWorktree}
           />

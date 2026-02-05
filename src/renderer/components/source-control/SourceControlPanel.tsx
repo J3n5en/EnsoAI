@@ -1,18 +1,7 @@
 import { joinPath } from '@shared/utils/path';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  CloudUpload,
-  GitBranch,
-  GripVertical,
-  History,
-  Loader2,
-  PanelLeft,
-  PanelLeftClose,
-} from 'lucide-react';
+import { ChevronDown, GitBranch, GripVertical, History, PanelLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertDialog,
@@ -32,16 +21,23 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { toastManager } from '@/components/ui/toast';
-import {
-  useGitBranches,
-  useGitCheckout,
-  useGitPull,
-  useGitPush,
-  useGitStatus,
-} from '@/hooks/useGit';
+import { useGitBranches, useGitCheckout, useGitPull, useGitPush } from '@/hooks/useGit';
 import { useCommitDiff, useCommitFiles, useGitHistoryInfinite } from '@/hooks/useGitHistory';
-import { useFileChanges, useGitFetch } from '@/hooks/useSourceControl';
-import { useSubmoduleFileDiff, useSubmodules } from '@/hooks/useSubmodules';
+import { useGitSync } from '@/hooks/useGitSync';
+import {
+  useFileChanges,
+  useGitCommit,
+  useGitDiscard,
+  useGitFetch,
+  useGitStage,
+  useGitUnstage,
+} from '@/hooks/useSourceControl';
+import {
+  useSubmoduleBranches,
+  useSubmoduleChanges,
+  useSubmoduleFileDiff,
+  useSubmodules,
+} from '@/hooks/useSubmodules';
 import { useI18n } from '@/i18n';
 import { heightVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
@@ -53,9 +49,9 @@ import { CommitDiffViewer } from './CommitDiffViewer';
 import { CommitHistoryList } from './CommitHistoryList';
 import { panelTransition } from './constants';
 import { DiffViewer } from './DiffViewer';
-import { SubmoduleSection } from './SubmoduleSection';
+import { RepositoryList } from './RepositoryList';
+import type { Repository, SelectedFile } from './types';
 import { usePanelResize } from './usePanelResize';
-import { useSourceControlActions } from './useSourceControlActions';
 
 interface SourceControlPanelProps {
   rootPath: string | undefined;
@@ -76,12 +72,13 @@ export function SourceControlPanel({
   const queryClient = useQueryClient();
 
   // Accordion state - collapsible sections
+  const [reposExpanded, setReposExpanded] = useState(true);
   const [changesExpanded, setChangesExpanded] = useState(true);
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Submodule expanded state - track which submodules are expanded
-  const [expandedSubmodules, setExpandedSubmodules] = useState<Set<string>>(new Set());
+  // Selected repository - null means main repo, string means submodule path
+  const [selectedSubmodulePath, setSelectedSubmodulePath] = useState<string | null>(null);
 
   // Selected submodule file state
   const [selectedSubmoduleFile, setSelectedSubmoduleFile] = useState<{
@@ -112,12 +109,15 @@ export function SourceControlPanel({
   const changes = fileChangesResult?.changes;
   const skippedDirs = fileChangesResult?.skippedDirs;
 
-  // Git sync status
-  const { data: gitStatus, refetch: refetchStatus } = useGitStatus(rootPath ?? null, isActive);
-  const pushMutation = useGitPush();
-  const pullMutation = useGitPull();
+  // Git sync operations using shared hook
+  const { refetchStatus, isSyncing, ahead, behind, tracking, currentBranch } = useGitSync({
+    workdir: rootPath ?? '',
+    enabled: isActive && !!rootPath,
+  });
+
+  // Note: useGitFetch is separate from useGitSync because fetch is a read-only
+  // operation used for refresh, while sync handles push/pull mutations.
   const fetchMutation = useGitFetch();
-  const isSyncing = pushMutation.isPending || pullMutation.isPending;
 
   // Branch switching
   const {
@@ -130,8 +130,95 @@ export function SourceControlPanel({
   // Submodules
   const { data: submodules = [] } = useSubmodules(rootPath ?? null);
 
+  // Generic pull/push mutations for both main repo and submodules
+  const pullMutation = useGitPull();
+  const pushMutation = useGitPush();
+
+  // Submodule branches - fetch when a submodule is selected (must be before repositories useMemo)
+  const { data: submoduleBranches = [], isLoading: submoduleBranchesLoading } =
+    useSubmoduleBranches(rootPath ?? null, selectedSubmodulePath);
+
+  // Main repository
+  const mainRepo: Repository | null = useMemo(() => {
+    if (!rootPath) return null;
+    return {
+      type: 'main',
+      name: rootPath.split('/').pop() || t('Repository'),
+      path: rootPath,
+      branch: currentBranch ?? null,
+      tracking: tracking ?? null,
+      ahead: ahead ?? 0,
+      behind: behind ?? 0,
+      changesCount: changes?.length ?? 0,
+      branches,
+      branchesLoading,
+    };
+  }, [rootPath, currentBranch, tracking, ahead, behind, changes, branches, branchesLoading, t]);
+
+  // Submodule repositories
+  const submoduleRepos: Repository[] = useMemo(() => {
+    if (!rootPath) return [];
+    return submodules
+      .filter((s) => s.initialized)
+      .map((sub) => {
+        const isSelected = selectedSubmodulePath === sub.path;
+        return {
+          type: 'submodule' as const,
+          name: sub.name,
+          path: joinPath(rootPath, sub.path),
+          submodulePath: sub.path,
+          branch: sub.branch ?? null,
+          tracking: sub.tracking ?? null,
+          ahead: sub.ahead ?? 0,
+          behind: sub.behind ?? 0,
+          changesCount: 0,
+          branches: isSelected ? submoduleBranches : undefined,
+          branchesLoading: isSelected ? submoduleBranchesLoading : undefined,
+        };
+      });
+  }, [rootPath, submodules, selectedSubmodulePath, submoduleBranches, submoduleBranchesLoading]);
+
+  // Combined repositories list
+  const repositories = useMemo(() => {
+    return mainRepo ? [mainRepo, ...submoduleRepos] : [];
+  }, [mainRepo, submoduleRepos]);
+
+  // Get selected repository
+  const selectedRepo = useMemo(() => {
+    if (!selectedSubmodulePath) {
+      return repositories.find((r) => r.type === 'main') ?? null;
+    }
+    return repositories.find((r) => r.submodulePath === selectedSubmodulePath) ?? null;
+  }, [repositories, selectedSubmodulePath]);
+
+  // Submodule changes - only fetch when a submodule is selected
+  const {
+    data: submoduleChanges = [],
+    isLoading: submoduleChangesLoading,
+    refetch: refetchSubmoduleChanges,
+  } = useSubmoduleChanges(rootPath ?? null, selectedSubmodulePath);
+
+  // Submodule history - only fetch when a submodule is selected
+  const {
+    data: submoduleCommitsData,
+    isLoading: submoduleCommitsLoading,
+    hasNextPage: submoduleHasNextPage,
+    isFetchingNextPage: submoduleIsFetchingNextPage,
+    fetchNextPage: fetchSubmoduleNextPage,
+    refetch: refetchSubmoduleCommits,
+  } = useGitHistoryInfinite(
+    selectedSubmodulePath ? (rootPath ?? null) : null,
+    20,
+    selectedSubmodulePath ?? undefined
+  );
+
+  // Current changes based on selected repo
+  const currentChanges = selectedSubmodulePath ? submoduleChanges : (changes ?? []);
+  const currentBranches = selectedSubmodulePath ? submoduleBranches : branches;
+  const currentBranchesLoading = selectedSubmodulePath ? submoduleBranchesLoading : branchesLoading;
+
   // Submodule file diff - fetch when a submodule file is selected
-  const { data: submoduleFileDiff, isLoading: submoduleDiffLoading } = useSubmoduleFileDiff(
+  const { data: submoduleFileDiff } = useSubmoduleFileDiff(
     rootPath ?? null,
     selectedSubmoduleFile?.submodulePath ?? null,
     selectedSubmoduleFile?.path ?? null,
@@ -159,90 +246,131 @@ export function SourceControlPanel({
     }
   }, [isActive, rootPath, refetch, refetchCommits, refetchStatus, queryClient]);
 
-  // Sync handler: pull first (if behind), then push (if ahead)
-  const handleSync = useCallback(async () => {
-    if (!rootPath || isSyncing) return;
+  // Wrap sync handlers to add additional refetch calls for SourceControlPanel
+  const handleSync = useCallback(
+    async (repoPath: string) => {
+      if (!repoPath || pullMutation.isPending || pushMutation.isPending) return;
 
-    try {
-      let pulled = false;
-      let pushed = false;
+      const isSubmodule = repoPath !== rootPath;
+      const repo = repositories.find((r) => r.path === repoPath);
+      if (!repo) return;
 
-      // Pull first if behind
-      if (gitStatus?.behind && gitStatus.behind > 0) {
-        await pullMutation.mutateAsync({ workdir: rootPath });
-        pulled = true;
-      }
-      // Then push if ahead
-      if (gitStatus?.ahead && gitStatus.ahead > 0) {
-        await pushMutation.mutateAsync({ workdir: rootPath });
-        pushed = true;
-      }
-      // Refetch all data after sync
-      refetch();
-      refetchCommits();
-      refetchStatus();
+      const repoAhead = repo.ahead;
+      const repoBehind = repo.behind;
 
-      // Show success toast
-      if (pulled || pushed) {
-        const actions = [pulled && t('Pulled'), pushed && t('Pushed')].filter(Boolean).join(' & ');
+      try {
+        let pulled = false;
+        let pushed = false;
+
+        // Pull first if behind
+        if (repoBehind > 0) {
+          await pullMutation.mutateAsync({ workdir: repoPath });
+          pulled = true;
+        }
+        // Then push if ahead
+        if (repoAhead > 0) {
+          await pushMutation.mutateAsync({ workdir: repoPath });
+          pushed = true;
+        }
+
+        if (isSubmodule) {
+          queryClient.invalidateQueries({ queryKey: ['git', 'submodules', rootPath] });
+        } else {
+          refetchStatus();
+        }
+        refetch();
+        refetchCommits();
+
+        if (pulled || pushed) {
+          const actions = [pulled && t('Pulled'), pushed && t('Pushed')]
+            .filter(Boolean)
+            .join(' & ');
+          toastManager.add({
+            title: t('Sync completed'),
+            description: actions,
+            type: 'success',
+            timeout: 3000,
+          });
+        } else {
+          toastManager.add({
+            title: t('Already up to date'),
+            type: 'success',
+            timeout: 2000,
+          });
+        }
+      } catch (error) {
         toastManager.add({
-          title: t('Sync completed'),
-          description: actions,
+          title: t('Sync failed'),
+          description: error instanceof Error ? error.message : String(error),
+          type: 'error',
+          timeout: 5000,
+        });
+      }
+    },
+    [
+      rootPath,
+      repositories,
+      pullMutation,
+      pushMutation,
+      queryClient,
+      refetchStatus,
+      refetch,
+      refetchCommits,
+      t,
+    ]
+  );
+
+  const handlePublish = useCallback(
+    async (repoPath: string) => {
+      if (!repoPath || pushMutation.isPending) return;
+
+      const isSubmodule = repoPath !== rootPath;
+      const repo = repositories.find((r) => r.path === repoPath);
+      const branch = repo?.branch;
+
+      try {
+        await pushMutation.mutateAsync({
+          workdir: repoPath,
+          remote: 'origin',
+          branch: branch ?? undefined,
+          setUpstream: true,
+        });
+
+        if (isSubmodule) {
+          queryClient.invalidateQueries({ queryKey: ['git', 'submodules', rootPath] });
+        } else {
+          refetchStatus();
+        }
+        refetch();
+        refetchCommits();
+
+        toastManager.add({
+          title: t('Branch published'),
+          description: t('Branch {{branch}} is now tracking origin/{{branch}}', {
+            branch: branch ?? '',
+          }),
           type: 'success',
           timeout: 3000,
         });
+      } catch (error) {
+        toastManager.add({
+          title: t('Publish failed'),
+          description: error instanceof Error ? error.message : String(error),
+          type: 'error',
+          timeout: 5000,
+        });
       }
-    } catch {
-      // Errors are handled by mutation's onError
-    }
-  }, [
-    rootPath,
-    isSyncing,
-    gitStatus,
-    pullMutation,
-    pushMutation,
-    refetch,
-    refetchCommits,
-    refetchStatus,
-    t,
-  ]);
-
-  // Publish branch handler: push with --set-upstream
-  const handlePublish = useCallback(async () => {
-    if (!rootPath || !gitStatus?.current || pushMutation.isPending) return;
-
-    try {
-      await pushMutation.mutateAsync({
-        workdir: rootPath,
-        remote: 'origin',
-        branch: gitStatus.current,
-        setUpstream: true,
-      });
-      // Refetch all data after publish
-      refetch();
-      refetchCommits();
-      refetchStatus();
-
-      toastManager.add({
-        title: t('Branch published'),
-        description: t('Branch {{branch}} is now tracking origin/{{branch}}', {
-          branch: gitStatus.current,
-        }),
-        type: 'success',
-        timeout: 3000,
-      });
-    } catch {
-      // Errors are handled by mutation's onError
-    }
-  }, [rootPath, gitStatus?.current, pushMutation, refetch, refetchCommits, refetchStatus, t]);
+    },
+    [rootPath, repositories, pushMutation, queryClient, refetchStatus, refetch, refetchCommits, t]
+  );
 
   // Branch checkout handler
   const handleBranchCheckout = useCallback(
-    async (branch: string) => {
-      if (!rootPath || checkoutMutation.isPending) return;
+    async (repoPath: string, branch: string) => {
+      if (!repoPath || checkoutMutation.isPending) return;
 
       try {
-        await checkoutMutation.mutateAsync({ workdir: rootPath, branch });
+        await checkoutMutation.mutateAsync({ workdir: repoPath, branch });
         refetch();
         refetchBranches();
         refetchCommits();
@@ -263,14 +391,24 @@ export function SourceControlPanel({
         });
       }
     },
-    [rootPath, checkoutMutation, refetch, refetchBranches, refetchCommits, refetchStatus, t]
+    [checkoutMutation, refetch, refetchBranches, refetchCommits, refetchStatus, t]
   );
 
   // Flatten infinite query data
-  const commits = commitsData?.pages.flat() ?? [];
+  const mainCommits = commitsData?.pages.flat() ?? [];
+  const submoduleCommits = submoduleCommitsData?.pages.flat() ?? [];
+  const currentCommits = selectedSubmodulePath ? submoduleCommits : mainCommits;
+  const currentCommitsLoading = selectedSubmodulePath ? submoduleCommitsLoading : commitsLoading;
+  const currentHasNextPage = selectedSubmodulePath ? submoduleHasNextPage : hasNextPage;
+  const currentIsFetchingNextPage = selectedSubmodulePath
+    ? submoduleIsFetchingNextPage
+    : isFetchingNextPage;
+  const currentFetchNextPage = selectedSubmodulePath ? fetchSubmoduleNextPage : fetchNextPage;
+
   const { data: commitFiles = [], isLoading: commitFilesLoading } = useCommitFiles(
     rootPath ?? null,
-    selectedCommitHash
+    selectedCommitHash,
+    selectedSubmodulePath ?? undefined
   );
 
   // Find the status of the selected file to pass to useCommitDiff
@@ -280,7 +418,8 @@ export function SourceControlPanel({
     rootPath ?? null,
     selectedCommitHash,
     selectedCommitFile,
-    selectedFileStatus
+    selectedFileStatus,
+    selectedSubmodulePath ?? undefined
   );
 
   // Submodule commit diff
@@ -294,8 +433,28 @@ export function SourceControlPanel({
 
   const { selectedFile, setSelectedFile, setNavigationDirection } = useSourceControlStore();
 
-  const staged = useMemo(() => changes?.filter((c) => c.staged) ?? [], [changes]);
-  const unstaged = useMemo(() => changes?.filter((c) => !c.staged) ?? [], [changes]);
+  // Handle repository selection
+  const handleRepoSelect = useCallback(
+    (repoPath: string) => {
+      const repo = repositories.find((r) => r.path === repoPath);
+      if (repo?.type === 'main') {
+        setSelectedSubmodulePath(null);
+      } else if (repo?.submodulePath) {
+        setSelectedSubmodulePath(repo.submodulePath);
+      }
+      // Clear file selections when switching repos
+      setSelectedFile(null);
+      setSelectedCommitHash(null);
+      setSelectedCommitFile(null);
+      setExpandedCommitHash(null);
+      setSelectedSubmoduleFile(null);
+    },
+    [repositories, setSelectedFile]
+  );
+
+  // Use currentChanges for staged/unstaged based on selected repo
+  const staged = useMemo(() => currentChanges.filter((c) => c.staged), [currentChanges]);
+  const unstaged = useMemo(() => currentChanges.filter((c) => !c.staged), [currentChanges]);
 
   // All files in order: staged first, then unstaged
   const allFiles = useMemo(() => [...staged, ...unstaged], [staged, unstaged]);
@@ -303,19 +462,124 @@ export function SourceControlPanel({
   // Panel resize hooks
   const { width: panelWidth, isResizing, containerRef, handleMouseDown } = usePanelResize();
 
-  // Source control actions
-  const {
-    handleStage,
-    handleUnstage,
-    handleDiscard,
-    handleDeleteUntracked,
-    handleCommit,
+  // Get the working directory for the selected repo
+  const selectedRepoPath =
+    selectedSubmodulePath && rootPath ? joinPath(rootPath, selectedSubmodulePath) : rootPath;
+
+  // Git mutations
+  const stageMutation = useGitStage();
+  const unstageMutation = useGitUnstage();
+  const discardMutation = useGitDiscard();
+  const commitMutation = useGitCommit();
+
+  // Confirmation dialog state
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'discard' | 'delete';
+    paths: string[];
+  } | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Git action handlers
+  const handleStage = useCallback(
+    (paths: string[]) => {
+      if (selectedRepoPath) {
+        stageMutation.mutate({ workdir: selectedRepoPath, paths });
+      }
+    },
+    [selectedRepoPath, stageMutation]
+  );
+
+  const handleUnstage = useCallback(
+    (paths: string[]) => {
+      if (selectedRepoPath) {
+        unstageMutation.mutate({ workdir: selectedRepoPath, paths });
+      }
+    },
+    [selectedRepoPath, unstageMutation]
+  );
+
+  const handleDiscard = useCallback((paths: string[]) => {
+    setConfirmAction({ paths, type: 'discard' });
+    setDialogOpen(true);
+  }, []);
+
+  const handleDeleteUntracked = useCallback((paths: string[]) => {
+    setConfirmAction({ paths, type: 'delete' });
+    setDialogOpen(true);
+  }, []);
+
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setConfirmAction(null);
+    }
+  }, []);
+
+  const handleConfirmAction = useCallback(async () => {
+    if (!selectedRepoPath || !confirmAction) return;
+
+    try {
+      if (confirmAction.type === 'discard') {
+        await discardMutation.mutateAsync({
+          workdir: selectedRepoPath,
+          paths: confirmAction.paths,
+        });
+      } else {
+        for (const path of confirmAction.paths) {
+          await window.electronAPI.file.delete(`${selectedRepoPath}/${path}`, { recursive: false });
+        }
+        stageMutation.mutate({ workdir: selectedRepoPath, paths: [] });
+      }
+
+      if (selectedFile && confirmAction.paths.includes(selectedFile.path)) {
+        setSelectedFile(null);
+      }
+    } catch (error) {
+      toastManager.add({
+        title: confirmAction.type === 'discard' ? t('Discard failed') : t('Delete failed'),
+        description: error instanceof Error ? error.message : t('Unknown error'),
+        type: 'error',
+        timeout: 5000,
+      });
+    }
+
+    setDialogOpen(false);
+  }, [
+    selectedRepoPath,
     confirmAction,
-    dialogOpen,
-    handleDialogOpenChange,
-    handleConfirmAction,
-    isCommitting,
-  } = useSourceControlActions({ rootPath, stagedCount: staged.length });
+    discardMutation,
+    selectedFile,
+    setSelectedFile,
+    stageMutation,
+    t,
+  ]);
+
+  const handleCommit = useCallback(
+    async (message: string) => {
+      if (!selectedRepoPath || staged.length === 0) return;
+
+      try {
+        await commitMutation.mutateAsync({ workdir: selectedRepoPath, message });
+        toastManager.add({
+          title: t('Commit successful'),
+          description: t('Committed {{count}} files', { count: staged.length }),
+          type: 'success',
+          timeout: 3000,
+        });
+        setSelectedFile(null);
+      } catch (error) {
+        toastManager.add({
+          title: t('Commit failed'),
+          description: error instanceof Error ? error.message : t('Unknown error'),
+          type: 'error',
+          timeout: 5000,
+        });
+      }
+    },
+    [selectedRepoPath, staged.length, commitMutation, setSelectedFile, t]
+  );
+
+  const isCommitting = commitMutation.isPending;
 
   // Handle file click in current changes view - clear commit selection
   const handleFileClick = useCallback(
@@ -324,34 +588,13 @@ export function SourceControlPanel({
       setSelectedCommitFile(null);
       setExpandedCommitHash(null);
       setSelectedSubmoduleFile(null);
-      setSelectedFile(file);
-    },
-    [setSelectedFile]
-  );
-
-  // Handle submodule toggle
-  const handleSubmoduleToggle = useCallback((submodulePath: string) => {
-    setExpandedSubmodules((prev) => {
-      const next = new Set(prev);
-      if (next.has(submodulePath)) {
-        next.delete(submodulePath);
+      if (selectedSubmodulePath) {
+        setSelectedSubmoduleFile({ ...file, submodulePath: selectedSubmodulePath });
       } else {
-        next.add(submodulePath);
+        setSelectedFile(file);
       }
-      return next;
-    });
-  }, []);
-
-  // Handle submodule file click
-  const handleSubmoduleFileClick = useCallback(
-    (file: { path: string; staged: boolean; submodulePath: string }) => {
-      setSelectedCommitHash(null);
-      setSelectedCommitFile(null);
-      setExpandedCommitHash(null);
-      setSelectedFile(null);
-      setSelectedSubmoduleFile(file);
     },
-    [setSelectedFile]
+    [setSelectedFile, selectedSubmodulePath]
   );
 
   // Handle commit click in history view - toggle expansion
@@ -376,19 +619,6 @@ export function SourceControlPanel({
   const handleCommitFileClick = useCallback(
     (filePath: string) => {
       setSelectedCommitFile(filePath);
-      setNavigationDirection('next');
-    },
-    [setNavigationDirection]
-  );
-
-  // Handle file click in submodule commit history view
-  const handleSubmoduleCommitFileClick = useCallback(
-    (hash: string, filePath: string, submodulePath: string) => {
-      setSelectedSubmoduleCommit({ hash, filePath, submodulePath });
-      // Clear other selections
-      setSelectedCommitHash(null);
-      setSelectedCommitFile(null);
-      setSelectedSubmoduleFile(null);
       setNavigationDirection('next');
     },
     [setNavigationDirection]
@@ -499,6 +729,21 @@ export function SourceControlPanel({
               exit={{ width: 0, opacity: 0 }}
               transition={panelTransition}
             >
+              {/* Repositories Section (VSCode-style) */}
+              <RepositoryList
+                repositories={repositories}
+                selectedId={selectedRepo?.path ?? null}
+                onSelect={handleRepoSelect}
+                expanded={reposExpanded}
+                onToggleExpand={() => setReposExpanded(!reposExpanded)}
+                onCollapseSidebar={() => setSidebarCollapsed(true)}
+                isSyncing={isSyncing}
+                onSync={handleSync}
+                onPublish={handlePublish}
+                onCheckout={handleBranchCheckout}
+                isCheckingOut={checkoutMutation.isPending}
+              />
+
               {/* Changes Section (Collapsible) */}
               <div
                 className={cn(
@@ -506,7 +751,7 @@ export function SourceControlPanel({
                   changesExpanded ? 'flex-1 min-h-0' : 'shrink-0'
                 )}
               >
-                <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors">
+                <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors pr-4">
                   <button
                     type="button"
                     onClick={() => setChangesExpanded(!changesExpanded)}
@@ -520,26 +765,24 @@ export function SourceControlPanel({
                     />
                     <GitBranch className="h-4 w-4" />
                     <span className="text-sm font-medium shrink-0">{t('Changes')}</span>
+                    {currentChanges.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        ({currentChanges.length})
+                      </span>
+                    )}
                   </button>
 
-                  {/* Branch Switcher */}
+                  {/* Branch Switcher - uses selected repo's branches */}
                   <BranchSwitcher
-                    currentBranch={gitStatus?.current ?? null}
-                    branches={branches}
-                    onCheckout={handleBranchCheckout}
-                    isLoading={branchesLoading}
+                    currentBranch={selectedRepo?.branch ?? null}
+                    branches={currentBranches}
+                    onCheckout={(branch) =>
+                      selectedRepoPath && handleBranchCheckout(selectedRepoPath, branch)
+                    }
+                    isLoading={currentBranchesLoading}
                     isCheckingOut={checkoutMutation.isPending}
-                    size="sm"
+                    size="xs"
                   />
-
-                  <button
-                    type="button"
-                    onClick={() => setSidebarCollapsed(true)}
-                    className="mr-2 flex h-5 w-5 items-center justify-center rounded text-muted-foreground/60 group-hover:text-foreground transition-colors"
-                    title={t('Hide sidebar')}
-                  >
-                    <PanelLeftClose className="h-3.5 w-3.5" />
-                  </button>
                 </div>
 
                 {/* Collapsible content with AnimatePresence for proper unmounting */}
@@ -554,8 +797,8 @@ export function SourceControlPanel({
                       transition={springFast}
                       className="flex flex-col flex-1 min-h-0 overflow-hidden"
                     >
-                      {/* Warning for skipped directories */}
-                      {skippedDirs && skippedDirs.length > 0 && (
+                      {/* Warning for skipped directories - only for main repo */}
+                      {!selectedSubmodulePath && skippedDirs && skippedDirs.length > 0 && (
                         <div className="mx-2 mt-2 rounded-md bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400">
                           <span className="font-medium">{t('Performance warning')}:</span>{' '}
                           {t('Skipped {{dirs}} (not in .gitignore)', {
@@ -563,7 +806,7 @@ export function SourceControlPanel({
                           })}
                         </div>
                       )}
-                      {fileChangesResult?.truncated && (
+                      {!selectedSubmodulePath && fileChangesResult?.truncated && (
                         <div className="mx-2 mt-2 rounded-md bg-muted/50 border px-3 py-2 text-xs text-muted-foreground">
                           {t('Too many changes, showing first {{count}}.', {
                             count:
@@ -575,22 +818,29 @@ export function SourceControlPanel({
                         <ChangesList
                           staged={staged}
                           unstaged={unstaged}
-                          selectedFile={selectedFile}
+                          selectedFile={selectedSubmodulePath ? null : selectedFile}
                           onFileClick={handleFileClick}
                           onStage={handleStage}
                           onUnstage={handleUnstage}
                           onDiscard={handleDiscard}
                           onDeleteUntracked={handleDeleteUntracked}
                           onRefresh={async () => {
-                            if (rootPath) {
+                            if (selectedSubmodulePath) {
+                              refetchSubmoduleChanges();
+                              refetchSubmoduleCommits();
+                            } else if (rootPath) {
                               await fetchMutation.mutateAsync({ workdir: rootPath });
+                              refetch();
+                              refetchCommits();
+                              refetchStatus();
                             }
-                            refetch();
-                            refetchCommits();
-                            refetchStatus();
                           }}
-                          isRefreshing={isFetching || fetchMutation.isPending}
-                          repoPath={rootPath}
+                          isRefreshing={
+                            selectedSubmodulePath
+                              ? submoduleChangesLoading
+                              : isFetching || fetchMutation.isPending
+                          }
+                          repoPath={selectedRepoPath}
                           sessionId={sessionId}
                         />
                       </div>
@@ -599,7 +849,7 @@ export function SourceControlPanel({
                         stagedCount={staged.length}
                         onCommit={handleCommit}
                         isCommitting={isCommitting}
-                        rootPath={rootPath}
+                        rootPath={selectedRepoPath}
                       />
                     </motion.div>
                   )}
@@ -628,62 +878,6 @@ export function SourceControlPanel({
                     <History className="h-4 w-4" />
                     <span className="text-sm font-medium">{t('History')}</span>
                   </button>
-
-                  {/* Publish Branch Button - when no upstream */}
-                  {!gitStatus?.tracking && gitStatus?.current && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePublish();
-                      }}
-                      disabled={pushMutation.isPending}
-                      className="mr-2 flex h-6 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
-                      title={t('Publish branch to remote')}
-                    >
-                      {pushMutation.isPending ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <>
-                          <CloudUpload className="h-3 w-3" />
-                          <span>{t('Publish')}</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                  {/* Sync Button - when has upstream and ahead/behind */}
-                  {gitStatus?.tracking && (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSync();
-                      }}
-                      disabled={isSyncing}
-                      className="mr-2 flex h-6 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
-                      title={t('Sync with remote')}
-                    >
-                      {isSyncing ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <>
-                          {gitStatus.ahead > 0 && (
-                            <span className="flex items-center gap-0.5 text-blue-500">
-                              <ArrowUp className="h-3 w-3" />
-                              {gitStatus.ahead}
-                            </span>
-                          )}
-                          {gitStatus.behind > 0 && (
-                            <span className="flex items-center gap-0.5 text-orange-500">
-                              <ArrowDown className="h-3 w-3" />
-                              {gitStatus.behind}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </button>
-                  )}
                 </div>
 
                 {/* Collapsible content with AnimatePresence for proper unmounting */}
@@ -700,15 +894,15 @@ export function SourceControlPanel({
                     >
                       <div className="h-full">
                         <CommitHistoryList
-                          commits={commits}
+                          commits={currentCommits}
                           selectedHash={selectedCommitHash}
                           onCommitClick={handleCommitClick}
-                          isLoading={commitsLoading}
-                          isFetchingNextPage={isFetchingNextPage}
-                          hasNextPage={hasNextPage}
+                          isLoading={currentCommitsLoading}
+                          isFetchingNextPage={currentIsFetchingNextPage}
+                          hasNextPage={currentHasNextPage}
                           onLoadMore={() => {
-                            if (hasNextPage && !isFetchingNextPage) {
-                              fetchNextPage();
+                            if (currentHasNextPage && !currentIsFetchingNextPage) {
+                              currentFetchNextPage();
                             }
                           }}
                           expandedCommitHash={expandedCommitHash}
@@ -722,28 +916,6 @@ export function SourceControlPanel({
                   )}
                 </AnimatePresence>
               </div>
-
-              {/* Submodules - Each submodule as a separate repository section */}
-              {submodules
-                .filter((s) => s.initialized)
-                .map((submodule) => (
-                  <SubmoduleSection
-                    key={submodule.path}
-                    submodule={submodule}
-                    rootPath={rootPath}
-                    expanded={expandedSubmodules.has(submodule.path)}
-                    onToggle={() => handleSubmoduleToggle(submodule.path)}
-                    selectedFile={selectedSubmoduleFile}
-                    onFileClick={handleSubmoduleFileClick}
-                    selectedCommitFile={
-                      selectedSubmoduleCommit?.submodulePath === submodule.path
-                        ? selectedSubmoduleCommit.filePath
-                        : null
-                    }
-                    onCommitFileClick={handleSubmoduleCommitFileClick}
-                    onClearCommitSelection={() => setSelectedSubmoduleCommit(null)}
-                  />
-                ))}
             </motion.div>
           )}
         </AnimatePresence>
@@ -766,7 +938,7 @@ export function SourceControlPanel({
           {selectedCommitHash ? (
             <div className="flex-1 overflow-hidden">
               <CommitDiffViewer
-                rootPath={rootPath}
+                rootPath={selectedRepoPath ?? rootPath ?? ''}
                 fileDiff={commitDiff}
                 filePath={selectedCommitFile}
                 isActive={isActive}
@@ -778,18 +950,7 @@ export function SourceControlPanel({
                 sessionId={sessionId}
               />
             </div>
-          ) : selectedSubmoduleCommit?.filePath ? (
-            <div className="flex-1 overflow-hidden">
-              <CommitDiffViewer
-                rootPath={joinPath(rootPath, selectedSubmoduleCommit.submodulePath)}
-                fileDiff={submoduleCommitDiff}
-                filePath={selectedSubmoduleCommit.filePath}
-                isActive={isActive}
-                isLoading={submoduleCommitDiffLoading}
-                sessionId={sessionId}
-              />
-            </div>
-          ) : selectedSubmoduleFile ? (
+          ) : selectedSubmoduleFile && rootPath ? (
             <div className="flex-1 overflow-hidden">
               <DiffViewer
                 rootPath={joinPath(rootPath, selectedSubmoduleFile.submodulePath)}
@@ -803,7 +964,7 @@ export function SourceControlPanel({
           ) : (
             <div className="flex-1 overflow-hidden">
               <DiffViewer
-                rootPath={rootPath}
+                rootPath={selectedRepoPath ?? rootPath ?? ''}
                 file={selectedFile}
                 isActive={isActive}
                 onPrevFile={handlePrevFile}

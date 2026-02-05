@@ -11,5 +11,6 @@ export * from './plugins';
 export * from './prompts';
 export * from './search';
 export * from './shell';
+export * from './tempWorkspace';
 export * from './terminal';
 export * from './worktree';

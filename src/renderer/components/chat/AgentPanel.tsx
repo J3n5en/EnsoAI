@@ -1,5 +1,6 @@
 import { Plus, Settings, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TEMP_REPO_ID } from '@/App/constants';
 import { normalizePath, pathsEqual } from '@/App/storage';
 import { ResizeHandle } from '@/components/terminal/ResizeHandle';
 import { Button } from '@/components/ui/button';
@@ -122,6 +123,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     xtermKeybindings,
     hapiSettings,
     autoCreateSessionOnActivate,
+    autoCreateSessionOnTempActivate,
     claudeCodeIntegration,
     terminalTheme,
   } = useSettingsStore();
@@ -976,10 +978,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [updateCurrentGroupState]
   );
 
+  const shouldAutoCreateSession =
+    repoPath === TEMP_REPO_ID ? autoCreateSessionOnTempActivate : autoCreateSessionOnActivate;
+
   // Auto-create first session when panel becomes active and empty (if enabled in settings)
   useEffect(() => {
     if (
-      autoCreateSessionOnActivate &&
+      shouldAutoCreateSession &&
       isActive &&
       cwd &&
       groups.length === 0 &&
@@ -988,7 +993,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       handleNewSession();
     }
   }, [
-    autoCreateSessionOnActivate,
+    shouldAutoCreateSession,
     isActive,
     cwd,
     groups.length,

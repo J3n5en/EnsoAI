@@ -231,6 +231,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   }, []);
 
   // Cmd+W: close tab, Cmd+1-9: switch tab, search shortcuts from settings
+  // Use capture phase so search shortcuts run before Monaco/inputs consume them
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isActive) return;
@@ -238,6 +239,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
       // File search (default: Cmd+P)
       if (matchesKeybinding(e, searchKeybindings.searchFiles)) {
         e.preventDefault();
+        e.stopPropagation();
         setSearchMode('files');
         setSearchOpen(true);
         return;
@@ -245,6 +247,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
 
       if (matchesKeybinding(e, searchKeybindings.searchContent)) {
         e.preventDefault();
+        e.stopPropagation();
         const selectedText = editorAreaRef.current?.getSelectedText() ?? '';
         openSearch('content', selectedText);
         return;
@@ -264,8 +267,8 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
         }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [isActive, tabs, activeTab, setActiveFile, searchKeybindings, openSearch]);
 
   const shouldPromptUnsaved = useCallback(

@@ -35,6 +35,9 @@ import type {
   RecentEditorProject,
   ShellConfig,
   ShellInfo,
+  TempWorkspaceCheckResult,
+  TempWorkspaceCreateResult,
+  TempWorkspaceRemoveResult,
   TerminalCreateOptions,
   TerminalResizeOptions,
   ValidateLocalPathResult,
@@ -274,6 +277,16 @@ const electronAPI = {
       cleanupOptions?: WorktreeMergeCleanupOptions
     ): Promise<WorktreeMergeResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.WORKTREE_MERGE_CONTINUE, workdir, message, cleanupOptions),
+  },
+
+  // Temporary Workspace
+  tempWorkspace: {
+    create: (basePath?: string): Promise<TempWorkspaceCreateResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TEMP_WORKSPACE_CREATE, basePath),
+    remove: (dirPath: string, basePath?: string): Promise<TempWorkspaceRemoveResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TEMP_WORKSPACE_REMOVE, dirPath, basePath),
+    checkPath: (dirPath: string): Promise<TempWorkspaceCheckResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TEMP_WORKSPACE_CHECK_PATH, dirPath),
   },
 
   // Files

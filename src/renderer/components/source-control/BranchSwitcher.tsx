@@ -16,18 +16,20 @@ import { cn } from '@/lib/utils';
 
 interface BranchSwitcherProps {
   currentBranch: string | null;
-  branches: GitBranch[];
+  branches?: GitBranch[];
   onCheckout: (branch: string) => void;
+  onOpen?: () => void;
   isLoading?: boolean;
   isCheckingOut?: boolean;
   disabled?: boolean;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
 }
 
 export function BranchSwitcher({
   currentBranch,
-  branches,
+  branches = [],
   onCheckout,
+  onOpen,
   isLoading,
   isCheckingOut,
   disabled,
@@ -62,7 +64,9 @@ export function BranchSwitcher({
   };
 
   const handleOpenChange = (open: boolean) => {
-    if (!open) {
+    if (open) {
+      onOpen?.();
+    } else {
       setSearchQuery('');
     }
   };
@@ -79,6 +83,8 @@ export function BranchSwitcher({
         className={cn(
           'border-0 bg-transparent shadow-none ring-0 ring-transparent before:shadow-none before:!shadow-none transition-colors dark:bg-transparent shrink-0',
           'focus-visible:ring-0 focus-visible:border-0 hover:ring-0 hover:shadow-none hover:before:shadow-none',
+          size === 'xs' &&
+            'h-auto min-h-0 min-w-0 w-auto max-w-20 gap-0 p-0 text-xs text-muted-foreground hover:text-foreground',
           size === 'sm' && 'h-6 min-h-6 min-w-0 w-auto max-w-32 gap-1 px-1.5 text-xs',
           size === 'md' && 'h-7 min-h-7 min-w-0 w-auto max-w-40 gap-1.5 px-2 text-sm'
         )}
@@ -87,10 +93,10 @@ export function BranchSwitcher({
       >
         {isCheckingOut ? (
           <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-        ) : (
+        ) : size !== 'xs' ? (
           <GitBranchIcon className={cn('shrink-0', size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
-        )}
-        <SelectValue className="min-w-0 truncate">
+        ) : null}
+        <SelectValue className={cn('min-w-0 truncate', size === 'xs' && 'text-xs')}>
           {currentBranch || t('Select branch')}
         </SelectValue>
       </SelectTrigger>

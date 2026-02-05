@@ -63,6 +63,9 @@ export interface Repository {
   groupId?: string;
 }
 
+// Virtual repository for Temp Session
+export const TEMP_REPO_ID = '__enso_temp_workspace__';
+
 // Panel size constraints
 export const REPOSITORY_MIN = 200;
 export const REPOSITORY_MAX = 400;

@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GitSyncButton } from '@/components/git/GitSyncButton';
 import {
   AlertDialog,
   AlertDialogClose,
@@ -35,6 +36,7 @@ import {
 import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/ui/glow-card';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useGitSync } from '@/hooks/useGitSync';
 import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
 import { useI18n } from '@/i18n';
@@ -494,6 +496,10 @@ function WorktreeItem({
   const isPrunable = worktree.prunable;
   const glowEnabled = useGlowEffectEnabled();
 
+  // Git sync operations
+  const { ahead, behind, tracking, currentBranch, isSyncing, handleSync, handlePublish } =
+    useGitSync({ workdir: worktree.path, enabled: isActive });
+
   // Check if branch is merged to main
   const isMerged = useMemo(() => {
     if (!worktree.branch || isMain) return false;
@@ -587,7 +593,7 @@ function WorktreeItem({
         onClick={onClick}
         onContextMenu={handleContextMenu}
         className={cn(
-          'relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
+          'relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors cursor-pointer',
           isPrunable && 'opacity-50',
           isActive ? 'text-accent-foreground' : 'hover:bg-accent/50'
         )}
@@ -627,6 +633,16 @@ function WorktreeItem({
               {t('Merged')}
             </span>
           ) : null}
+          {/* Git sync status - inline with branch name */}
+          <GitSyncButton
+            ahead={ahead}
+            behind={behind}
+            tracking={tracking}
+            currentBranch={currentBranch}
+            isSyncing={isSyncing}
+            onSync={handleSync}
+            onPublish={handlePublish}
+          />
         </div>
 
         {/* Path - use rtl direction to show ellipsis at start, keeping end visible */}
