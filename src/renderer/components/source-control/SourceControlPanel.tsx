@@ -171,7 +171,7 @@ export function SourceControlPanel({
           tracking: sub.tracking ?? null,
           ahead: sub.ahead ?? 0,
           behind: sub.behind ?? 0,
-          changesCount: 0,
+          changesCount: (sub.stagedCount ?? 0) + (sub.unstagedCount ?? 0),
           branches: isSelected ? submoduleBranches : undefined,
           branchesLoading: isSelected ? submoduleBranchesLoading : undefined,
         };
