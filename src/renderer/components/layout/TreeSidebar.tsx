@@ -716,7 +716,18 @@ export function TreeSidebar({
                 const workdir = mainWorktree?.path || repo.path;
 
                 return (
-                  <div key={repo.path}>
+                  <div
+                    key={repo.path}
+                    className={cn('relative rounded-lg', isSelected && 'pb-2 pr-4')}
+                  >
+                    {/* Sliding highlight background for selected repo */}
+                    {isSelected && (
+                      <motion.div
+                        layoutId="repo-container-highlight"
+                        className="absolute inset-0 rounded-lg bg-accent/40"
+                        transition={springFast}
+                      />
+                    )}
                     {/* Repository row */}
                     <RepoItemWithGlow repoPath={repo.path}>
                       {/* Drop indicator - top */}
@@ -747,18 +758,10 @@ export function TreeSidebar({
                         }}
                         className={cn(
                           'group relative flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer',
-                          isSelected ? 'text-accent-foreground' : 'hover:bg-accent/30',
+                          !isSelected && 'hover:bg-accent/30',
                           draggedRepoIndexRef.current === index && 'opacity-50'
                         )}
                       >
-                        {/* Sliding highlight background */}
-                        {isSelected && (
-                          <motion.div
-                            layoutId="repo-highlight"
-                            className="absolute inset-0 rounded-lg bg-accent/50"
-                            transition={springFast}
-                          />
-                        )}
                         {/* Row 1: Chevron + Icon + Name + Tag + CreateWorktree + Settings */}
                         <div className="relative z-10 flex w-full items-center gap-1">
                           <span className="shrink-0 w-5 h-5 flex items-center justify-center">
@@ -1448,39 +1451,30 @@ function WorktreeTreeItem({
         className={cn(
           'relative flex w-full items-center gap-2 rounded-lg pl-5 pr-2 py-1.5 text-left transition-colors text-sm',
           isPrunable && 'opacity-50',
-          isActive ? 'text-accent-foreground' : 'hover:bg-accent/50'
+          isActive
+            ? 'border border-primary bg-primary/10'
+            : 'border border-transparent hover:bg-accent/50'
         )}
       >
-        {isActive && (
-          <motion.div
-            layoutId={`worktree-highlight-${repoPath}`}
-            className="absolute inset-0 rounded-lg bg-accent"
-            transition={springFast}
-          />
-        )}
         <GitBranch
           className={cn(
-            'relative z-10 h-3.5 w-3.5 shrink-0',
-            isPrunable
-              ? 'text-destructive'
-              : isActive
-                ? 'text-accent-foreground'
-                : 'text-muted-foreground'
+            'h-3.5 w-3.5 shrink-0',
+            isPrunable ? 'text-destructive' : isActive ? 'text-primary' : 'text-muted-foreground'
           )}
         />
-        <span className={cn('relative z-10 min-w-0 flex-1 truncate', isPrunable && 'line-through')}>
+        <span className={cn('min-w-0 flex-1 truncate', isPrunable && 'line-through')}>
           {branchDisplay}
         </span>
         {isPrunable ? (
-          <span className="relative z-10 shrink-0 rounded bg-destructive/20 px-1 py-0.5 text-[9px] font-medium uppercase text-destructive">
+          <span className="shrink-0 rounded bg-destructive/20 px-1 py-0.5 text-[9px] font-medium uppercase text-destructive">
             {t('Deleted')}
           </span>
         ) : isMain ? (
-          <span className="relative z-10 shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
+          <span className="shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
             {t('Main')}
           </span>
         ) : isMerged ? (
-          <span className="relative z-10 shrink-0 rounded bg-success/20 px-1 py-0.5 text-[9px] font-medium uppercase text-success-foreground">
+          <span className="shrink-0 rounded bg-success/20 px-1 py-0.5 text-[9px] font-medium uppercase text-success-foreground">
             {t('Merged')}
           </span>
         ) : null}
@@ -1493,11 +1487,10 @@ function WorktreeTreeItem({
           isSyncing={isSyncing}
           onSync={handleSync}
           onPublish={handlePublish}
-          className="relative z-10"
         />
         {/* Activity counts and diff stats */}
         {hasActivity && (
-          <div className="relative z-10 flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
             {activity.agentCount > 0 && (
               <span className="flex items-center gap-0.5">
                 <Sparkles className="h-3 w-3" />
