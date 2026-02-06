@@ -122,6 +122,7 @@ export function useXterm({
   const terminalRef = useRef<Terminal | null>(null);
   const settings = useTerminalSettings();
   const terminalRenderer = useSettingsStore((s) => s.terminalRenderer);
+  const copyOnSelection = useSettingsStore((s) => s.copyOnSelection);
   const shellConfig = useSettingsStore((s) => s.shellConfig);
   const navigateToFile = useNavigationStore((s) => s.navigateToFile);
   const cwdRef = useRef(cwd);
@@ -149,6 +150,8 @@ export function useXterm({
   onMergeRef.current = onMerge;
   const canMergeRef = useRef(canMerge);
   canMergeRef.current = canMerge;
+  const copyOnSelectionRef = useRef(copyOnSelection);
+  copyOnSelectionRef.current = copyOnSelection;
   const hasBeenActivatedRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const hasReceivedDataRef = useRef(false);
@@ -397,6 +400,21 @@ export function useXterm({
       },
     });
     linkProviderDisposableRef.current = linkProviderDisposable;
+
+    // Copy on Selection: copy selected text to clipboard when mouse is released
+    terminal.element?.addEventListener('mouseup', () => {
+      if (!copyOnSelectionRef.current) return;
+      // Defer to next microtask so xterm finalizes the selection first
+      setTimeout(() => {
+        // Guard: terminal may have been disposed between mouseup and this callback
+        if (!terminalRef.current) return;
+        if (terminal.hasSelection()) {
+          navigator.clipboard.writeText(terminal.getSelection()).catch(() => {
+            // Ignore clipboard write failures (e.g., window not focused)
+          });
+        }
+      }, 0);
+    });
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;

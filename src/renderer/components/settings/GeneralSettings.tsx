@@ -93,6 +93,8 @@ export function GeneralSettings() {
     setQuickTerminalEnabled,
     hideGroups,
     setHideGroups,
+    copyOnSelection,
+    setCopyOnSelection,
     temporaryWorkspaceEnabled,
     setTemporaryWorkspaceEnabled,
     defaultTemporaryPath,
@@ -576,6 +578,17 @@ export function GeneralSettings() {
             {t('History lines in the terminal. Higher values use more memory.')}
           </p>
           <p className="text-xs text-muted-foreground">{t('Apply on new terminals only')}</p>
+        </div>
+      </div>
+
+      {/* Copy on Selection */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Copy on Selection')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Automatically copy selected text in the terminal to the clipboard')}
+          </p>
+          <Switch checked={copyOnSelection} onCheckedChange={setCopyOnSelection} />
         </div>
       </div>
 
