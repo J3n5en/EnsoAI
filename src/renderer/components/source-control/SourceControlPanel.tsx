@@ -33,10 +33,12 @@ import {
   useGitUnstage,
 } from '@/hooks/useSourceControl';
 import {
+  useStageSubmodule,
   useSubmoduleBranches,
   useSubmoduleChanges,
   useSubmoduleFileDiff,
   useSubmodules,
+  useUnstageSubmodule,
 } from '@/hooks/useSubmodules';
 import { useI18n } from '@/i18n';
 import { heightVariants, springFast } from '@/lib/motion';
@@ -171,7 +173,7 @@ export function SourceControlPanel({
           tracking: sub.tracking ?? null,
           ahead: sub.ahead ?? 0,
           behind: sub.behind ?? 0,
-          changesCount: 0,
+          changesCount: (sub.stagedCount ?? 0) + (sub.unstagedCount ?? 0),
           branches: isSelected ? submoduleBranches : undefined,
           branchesLoading: isSelected ? submoduleBranchesLoading : undefined,
         };
@@ -472,6 +474,10 @@ export function SourceControlPanel({
   const discardMutation = useGitDiscard();
   const commitMutation = useGitCommit();
 
+  // Submodule mutations
+  const stageSubmoduleMutation = useStageSubmodule();
+  const unstageSubmoduleMutation = useUnstageSubmodule();
+
   // Confirmation dialog state
   const [confirmAction, setConfirmAction] = useState<{
     type: 'discard' | 'delete';
@@ -482,20 +488,34 @@ export function SourceControlPanel({
   // Git action handlers
   const handleStage = useCallback(
     (paths: string[]) => {
-      if (selectedRepoPath) {
-        stageMutation.mutate({ workdir: selectedRepoPath, paths });
+      if (!rootPath) return;
+      if (selectedSubmodulePath) {
+        stageSubmoduleMutation.mutate({
+          workdir: rootPath,
+          submodulePath: selectedSubmodulePath,
+          paths,
+        });
+      } else {
+        stageMutation.mutate({ workdir: rootPath, paths });
       }
     },
-    [selectedRepoPath, stageMutation]
+    [rootPath, selectedSubmodulePath, stageMutation, stageSubmoduleMutation]
   );
 
   const handleUnstage = useCallback(
     (paths: string[]) => {
-      if (selectedRepoPath) {
-        unstageMutation.mutate({ workdir: selectedRepoPath, paths });
+      if (!rootPath) return;
+      if (selectedSubmodulePath) {
+        unstageSubmoduleMutation.mutate({
+          workdir: rootPath,
+          submodulePath: selectedSubmodulePath,
+          paths,
+        });
+      } else {
+        unstageMutation.mutate({ workdir: rootPath, paths });
       }
     },
-    [selectedRepoPath, unstageMutation]
+    [rootPath, selectedSubmodulePath, unstageMutation, unstageSubmoduleMutation]
   );
 
   const handleDiscard = useCallback((paths: string[]) => {
@@ -528,7 +548,23 @@ export function SourceControlPanel({
         for (const path of confirmAction.paths) {
           await window.electronAPI.file.delete(`${selectedRepoPath}/${path}`, { recursive: false });
         }
-        stageMutation.mutate({ workdir: selectedRepoPath, paths: [] });
+        if (selectedSubmodulePath && rootPath) {
+          await Promise.all([
+            queryClient.invalidateQueries({
+              queryKey: ['git', 'submodule', 'changes', rootPath, selectedSubmodulePath],
+            }),
+            queryClient.invalidateQueries({ queryKey: ['git', 'submodules', rootPath] }),
+            queryClient.invalidateQueries({
+              queryKey: ['git', 'submodule', 'diff', rootPath, selectedSubmodulePath],
+            }),
+          ]);
+        } else if (rootPath) {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['git', 'file-changes', rootPath] }),
+            queryClient.invalidateQueries({ queryKey: ['git', 'status', rootPath] }),
+            queryClient.invalidateQueries({ queryKey: ['git', 'file-diff', rootPath] }),
+          ]);
+        }
       }
 
       if (selectedFile && confirmAction.paths.includes(selectedFile.path)) {
@@ -550,8 +586,10 @@ export function SourceControlPanel({
     discardMutation,
     selectedFile,
     setSelectedFile,
-    stageMutation,
     t,
+    rootPath,
+    queryClient,
+    selectedSubmodulePath,
   ]);
 
   const handleCommit = useCallback(
