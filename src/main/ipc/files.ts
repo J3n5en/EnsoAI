@@ -1,9 +1,8 @@
-import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { rmSync } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
-import { app } from 'electron';
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { type FileEntry, type FileReadResult, IPC_CHANNELS } from '@shared/types';
-import { BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import iconv from 'iconv-lite';
 import jschardet from 'jschardet';
 import simpleGit from 'simple-git';
@@ -83,8 +82,12 @@ export async function stopWatchersInDirectory(dirPath: string): Promise<void> {
 export function registerFileHandlers(): void {
   // Save file to temp directory (for enhanced input images)
   ipcMain.handle(
-    'file:save-to-temp',
-    async (_, filename: string, data: Uint8Array): Promise<{ success: boolean; path?: string; error?: string }> => {
+    IPC_CHANNELS.FILE_SAVE_TO_TEMP,
+    async (
+      _,
+      filename: string,
+      data: Uint8Array
+    ): Promise<{ success: boolean; path?: string; error?: string }> => {
       try {
         const tempDir = app.getPath('temp');
         const ensoaiInputDir = join(tempDir, 'ensoai-input');
@@ -93,7 +96,21 @@ export function registerFileHandlers(): void {
         registerAllowedLocalFileRoot(ensoaiInputDir);
         await mkdir(ensoaiInputDir, { recursive: true });
 
-        const filePath = join(ensoaiInputDir, filename);
+        // Defense-in-depth: never trust renderer-controlled path segments.
+        const safeName = basename(filename);
+        if (!safeName || safeName === '.' || safeName === '..') {
+          return { success: false, error: 'Invalid filename' };
+        }
+
+        const filePath = join(ensoaiInputDir, safeName);
+
+        // Double-check resolved path stays within the allowed directory.
+        const resolvedPath = resolve(filePath);
+        const allowedRoot = resolve(ensoaiInputDir) + sep;
+        if (!resolvedPath.startsWith(allowedRoot)) {
+          return { success: false, error: 'Invalid filename' };
+        }
+
         await writeFile(filePath, Buffer.from(data));
 
         return { success: true, path: filePath };

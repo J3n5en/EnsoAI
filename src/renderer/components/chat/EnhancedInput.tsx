@@ -51,6 +51,7 @@ export function EnhancedInput({
   isActive = false,
 }: EnhancedInputProps) {
   const { t } = useI18n();
+  const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,13 +79,23 @@ export function EnhancedInput({
     }
   }, [open, _sessionId, isActive]);
 
-  // Focus trap: keep focus on textarea while panel is open
+  // Focus trap: only refocus textarea when focus leaves this panel.
+  // This avoids breaking keyboard navigation to Upload/Close/Send buttons.
   const handleBlur = useCallback(() => {
-    // Delay check because blur fires before click on buttons
+    // Delay check because blur fires before the next focused element is set.
     requestAnimationFrame(() => {
-      if (open && textareaRef.current) {
-        textareaRef.current.focus();
+      if (!open) return;
+
+      const container = containerRef.current;
+      const textarea = textareaRef.current;
+      if (!container || !textarea) return;
+
+      const active = document.activeElement;
+      if (active && container.contains(active)) {
+        return;
       }
+
+      textarea.focus();
     });
   }, [open]);
 
@@ -94,9 +105,6 @@ export function EnhancedInput({
     if (!content.trim() && imagePaths.length === 0) return;
     try {
       onSend(content.trim(), imagePaths);
-      // Clear content after sending (notify parent)
-      onContentChange('');
-      onImagesChange([]);
       // Only close panel if not in 'always open' mode
       if (!keepOpenAfterSend) {
         onOpenChange(false);
@@ -109,16 +117,33 @@ export function EnhancedInput({
         description: message,
       });
     }
-  }, [
-    content,
-    imagePaths,
-    onSend,
-    onOpenChange,
-    onContentChange,
-    onImagesChange,
-    keepOpenAfterSend,
-    t,
-  ]);
+  }, [content, imagePaths, onSend, keepOpenAfterSend, onOpenChange, t]);
+
+  const getImageExtension = useCallback((file: File): string => {
+    const mime = file.type.toLowerCase();
+    const mimeMap: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/bmp': 'bmp',
+      'image/svg+xml': 'svg',
+    };
+    const mapped = mimeMap[mime];
+    if (mapped) return mapped;
+
+    const name = file.name;
+    const lastDot = name.lastIndexOf('.');
+    if (lastDot > 0 && lastDot < name.length - 1) {
+      const ext = name.slice(lastDot + 1).toLowerCase();
+      if (/^[a-z0-9]{1,10}$/.test(ext)) {
+        return ext;
+      }
+    }
+
+    return 'png';
+  }, []);
 
   const handlePanelKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -164,7 +189,7 @@ export function EnhancedInput({
         // Generate unique filename
         const timestamp = Date.now();
         const random = Math.random().toString(36).substring(2, 8);
-        const extension = file.name.split('.').pop() || 'png';
+        const extension = getImageExtension(file);
         const filename = `ensoai-input-${timestamp}-${random}.${extension}`;
 
         // Save to temp directory via electron API
@@ -191,7 +216,7 @@ export function EnhancedInput({
         return null;
       }
     },
-    [t]
+    [t, getImageExtension]
   );
 
   const addImageFiles = useCallback(
@@ -211,8 +236,8 @@ export function EnhancedInput({
 
       // Save to temp (keep order)
       const nextPaths = [...imagePaths];
-      for (const file of imageFiles) {
-        const path = await saveImageToTemp(file);
+      const results = await Promise.all(imageFiles.map((file) => saveImageToTemp(file)));
+      for (const path of results) {
         if (path) {
           nextPaths.push(path);
         }
@@ -291,6 +316,7 @@ export function EnhancedInput({
 
   return (
     <div
+      ref={containerRef}
       className="absolute z-50 pointer-events-auto bg-background rounded-lg overflow-hidden border-t shadow-[0_-10px_20px_-14px_rgba(0,0,0,0.35)]"
       style={{
         ...resolvedContainerStyle,
