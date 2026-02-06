@@ -1147,6 +1147,9 @@ export const zhTranslations: Record<string, string> = {
   'Click the Enso button on the webpage': '点击网页上的 Enso 按钮',
   'Click on any element to inspect': '点击任意元素进行检查',
   'Element info will be sent to your active agent session': '元素信息将发送到当前活跃的 Agent 会话',
+  'Copy on Selection': '选中即复制',
+  'Automatically copy selected text in the terminal to the clipboard':
+    '自动将终端中选中的文本复制到剪贴板',
 };
 
 export function normalizeLocale(input?: string): Locale {
