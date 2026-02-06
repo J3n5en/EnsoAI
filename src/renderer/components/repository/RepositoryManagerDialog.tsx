@@ -32,6 +32,7 @@ interface RepositoryManagerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   repositories: Repository[];
+  selectedRepo?: string | null;
   onSelectRepo?: (repoPath: string) => void;
   onRemoveRepository?: (repoPath: string) => void;
   onSettingsChange?: () => void;
@@ -41,6 +42,7 @@ export function RepositoryManagerDialog({
   open,
   onOpenChange,
   repositories,
+  selectedRepo,
   onSelectRepo,
   onRemoveRepository,
   onSettingsChange,
@@ -67,8 +69,17 @@ export function RepositoryManagerDialog({
       saveRepositorySettings(repoPath, updated);
       setSettingsMap((prev) => ({ ...prev, [repoPath]: updated }));
       onSettingsChange?.();
+      // If hiding the currently selected repo, switch to next visible one
+      if (updated.hidden && selectedRepo === repoPath) {
+        const nextVisible = repositories.find(
+          (r) => r.path !== repoPath && !settingsMap[r.path]?.hidden
+        );
+        if (nextVisible) {
+          onSelectRepo?.(nextVisible.path);
+        }
+      }
     },
-    [settingsMap, onSettingsChange]
+    [settingsMap, onSettingsChange, selectedRepo, repositories, onSelectRepo]
   );
 
   const handleRepoClick = useCallback(
