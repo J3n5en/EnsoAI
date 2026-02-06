@@ -11,6 +11,11 @@ import { useI18n } from '@/i18n';
 import { type OutputState, useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
+import {
+  registerSessionWorktree,
+  unregisterSessionWorktree,
+  useWorktreeActivityStore,
+} from '@/stores/worktreeActivity';
 
 interface AgentTerminalProps {
   id?: string; // Terminal session ID (UI key)
@@ -144,6 +149,23 @@ export function AgentTerminal({
     }
   }, [isActive, terminalSessionId, markSessionActive]);
 
+  // Register session worktree mapping for activity state tracking.
+  // The cleanup function uses the closure value of terminalSessionId (not a ref) because:
+  // 1. React guarantees cleanup runs with the values from the effect that created it
+  // 2. This ensures we unregister the exact sessionId that was registered
+  // 3. Using a ref would risk unregistering a different sessionId if it changed between registration and cleanup
+  useEffect(() => {
+    if (terminalSessionId && cwd) {
+      registerSessionWorktree(terminalSessionId, cwd);
+      return () => {
+        unregisterSessionWorktree(terminalSessionId);
+      };
+    }
+  }, [terminalSessionId, cwd]);
+
+  // Activity state setter - used by startActivityPolling and handleData/handleCustomKey
+  const setActivityState = useWorktreeActivityStore((s) => s.setActivityState);
+
   // Start polling for process activity
   const startActivityPolling = useCallback(() => {
     // Clear any existing interval
@@ -173,6 +195,10 @@ export function AgentTerminal({
           // If we have enough output, show the indicator
           if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
             updateOutputState('outputting');
+            // Also update worktree activity state to 'running'
+            if (cwd) {
+              setActivityState(cwd, 'running');
+            }
           }
         } else {
           // Process is idle AND no recent output
@@ -192,7 +218,7 @@ export function AgentTerminal({
         // Error checking activity, ignore
       }
     }, ACTIVITY_POLL_INTERVAL_MS);
-  }, [updateOutputState]);
+  }, [updateOutputState, cwd, setActivityState]);
 
   // Stop polling for process activity
   const stopActivityPolling = useCallback(() => {
@@ -380,6 +406,8 @@ export function AgentTerminal({
         // Update to 'outputting' once we have substantial output after Enter
         if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
           updateOutputState('outputting');
+          // Note: Activity state 'running' is set by handleCustomKey (on Enter) and
+          // startActivityPolling (during polling), so no need to set it here
         }
         // Note: The transition to 'idle' is handled by process activity polling
         // (startActivityPolling), not by a simple timeout
@@ -478,6 +506,11 @@ export function AgentTerminal({
         // Reset output counter.
         dataSinceEnterRef.current = 0;
 
+        // Set activity state to 'running' immediately when user presses Enter
+        if (cwd) {
+          setActivityState(cwd, 'running');
+        }
+
         if (terminalSessionId && glowEffectEnabled) {
           isMonitoringOutputRef.current = true;
           outputSinceEnterRef.current = 0;
@@ -532,6 +565,8 @@ export function AgentTerminal({
       startActivityPolling,
       terminalSessionId,
       glowEffectEnabled,
+      cwd,
+      setActivityState,
     ]
   );
 

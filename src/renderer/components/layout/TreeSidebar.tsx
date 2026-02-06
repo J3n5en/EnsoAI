@@ -49,6 +49,7 @@ import {
 import { RepositoryManagerDialog } from '@/components/repository/RepositoryManagerDialog';
 import { RepositorySettingsDialog } from '@/components/repository/RepositorySettingsDialog';
 import { TempWorkspaceContextMenu } from '@/components/temp-workspace/TempWorkspaceContextMenu';
+import { ActivityIndicator } from '@/components/ui/activity-indicator';
 import {
   AlertDialog,
   AlertDialogClose,
@@ -1405,12 +1406,25 @@ function WorktreeTreeItem({
   // Subscribe to activity store
   const activities = useWorktreeActivityStore((s) => s.activities);
   const diffStatsMap = useWorktreeActivityStore((s) => s.diffStats);
+  const activityStates = useWorktreeActivityStore((s) => s.activityStates);
   const activity = activities[worktree.path] || { agentCount: 0, terminalCount: 0 };
   const diffStats = diffStatsMap[worktree.path] || { insertions: 0, deletions: 0 };
+  const activityState = activityStates[worktree.path] || 'idle';
   const closeAgentSessions = useWorktreeActivityStore((s) => s.closeAgentSessions);
   const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
+  const clearActivityState = useWorktreeActivityStore((s) => s.clearActivityState);
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
   const hasDiffStats = diffStats.insertions > 0 || diffStats.deletions > 0;
+
+  // Auto-clear completed state after 5 seconds when worktree is active
+  useEffect(() => {
+    if (isActive && activityState === 'completed') {
+      const timer = setTimeout(() => {
+        clearActivityState(worktree.path);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive, activityState, worktree.path, clearActivityState]);
 
   // Check if any session in this worktree has outputting or unread state
   const outputState = useWorktreeOutputState(worktree.path);
@@ -1477,12 +1491,12 @@ function WorktreeTreeItem({
     }
   }, [menuOpen, menuPosition]);
 
-  // Common worktree item content
-  const worktreeItemContent = (
+  // Button content (without activity indicator - it's now outside)
+  const buttonContent = (
     <>
       {/* Drop indicator - top */}
       {showDropIndicator && dropDirection === 'top' && (
-        <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+        <div className="absolute -top-0.5 left-0 right-0 h-0.5 bg-primary rounded-full" />
       )}
       <button
         type="button"
@@ -1495,7 +1509,7 @@ function WorktreeTreeItem({
         onClick={onClick}
         onContextMenu={handleContextMenu}
         className={cn(
-          'relative flex w-full items-center gap-2 rounded-lg pl-3 pr-2 py-1.5 text-left transition-colors text-sm',
+          'relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors text-sm',
           isPrunable && 'opacity-50',
           isActive
             ? 'border border-primary bg-primary/10'
@@ -1534,52 +1548,58 @@ function WorktreeTreeItem({
           onSync={handleSync}
           onPublish={handlePublish}
         />
-        {/* Activity counts and diff stats */}
-        {hasActivity && (
-          <div className="flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
-            {activity.agentCount > 0 && (
-              <span className="flex items-center gap-0.5">
-                <Sparkles className="h-3 w-3" />
-                {activity.agentCount}
-              </span>
-            )}
-            {activity.terminalCount > 0 && (
-              <span className="flex items-center gap-0.5">
-                <Terminal className="h-3 w-3" />
-                {activity.terminalCount}
-              </span>
-            )}
-            {hasDiffStats && (
-              <span className="flex items-center gap-0.5">
-                {diffStats.insertions > 0 && (
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    +{diffStats.insertions}
-                  </span>
-                )}
-                {diffStats.deletions > 0 && (
-                  <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
-                )}
-              </span>
-            )}
-          </div>
-        )}
+        {/* Activity counts */}
+        <div className="flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
+          {activity.agentCount > 0 && (
+            <span className="flex items-center gap-0.5">
+              <Sparkles className="h-3 w-3" />
+              {activity.agentCount}
+            </span>
+          )}
+          {activity.terminalCount > 0 && (
+            <span className="flex items-center gap-0.5">
+              <Terminal className="h-3 w-3" />
+              {activity.terminalCount}
+            </span>
+          )}
+          {hasDiffStats && (
+            <span className="flex items-center gap-0.5">
+              {diffStats.insertions > 0 && (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  +{diffStats.insertions}
+                </span>
+              )}
+              {diffStats.deletions > 0 && (
+                <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
+              )}
+            </span>
+          )}
+        </div>
       </button>
       {/* Drop indicator - bottom */}
       {showDropIndicator && dropDirection === 'bottom' && (
-        <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+        <div className="absolute -bottom-0.5 left-0 right-0 h-0.5 bg-primary rounded-full" />
       )}
     </>
   );
 
   return (
     <>
-      {glowEnabled ? (
-        <GlowBorder state={outputState as GlowState} className="rounded-xl">
-          {worktreeItemContent}
-        </GlowBorder>
-      ) : (
-        <div className="relative rounded-xl">{worktreeItemContent}</div>
-      )}
+      {/* Flex container: activity indicator on left, button on right */}
+      <div className="flex items-center">
+        {/* Activity indicator area - same width as ChevronRight container in repo row */}
+        <span className="shrink-0 w-5 h-5 flex items-center justify-center">
+          <ActivityIndicator state={activityState} size="sm" />
+        </span>
+        {/* Button with optional glow border */}
+        {glowEnabled ? (
+          <GlowBorder state={outputState as GlowState} className="rounded-xl flex-1 min-w-0">
+            {buttonContent}
+          </GlowBorder>
+        ) : (
+          <div className="relative rounded-xl flex-1 min-w-0">{buttonContent}</div>
+        )}
+      </div>
 
       {/* Context Menu */}
       {menuOpen && (

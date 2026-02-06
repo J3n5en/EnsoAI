@@ -86,7 +86,7 @@ import { useSettingsStore } from './stores/settings';
 import { useTempWorkspaceStore } from './stores/tempWorkspace';
 import { requestUnsavedChoice } from './stores/unsavedPrompt';
 import { useWorktreeStore } from './stores/worktree';
-import { useWorktreeActivityStore } from './stores/worktreeActivity';
+import { initAgentActivityListener, useWorktreeActivityStore } from './stores/worktreeActivity';
 
 // Initialize global clone progress listener
 initCloneProgressListener();
@@ -94,6 +94,11 @@ initCloneProgressListener();
 export default function App() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
+
+  // Initialize agent activity listener for tree sidebar status display
+  useEffect(() => {
+    return initAgentActivityListener();
+  }, []);
 
   // Listen for auto-fetch completion events to refresh git status
   useAutoFetchListener();
@@ -990,6 +995,13 @@ export default function App() {
   useEffect(() => {
     window.electronAPI.mcp.setStatusLineHookEnabled(claudeCodeIntegration.statusLineEnabled);
   }, [claudeCodeIntegration.statusLineEnabled]);
+
+  // Sync PermissionRequest hook setting with Claude Code (for AskUserQuestion notifications)
+  useEffect(() => {
+    window.electronAPI.mcp.setPermissionRequestHookEnabled(
+      claudeCodeIntegration.permissionRequestHookEnabled
+    );
+  }, [claudeCodeIntegration.permissionRequestHookEnabled]);
 
   // Listen for code review continue conversation request
   const shouldSwitchToChatTab = useCodeReviewContinueStore(

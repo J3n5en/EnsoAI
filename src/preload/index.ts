@@ -661,6 +661,10 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.MCP_STATUSLINE_HOOK_SET, enabled),
     getStatusLineHookStatus: (): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.MCP_STATUSLINE_HOOK_STATUS),
+    setPermissionRequestHookEnabled: (enabled: boolean): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_PERMISSION_REQUEST_HOOK_SET, enabled),
+    getPermissionRequestHookStatus: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.MCP_PERMISSION_REQUEST_HOOK_STATUS),
   },
 
   // Claude Provider
