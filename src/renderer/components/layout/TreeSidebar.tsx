@@ -1091,6 +1091,7 @@ export function TreeSidebar({
                     ...currentSettings,
                     hidden: true,
                   });
+                  refreshRepoSettings();
                   toastManager.add({
                     title: t('Repository hidden'),
                     description: t('Hidden repositories will not appear in the sidebar'),
