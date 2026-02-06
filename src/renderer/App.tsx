@@ -1000,8 +1000,16 @@ export default function App() {
 
   // Sync PermissionRequest hook setting with Claude Code (for AskUserQuestion notifications)
   useEffect(() => {
-    window.electronAPI.mcp.setPermissionRequestHookEnabled(
-      claudeCodeIntegration.permissionRequestHookEnabled
+    const setHook = window.electronAPI?.mcp?.setPermissionRequestHookEnabled;
+    if (typeof setHook === 'function') {
+      setHook(claudeCodeIntegration.permissionRequestHookEnabled);
+      return;
+    }
+
+    // In dev, preload changes may require an Electron restart. Avoid crashing the renderer
+    // if the currently loaded preload bundle is missing this API.
+    console.warn(
+      '[mcp] setPermissionRequestHookEnabled is not available. Please restart Electron dev process to update preload.'
     );
   }, [claudeCodeIntegration.permissionRequestHookEnabled]);
 
