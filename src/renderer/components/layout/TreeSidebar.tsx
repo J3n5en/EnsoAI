@@ -1092,6 +1092,15 @@ export function TreeSidebar({
                     hidden: true,
                   });
                   refreshRepoSettings();
+                  // If hiding the currently selected repo, switch to next visible one
+                  if (selectedRepo === repoMenuTarget.path) {
+                    const nextVisible = repositories.find(
+                      (r) => r.path !== repoMenuTarget.path && !getRepositorySettings(r.path).hidden
+                    );
+                    if (nextVisible) {
+                      onSelectRepo(nextVisible.path);
+                    }
+                  }
                   toastManager.add({
                     title: t('Repository hidden'),
                     description: t('Hidden repositories will not appear in the sidebar'),
@@ -1274,6 +1283,7 @@ export function TreeSidebar({
         open={repoManagerOpen}
         onOpenChange={setRepoManagerOpen}
         repositories={repositories}
+        selectedRepo={selectedRepo}
         onSelectRepo={onSelectRepo}
         onRemoveRepository={onRemoveRepository}
         onSettingsChange={refreshRepoSettings}
