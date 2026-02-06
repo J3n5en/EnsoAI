@@ -236,6 +236,15 @@ export function SourceControlPanel({
     refetch: refetchCommits,
   } = useGitHistoryInfinite(rootPath ?? null, 20);
 
+  // Ensure a repository is selected when repositories are available
+  // This fixes the issue where no repository is selected when switching to source control tab
+  useEffect(() => {
+    if (repositories.length > 0 && !selectedRepo) {
+      // Default to main repository (first in list)
+      setSelectedSubmodulePath(null);
+    }
+  }, [repositories.length, selectedRepo]);
+
   // Refetch immediately when tab becomes active
   useEffect(() => {
     if (isActive && rootPath) {
