@@ -1,5 +1,15 @@
 import * as React from 'react';
 import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import {
   Select,
   SelectItem,
   SelectPopup,
@@ -25,6 +35,7 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
   const providerRef = React.useRef<HTMLDivElement>(null);
   const { claudeCodeIntegration, setClaudeCodeIntegration } = useSettingsStore();
   const [bridgePort, setBridgePort] = React.useState<number | null>(null);
+  const [showDependencyDialog, setShowDependencyDialog] = React.useState(false);
   const [tmuxError, setTmuxError] = React.useState<string | null>(null);
   const isWindows = window.electronAPI?.env?.platform === 'win32';
 
@@ -137,9 +148,51 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
             </div>
             <Switch
               checked={claudeCodeIntegration.stopHookEnabled}
-              onCheckedChange={(checked) => setClaudeCodeIntegration({ stopHookEnabled: checked })}
+              onCheckedChange={(checked) => {
+                if (
+                  !checked &&
+                  claudeCodeIntegration.enhancedInputAutoPopup === 'hideWhileRunning'
+                ) {
+                  // Show dependency dialog when disabling and hideWhileRunning is selected
+                  setShowDependencyDialog(true);
+                } else {
+                  setClaudeCodeIntegration({ stopHookEnabled: checked });
+                }
+              }}
             />
           </div>
+
+          {/* Dependency Dialog */}
+          <AlertDialog open={showDependencyDialog}>
+            <AlertDialogPopup>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t('Feature Dependency')}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t(
+                    '"Hide While Running" mode requires "Enhanced Notification". Display mode will be switched to "Always Show".'
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogClose
+                  render={(props) => (
+                    <Button
+                      {...props}
+                      onClick={() => {
+                        setClaudeCodeIntegration({
+                          stopHookEnabled: false,
+                          enhancedInputAutoPopup: 'always',
+                        });
+                        setShowDependencyDialog(false);
+                      }}
+                    >
+                      {t('Confirm')}
+                    </Button>
+                  )}
+                />
+              </AlertDialogFooter>
+            </AlertDialogPopup>
+          </AlertDialog>
 
           {/* Ask User Question Notification */}
           <div className="flex items-center justify-between">
@@ -174,32 +227,53 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
           </div>
 
           {claudeCodeIntegration.enhancedInputEnabled && (
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium">{t('Auto Popup Enhanced Input')}</span>
-                <p className="text-xs text-muted-foreground">
-                  {claudeCodeIntegration.stopHookEnabled
-                    ? t('Automatically show enhanced input when agent stops')
-                    : t('Requires Enhanced Notification to auto popup on agent stop')}
-                </p>
+            <div className="ml-4 space-y-2 border-l-2 border-muted pl-4">
+              <span className="text-xs font-medium text-muted-foreground">{t('Display Mode')}</span>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="enhancedInputAutoPopup"
+                    checked={claudeCodeIntegration.enhancedInputAutoPopup === 'manual'}
+                    onChange={() => setClaudeCodeIntegration({ enhancedInputAutoPopup: 'manual' })}
+                    className="h-4 w-4"
+                  />
+                  {t('Manual')}
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="enhancedInputAutoPopup"
+                    checked={claudeCodeIntegration.enhancedInputAutoPopup === 'always'}
+                    onChange={() => setClaudeCodeIntegration({ enhancedInputAutoPopup: 'always' })}
+                    className="h-4 w-4"
+                  />
+                  {t('Always Show')}
+                </label>
+                <label
+                  className={`flex items-center gap-2 text-sm ${!claudeCodeIntegration.stopHookEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="enhancedInputAutoPopup"
+                    checked={
+                      (claudeCodeIntegration.enhancedInputAutoPopup ?? 'hideWhileRunning') ===
+                      'hideWhileRunning'
+                    }
+                    onChange={() =>
+                      setClaudeCodeIntegration({ enhancedInputAutoPopup: 'hideWhileRunning' })
+                    }
+                    disabled={!claudeCodeIntegration.stopHookEnabled}
+                    className="h-4 w-4"
+                  />
+                  {t('Hide While Running')}
+                  <span className="text-xs text-muted-foreground">
+                    ({t('Requires Enhanced Notification')})
+                  </span>
+                </label>
               </div>
-              <Switch
-                checked={(claudeCodeIntegration.enhancedInputAutoPopup ?? false) &&
-                  claudeCodeIntegration.stopHookEnabled}
-                disabled={!claudeCodeIntegration.stopHookEnabled}
-                onCheckedChange={(checked) => {
-                  // Auto popup depends on the stop hook event channel.
-                  // If stop hook is disabled, force-disable auto popup to avoid confusing states.
-                  if (!claudeCodeIntegration.stopHookEnabled) {
-                    setClaudeCodeIntegration({ enhancedInputAutoPopup: false });
-                    return;
-                  }
-                  setClaudeCodeIntegration({ enhancedInputAutoPopup: checked });
-                }}
-              />
             </div>
           )}
-
 
           {/* Status Line */}
           <div className="flex items-center justify-between">

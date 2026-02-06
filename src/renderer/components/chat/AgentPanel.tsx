@@ -24,7 +24,7 @@ import { useTerminalStore } from '@/stores/terminal';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
-import { EnhancedInput } from './EnhancedInput';
+import { EnhancedInputContainer } from './EnhancedInputContainer';
 import { QuickTerminalModal } from './QuickTerminalModal';
 import type { Session } from './SessionBar';
 import { StatusLine } from './StatusLine';
@@ -206,9 +206,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   // Track StatusLine height per group to avoid cross-column races.
   // When split panels render multiple StatusLines, a newly mounted/empty column can report 0,
   // which would incorrectly collapse the global height and cause EnhancedInput to cover StatusLine.
-  const [statusLineHeightsByGroupId, setStatusLineHeightsByGroupId] = useState<Record<string, number>>(
-    {}
-  );
+  const [statusLineHeightsByGroupId, setStatusLineHeightsByGroupId] = useState<
+    Record<string, number>
+  >({});
 
   useEffect(() => {
     if (!statusLineEnabled) {
@@ -222,6 +222,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const removeSession = useAgentSessionsStore((state) => state.removeSession);
   const updateSession = useAgentSessionsStore((state) => state.updateSession);
   const setActiveId = useAgentSessionsStore((state) => state.setActiveId);
+
+  // Enhanced input state actions from store
+  const setEnhancedInputOpen = useAgentSessionsStore((state) => state.setEnhancedInputOpen);
+  const getEnhancedInputState = useAgentSessionsStore((state) => state.getEnhancedInputState);
 
   // Group states from store (persists across component remounts)
   const worktreeGroupStates = useAgentSessionsStore((state) => state.groupStates);
@@ -457,6 +461,17 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       const newSession = createSession(repoPath, cwd, defaultAgentId, customAgents, agentSettings);
       addSession(newSession);
 
+      // Auto open enhanced input for new Claude session if enabled
+      const baseAgentId = defaultAgentId.replace(/-hapi$/, '').replace(/-happy$/, '');
+      const autoPopupMode = claudeCodeIntegration.enhancedInputAutoPopup;
+      if (
+        baseAgentId === 'claude' &&
+        claudeCodeIntegration.enhancedInputEnabled &&
+        (autoPopupMode === 'always' || autoPopupMode === 'hideWhileRunning')
+      ) {
+        setEnhancedInputOpen(newSession.id, true);
+      }
+
       // Add session to group
       updateCurrentGroupState((state) => {
         const groupId = targetGroupId || state.activeGroupId || state.groups[0]?.id;
@@ -496,6 +511,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       agentSettings,
       addSession,
       updateCurrentGroupState,
+      claudeCodeIntegration.enhancedInputEnabled,
+      claudeCodeIntegration.enhancedInputAutoPopup,
+      setEnhancedInputOpen,
     ]
   );
 
@@ -599,17 +617,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     return unsubscribe;
   }, [handleSelectSession, allSessions, cwd, onSwitchWorktree]);
 
-  // Enhanced input panel state
-  const [enhancedInputSessionId, setEnhancedInputSessionId] = useState<string | null>(null);
+  // Enhanced input sender ref (unchanged)
   const enhancedInputSenderRef = useRef<
     Map<string, (content: string, imagePaths: string[]) => void>
   >(new Map());
-  // Pending auto-popup sessions (when stop notification arrives for non-active sessions)
-  const [pendingAutoPopupSessionIds, setPendingAutoPopupSessionIds] = useState<Set<string>>(
-    () => new Set()
-  );
-  // Track active session changes to auto-collapse enhanced input on session switch
-  const prevActiveSessionIdRef = useRef<string | null>(null);
 
   // 监听 Claude stop hook 通知，精确更新 output state 并发送完成通知
   const setOutputState = useAgentSessionsStore((s) => s.setOutputState);
@@ -628,27 +639,19 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         // Check if enhanced input is enabled and should auto popup
         // Auto popup requires:
         // 1. enhancedInputEnabled
-        // 2. enhancedInputAutoPopup
+        // 2. enhancedInputAutoPopup is 'always' or 'hideWhileRunning'
         // 3. stopHookEnabled (for Claude Code)
+        const autoPopupMode = claudeCodeIntegration.enhancedInputAutoPopup;
         const shouldAutoPopup =
           session.agentId === 'claude' &&
           claudeCodeIntegration.enhancedInputEnabled &&
-          claudeCodeIntegration.enhancedInputAutoPopup &&
+          (autoPopupMode === 'always' || autoPopupMode === 'hideWhileRunning') &&
           claudeCodeIntegration.stopHookEnabled;
 
-        // Auto popup enhanced input if enabled and session is in current worktree
-        if (shouldAutoPopup && pathsEqual(session.cwd, cwd)) {
-          if (isActive && activeGroup?.activeSessionId === sessionId) {
-            // Active session: popup immediately
-            setEnhancedInputSessionId(sessionId);
-          } else {
-            // Non-active session: mark as pending (allow multiple pending sessions)
-            setPendingAutoPopupSessionIds((prev) => {
-              const next = new Set(prev);
-              next.add(sessionId);
-              return next;
-            });
-          }
+        // Auto popup enhanced input if enabled
+        // Now we set the open state in store - it persists per session
+        if (shouldAutoPopup) {
+          setEnhancedInputOpen(sessionId, true);
         }
 
         // Send system notification
@@ -673,43 +676,11 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     isActive,
     setOutputState,
     claudeCodeIntegration,
+    setEnhancedInputOpen,
   ]);
 
-  // When user switches to a session with pending auto popup, show the enhanced input
-  useEffect(() => {
-    const activeGroup = groups.find((g) => g.id === activeGroupId);
-    const activeSessionId = activeGroup?.activeSessionId;
-
-    const prevActiveSessionId = prevActiveSessionIdRef.current;
-    prevActiveSessionIdRef.current = activeSessionId ?? null;
-
-    // If active session disappeared (e.g. group emptied), collapse.
-    if (!activeSessionId) {
-      setEnhancedInputSessionId(null);
-      return;
-    }
-
-    if (activeSessionId && pendingAutoPopupSessionIds.has(activeSessionId)) {
-      setEnhancedInputSessionId(activeSessionId);
-      setPendingAutoPopupSessionIds((prev) => {
-        const next = new Set(prev);
-        next.delete(activeSessionId);
-        return next;
-      });
-      return;
-    }
-
-    // Session switched: auto-collapse enhanced input (per lifecycle spec)
-    if (prevActiveSessionId && activeSessionId !== prevActiveSessionId) {
-      setEnhancedInputSessionId(null);
-      return;
-    }
-
-    // Safety: if enhanced input is open for another session, collapse.
-    if (enhancedInputSessionId && enhancedInputSessionId !== activeSessionId) {
-      setEnhancedInputSessionId(null);
-    }
-  }, [groups, activeGroupId, pendingAutoPopupSessionIds, enhancedInputSessionId]);
+  // Note: EnhancedInput open state is now stored per-session in the store
+  // No need to auto-collapse on session switch - each session keeps its own state
 
   // 监听 Claude AskUserQuestion 通知
   useEffect(() => {
@@ -860,6 +831,16 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
       addSession(newSession);
 
+      // Auto open enhanced input for new Claude session if enabled
+      const autoPopupMode = claudeCodeIntegration.enhancedInputAutoPopup;
+      if (
+        baseId === 'claude' &&
+        claudeCodeIntegration.enhancedInputEnabled &&
+        (autoPopupMode === 'always' || autoPopupMode === 'hideWhileRunning')
+      ) {
+        setEnhancedInputOpen(newSession.id, true);
+      }
+
       // Add to target group or active group
       updateCurrentGroupState((state) => {
         const groupId = targetGroupId || state.activeGroupId || state.groups[0]?.id;
@@ -890,7 +871,17 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         };
       });
     },
-    [repoPath, cwd, customAgents, agentSettings, addSession, updateCurrentGroupState]
+    [
+      repoPath,
+      cwd,
+      customAgents,
+      agentSettings,
+      addSession,
+      updateCurrentGroupState,
+      claudeCodeIntegration.enhancedInputEnabled,
+      claudeCodeIntegration.enhancedInputAutoPopup,
+      setEnhancedInputOpen,
+    ]
   );
 
   // Handle group click
@@ -1225,6 +1216,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActive, handleToggleQuickTerminal]);
 
+  const maxStatusLineHeight = useMemo(() => {
+    let max = 0;
+    for (const h of Object.values(statusLineHeightsByGroupId)) {
+      if (h > max) max = h;
+    }
+    return max;
+  }, [statusLineHeightsByGroupId]);
+
   if (!cwd) return null;
 
   // Check if current worktree has any groups (used for empty state detection)
@@ -1262,14 +1261,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   // Get current worktree's group positions for terminal placement
   const currentGroupPositions = getGroupPositions(currentGroupState);
-
-  const maxStatusLineHeight = useMemo(() => {
-    let max = 0;
-    for (const h of Object.values(statusLineHeightsByGroupId)) {
-      if (h > max) max = h;
-    }
-    return max;
-  }, [statusLineHeightsByGroupId]);
 
   return (
     <div
@@ -1398,7 +1389,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       {/* This container is NOT inside any worktree-specific wrapper, ensuring stable mounting */}
       {/* All sessions across ALL repos are rendered here to keep them mounted */}
       {/* bottom is dynamically set based on StatusLine height */}
-      <div className="absolute top-2 left-2 right-2 z-0" style={{ bottom: maxStatusLineHeight + 8 }}>
+      <div
+        className="absolute top-2 left-2 right-2 z-0"
+        style={{ bottom: maxStatusLineHeight + 8 }}
+      >
         {Array.from(globalSessionIds).map((sessionId) => {
           const session = allSessions.find((s) => s.id === sessionId);
           if (!session) return null;
@@ -1473,20 +1467,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 canMerge={info ? info.groupIndex > 0 : false}
                 onMerge={() => groupId && handleMerge(groupId)}
                 onFocus={() => groupId && handleSelectSession(sessionId, groupId)}
-                enhancedInputOpen={enhancedInputSessionId === sessionId}
+                enhancedInputOpen={getEnhancedInputState(sessionId).open}
                 onEnhancedInputOpenChange={(open) => {
-                  // EnhancedInput open state is centrally controlled by AgentPanel
-                  // so we can support BOTH:
-                  // - auto popup (stop hook)
-                  // - manual toggle (Ctrl+G inside AgentTerminal)
-                  if (open) {
-                    setEnhancedInputSessionId(sessionId);
-                    return;
-                  }
-                  // Sync close events (e.g. click X) back to enhancedInputSessionId.
-                  if (enhancedInputSessionId === sessionId) {
-                    setEnhancedInputSessionId(null);
-                  }
+                  // EnhancedInput open state is now stored per-session in the store
+                  setEnhancedInputOpen(sessionId, open);
                 }}
                 onRegisterEnhancedInputSender={(senderSessionId, sender) => {
                   enhancedInputSenderRef.current.set(senderSessionId, sender);
@@ -1502,42 +1486,45 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
       {/* Enhanced Input Panel (top-level overlay, scoped to active group column) */}
       {(() => {
-        if (!enhancedInputSessionId) return null;
         if (!claudeCodeIntegration.enhancedInputEnabled) return null;
 
+        // Get active session ID from current active group
+        const activeGroup = groups.find((g) => g.id === activeGroupId);
+        const activeSessionId = activeGroup?.activeSessionId;
+        if (!activeSessionId) return null;
+
+        // Validate session exists before rendering
+        const session = allSessions.find((s) => s.id === activeSessionId);
+        if (!session) return null;
+
         // Find which group/column the session belongs to (within current worktree)
-        const groupIndex = groups.findIndex((g) => g.sessionIds.includes(enhancedInputSessionId));
+        const groupIndex = groups.findIndex((g) => g.sessionIds.includes(activeSessionId));
         const position = groupIndex >= 0 ? currentGroupPositions[groupIndex] : undefined;
 
         const enhancedInputGroupId = groupIndex >= 0 ? groups[groupIndex]?.id : undefined;
-        const statusLineHeight =
-          enhancedInputGroupId ? (statusLineHeightsByGroupId[enhancedInputGroupId] ?? 0) : 0;
+        const statusLineHeight = enhancedInputGroupId
+          ? (statusLineHeightsByGroupId[enhancedInputGroupId] ?? 0)
+          : 0;
 
-        const sender = enhancedInputSenderRef.current.get(enhancedInputSessionId);
+        const sender = enhancedInputSenderRef.current.get(activeSessionId);
 
         return (
-          <div className="absolute inset-x-2 top-2 bottom-0 pointer-events-none">
-            <EnhancedInput
-              open
-              onOpenChange={(open) => {
-                if (open) return;
-                setEnhancedInputSessionId(null);
-              }}
-              onSend={(content, imagePaths) => {
-                sender?.(content, imagePaths);
-              }}
-              sessionId={enhancedInputSessionId}
-              statusLineHeight={statusLineHeight}
-              containerStyle={
-                position
-                  ? {
-                      left: `${position.left}%`,
-                      width: `${position.width}%`,
-                    }
-                  : undefined
-              }
-            />
-          </div>
+          <EnhancedInputContainer
+            sessionId={activeSessionId}
+            statusLineHeight={statusLineHeight}
+            containerStyle={
+              position
+                ? {
+                    left: `${position.left}%`,
+                    width: `${position.width}%`,
+                  }
+                : undefined
+            }
+            onSend={(content, imagePaths) => {
+              sender?.(content, imagePaths);
+            }}
+            isActive={isActive}
+          />
         );
       })()}
 

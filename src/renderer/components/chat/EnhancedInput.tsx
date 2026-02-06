@@ -14,6 +14,18 @@ interface EnhancedInputProps {
    * Used by AgentPanel top-level rendering to position the panel within the active group column.
    */
   containerStyle?: CSSProperties;
+  /** Initial content for the textarea (used for draft preservation) */
+  initialContent?: string;
+  /** Initial image paths (used for draft preservation) */
+  initialImagePaths?: string[];
+  /** Callback when content changes (for draft preservation) */
+  onContentChange?: (content: string) => void;
+  /** Callback when image paths change (for draft preservation) */
+  onImagesChange?: (imagePaths: string[]) => void;
+  /** Keep panel open after sending (for 'always' mode) */
+  keepOpenAfterSend?: boolean;
+  /** Whether the parent panel is active (used to trigger focus on tab switch) */
+  isActive?: boolean;
 }
 
 const MAX_IMAGES = 5;
@@ -30,14 +42,70 @@ export function EnhancedInput({
   sessionId: _sessionId,
   statusLineHeight = 0,
   containerStyle,
+  initialContent = '',
+  initialImagePaths = [],
+  onContentChange,
+  onImagesChange,
+  keepOpenAfterSend = false,
+  isActive = false,
 }: EnhancedInputProps) {
   const { t } = useI18n();
-  const [content, setContent] = useState('');
-  const [imagePaths, setImagePaths] = useState<string[]>([]);
+  const [content, setContent] = useState(initialContent);
+  const [imagePaths, setImagePaths] = useState<string[]>(initialImagePaths);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync content with external initial value when it changes
+  useEffect(() => {
+    setContent(initialContent);
+  }, [initialContent]);
+
+  // Sync imagePaths with external initial value when it changes
+  useEffect(() => {
+    setImagePaths(initialImagePaths);
+  }, [initialImagePaths]);
+
+  // Notify parent when content changes
+  const handleContentChange = useCallback(
+    (newContent: string) => {
+      setContent(newContent);
+      onContentChange?.(newContent);
+    },
+    [onContentChange]
+  );
+
+  // Helper to add images and notify parent
+  const addImagePath = useCallback(
+    (path: string) => {
+      setImagePaths((prev) => {
+        const newPaths = [...prev, path];
+        onImagesChange?.(newPaths);
+        return newPaths;
+      });
+    },
+    [onImagesChange]
+  );
+
+  // Helper to remove image and notify parent
+  const removeImagePath = useCallback(
+    (index: number) => {
+      setImagePaths((prev) => {
+        const newPaths = prev.filter((_, i) => i !== index);
+        onImagesChange?.(newPaths);
+        return newPaths;
+      });
+    },
+    [onImagesChange]
+  );
+
+  // Helper to clear images and notify parent
+  const clearImagePaths = useCallback(() => {
+    setImagePaths([]);
+    onImagesChange?.([]);
+  }, [onImagesChange]);
+
   // Auto-resize textarea
+  // biome-ignore lint/correctness/useExhaustiveDependencies: content triggers height recalculation
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -45,28 +113,55 @@ export function EnhancedInput({
     }
   }, [content]);
 
-  // Focus textarea when opened
+  // Focus textarea when opened, session changes, or panel becomes active
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId triggers focus on session switch
   useEffect(() => {
-    if (open && textareaRef.current) {
+    if (open && isActive && textareaRef.current) {
       textareaRef.current.focus();
     }
+  }, [open, _sessionId, isActive]);
+
+  // Focus trap: keep focus on textarea while panel is open
+  const handleBlur = useCallback(() => {
+    // Delay check because blur fires before click on buttons
+    requestAnimationFrame(() => {
+      if (open && textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    });
   }, [open]);
 
-  // Reset content when closed
-  useEffect(() => {
-    if (!open) {
-      setContent('');
-      setImagePaths([]);
-    }
-  }, [open]);
+  // Draft is now preserved in store - no reset on close
 
   const handleSend = useCallback(async () => {
     if (!content.trim() && imagePaths.length === 0) return;
-    onSend(content.trim(), imagePaths);
-    setContent('');
-    setImagePaths([]);
-    onOpenChange(false);
-  }, [content, imagePaths, onSend, onOpenChange]);
+    try {
+      onSend(content.trim(), imagePaths);
+      // Clear content after sending (notify parent)
+      handleContentChange('');
+      clearImagePaths();
+      // Only close panel if not in 'always open' mode
+      if (!keepOpenAfterSend) {
+        onOpenChange(false);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toastManager.add({
+        type: 'error',
+        title: t('Failed to send message'),
+        description: message,
+      });
+    }
+  }, [
+    content,
+    imagePaths,
+    onSend,
+    onOpenChange,
+    handleContentChange,
+    clearImagePaths,
+    keepOpenAfterSend,
+    t,
+  ]);
 
   const handlePanelKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -92,52 +187,55 @@ export function EnhancedInput({
     [handleSend]
   );
 
-  const saveImageToTemp = useCallback(async (file: File): Promise<string | null> => {
-    try {
-      // Check file size
-      if (file.size > MAX_IMAGE_SIZE) {
+  const saveImageToTemp = useCallback(
+    async (file: File): Promise<string | null> => {
+      try {
+        // Check file size
+        if (file.size > MAX_IMAGE_SIZE) {
+          toastManager.add({
+            type: 'warning',
+            title: t('Image too large'),
+            description: t('Max image size is {{size}}MB', { size: 10 }),
+          });
+          return null;
+        }
+
+        // Read file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = new Uint8Array(arrayBuffer);
+
+        // Generate unique filename
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        const extension = file.name.split('.').pop() || 'png';
+        const filename = `ensoai-input-${timestamp}-${random}.${extension}`;
+
+        // Save to temp directory via electron API
+        const result = await window.electronAPI.file.saveToTemp(filename, buffer);
+
+        if (result.success && result.path) {
+          return result.path;
+        }
+
         toastManager.add({
-          type: 'warning',
-          title: t('Image too large'),
-          description: t('Max image size is {{size}}MB', { size: 10 }),
+          type: 'error',
+          title: t('Failed to save image'),
+          description: result.error || t('Unknown error'),
+        });
+
+        return null;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        toastManager.add({
+          type: 'error',
+          title: t('Failed to save image'),
+          description: message,
         });
         return null;
       }
-
-      // Read file as ArrayBuffer
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
-
-      // Generate unique filename
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2, 8);
-      const extension = file.name.split('.').pop() || 'png';
-      const filename = `ensoai-input-${timestamp}-${random}.${extension}`;
-
-      // Save to temp directory via electron API
-      const result = await window.electronAPI.file.saveToTemp(filename, buffer);
-
-      if (result.success && result.path) {
-        return result.path;
-      }
-
-      toastManager.add({
-        type: 'error',
-        title: t('Failed to save image'),
-        description: result.error || t('Unknown error'),
-      });
-
-      return null;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      toastManager.add({
-        type: 'error',
-        title: t('Failed to save image'),
-        description: message,
-      });
-      return null;
-    }
-  }, [t]);
+    },
+    [t]
+  );
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent) => {
@@ -172,12 +270,12 @@ export function EnhancedInput({
         for (const file of imageFiles) {
           const path = await saveImageToTemp(file);
           if (path) {
-            setImagePaths((prev) => [...prev, path]);
+            addImagePath(path);
           }
         }
       }
     },
-    [imagePaths.length, saveImageToTemp, t]
+    [imagePaths.length, saveImageToTemp, t, addImagePath]
   );
 
   const handleDrop = useCallback(
@@ -201,12 +299,12 @@ export function EnhancedInput({
         for (const file of imageFiles) {
           const path = await saveImageToTemp(file);
           if (path) {
-            setImagePaths((prev) => [...prev, path]);
+            addImagePath(path);
           }
         }
       }
     },
-    [imagePaths.length, saveImageToTemp, t]
+    [imagePaths.length, saveImageToTemp, t, addImagePath]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -236,7 +334,7 @@ export function EnhancedInput({
       for (const file of imageFiles) {
         const path = await saveImageToTemp(file);
         if (path) {
-          setImagePaths((prev) => [...prev, path]);
+          addImagePath(path);
         }
       }
 
@@ -245,12 +343,15 @@ export function EnhancedInput({
         fileInputRef.current.value = '';
       }
     },
-    [imagePaths.length, saveImageToTemp, t]
+    [imagePaths.length, saveImageToTemp, t, addImagePath]
   );
 
-  const removeImage = useCallback((index: number) => {
-    setImagePaths((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  const removeImage = useCallback(
+    (index: number) => {
+      removeImagePath(index);
+    },
+    [removeImagePath]
+  );
 
   const createImagePreviewFromPath = useCallback((path: string) => {
     // Use local-file:// protocol to preview saved temp images.
@@ -315,10 +416,7 @@ export function EnhancedInput({
             {imagePaths.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {imagePaths.map((path, index) => (
-                  <div
-                    key={index}
-                    className="relative group h-4 w-4 rounded overflow-hidden border"
-                  >
+                  <div key={path} className="relative group h-4 w-4 rounded overflow-hidden border">
                     <img
                       src={createImagePreviewFromPath(path)}
                       alt={`Preview ${index + 1}`}
@@ -347,17 +445,14 @@ export function EnhancedInput({
         </div>
 
         <div className="flex items-start gap-2">
-          <div
-            className="flex-1 relative"
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-          >
+          <div className="flex-1 relative" onDrop={handleDrop} onDragOver={handleDragOver}>
             <textarea
               ref={textareaRef}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => handleContentChange(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onBlur={handleBlur}
               placeholder={t('Type your message... (Shift+Enter for newline)')}
               className="w-full min-h-[40px] max-h-40 p-3 pr-12 resize-none bg-muted rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               rows={1}
