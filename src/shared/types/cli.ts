@@ -31,3 +31,10 @@ export interface CustomAgent {
 export interface AgentCliStatus {
   agents: AgentCliInfo[];
 }
+
+export interface CliDetectDebugLog {
+  level: 'debug' | 'warn';
+  message: string;
+  details?: Record<string, unknown>;
+  timestamp: string;
+}

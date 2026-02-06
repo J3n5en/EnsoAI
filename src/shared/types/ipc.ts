@@ -145,6 +145,7 @@ export const IPC_CHANNELS = {
   // CLI Detector
   CLI_DETECT: 'cli:detect',
   CLI_DETECT_ONE: 'cli:detectOne',
+  CLI_DETECT_LOG: 'cli:detect:log',
 
   // CLI Installer
   CLI_INSTALL_STATUS: 'cli:install:status',

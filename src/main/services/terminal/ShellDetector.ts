@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import type { ShellConfig, ShellInfo } from '@shared/types';
@@ -110,6 +110,25 @@ class ShellDetector {
   private cachedShells: ShellInfo[] | null = null;
   private wslAvailable: boolean | null = null;
 
+  private resolveWindowsCommandPath(command: string): string | null {
+    if (!isWindows) return null;
+
+    try {
+      const output = execSync(`where.exe ${command}`, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 3000,
+      });
+      const firstMatch = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find(Boolean);
+      return firstMatch || null;
+    } catch {
+      return null;
+    }
+  }
+
   private async isWslAvailable(): Promise<boolean> {
     if (this.wslAvailable !== null) {
       return this.wslAvailable;
@@ -134,11 +153,31 @@ class ShellDetector {
         if (existsSync(p)) {
           return p;
         }
+      } else if (isWindows) {
+        const resolved = this.resolveWindowsCommandPath(p);
+        if (resolved) {
+          return resolved;
+        }
       } else {
         return p;
       }
     }
     return null;
+  }
+
+  private resolveCustomShellPath(shellPath: string): string {
+    if (!isWindows) return shellPath;
+
+    const looksLikeAbsolutePath =
+      shellPath.includes('\\') || shellPath.includes('/') || /^[a-zA-Z]:/.test(shellPath);
+    if (looksLikeAbsolutePath) {
+      if (existsSync(shellPath)) return shellPath;
+    } else {
+      const resolved = this.resolveWindowsCommandPath(shellPath);
+      if (resolved) return resolved;
+    }
+
+    return this.findAvailablePath(['powershell.exe']) || 'powershell.exe';
   }
 
   private async detectWindowsShells(): Promise<ShellInfo[]> {
@@ -214,8 +253,9 @@ class ShellDetector {
 
   resolveShellConfig(config: ShellConfig): { shell: string; args: string[] } {
     if (config.shellType === 'custom') {
+      const configuredShell = config.customShellPath || (isWindows ? 'powershell.exe' : '/bin/sh');
       return {
-        shell: config.customShellPath || (isWindows ? 'powershell.exe' : '/bin/sh'),
+        shell: this.resolveCustomShellPath(configuredShell),
         args: config.customShellArgs || [],
       };
     }
@@ -250,7 +290,7 @@ class ShellDetector {
     }
 
     return isWindows
-      ? { shell: 'powershell.exe', args: ['-NoLogo'] }
+      ? { shell: this.findAvailablePath(['powershell.exe']) || 'powershell.exe', args: ['-NoLogo'] }
       : { shell: '/bin/sh', args: [] };
   }
 
@@ -260,7 +300,8 @@ class ShellDetector {
    */
   resolveShellForCommand(config: ShellConfig): { shell: string; execArgs: string[] } {
     if (config.shellType === 'custom') {
-      const shell = config.customShellPath || (isWindows ? 'powershell.exe' : '/bin/sh');
+      const configuredShell = config.customShellPath || (isWindows ? 'powershell.exe' : '/bin/sh');
+      const shell = this.resolveCustomShellPath(configuredShell);
       // For custom shell, try to infer execArgs based on shell name
       const execArgs = this.inferExecArgs(shell, config.customShellArgs);
       return { shell, execArgs };
@@ -297,7 +338,10 @@ class ShellDetector {
     }
 
     return isWindows
-      ? { shell: 'powershell.exe', execArgs: ['-NoLogo', '-ExecutionPolicy', 'Bypass', '-Command'] }
+      ? {
+          shell: this.findAvailablePath(['powershell.exe']) || 'powershell.exe',
+          execArgs: ['-NoLogo', '-ExecutionPolicy', 'Bypass', '-Command'],
+        }
       : { shell: '/bin/sh', execArgs: ['-c'] };
   }
 

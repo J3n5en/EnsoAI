@@ -105,6 +105,15 @@ function expandWindowsEnvVars(str: string): string {
         return value;
       }
     }
+
+    const processValue =
+      process.env[varName] ||
+      process.env[varName.toUpperCase()] ||
+      process.env[varName.toLowerCase()];
+    if (processValue) {
+      return processValue;
+    }
+
     // Keep original if not found
     return match;
   });
@@ -152,7 +161,13 @@ function getWindowsRegistryPath(): string {
     // Expand environment variables like %NVM_SYMLINK%, %USERPROFILE%, etc.
     combinedPath = expandWindowsEnvVars(combinedPath);
 
-    cachedWindowsPath = combinedPath || process.env.PATH || '';
+    const processPath = process.env.PATH || '';
+    const allPaths = [
+      ...new Set([...combinedPath.split(delimiter), ...processPath.split(delimiter)]),
+    ]
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    cachedWindowsPath = allPaths.join(delimiter);
     return cachedWindowsPath;
   } catch {
     // Fallback to process.env.PATH
