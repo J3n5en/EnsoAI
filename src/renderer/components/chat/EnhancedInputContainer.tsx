@@ -59,8 +59,8 @@ export const EnhancedInputContainer = memo(function EnhancedInputContainer({
         sessionId={sessionId}
         statusLineHeight={statusLineHeight}
         containerStyle={containerStyle}
-        initialContent={content}
-        initialImagePaths={imagePaths}
+        content={content}
+        imagePaths={imagePaths}
         onContentChange={(newContent) => setEnhancedInputContent(sessionId, newContent)}
         onImagesChange={(newImagePaths) => setEnhancedInputImages(sessionId, newImagePaths)}
         keepOpenAfterSend={keepOpenAfterSend}

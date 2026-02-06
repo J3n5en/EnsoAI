@@ -82,7 +82,6 @@ interface AgentSessionsState {
   setEnhancedInputContent: (sessionId: string, content: string) => void;
   setEnhancedInputImages: (sessionId: string, imagePaths: string[]) => void;
   clearEnhancedInput: (sessionId: string, keepOpen?: boolean) => void; // Clear content after sending
-  clearEnhancedInputState: (sessionId: string) => void; // Clean up when session removed
 
   // Aggregated state selectors
   getAggregatedByWorktree: (cwd: string) => AggregatedOutputState;
@@ -503,13 +502,6 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
             [sessionId]: { open: keepOpen, content: '', imagePaths: [] },
           },
         };
-      }),
-
-    clearEnhancedInputState: (sessionId) =>
-      set((prev) => {
-        const newStates = { ...prev.enhancedInputStates };
-        delete newStates[sessionId];
-        return { enhancedInputStates: newStates };
       }),
   }))
 );

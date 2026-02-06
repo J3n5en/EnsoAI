@@ -1,7 +1,8 @@
 import { Send, Upload, X } from 'lucide-react';
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useRef } from 'react';
 import { toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
+import { toLocalFileUrl } from '@/lib/localFileUrl';
 
 interface EnhancedInputProps {
   open: boolean;
@@ -14,14 +15,14 @@ interface EnhancedInputProps {
    * Used by AgentPanel top-level rendering to position the panel within the active group column.
    */
   containerStyle?: CSSProperties;
-  /** Initial content for the textarea (used for draft preservation) */
-  initialContent?: string;
-  /** Initial image paths (used for draft preservation) */
-  initialImagePaths?: string[];
-  /** Callback when content changes (for draft preservation) */
-  onContentChange?: (content: string) => void;
-  /** Callback when image paths change (for draft preservation) */
-  onImagesChange?: (imagePaths: string[]) => void;
+  /** Current content for the textarea (store-controlled) */
+  content: string;
+  /** Current image paths (store-controlled) */
+  imagePaths: string[];
+  /** Callback when content changes (store-controlled) */
+  onContentChange: (content: string) => void;
+  /** Callback when image paths change (store-controlled) */
+  onImagesChange: (imagePaths: string[]) => void;
   /** Keep panel open after sending (for 'always' mode) */
   keepOpenAfterSend?: boolean;
   /** Whether the parent panel is active (used to trigger focus on tab switch) */
@@ -42,67 +43,23 @@ export function EnhancedInput({
   sessionId: _sessionId,
   statusLineHeight = 0,
   containerStyle,
-  initialContent = '',
-  initialImagePaths = [],
+  content,
+  imagePaths,
   onContentChange,
   onImagesChange,
   keepOpenAfterSend = false,
   isActive = false,
 }: EnhancedInputProps) {
   const { t } = useI18n();
-  const [content, setContent] = useState(initialContent);
-  const [imagePaths, setImagePaths] = useState<string[]>(initialImagePaths);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync content with external initial value when it changes
-  useEffect(() => {
-    setContent(initialContent);
-  }, [initialContent]);
-
-  // Sync imagePaths with external initial value when it changes
-  useEffect(() => {
-    setImagePaths(initialImagePaths);
-  }, [initialImagePaths]);
-
-  // Notify parent when content changes
-  const handleContentChange = useCallback(
-    (newContent: string) => {
-      setContent(newContent);
-      onContentChange?.(newContent);
-    },
-    [onContentChange]
-  );
-
-  // Helper to add images and notify parent
-  const addImagePath = useCallback(
-    (path: string) => {
-      setImagePaths((prev) => {
-        const newPaths = [...prev, path];
-        onImagesChange?.(newPaths);
-        return newPaths;
-      });
-    },
-    [onImagesChange]
-  );
-
-  // Helper to remove image and notify parent
   const removeImagePath = useCallback(
     (index: number) => {
-      setImagePaths((prev) => {
-        const newPaths = prev.filter((_, i) => i !== index);
-        onImagesChange?.(newPaths);
-        return newPaths;
-      });
+      onImagesChange(imagePaths.filter((_, i) => i !== index));
     },
-    [onImagesChange]
+    [imagePaths, onImagesChange]
   );
-
-  // Helper to clear images and notify parent
-  const clearImagePaths = useCallback(() => {
-    setImagePaths([]);
-    onImagesChange?.([]);
-  }, [onImagesChange]);
 
   // Auto-resize textarea
   // biome-ignore lint/correctness/useExhaustiveDependencies: content triggers height recalculation
@@ -138,8 +95,8 @@ export function EnhancedInput({
     try {
       onSend(content.trim(), imagePaths);
       // Clear content after sending (notify parent)
-      handleContentChange('');
-      clearImagePaths();
+      onContentChange('');
+      onImagesChange([]);
       // Only close panel if not in 'always open' mode
       if (!keepOpenAfterSend) {
         onOpenChange(false);
@@ -157,8 +114,8 @@ export function EnhancedInput({
     imagePaths,
     onSend,
     onOpenChange,
-    handleContentChange,
-    clearImagePaths,
+    onContentChange,
+    onImagesChange,
     keepOpenAfterSend,
     t,
   ]);
@@ -237,6 +194,37 @@ export function EnhancedInput({
     [t]
   );
 
+  const addImageFiles = useCallback(
+    async (files: File[]) => {
+      const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+      if (imageFiles.length === 0) return;
+
+      // Check limit
+      if (imagePaths.length + imageFiles.length > MAX_IMAGES) {
+        toastManager.add({
+          type: 'warning',
+          title: t('Too many images'),
+          description: t('Max images is {{count}}', { count: MAX_IMAGES }),
+        });
+        return;
+      }
+
+      // Save to temp (keep order)
+      const nextPaths = [...imagePaths];
+      for (const file of imageFiles) {
+        const path = await saveImageToTemp(file);
+        if (path) {
+          nextPaths.push(path);
+        }
+      }
+
+      if (nextPaths.length !== imagePaths.length) {
+        onImagesChange(nextPaths);
+      }
+    },
+    [imagePaths, saveImageToTemp, t, onImagesChange]
+  );
+
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -255,56 +243,20 @@ export function EnhancedInput({
 
       if (imageFiles.length > 0) {
         e.preventDefault();
-
-        // Check limit
-        if (imagePaths.length + imageFiles.length > MAX_IMAGES) {
-          toastManager.add({
-            type: 'warning',
-            title: t('Too many images'),
-            description: t('Max images is {{count}}', { count: MAX_IMAGES }),
-          });
-          return;
-        }
-
-        // Save to temp
-        for (const file of imageFiles) {
-          const path = await saveImageToTemp(file);
-          if (path) {
-            addImagePath(path);
-          }
-        }
+        await addImageFiles(imageFiles);
       }
     },
-    [imagePaths.length, saveImageToTemp, t, addImagePath]
+    [addImageFiles]
   );
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault();
       const files = Array.from(e.dataTransfer.files);
-      const imageFiles = files.filter((f) => f.type.startsWith('image/'));
 
-      if (imageFiles.length > 0) {
-        // Check limit
-        if (imagePaths.length + imageFiles.length > MAX_IMAGES) {
-          toastManager.add({
-            type: 'warning',
-            title: t('Too many images'),
-            description: t('Max images is {{count}}', { count: MAX_IMAGES }),
-          });
-          return;
-        }
-
-        // Save to temp
-        for (const file of imageFiles) {
-          const path = await saveImageToTemp(file);
-          if (path) {
-            addImagePath(path);
-          }
-        }
-      }
+      await addImageFiles(files);
     },
-    [imagePaths.length, saveImageToTemp, t, addImagePath]
+    [addImageFiles]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -316,59 +268,15 @@ export function EnhancedInput({
       const files = e.target.files;
       if (!files) return;
 
-      const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
-
-      if (imageFiles.length === 0) return;
-
-      // Check limit
-      if (imagePaths.length + imageFiles.length > MAX_IMAGES) {
-        toastManager.add({
-          type: 'warning',
-          title: t('Too many images'),
-          description: t('Max images is {{count}}', { count: MAX_IMAGES }),
-        });
-        return;
-      }
-
-      // Save to temp
-      for (const file of imageFiles) {
-        const path = await saveImageToTemp(file);
-        if (path) {
-          addImagePath(path);
-        }
-      }
+      await addImageFiles(Array.from(files));
 
       // Reset input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     },
-    [imagePaths.length, saveImageToTemp, t, addImagePath]
+    [addImageFiles]
   );
-
-  const removeImage = useCallback(
-    (index: number) => {
-      removeImagePath(index);
-    },
-    [removeImagePath]
-  );
-
-  const createImagePreviewFromPath = useCallback((path: string) => {
-    // Use local-file:// protocol to preview saved temp images.
-    // This avoids blob: URLs which are blocked by the app CSP.
-    let normalized = path.replace(/\\/g, '/');
-
-    // Windows drive path (C:/...) needs a leading slash in URL pathname (/C:/...)
-    if (/^[a-zA-Z]:\//.test(normalized)) {
-      normalized = `/${normalized}`;
-    } else if (!normalized.startsWith('/')) {
-      normalized = `/${normalized}`;
-    }
-
-    const url = new URL('local-file://');
-    url.pathname = normalized;
-    return url.toString();
-  }, []);
 
   const handleSelectFiles = useCallback(() => {
     fileInputRef.current?.click();
@@ -418,13 +326,13 @@ export function EnhancedInput({
                 {imagePaths.map((path, index) => (
                   <div key={path} className="relative group h-4 w-4 rounded overflow-hidden border">
                     <img
-                      src={createImagePreviewFromPath(path)}
+                      src={toLocalFileUrl(path)}
                       alt={`Preview ${index + 1}`}
                       className="h-full w-full object-cover"
                     />
                     <button
                       type="button"
-                      onClick={() => removeImage(index)}
+                      onClick={() => removeImagePath(index)}
                       className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X className="h-3 w-3 text-white" />
@@ -449,7 +357,7 @@ export function EnhancedInput({
             <textarea
               ref={textareaRef}
               value={content}
-              onChange={(e) => handleContentChange(e.target.value)}
+              onChange={(e) => onContentChange(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onBlur={handleBlur}

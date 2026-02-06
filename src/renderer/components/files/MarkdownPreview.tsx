@@ -5,33 +5,15 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/ui/code-block';
 import { MermaidRenderer } from '@/components/ui/mermaid-renderer';
+import { toLocalFileBaseUrl } from '@/lib/localFileUrl';
 
 const URL_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
-
-function normalizeForUrlPath(path: string): string {
-  let normalized = path.replace(/\\/g, '/');
-
-  // Windows drive path (C:/...) needs a leading slash in URL pathname (/C:/...)
-  if (/^[a-zA-Z]:\//.test(normalized)) {
-    normalized = `/${normalized}`;
-  } else if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-
-  return normalized;
-}
 
 function getDirname(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/');
   const idx = normalized.lastIndexOf('/');
   if (idx === -1) return '';
   return idx === 0 ? '/' : normalized.slice(0, idx);
-}
-
-function toLocalFileBaseUrl(absPath: string): URL {
-  const url = new URL('local-file://');
-  url.pathname = `${normalizeForUrlPath(absPath).replace(/\/+$/, '')}/`;
-  return url;
 }
 
 function normalizePathnameForCompare(pathname: string): string {

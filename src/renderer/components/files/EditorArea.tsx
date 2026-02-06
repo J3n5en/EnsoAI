@@ -934,9 +934,9 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
               }}
             >
               {isImage ? (
-                <ImagePreview path={activeTab.path} sessionId={sessionId ?? undefined} />
+                <ImagePreview path={activeTab.path} />
               ) : isPdf ? (
-                <PdfPreview path={activeTab.path} sessionId={sessionId ?? undefined} />
+                <PdfPreview path={activeTab.path} />
               ) : (
                 <Editor
                   key={activeTab.path}
