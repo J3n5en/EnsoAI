@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import type { AgentActivityState } from '@/stores/worktreeActivity';
 
@@ -21,7 +22,7 @@ const colorClasses: Record<AgentActivityState, string> = {
   completed: 'bg-blue-500',
 };
 
-const titles: Record<AgentActivityState, string> = {
+const titleKeys: Record<AgentActivityState, string> = {
   idle: '',
   running: 'Agent is running',
   waiting_input: 'Waiting for user input',
@@ -36,9 +37,12 @@ const titles: Record<AgentActivityState, string> = {
  * - idle: hidden
  */
 export function ActivityIndicator({ state, size = 'md', className }: ActivityIndicatorProps) {
+  const { t } = useI18n();
+
   if (state === 'idle') return null;
 
   const isAnimated = state === 'running' || state === 'waiting_input';
+  const title = titleKeys[state] ? t(titleKeys[state]) : '';
 
   return (
     <motion.span
@@ -64,7 +68,7 @@ export function ActivityIndicator({ state, size = 'md', className }: ActivityInd
             }
           : undefined
       }
-      title={titles[state]}
+      title={title}
     />
   );
 }
