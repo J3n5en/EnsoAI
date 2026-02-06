@@ -177,9 +177,11 @@ export const useWorktreeActivityStore = create<WorktreeActivityState>()(
 
     // Activity state methods
     setActivityState: (worktreePath, state) =>
-      set((prev) => ({
-        activityStates: { ...prev.activityStates, [worktreePath]: state },
-      })),
+      set((prev) => {
+        // Skip update if state hasn't changed to avoid unnecessary re-renders
+        if (prev.activityStates[worktreePath] === state) return prev;
+        return { activityStates: { ...prev.activityStates, [worktreePath]: state } };
+      }),
 
     getActivityState: (worktreePath) => {
       return get().activityStates[worktreePath] || 'idle';

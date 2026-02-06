@@ -406,10 +406,8 @@ export function AgentTerminal({
         // Update to 'outputting' once we have substantial output after Enter
         if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
           updateOutputState('outputting');
-          // Also update worktree activity state to 'running'
-          if (cwd) {
-            setActivityState(cwd, 'running');
-          }
+          // Note: Activity state 'running' is set by handleCustomKey (on Enter) and
+          // startActivityPolling (during polling), so no need to set it here
         }
         // Note: The transition to 'idle' is handled by process activity polling
         // (startActivityPolling), not by a simple timeout
@@ -464,7 +462,6 @@ export function AgentTerminal({
       terminalSessionId,
       t,
       updateOutputState,
-      setActivityState,
     ]
   );
 
