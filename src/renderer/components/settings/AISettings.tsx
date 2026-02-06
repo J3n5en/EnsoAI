@@ -21,6 +21,7 @@ import {
 const PROVIDERS: { value: AIProvider; label: string }[] = [
   { value: 'claude-code', label: 'Claude Code' },
   { value: 'codex-cli', label: 'Codex CLI' },
+  { value: 'cursor-cli', label: 'Cursor CLI' },
   { value: 'gemini-cli', label: 'Gemini CLI' },
 ];
 
@@ -34,6 +35,13 @@ const MODELS_BY_PROVIDER: Record<AIProvider, { value: string; label: string }[]>
   'codex-cli': [
     { value: 'gpt-5.2', label: 'GPT-5.2' },
     { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
+  ],
+  'cursor-cli': [
+    { value: 'auto', label: 'Auto' },
+    { value: 'composer-1', label: 'Composer 1' },
+    { value: 'gpt-5.2', label: 'GPT-5.2' },
+    { value: 'sonnet-4.5', label: 'Sonnet 4.5' },
+    { value: 'opus-4.6', label: 'Opus 4.6' },
   ],
   'gemini-cli': [
     { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },

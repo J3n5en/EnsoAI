@@ -222,15 +222,20 @@ export function AgentTerminal({
     // Use custom path if provided, otherwise use agentCommand
     const effectiveCommand = customPath || agentCommand;
 
-    const supportsSession = agentCommand?.startsWith('claude') ?? false;
-    const supportIde = agentCommand?.startsWith('claude') ?? false;
+    const supportsSession = agentCommand?.startsWith('claude') || agentCommand === 'cursor-agent';
+    // Only Claude CLI supports --ide; Cursor CLI does not (errors with "unknown option '--ide'")
+    const supportIde = agentCommand?.startsWith('claude');
     const effectiveSessionId = resumeSessionId;
-    const agentArgs =
-      supportsSession && effectiveSessionId
-        ? initialized
-          ? ['--resume', effectiveSessionId]
-          : ['--session-id', effectiveSessionId]
-        : [];
+
+    // Build agent args: cursor-agent and initialized claude use --resume; otherwise --session-id
+    let agentArgs: string[] = [];
+    if (supportsSession && effectiveSessionId) {
+      if (agentCommand === 'cursor-agent' || initialized) {
+        agentArgs = ['--resume', effectiveSessionId];
+      } else {
+        agentArgs = ['--session-id', effectiveSessionId];
+      }
+    }
 
     if (supportIde) {
       agentArgs.push('--ide');

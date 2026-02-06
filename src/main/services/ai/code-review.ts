@@ -271,7 +271,7 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
 
   const prompt = buildPrompt(gitDiff, gitLog, language);
 
-  // Use stream-json for Claude and Gemini, json for Codex (doesn't support streaming well)
+  // Use stream-json for Claude, Cursor, and Gemini; json for Codex (doesn't support streaming well)
   const outputFormat = provider === 'codex-cli' ? 'json' : 'stream-json';
 
   const { proc, kill } = spawnCLI({
@@ -281,6 +281,7 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     cwd: workdir,
     reasoningEffort,
     outputFormat,
+    // Claude CLI honors this; Cursor CLI does not (see providers.buildCursorArgs). Cursor may edit/run git.
     disallowedTools: ['"Bash(git:*)"', 'Edit'],
     sessionId: options.sessionId, // Pass sessionId for session preservation
     preserveSession: !!options.sessionId, // Preserve session if sessionId is provided
@@ -298,7 +299,7 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
 
     const cleaned = stripAnsi(dataStr);
 
-    if (provider === 'claude-code') {
+    if (provider === 'claude-code' || provider === 'cursor-cli') {
       const chunks = claudeParser.parse(cleaned);
       for (const chunk of chunks) {
         onChunk(chunk);

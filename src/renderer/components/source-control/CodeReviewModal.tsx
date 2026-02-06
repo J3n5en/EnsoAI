@@ -263,10 +263,10 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
 
   const handleContinueConversation = useCallback(() => {
     if (reviewSessionId) {
-      requestContinue(reviewSessionId);
+      requestContinue(reviewSessionId, codeReviewSettings.provider ?? undefined);
       onOpenChange(false);
     }
-  }, [reviewSessionId, requestContinue, onOpenChange]);
+  }, [reviewSessionId, codeReviewSettings.provider, requestContinue, onOpenChange]);
 
   const handleSendToCurrentSession = useCallback(() => {
     if (!sessionId || !hasWriter || !content) return;
@@ -381,12 +381,15 @@ export function CodeReviewModal({ open, onOpenChange, repoPath, sessionId }: Cod
                 {t('Minimize')}
               </Button>
             )}
-            {codeReviewSettings.provider === 'claude-code' && status === 'complete' && content && (
-              <Button variant="outline" onClick={handleContinueConversation}>
-                <MessageSquare className="h-4 w-4 mr-2" />
-                {t('Continue Conversation')}
-              </Button>
-            )}
+            {(codeReviewSettings.provider === 'claude-code' ||
+              codeReviewSettings.provider === 'cursor-cli') &&
+              status === 'complete' &&
+              content && (
+                <Button variant="outline" onClick={handleContinueConversation}>
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  {t('Continue Conversation')}
+                </Button>
+              )}
             {content && sessionId && (
               <Button variant="outline" onClick={handleSendToCurrentSession} disabled={!hasWriter}>
                 <Send className="h-4 w-4 mr-2" />

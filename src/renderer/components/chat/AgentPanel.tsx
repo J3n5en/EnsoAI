@@ -1,3 +1,4 @@
+import type { AIProvider } from '@shared/types';
 import { Plus, Settings, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEMP_REPO_ID } from '@/App/constants';
@@ -344,16 +345,31 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const pendingContinueSessionId = useCodeReviewContinueStore(
     (s) => s.continueConversation.sessionId
   );
+  const pendingContinueProvider = useCodeReviewContinueStore(
+    (s) => s.continueConversation.provider
+  );
   const clearContinueRequest = useCodeReviewContinueStore((s) => s.clearContinueRequest);
+
+  // Map AI provider (code review) to agent id for "Continue Conversation"
+  const continueAgentId = useMemo(() => {
+    const map: Record<AIProvider, string> = {
+      'claude-code': 'claude',
+      'codex-cli': 'codex',
+      'cursor-cli': 'cursor',
+      'gemini-cli': 'gemini',
+    };
+    return pendingContinueProvider != null ? (map[pendingContinueProvider] ?? 'claude') : 'claude';
+  }, [pendingContinueProvider]);
 
   useEffect(() => {
     if (pendingContinueSessionId && cwd) {
+      const info = AGENT_INFO[continueAgentId] ?? { name: 'Claude', command: 'claude' };
       const newSession: Session = {
         id: crypto.randomUUID(), // Generate new session ID
         sessionId: pendingContinueSessionId, // Use code review's sessionId for --resume
         name: 'Code Review',
-        agentId: 'claude',
-        agentCommand: 'claude',
+        agentId: continueAgentId,
+        agentCommand: info.command,
         repoPath,
         cwd,
         initialized: true, // Mark as initialized to use --resume
@@ -396,6 +412,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     }
   }, [
     pendingContinueSessionId,
+    continueAgentId,
     cwd,
     repoPath,
     addSession,

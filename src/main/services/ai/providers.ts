@@ -4,6 +4,7 @@ import type {
   AIProvider,
   ClaudeModelId,
   CodexModelId,
+  CursorModelId,
   GeminiModelId,
   ModelId,
   ReasoningEffort,
@@ -84,6 +85,33 @@ function buildGeminiArgs(options: CLISpawnOptions): string[] {
   return args;
 }
 
+/**
+ * Build args for Cursor CLI (agent). Prompt is passed via stdin; -p enables non-interactive mode.
+ *
+ * Limitations (vs Claude CLI): Cursor CLI does not support --no-session-persistence,
+ * --session-id, or --disallowedTools. When used for code review, the Cursor agent may
+ * attempt to modify files or run git commands; callers that pass disallowedTools will
+ * see a console warning that the option is ignored.
+ */
+function buildCursorArgs(options: CLISpawnOptions): string[] {
+  if (options.disallowedTools?.length) {
+    console.warn(
+      '[providers] Cursor CLI does not support --disallowedTools; option ignored. ' +
+        'Agent may modify files or run git commands during code review.'
+    );
+  }
+
+  const args = [
+    '-p',
+    '--output-format',
+    options.outputFormat ?? 'json',
+    '--model',
+    options.model as CursorModelId,
+  ];
+
+  return args;
+}
+
 export function spawnCLI(options: CLISpawnOptions): CLISpawnResult {
   const { shell, args: shellArgs } = getShellForCommand();
   const env = getEnvForCommand();
@@ -103,6 +131,10 @@ export function spawnCLI(options: CLISpawnOptions): CLISpawnResult {
     case 'gemini-cli':
       cliCommand = 'gemini';
       cliArgs = buildGeminiArgs(options);
+      break;
+    case 'cursor-cli':
+      cliCommand = 'agent';
+      cliArgs = buildCursorArgs(options);
       break;
     default:
       cliCommand = 'claude';
@@ -230,6 +262,11 @@ export function parseCodexOutput(stdout: string): ParsedCLIResult {
   return { success: true, text: cleaned };
 }
 
+export function parseCursorOutput(stdout: string): ParsedCLIResult {
+  // Cursor CLI uses same JSON result shape as Claude: type/result/subtype
+  return parseClaudeJsonOutput(stdout);
+}
+
 export function parseGeminiJsonOutput(stdout: string): ParsedCLIResult {
   try {
     let jsonStr = stripAnsi(stdout).trim();
@@ -279,6 +316,8 @@ export function parseCLIOutput(provider: AIProvider, stdout: string): ParsedCLIR
       return parseClaudeJsonOutput(stdout);
     case 'codex-cli':
       return parseCodexOutput(stdout);
+    case 'cursor-cli':
+      return parseCursorOutput(stdout);
     case 'gemini-cli':
       return parseGeminiJsonOutput(stdout);
     default:

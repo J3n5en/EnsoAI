@@ -1,3 +1,4 @@
+import type { AIProvider } from '@shared/types';
 import { create } from 'zustand';
 
 export type ReviewStatus = 'idle' | 'initializing' | 'streaming' | 'complete' | 'error';
@@ -13,6 +14,8 @@ interface CodeReviewState {
 
 interface ContinueConversationState {
   sessionId: string | null;
+  /** AI provider used for the review; used to select agent when switching to chat */
+  provider: AIProvider | null;
   shouldSwitchToChatTab: boolean;
 }
 
@@ -33,7 +36,7 @@ interface CodeReviewContinueState {
   setSessionId: (sessionId: string | null) => void;
 
   // Continue conversation actions
-  requestContinue: (sessionId: string) => void;
+  requestContinue: (sessionId: string, provider?: AIProvider | null) => void;
   requestChatTabSwitch: () => void;
   clearContinueRequest: () => void;
   clearChatTabSwitch: () => void;
@@ -50,6 +53,7 @@ const initialReviewState: CodeReviewState = {
 
 const initialContinueConversationState: ContinueConversationState = {
   sessionId: null,
+  provider: null,
   shouldSwitchToChatTab: false,
 };
 
@@ -87,10 +91,11 @@ export const useCodeReviewContinueStore = create<CodeReviewContinueState>((set) 
       review: { ...state.review, sessionId },
     })),
 
-  requestContinue: (sessionId) => {
+  requestContinue: (sessionId, provider = null) => {
     set({
       continueConversation: {
         sessionId,
+        provider: provider ?? null,
         shouldSwitchToChatTab: true,
       },
     });
@@ -107,6 +112,7 @@ export const useCodeReviewContinueStore = create<CodeReviewContinueState>((set) 
       continueConversation: {
         ...state.continueConversation,
         sessionId: null,
+        provider: null,
       },
     })),
   clearChatTabSwitch: () =>
@@ -123,7 +129,7 @@ let cleanupFn: (() => void) | null = null;
 export async function startCodeReview(
   repoPath: string,
   settings: {
-    provider: string;
+    provider: AIProvider;
     model: string;
     reasoningEffort?: string;
     language: string;
