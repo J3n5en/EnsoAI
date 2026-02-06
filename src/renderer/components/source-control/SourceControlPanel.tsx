@@ -283,19 +283,41 @@ export function SourceControlPanel({
         refetch();
         refetchCommits();
 
-        if (pulled || pushed) {
-          const actions = [pulled && t('Pulled'), pushed && t('Pushed')]
-            .filter(Boolean)
-            .join(' & ');
+        const branch = repo.branch ?? '';
+        if (pulled && pushed) {
           toastManager.add({
             title: t('Sync completed'),
-            description: actions,
+            description: t(
+              'Pulled {{pulled}} commit(s), pushed {{pushed}} commit(s) on {{branch}}',
+              { pulled: repoBehind, pushed: repoAhead, branch }
+            ),
+            type: 'success',
+            timeout: 3000,
+          });
+        } else if (pulled) {
+          toastManager.add({
+            title: t('Sync completed'),
+            description: t('Pulled {{count}} commit(s) on {{branch}}', {
+              count: repoBehind,
+              branch,
+            }),
+            type: 'success',
+            timeout: 3000,
+          });
+        } else if (pushed) {
+          toastManager.add({
+            title: t('Sync completed'),
+            description: t('Pushed {{count}} commit(s) on {{branch}}', {
+              count: repoAhead,
+              branch,
+            }),
             type: 'success',
             timeout: 3000,
           });
         } else {
           toastManager.add({
             title: t('Already up to date'),
+            description: t('{{branch}} is in sync with remote', { branch }),
             type: 'success',
             timeout: 2000,
           });

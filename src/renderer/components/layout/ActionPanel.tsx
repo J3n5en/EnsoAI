@@ -55,6 +55,7 @@ function useCliInstallStatus() {
 
 function useCliInstall() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   return useMutation({
     mutationFn: async () => {
       return await window.electronAPI.cli.install();
@@ -64,13 +65,13 @@ function useCliInstall() {
       if (result.installed) {
         toastManager.add({
           type: 'success',
-          title: '安装成功',
-          description: `'enso' 命令已安装到 ${result.path}`,
+          title: t('CLI install success'),
+          description: t("'enso' command installed to {{path}}", { path: result.path ?? '' }),
         });
       } else if (result.error) {
         toastManager.add({
           type: 'error',
-          title: '安装失败',
+          title: t('CLI install failed'),
           description: result.error,
         });
       }
@@ -78,7 +79,7 @@ function useCliInstall() {
     onError: (error) => {
       toastManager.add({
         type: 'error',
-        title: '安装失败',
+        title: t('CLI install failed'),
         description: error instanceof Error ? error.message : String(error),
       });
     },
@@ -87,6 +88,7 @@ function useCliInstall() {
 
 function useCliUninstall() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   return useMutation({
     mutationFn: async () => {
       return await window.electronAPI.cli.uninstall();
@@ -96,13 +98,13 @@ function useCliUninstall() {
       if (!result.installed) {
         toastManager.add({
           type: 'success',
-          title: '卸载成功',
-          description: "'enso' 命令已卸载",
+          title: t('CLI uninstall success'),
+          description: t("'enso' command uninstalled"),
         });
       } else if (result.error) {
         toastManager.add({
           type: 'error',
-          title: '卸载失败',
+          title: t('CLI uninstall failed'),
           description: result.error,
         });
       }
@@ -110,7 +112,7 @@ function useCliUninstall() {
     onError: (error) => {
       toastManager.add({
         type: 'error',
-        title: '卸载失败',
+        title: t('CLI uninstall failed'),
         description: error instanceof Error ? error.message : String(error),
       });
     },

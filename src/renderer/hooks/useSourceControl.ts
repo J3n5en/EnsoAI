@@ -2,6 +2,7 @@ import type { FileChangesResult } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toastManager } from '@/components/ui/toast';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
+import { useI18n } from '@/i18n';
 
 const emptyResult: FileChangesResult = { changes: [] };
 
@@ -42,6 +43,7 @@ export function useFileDiff(
 
 export function useGitStage() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation({
     mutationFn: async ({ workdir, paths }: { workdir: string; paths: string[] }) => {
@@ -56,8 +58,8 @@ export function useGitStage() {
     },
     onError: (error) => {
       toastManager.add({
-        title: 'Stage failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('Stage failed'),
+        description: error instanceof Error ? error.message : t('Unknown error'),
         type: 'error',
         timeout: 5000,
       });
@@ -67,6 +69,7 @@ export function useGitStage() {
 
 export function useGitUnstage() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation({
     mutationFn: async ({ workdir, paths }: { workdir: string; paths: string[] }) => {
@@ -81,8 +84,8 @@ export function useGitUnstage() {
     },
     onError: (error) => {
       toastManager.add({
-        title: 'Unstage failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('Unstage failed'),
+        description: error instanceof Error ? error.message : t('Unknown error'),
         type: 'error',
         timeout: 5000,
       });
@@ -92,6 +95,7 @@ export function useGitUnstage() {
 
 export function useGitDiscard() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation({
     mutationFn: async ({ workdir, paths }: { workdir: string; paths: string[] }) => {
@@ -106,8 +110,8 @@ export function useGitDiscard() {
     },
     onError: (error) => {
       toastManager.add({
-        title: 'Discard failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('Discard failed'),
+        description: error instanceof Error ? error.message : t('Unknown error'),
         type: 'error',
         timeout: 5000,
       });
@@ -117,6 +121,7 @@ export function useGitDiscard() {
 
 export function useGitCommit() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation({
     mutationFn: async ({ workdir, message }: { workdir: string; message: string }) => {
@@ -133,8 +138,8 @@ export function useGitCommit() {
     },
     onError: (error) => {
       toastManager.add({
-        title: 'Commit failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: t('Commit failed'),
+        description: error instanceof Error ? error.message : t('Unknown error'),
         type: 'error',
         timeout: 5000,
       });
