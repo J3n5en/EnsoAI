@@ -1,6 +1,6 @@
 {
   "name": "enso-ai",
-  "version": "0.2.30",
+  "version": "0.2.31",
   "description": "EnsoAI - Git Worktree Manager with AI Agent",
   "main": "./out/main/index.js",
   "author": {
