@@ -15,6 +15,13 @@ function formatInspectData(data: InspectPayload): string {
     `Position: ${data.position.width} x ${data.position.height} @ (${data.position.left}, ${data.position.top})`,
   ];
 
+  // Add component source info if available
+  if (data.component) {
+    const { framework, file, line, column } = data.component;
+    const location = line !== undefined ? `:${line}${column !== undefined ? `:${column}` : ''}` : '';
+    lines.push(`Component: [${framework}] ${file}${location}`);
+  }
+
   if (data.innerText) {
     const truncatedText =
       data.innerText.length > 200 ? `${data.innerText.substring(0, 200)}...` : data.innerText;

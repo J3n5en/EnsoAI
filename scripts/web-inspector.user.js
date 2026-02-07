@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Enso Web Inspector
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  选中页面元素并发送到 Enso，具备现代化的 UI 界面
 // @author       Enso
 // @match        *://*/*
@@ -18,6 +18,7 @@
 (() => {
   const CONFIG = {
     PORT: 18765,
+    MAX_WALK_UP_DEPTH: 15, // Limit depth to avoid performance issues on deeply nested DOM
     THEME: {
       PRIMARY: '#4F46E5', // Enso Indigo
       DANGER: '#EF4444',
@@ -54,10 +55,20 @@
     }
 
     init() {
-      this.injectStyles();
       this.updateMenuCommand();
-      if (this.isEnabledForSite()) {
-        this.createUI();
+
+      // Wait for DOM to be ready before creating UI
+      const initUI = () => {
+        this.injectStyles();
+        if (this.isEnabledForSite()) {
+          this.createUI();
+        }
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initUI);
+      } else {
+        initUI();
       }
     }
 
@@ -535,6 +546,7 @@
         innerText: el.innerText?.substring(0, 1000) || '',
         url: window.location.href,
         timestamp: Date.now(),
+        component: this.findSourceByWalkUp(el),
       };
 
       this.sendToEnso(info);
@@ -613,6 +625,94 @@
         width: `${r.width}px`,
         height: `${r.height}px`,
       };
+    }
+
+    /**
+     * Parse vite-plugin-vue-inspector string format: "path/to/file.vue:line:column"
+     */
+    parseVueInspectorString(str) {
+      if (!str || typeof str !== 'string') return null;
+      const match = str.match(/^(.+?):(\d+)(?::(\d+))?$/);
+      if (match) {
+        return {
+          framework: 'vue',
+          file: match[1],
+          line: parseInt(match[2], 10),
+          column: match[3] ? parseInt(match[3], 10) : undefined,
+        };
+      }
+      return { framework: 'vue', file: str };
+    }
+
+    /**
+     * Extract component source from DOM element
+     * Priority: vite-plugin-vue-inspector > Vue 3 > Vue 2 > React
+     */
+    getSourceFromDOM(el) {
+      if (!el || typeof el.getAttribute !== 'function') return null;
+
+      // 1. vite-plugin-vue-inspector (v3.x attribute)
+      const inspectorAttr = el.getAttribute('data-v-inspector');
+      if (inspectorAttr) {
+        return this.parseVueInspectorString(inspectorAttr);
+      }
+
+      // 2. vite-plugin-vue-inspector (v4.0+ hidden prop in vnode)
+      const vnodePaths = [
+        el.__vnode?.props?.__v_inspector,
+        el.__vnode?.ctx?.vnode?.props?.__v_inspector,
+        el.__vnode?.component?.vnode?.props?.__v_inspector,
+      ];
+      for (const data of vnodePaths) {
+        if (data) return this.parseVueInspectorString(data);
+      }
+
+      // 3. Vue 3: __vueParentComponent
+      const vueFile = el.__vueParentComponent?.type?.__file;
+      if (vueFile) {
+        return { framework: 'vue', file: vueFile };
+      }
+
+      // 4. Vue 2: __vue__
+      const vue2File = el.__vue__?.$options?.__file;
+      if (vue2File) {
+        return { framework: 'vue', file: vue2File };
+      }
+
+      // 5. React: fiber _debugSource
+      const fiberKey = Object.keys(el).find(
+        (k) => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance')
+      );
+      if (fiberKey) {
+        let fiber = el[fiberKey];
+        while (fiber) {
+          const source = fiber._debugSource || fiber._debugOwner?._debugSource;
+          if (source) {
+            return {
+              framework: 'react',
+              file: source.fileName,
+              line: source.lineNumber,
+              column: source.columnNumber,
+            };
+          }
+          fiber = fiber.return;
+        }
+      }
+
+      return null;
+    }
+
+    /**
+     * Walk up DOM tree to find component source
+     */
+    findSourceByWalkUp(el) {
+      let cur = el;
+      for (let i = 0; i < CONFIG.MAX_WALK_UP_DEPTH && cur; i++) {
+        const source = this.getSourceFromDOM(cur);
+        if (source) return source;
+        cur = cur.parentElement;
+      }
+      return null;
     }
 
     sendToEnso(payload) {
