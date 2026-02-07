@@ -1,21 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { toLocalFileUrl } from '@/lib/localFileUrl';
 
 interface ImagePreviewProps {
   path: string;
-  sessionId?: string;
-}
-
-function normalizeForUrlPath(path: string): string {
-  let normalized = path.replace(/\\/g, '/');
-
-  // Windows drive path (C:/...) needs a leading slash in URL pathname (/C:/...)
-  if (/^[a-zA-Z]:\//.test(normalized)) {
-    normalized = `/${normalized}`;
-  } else if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-
-  return normalized;
 }
 
 export function ImagePreview({ path }: ImagePreviewProps) {
@@ -28,9 +15,7 @@ export function ImagePreview({ path }: ImagePreviewProps) {
 
   // Convert file path to local-file:// URL (Electron custom protocol)
   const imageUrl = useMemo(() => {
-    const url = new URL('local-file://');
-    url.pathname = normalizeForUrlPath(path);
-    return url.toString();
+    return toLocalFileUrl(path);
   }, [path]);
 
   // Reset scale when image changes

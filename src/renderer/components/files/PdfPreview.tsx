@@ -1,28 +1,15 @@
 import { ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { toLocalFileUrl } from '@/lib/localFileUrl';
 import { cn } from '@/lib/utils';
 import { getPDFJS, type PDFDocumentProxy } from './pdfSetup';
 
 interface PdfPreviewProps {
   path: string;
-  sessionId?: string;
 }
 
 type ZoomMode = 'fit-width' | 'fit-page' | 'custom';
-
-function normalizeForUrlPath(path: string): string {
-  let normalized = path.replace(/\\/g, '/');
-
-  // Windows drive path (C:/...) needs a leading slash in URL pathname (/C:/...)
-  if (/^[a-zA-Z]:\//.test(normalized)) {
-    normalized = `/${normalized}`;
-  } else if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-
-  return normalized;
-}
 
 export function PdfPreview({ path }: PdfPreviewProps) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
@@ -39,9 +26,7 @@ export function PdfPreview({ path }: PdfPreviewProps) {
 
   // Convert file path to local-file:// URL (Electron custom protocol)
   const pdfUrl = useMemo(() => {
-    const url = new URL('local-file://');
-    url.pathname = normalizeForUrlPath(path);
-    return url.toString();
+    return toLocalFileUrl(path);
   }, [path]);
 
   // 加载 PDF 文档

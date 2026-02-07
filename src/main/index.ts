@@ -22,11 +22,12 @@ import {
   cleanupAllResourcesSync,
   registerIpcHandlers,
 } from './ipc';
+import { cleanupTempFiles } from './ipc/files';
 import { initClaudeProviderWatcher } from './ipc/claudeProvider';
 import { registerWindowHandlers } from './ipc/window';
 import { registerClaudeBridgeIpcHandlers } from './services/claude/ClaudeIdeBridge';
 import { unwatchClaudeSettings } from './services/claude/ClaudeProviderManager';
-import { isAllowedLocalFilePath } from './services/files/LocalFileAccess';
+import { isAllowedLocalFilePath, registerAllowedLocalFileRoot } from './services/files/LocalFileAccess';
 import { checkGitInstalled } from './services/git/checkGit';
 import { gitAutoFetchService } from './services/git/GitAutoFetchService';
 import { setCurrentLocale } from './services/i18n';
@@ -210,6 +211,15 @@ async function init(): Promise<void> {
 app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.ensoai.app');
+
+  // Allow EnhancedInput temp images to be previewed via local-file:// protocol.
+  // NOTE: This is registered here (in the same module as the protocol handler)
+  // to avoid any potential issues with module-level state not being shared.
+  const ensoaiInputDir = join(app.getPath('temp'), 'ensoai-input');
+  registerAllowedLocalFileRoot(ensoaiInputDir);
+
+  // Clean up temp files from previous sessions
+  await cleanupTempFiles();
 
   // Register protocol to handle local file:// URLs for markdown images
   protocol.handle('local-file', (request) => {

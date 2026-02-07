@@ -585,36 +585,38 @@ export default function App() {
           type: 'info',
           title: t('New provider detected'),
           description: t('Click to save this config'),
-          actions: [
-            {
-              label: t('Preview'),
-              onClick: () => {
-                setSettingsCategory('integration');
-                setScrollToProvider(true);
-                openSettings();
-                setPendingProviderAction('preview');
+          data: {
+            actions: [
+              {
+                label: t('Preview'),
+                onClick: () => {
+                  setSettingsCategory('integration');
+                  setScrollToProvider(true);
+                  openSettings();
+                  setPendingProviderAction('preview');
+                },
+                variant: 'ghost',
               },
-              variant: 'ghost',
-            },
-            {
-              label: t('Save'),
-              onClick: () => {
-                setSettingsCategory('integration');
-                setScrollToProvider(true);
-                openSettings();
-                setPendingProviderAction('save');
+              {
+                label: t('Save'),
+                onClick: () => {
+                  setSettingsCategory('integration');
+                  setScrollToProvider(true);
+                  openSettings();
+                  setPendingProviderAction('save');
+                },
+                variant: 'outline',
               },
-              variant: 'outline',
-            },
-            {
-              label: t('Open Settings'),
-              onClick: () => {
-                setSettingsCategory('integration');
-                setScrollToProvider(true);
-                openSettings();
+              {
+                label: t('Open Settings'),
+                onClick: () => {
+                  setSettingsCategory('integration');
+                  setScrollToProvider(true);
+                  openSettings();
+                },
               },
-            },
-          ],
+            ],
+          },
         });
       }
     });
@@ -998,8 +1000,16 @@ export default function App() {
 
   // Sync PermissionRequest hook setting with Claude Code (for AskUserQuestion notifications)
   useEffect(() => {
-    window.electronAPI.mcp.setPermissionRequestHookEnabled(
-      claudeCodeIntegration.permissionRequestHookEnabled
+    const setHook = window.electronAPI?.mcp?.setPermissionRequestHookEnabled;
+    if (typeof setHook === 'function') {
+      setHook(claudeCodeIntegration.permissionRequestHookEnabled);
+      return;
+    }
+
+    // In dev, preload changes may require an Electron restart. Avoid crashing the renderer
+    // if the currently loaded preload bundle is missing this API.
+    console.warn(
+      '[mcp] setPermissionRequestHookEnabled is not available. Please restart Electron dev process to update preload.'
     );
   }, [claudeCodeIntegration.permissionRequestHookEnabled]);
 

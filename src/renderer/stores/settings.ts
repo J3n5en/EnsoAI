@@ -258,6 +258,8 @@ export interface ClaudeCodeIntegrationSettings {
   showProviderSwitcher: boolean; // Show provider switcher in SessionBar
   enableProviderDisableFeature: boolean; // Enable/disable the provider temporary disable feature
   providers: import('@shared/types').ClaudeProvider[];
+  enhancedInputEnabled: boolean; // Enable enhanced input panel for Claude Code
+  enhancedInputAutoPopup: 'always' | 'hideWhileRunning' | 'manual'; // Enhanced input auto popup mode
 }
 
 export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings = {
@@ -272,6 +274,8 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   showProviderSwitcher: true,
   enableProviderDisableFeature: false,
   providers: [],
+  enhancedInputEnabled: true, // Enable enhanced input by default
+  enhancedInputAutoPopup: 'hideWhileRunning', // Hide while running by default
 };
 
 export type { AIProvider, ReasoningEffort } from '@shared/types';
@@ -1209,14 +1213,26 @@ export const useSettingsStore = create<SettingsState>()(
             ...currentState.editorSettings,
             ...persisted.editorSettings,
           },
-          claudeCodeIntegration: {
-            ...currentState.claudeCodeIntegration,
-            ...persisted.claudeCodeIntegration,
-            statusLineFields: {
-              ...currentState.claudeCodeIntegration.statusLineFields,
-              ...persisted.claudeCodeIntegration?.statusLineFields,
-            },
-          },
+          claudeCodeIntegration: (() => {
+            const merged = {
+              ...currentState.claudeCodeIntegration,
+              ...persisted.claudeCodeIntegration,
+              statusLineFields: {
+                ...currentState.claudeCodeIntegration.statusLineFields,
+                ...persisted.claudeCodeIntegration?.statusLineFields,
+              },
+            };
+            // Migrate legacy boolean enhancedInputAutoPopup to new enum value
+            const legacyAutoPopup = persisted.claudeCodeIntegration?.enhancedInputAutoPopup;
+            if (typeof legacyAutoPopup === 'boolean') {
+              merged.enhancedInputAutoPopup = legacyAutoPopup ? 'hideWhileRunning' : 'manual';
+            }
+            // Fix inconsistent state: hideWhileRunning requires stopHookEnabled
+            if (merged.enhancedInputAutoPopup === 'hideWhileRunning' && !merged.stopHookEnabled) {
+              merged.enhancedInputAutoPopup = 'always';
+            }
+            return merged;
+          })(),
           commitMessageGenerator: {
             ...currentState.commitMessageGenerator,
             ...persisted.commitMessageGenerator,

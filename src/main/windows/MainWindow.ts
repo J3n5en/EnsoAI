@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
 import { IPC_CHANNELS } from '@shared/types';
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { Menu, app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { autoUpdaterService } from '../services/updater/AutoUpdater';
 
 interface WindowState {
@@ -78,6 +78,27 @@ export function createMainWindow(): BrowserWindow {
       allowRunningInsecureContent: false,
       preload: join(__dirname, '../preload/index.cjs'),
     },
+  });
+
+  // Enable native context menu for editable fields (input/textarea/contenteditable)
+  // so EnhancedInput and other text fields support Cut/Copy/Paste/SelectAll.
+  win.webContents.on('context-menu', (event, params) => {
+    if (!params.isEditable) return;
+    event.preventDefault();
+
+    const template: Electron.MenuItemConstructorOptions[] = [
+      { role: 'cut', enabled: params.editFlags.canCut },
+      { role: 'copy', enabled: params.editFlags.canCopy },
+      { role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+    ];
+
+    Menu.buildFromTemplate(template).popup({
+      window: win,
+      x: params.x,
+      y: params.y,
+    });
   });
 
   // Restore maximized state

@@ -162,6 +162,7 @@ function DirItem({ path, icon, label }: DirItemProps) {
 
 export function StatusLine({ sessionId, onHeightChange }: StatusLineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastReportedHeightRef = useRef<number | null>(null);
   const status = useAgentStatusStore((state) =>
     sessionId ? state.statuses[sessionId] : undefined
   );
@@ -313,18 +314,30 @@ export function StatusLine({ sessionId, onHeightChange }: StatusLineProps) {
 
     const el = containerRef.current;
     if (!el) {
+      lastReportedHeightRef.current = 0;
       onHeightChange(0);
       return;
     }
 
+    const reportHeight = () => {
+      // Use getBoundingClientRect() for stable measurement (less sensitive to
+      // offsetHeight/contentRect differences), and ceil to avoid 1px oscillations.
+      const next = Math.ceil(el.getBoundingClientRect().height);
+      if (lastReportedHeightRef.current === next) return;
+      lastReportedHeightRef.current = next;
+      onHeightChange(next);
+    };
+
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        onHeightChange(entry.contentRect.height + 1);
+      // We only care about the element height, so read from `el` directly.
+      // This avoids subtle rounding differences between different measurement APIs.
+      if (entries.length > 0) {
+        reportHeight();
       }
     });
 
     observer.observe(el);
-    onHeightChange(el.offsetHeight + 1);
+    reportHeight();
 
     return () => observer.disconnect();
   }, [onHeightChange]);
@@ -332,7 +345,10 @@ export function StatusLine({ sessionId, onHeightChange }: StatusLineProps) {
   // Report 0 height when not rendering
   useEffect(() => {
     if ((!statusLineEnabled || !items) && onHeightChange) {
-      onHeightChange(0);
+      if (lastReportedHeightRef.current !== 0) {
+        lastReportedHeightRef.current = 0;
+        onHeightChange(0);
+      }
     }
   }, [statusLineEnabled, items, onHeightChange]);
 

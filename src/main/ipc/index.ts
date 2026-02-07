@@ -8,7 +8,13 @@ import { registerClaudeConfigHandlers } from './claudeConfig';
 import { registerClaudeProviderHandlers } from './claudeProvider';
 import { registerCliHandlers } from './cli';
 import { registerDialogHandlers } from './dialog';
-import { registerFileHandlers, stopAllFileWatchers, stopAllFileWatchersSync } from './files';
+import {
+  registerFileHandlers,
+  stopAllFileWatchers,
+  stopAllFileWatchersSync,
+  cleanupTempFiles,
+  cleanupTempFilesSync,
+} from './files';
 import { clearAllGitServices, registerGitHandlers } from './git';
 import { autoStartHapi, cleanupHapi, registerHapiHandlers } from './hapi';
 
@@ -101,6 +107,9 @@ export async function cleanupAllResources(): Promise<void> {
 
   // Dispose Claude IDE Bridge
   disposeClaudeIdeBridge();
+
+  // Clean up temp files
+  await cleanupTempFiles();
 }
 
 /**
@@ -137,6 +146,9 @@ export function cleanupAllResourcesSync(): void {
 
   // Dispose Claude IDE Bridge (sync)
   disposeClaudeIdeBridge();
+
+  // Clean up temp files (sync)
+  cleanupTempFilesSync();
 
   console.log('[app] Sync cleanup done');
 }

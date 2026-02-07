@@ -21,6 +21,7 @@ interface AgentTerminalProps {
   id?: string; // Terminal session ID (UI key)
   cwd?: string;
   sessionId?: string; // Claude session ID for --session-id/--resume (falls back to id)
+  agentId?: string; // Agent ID (e.g., 'claude', 'codex', 'gemini')
   agentCommand?: string;
   customPath?: string; // custom absolute path to the agent CLI
   customArgs?: string; // additional arguments to pass to the agent
@@ -29,6 +30,12 @@ interface AgentTerminalProps {
   activated?: boolean;
   isActive?: boolean;
   canMerge?: boolean; // whether merge option should be enabled (has multiple groups)
+  /**
+   * When provided, Enhanced Input open state is controlled by parent (e.g. AgentPanel store).
+   * When omitted, AgentTerminal falls back to its own local state.
+   */
+  enhancedInputOpen?: boolean;
+  onEnhancedInputOpenChange?: (open: boolean) => void;
   onInitialized?: () => void;
   onActivated?: () => void;
   onExit?: () => void;
@@ -36,6 +43,11 @@ interface AgentTerminalProps {
   onSplit?: () => void;
   onMerge?: () => void;
   onFocus?: () => void; // called when terminal is clicked/focused to activate the group
+  onRegisterEnhancedInputSender?: (
+    sessionId: string,
+    sender: (content: string, imagePaths: string[]) => void
+  ) => void;
+  onUnregisterEnhancedInputSender?: (sessionId: string) => void;
 }
 
 const MIN_RUNTIME_FOR_AUTO_CLOSE = 10000; // 10 seconds
@@ -49,6 +61,7 @@ export function AgentTerminal({
   id,
   cwd,
   sessionId,
+  agentId = 'claude',
   agentCommand = 'claude',
   customPath,
   customArgs,
@@ -57,6 +70,8 @@ export function AgentTerminal({
   activated,
   isActive = false,
   canMerge = false,
+  enhancedInputOpen: externalEnhancedInputOpen,
+  onEnhancedInputOpenChange,
   onInitialized,
   onActivated,
   onExit,
@@ -64,6 +79,8 @@ export function AgentTerminal({
   onSplit,
   onMerge,
   onFocus,
+  onRegisterEnhancedInputSender,
+  onUnregisterEnhancedInputSender,
 }: AgentTerminalProps) {
   const { t } = useI18n();
   const {
@@ -126,6 +143,24 @@ export function AgentTerminal({
   const terminalSessionId = id ?? sessionId;
   const resumeSessionId = sessionId ?? id;
 
+  // Use external control if provided, otherwise use local state.
+  // IMPORTANT: `externalEnhancedInputOpen` can be false, so we must check `undefined` rather than truthiness.
+  const [localEnhancedInputOpen, setLocalEnhancedInputOpen] = useState(false);
+  const isExternallyControlled = externalEnhancedInputOpen !== undefined;
+  const enhancedInputOpen = isExternallyControlled
+    ? externalEnhancedInputOpen
+    : localEnhancedInputOpen;
+  const setEnhancedInputOpen = useCallback(
+    (open: boolean) => {
+      if (isExternallyControlled) {
+        onEnhancedInputOpenChange?.(open);
+        return;
+      }
+      setLocalEnhancedInputOpen(open);
+    },
+    [isExternallyControlled, onEnhancedInputOpenChange]
+  );
+
   // Keep isActiveRef in sync with isActive prop
   useEffect(() => {
     isActiveRef.current = isActive;
@@ -139,8 +174,18 @@ export function AgentTerminal({
       outputStateRef.current = newState;
       // Use isActiveRef.current to get latest value (important for interval callbacks)
       setOutputState(terminalSessionId, newState, isActiveRef.current);
+
+      // Hide enhanced input when agent starts running (hideWhileRunning mode)
+      if (
+        newState === 'outputting' &&
+        agentId === 'claude' &&
+        claudeCodeIntegration.enhancedInputEnabled &&
+        claudeCodeIntegration.enhancedInputAutoPopup === 'hideWhileRunning'
+      ) {
+        onEnhancedInputOpenChange?.(false);
+      }
     },
-    [terminalSessionId, setOutputState]
+    [terminalSessionId, setOutputState, agentId, claudeCodeIntegration, onEnhancedInputOpenChange]
   );
 
   // Mark session as active when user is viewing it
@@ -524,6 +569,15 @@ export function AgentTerminal({
       // Only handle keydown events for other logic
       if (event.type !== 'keydown') return true;
 
+      // Handle Ctrl+G to toggle enhanced input (only for Claude)
+      if (event.ctrlKey && event.key === 'g' && agentId === 'claude') {
+        if (claudeCodeIntegration.enhancedInputEnabled) {
+          setEnhancedInputOpen(!enhancedInputOpen);
+          return false; // Block the key event only when enhanced input is enabled
+        }
+        // When enhanced input is disabled, let the event pass through to terminal
+      }
+
       // Detect Enter key press (without modifiers) to activate session and start idle monitoring
       // Skip if IME is composing (e.g. selecting Chinese characters)
       if (
@@ -602,6 +656,10 @@ export function AgentTerminal({
       glowEffectEnabled,
       cwd,
       setActivityState,
+      agentId,
+      claudeCodeIntegration.enhancedInputEnabled,
+      enhancedInputOpen,
+      setEnhancedInputOpen,
     ]
   );
 
@@ -642,6 +700,34 @@ export function AgentTerminal({
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
+
+  // Mirror the side effects that used to live in EnhancedInput.onOpenChange:
+  // - Treat opening EnhancedInput as active user interaction (reset idle timers)
+  // - Restore terminal focus when EnhancedInput closes so Ctrl+G works without a click
+  const prevEnhancedInputOpenRef = useRef(enhancedInputOpen);
+  useEffect(() => {
+    const prev = prevEnhancedInputOpenRef.current;
+    if (prev === enhancedInputOpen) return;
+    prevEnhancedInputOpenRef.current = enhancedInputOpen;
+
+    if (enhancedInputOpen) {
+      isWaitingForIdleRef.current = false;
+      pendingIdleMonitorRef.current = false;
+
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+
+      if (enterDelayTimerRef.current) {
+        clearTimeout(enterDelayTimerRef.current);
+        enterDelayTimerRef.current = null;
+      }
+      return;
+    }
+
+    requestAnimationFrame(() => terminal?.focus());
+  }, [enhancedInputOpen, terminal]);
   const { showScrollToBottom, handleScrollToBottom } = useTerminalScrollToBottom(terminal);
 
   // Register write and focus functions to global store for external access
@@ -664,6 +750,7 @@ export function AgentTerminal({
           setIsSearchOpen(true);
         }
       }
+      // Ctrl+G is now handled in handleCustomKey
     },
     [isSearchOpen]
   );
@@ -765,6 +852,71 @@ export function AgentTerminal({
       onFocus?.();
     }
   }, [isActive, onFocus]);
+
+  // Handle enhanced input send
+  const handleEnhancedInputSend = useCallback(
+    async (content: string, imagePaths: string[]) => {
+      if (!write || !terminalSessionId) return;
+
+      // Build the message to send
+      let message = content;
+
+      // Handle images by adding their paths
+      if (imagePaths.length > 0) {
+        // Add image paths with proper escaping
+        // Paths with spaces need quotes
+        const escapedPaths = imagePaths.map((path) => (path.includes(' ') ? `"${path}"` : path));
+
+        // Follow spec: append images as [image]: <path>
+        message += `\n\n${escapedPaths.map((path) => `[image]: ${path}`).join('\n')}`;
+      }
+
+      // IMPORTANT:
+      // - Pure text can be sent via PTY write.
+      // - Messages with images contain internal newlines; sending those newlines via PTY write
+      //   often gets interpreted as multiple Enters (or paste newline) by interactive CLIs.
+      //   Use xterm's `terminal.paste()` so bracketed-paste (when supported) can preserve newlines.
+      const hasInternalNewlines = message.includes('\n');
+      if (hasInternalNewlines && terminal) {
+        terminal.paste(message);
+      } else {
+        write(message);
+      }
+
+      // Then submit.
+      // Empirically, for multi-line pasted content some CLIs treat the first Enter as
+      // “finish editing” and require another Enter to actually submit.
+      // So we send a double Enter only when the payload contains internal newlines.
+      setTimeout(
+        () => {
+          write('\r');
+          if (hasInternalNewlines) {
+            setTimeout(() => {
+              write('\r');
+            }, 80);
+          }
+        },
+        hasInternalNewlines ? 120 : 30
+      );
+
+      // Focus terminal
+      terminal?.focus();
+    },
+    [write, terminalSessionId, terminal]
+  );
+
+  useEffect(() => {
+    if (!terminalSessionId) return;
+    onRegisterEnhancedInputSender?.(terminalSessionId, handleEnhancedInputSend);
+    return () => {
+      onUnregisterEnhancedInputSender?.(terminalSessionId);
+    };
+  }, [
+    terminalSessionId,
+    handleEnhancedInputSend,
+    onRegisterEnhancedInputSender,
+    onUnregisterEnhancedInputSender,
+  ]);
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: click is for focus activation

@@ -17,6 +17,20 @@ export interface SessionRuntimeState {
   wasActiveWhenOutputting: boolean; // Track if user was viewing this session during output
 }
 
+// Enhanced input state for each session (not persisted)
+export interface EnhancedInputState {
+  open: boolean;
+  content: string;
+  imagePaths: string[];
+}
+
+// Default state object (cached and frozen to prevent accidental mutation)
+const DEFAULT_ENHANCED_INPUT_STATE: EnhancedInputState = Object.freeze({
+  open: false,
+  content: '',
+  imagePaths: [],
+});
+
 // Aggregated state for UI display
 export interface AggregatedOutputState {
   total: number;
@@ -37,6 +51,7 @@ interface AgentSessionsState {
   activeIds: Record<string, string | null>; // key = cwd (worktree path)
   groupStates: WorktreeGroupStates; // Group states per worktree (not persisted)
   runtimeStates: Record<string, SessionRuntimeState>; // Runtime output states (not persisted)
+  enhancedInputStates: Record<string, EnhancedInputState>; // Enhanced input states per session (not persisted)
 
   // Actions
   addSession: (session: Session) => void;
@@ -60,6 +75,13 @@ interface AgentSessionsState {
   getOutputState: (sessionId: string) => OutputState;
   getRuntimeState: (sessionId: string) => SessionRuntimeState | undefined;
   clearRuntimeState: (sessionId: string) => void;
+
+  // Enhanced input state actions
+  getEnhancedInputState: (sessionId: string) => EnhancedInputState;
+  setEnhancedInputOpen: (sessionId: string, open: boolean) => void;
+  setEnhancedInputContent: (sessionId: string, content: string) => void;
+  setEnhancedInputImages: (sessionId: string, imagePaths: string[]) => void;
+  clearEnhancedInput: (sessionId: string, keepOpen?: boolean) => void; // Clear content after sending
 
   // Aggregated state selectors
   getAggregatedByWorktree: (cwd: string) => AggregatedOutputState;
@@ -151,6 +173,7 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
     activeIds: initialState.activeIds,
     groupStates: {}, // Not persisted - will be recreated from sessions on mount
     runtimeStates: {}, // Not persisted - runtime output states
+    enhancedInputStates: {}, // Not persisted - enhanced input states per session
 
     addSession: (session) =>
       set((state) => {
@@ -166,13 +189,28 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
         return {
           sessions: [...state.sessions, newSession],
           activeIds: { ...state.activeIds, [normalizePath(session.cwd)]: session.id },
+          // Initialize enhanced input state for new session to ensure auto-popup works
+          enhancedInputStates: {
+            ...state.enhancedInputStates,
+            [session.id]: { open: false, content: '', imagePaths: [] },
+          },
         };
       }),
 
     removeSession: (id) =>
       set((state) => {
         const newSessions = state.sessions.filter((s) => s.id !== id);
-        return { sessions: newSessions };
+        // Clean up runtime states
+        const newRuntimeStates = { ...state.runtimeStates };
+        delete newRuntimeStates[id];
+        // Clean up enhanced input states
+        const newEnhancedInputStates = { ...state.enhancedInputStates };
+        delete newEnhancedInputStates[id];
+        return {
+          sessions: newSessions,
+          runtimeStates: newRuntimeStates,
+          enhancedInputStates: newEnhancedInputStates,
+        };
       }),
 
     updateSession: (id, updates) =>
@@ -415,6 +453,56 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
       const state = get();
       return computeAggregatedState(state.sessions, state.runtimeStates);
     },
+
+    // Enhanced input state actions
+    getEnhancedInputState: (sessionId) => {
+      return get().enhancedInputStates[sessionId] ?? DEFAULT_ENHANCED_INPUT_STATE;
+    },
+
+    setEnhancedInputOpen: (sessionId, open) =>
+      set((prev) => {
+        const current = prev.enhancedInputStates[sessionId] ?? DEFAULT_ENHANCED_INPUT_STATE;
+        return {
+          enhancedInputStates: {
+            ...prev.enhancedInputStates,
+            [sessionId]: { ...current, open },
+          },
+        };
+      }),
+
+    setEnhancedInputContent: (sessionId, content) =>
+      set((prev) => {
+        const current = prev.enhancedInputStates[sessionId] ?? DEFAULT_ENHANCED_INPUT_STATE;
+        return {
+          enhancedInputStates: {
+            ...prev.enhancedInputStates,
+            [sessionId]: { ...current, content },
+          },
+        };
+      }),
+
+    setEnhancedInputImages: (sessionId, imagePaths) =>
+      set((prev) => {
+        const current = prev.enhancedInputStates[sessionId] ?? DEFAULT_ENHANCED_INPUT_STATE;
+        return {
+          enhancedInputStates: {
+            ...prev.enhancedInputStates,
+            [sessionId]: { ...current, imagePaths },
+          },
+        };
+      }),
+
+    clearEnhancedInput: (sessionId, keepOpen = false) =>
+      set((prev) => {
+        const current = prev.enhancedInputStates[sessionId];
+        if (!current) return prev;
+        return {
+          enhancedInputStates: {
+            ...prev.enhancedInputStates,
+            [sessionId]: { open: keepOpen, content: '', imagePaths: [] },
+          },
+        };
+      }),
   }))
 );
 
