@@ -233,6 +233,7 @@ export const zhTranslations: Record<string, string> = {
   'No files': '没有文件',
   'No commits yet': '暂无提交记录',
   'No Group': '无分组',
+  Ungrouped: '未分组',
   'No file changes in this commit': '此提交没有文件更改',
   'No staged changes': '没有暂存的更改',
   'No matching actions found': '没有找到匹配的操作',

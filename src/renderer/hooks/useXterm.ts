@@ -634,7 +634,10 @@ export function useXterm({
       }
       // Remove copy-on-selection listener before disposing terminal
       if (copyOnSelectionHandlerRef.current) {
-        terminalRef.current?.element?.removeEventListener('mouseup', copyOnSelectionHandlerRef.current);
+        terminalRef.current?.element?.removeEventListener(
+          'mouseup',
+          copyOnSelectionHandlerRef.current
+        );
         copyOnSelectionHandlerRef.current = null;
       }
       // Dispose addons before terminal to prevent async callback errors
