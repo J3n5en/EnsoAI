@@ -38,11 +38,12 @@ function formatTimestamp(date = new Date()): string {
 function mapError(err: unknown, fallbackCode = 'UNKNOWN'): { code: string; message: string } {
   if (err && typeof err === 'object' && 'code' in err) {
     const code = String((err as { code?: string }).code || fallbackCode);
+    const rawMessage = (err as { message?: unknown }).message;
     const message =
       err instanceof Error
         ? err.message
-        : typeof (err as { message?: unknown }).message === 'string'
-          ? (err as { message: string }).message
+        : typeof rawMessage === 'string'
+          ? rawMessage
           : String(err);
     return { code, message };
   }

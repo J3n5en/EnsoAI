@@ -19,6 +19,9 @@ export const DEFAULT_TAB_ORDER: TabId[] = ['chat', 'file', 'terminal', 'source-c
 /** 全部分组 ID（特殊值） */
 export const ALL_GROUP_ID = '__all__';
 
+/** Virtual section ID for ungrouped repositories */
+export const UNGROUPED_SECTION_ID = '__ungrouped__';
+
 /** 分组 Emoji 预设 */
 export const GROUP_EMOJI_PRESETS = ['🏠', '💼', '🧪', '📦', '🎮', '📚', '🔧', '🌟', '🎯', '🚀'];
 

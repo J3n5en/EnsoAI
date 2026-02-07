@@ -581,7 +581,7 @@ export default function App() {
         });
       } else {
         // New unsaved config detected
-        providerToastRef.current = toastManager.add({
+        providerToastRef.current = addToast({
           type: 'info',
           title: t('New provider detected'),
           description: t('Click to save this config'),

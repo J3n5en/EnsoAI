@@ -33,13 +33,16 @@ import {
   type RepositoryGroup,
   type TabId,
   TEMP_REPO_ID,
+  UNGROUPED_SECTION_ID,
 } from '@/App/constants';
 import {
   DEFAULT_REPOSITORY_SETTINGS,
   getRepositorySettings,
+  getStoredGroupCollapsedState,
   getStoredRepositorySettings,
   normalizePath,
   type RepositorySettings,
+  saveGroupCollapsedState,
   saveRepositorySettings,
 } from '@/App/storage';
 import { GitSyncButton } from '@/components/git/GitSyncButton';
@@ -79,8 +82,7 @@ import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
 import { useWorktreeListMultiple } from '@/hooks/useWorktree';
 import { useI18n } from '@/i18n';
-import { hexToRgba } from '@/lib/colors';
-import { springFast } from '@/lib/motion';
+import { heightVariants, springFast, springStandard } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
@@ -190,8 +192,19 @@ export function TreeSidebar({
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [editGroupDialogOpen, setEditGroupDialogOpen] = useState(false);
 
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
+    getStoredGroupCollapsedState()
+  );
+
+  const toggleGroupCollapsed = useCallback((groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = { ...prev, [groupId]: !prev[groupId] };
+      saveGroupCollapsedState(next);
+      return next;
+    });
+  }, []);
+
   const activeGroup = groups.find((g) => g.id === activeGroupId);
-  const groupsById = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
   const repositoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const group of groups) {
@@ -275,6 +288,7 @@ export function TreeSidebar({
   // Drag reorder for repos
   const draggedRepoIndexRef = useRef<number | null>(null);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
+  const dragGroupRef = useRef<string | null>(null);
   const [dropRepoTargetIndex, setDropRepoTargetIndex] = useState<number | null>(null);
 
   // Drag reorder for worktrees
@@ -358,6 +372,7 @@ export function TreeSidebar({
   // Repository drag handlers
   const handleRepoDragStart = useCallback((e: React.DragEvent, index: number, repo: Repository) => {
     draggedRepoIndexRef.current = index;
+    dragGroupRef.current = repo.groupId ?? UNGROUPED_SECTION_ID;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', `repo:${index}`);
 
@@ -387,23 +402,39 @@ export function TreeSidebar({
       dragImageRef.current = null;
     }
     draggedRepoIndexRef.current = null;
+    dragGroupRef.current = null;
     setDropRepoTargetIndex(null);
   }, []);
 
-  const handleRepoDragOver = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedRepoIndexRef.current !== null && draggedRepoIndexRef.current !== index) {
-      setDropRepoTargetIndex(index);
-    }
-  }, []);
+  const handleRepoDragOver = useCallback(
+    (e: React.DragEvent, originalIndex: number, targetGroupId?: string) => {
+      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      if (!canDropInGroup) {
+        setDropRepoTargetIndex(null);
+        return;
+      }
+
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (draggedRepoIndexRef.current !== null && draggedRepoIndexRef.current !== originalIndex) {
+        setDropRepoTargetIndex(originalIndex);
+      }
+    },
+    []
+  );
 
   const handleRepoDragLeave = useCallback(() => {
     setDropRepoTargetIndex(null);
   }, []);
 
   const handleRepoDrop = useCallback(
-    (e: React.DragEvent, toIndex: number) => {
+    (e: React.DragEvent, toIndex: number, targetGroupId?: string) => {
+      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      if (!canDropInGroup) {
+        setDropRepoTargetIndex(null);
+        return;
+      }
+
       e.preventDefault();
       const fromIndex = draggedRepoIndexRef.current;
       if (fromIndex !== null && fromIndex !== toIndex && onReorderRepositories) {
@@ -498,6 +529,8 @@ export function TreeSidebar({
     setRepoToRemove(null);
   };
 
+  const showSections = activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
+
   const filteredRepos = useMemo(() => {
     let filtered = repositories;
 
@@ -522,8 +555,57 @@ export function TreeSidebar({
       });
     }
 
-    return filtered;
+    return filtered.map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
   }, [repositories, worktreesMap, searchQuery, activeGroupId, repoSettingsMap]);
+
+  const groupedSections = useMemo(() => {
+    if (!showSections) return [];
+
+    // Use the same hidden filter as filteredRepos
+    const visibleRepos = repositories.filter((repo) => {
+      const settings = repoSettingsMap[normalizePath(repo.path)] || DEFAULT_REPOSITORY_SETTINGS;
+      return !settings.hidden;
+    });
+
+    const sections: Array<{
+      groupId: string;
+      name: string;
+      emoji: string;
+      color: string;
+      repos: Array<{ repo: Repository; originalIndex: number }>;
+    }> = [];
+
+    const sortedGroups = [...groups].sort((a, b) => a.order - b.order);
+    for (const group of sortedGroups) {
+      const groupRepos = visibleRepos
+        .filter((r) => r.groupId === group.id)
+        .map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
+      if (groupRepos.length > 0) {
+        sections.push({
+          groupId: group.id,
+          name: group.name,
+          emoji: group.emoji,
+          color: group.color,
+          repos: groupRepos,
+        });
+      }
+    }
+
+    const ungroupedRepos = visibleRepos
+      .filter((r) => !r.groupId)
+      .map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
+    if (ungroupedRepos.length > 0) {
+      sections.push({
+        groupId: UNGROUPED_SECTION_ID,
+        name: t('Ungrouped'),
+        emoji: '',
+        color: '',
+        repos: ungroupedRepos,
+      });
+    }
+
+    return sections;
+  }, [showSections, groups, repositories, repoSettingsMap, t]);
 
   // Filter worktrees for a specific repo
   const getFilteredWorktrees = useCallback(
@@ -537,6 +619,233 @@ export function TreeSidebar({
     },
     [worktreesMap, searchQuery]
   );
+
+  const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
+    const isSelected = selectedRepo === repo.path;
+    const isExpanded = expandedRepos.has(repo.path);
+    const repoWorktrees = getFilteredWorktrees(repo.path);
+    const repoError = errorsMap[repo.path];
+    const repoLoading = loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
+    const repoWts = worktreesMap[repo.path] || [];
+    const repoMainWorktree = repoWts.find((wt) => wt.isMainWorktree);
+    const workdir = repoMainWorktree?.path || repo.path;
+
+    return (
+      <div key={repo.path} className={cn('relative rounded-lg', isSelected && 'pb-2')}>
+        {/* Sliding highlight background for selected repo */}
+        {isSelected && (
+          <motion.div
+            layoutId="repo-container-highlight"
+            className="absolute inset-0 rounded-lg bg-accent/40"
+            transition={springFast}
+          />
+        )}
+        {/* Repository row */}
+        <RepoItemWithGlow repoPath={repo.path}>
+          {/* Drop indicator - top */}
+          {dropRepoTargetIndex === originalIndex &&
+            draggedRepoIndexRef.current !== null &&
+            draggedRepoIndexRef.current > originalIndex && (
+              <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+            )}
+          <div
+            role="button"
+            tabIndex={0}
+            draggable={!searchQuery && !!onReorderRepositories}
+            onDragStart={(e) => handleRepoDragStart(e, originalIndex, repo)}
+            onDragEnd={handleRepoDragEnd}
+            onDragOver={(e) => handleRepoDragOver(e, originalIndex, sectionGroupId)}
+            onDragLeave={handleRepoDragLeave}
+            onDrop={(e) => handleRepoDrop(e, originalIndex, sectionGroupId)}
+            onContextMenu={(e) => handleRepoContextMenu(e, repo)}
+            onClick={() => {
+              toggleRepoExpanded(repo.path);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleRepoExpanded(repo.path);
+              }
+            }}
+            className={cn(
+              'group relative flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer',
+              !isSelected && 'hover:bg-accent/30',
+              draggedRepoIndexRef.current === originalIndex && 'opacity-50'
+            )}
+          >
+            {/* Row 1: Chevron + Icon + Name + CreateWorktree + Settings */}
+            <div className="relative z-10 flex w-full items-center gap-1">
+              <span className="shrink-0 w-5 h-5 flex items-center justify-center">
+                <ChevronRight
+                  className={cn(
+                    'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
+                    isExpanded && 'rotate-90'
+                  )}
+                />
+              </span>
+              <FolderGit2
+                className={cn(
+                  'h-4 w-4 shrink-0',
+                  isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
+                )}
+              />
+              <span className="min-w-0 flex-1 truncate font-medium text-sm text-left">
+                {repo.name}
+              </span>
+
+              {/* Create Worktree Button */}
+              {isSelected ? (
+                <CreateWorktreeDialog
+                  branches={branches}
+                  projectName={repo.name}
+                  workdir={workdir}
+                  isLoading={isCreating}
+                  onSubmit={async (options) => {
+                    await onCreateWorktree(options);
+                    refetchExpandedWorktrees();
+                  }}
+                  trigger={
+                    <button
+                      type="button"
+                      className="shrink-0 p-1 rounded hover:bg-muted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.currentTarget.blur();
+                      }}
+                      title={t('New Worktree')}
+                    >
+                      <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  }
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="shrink-0 p-1 rounded hover:bg-muted"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.currentTarget.blur();
+                    setRepoMenuTarget(repo);
+                    onSelectRepo(repo.path);
+                    setPendingCreateWorktree(true);
+                  }}
+                  title={t('New Worktree')}
+                >
+                  <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              )}
+
+              {/* Repository Settings Button */}
+              <button
+                type="button"
+                className="shrink-0 p-1 rounded hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRepoSettingsTarget(repo);
+                  setRepoSettingsOpen(true);
+                }}
+                title={t('Repository Settings')}
+              >
+                <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Row 3: Path */}
+            <span
+              className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
+              title={repo.path}
+            >
+              {repo.path}
+            </span>
+          </div>
+          {/* Drop indicator - bottom */}
+          {dropRepoTargetIndex === originalIndex &&
+            draggedRepoIndexRef.current !== null &&
+            draggedRepoIndexRef.current < originalIndex && (
+              <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+            )}
+        </RepoItemWithGlow>
+
+        {/* Worktrees under this repo */}
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
+            >
+              {repoError ? (
+                <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
+                  <span className="text-destructive">{t('Not a Git repository')}</span>
+                  {onInitGit && isSelected && (
+                    <Button
+                      onClick={async () => {
+                        await onInitGit();
+                        refetchExpandedWorktrees();
+                      }}
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-xs w-fit"
+                    >
+                      <GitBranch className="mr-1 h-3 w-3" />
+                      {t('Init')}
+                    </Button>
+                  )}
+                </div>
+              ) : repoLoading ? (
+                <div className="space-y-1">
+                  {[0, 1].map((i) => (
+                    <div key={`skeleton-${i}`} className="h-8 animate-pulse rounded-lg bg-muted" />
+                  ))}
+                </div>
+              ) : repoWorktrees.length === 0 ? (
+                <div className="py-2 px-2 text-xs text-muted-foreground">
+                  {searchQuery
+                    ? t('No matching worktrees')
+                    : t('No worktrees. Create one to get started.')}
+                </div>
+              ) : (
+                repoWorktrees.map((worktree, wtIndex) => (
+                  <WorktreeTreeItem
+                    key={worktree.path}
+                    worktree={worktree}
+                    repoPath={repo.path}
+                    branches={branches}
+                    isActive={activeWorktree?.path === worktree.path}
+                    onClick={() => {
+                      if (!isSelected) {
+                        onSelectRepo(repo.path);
+                      }
+                      onSelectWorktree(worktree);
+                    }}
+                    onDelete={() => setWorktreeToDelete(worktree)}
+                    onMerge={onMergeWorktree ? () => onMergeWorktree(worktree) : undefined}
+                    draggable={!searchQuery && !!onReorderWorktrees && isSelected}
+                    onDragStart={(e) => handleWorktreeDragStart(e, wtIndex, worktree)}
+                    onDragEnd={handleWorktreeDragEnd}
+                    onDragOver={(e) => handleWorktreeDragOver(e, wtIndex)}
+                    onDragLeave={handleWorktreeDragLeave}
+                    onDrop={(e) => handleWorktreeDrop(e, wtIndex)}
+                    showDropIndicator={dropWorktreeTargetIndex === wtIndex}
+                    dropDirection={
+                      dropWorktreeTargetIndex === wtIndex &&
+                      draggedWorktreeIndexRef.current !== null
+                        ? draggedWorktreeIndexRef.current > wtIndex
+                          ? 'top'
+                          : 'bottom'
+                        : null
+                    }
+                  />
+                ))
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
 
   return (
     <aside
@@ -739,270 +1048,68 @@ export function TreeSidebar({
           </Empty>
         ) : (
           <LayoutGroup>
-            <div className="space-y-1">
-              {filteredRepos.map((repo, index) => {
-                const isSelected = selectedRepo === repo.path;
-                const isExpanded = expandedRepos.has(repo.path);
-                const repoWorktrees = getFilteredWorktrees(repo.path);
-                const repoError = errorsMap[repo.path];
-                // Show loading if repo is expanded but not yet in the query results
-                const repoLoading =
-                  loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
-
-                // Pre-compute group tag variables
-                const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
-                const tagBg = group ? hexToRgba(group.color, 0.12) : null;
-                const tagBorder = group ? hexToRgba(group.color, 0.35) : null;
-
-                // Pre-compute workdir for CreateWorktreeDialog
-                const repoWts = worktreesMap[repo.path] || [];
-                const mainWorktree = repoWts.find((wt) => wt.isMainWorktree);
-                const workdir = mainWorktree?.path || repo.path;
-
-                return (
-                  <div key={repo.path} className={cn('relative rounded-lg', isSelected && 'pb-2')}>
-                    {/* Sliding highlight background for selected repo */}
-                    {isSelected && (
-                      <motion.div
-                        layoutId="repo-container-highlight"
-                        className="absolute inset-0 rounded-lg bg-accent/40"
-                        transition={springFast}
-                      />
-                    )}
-                    {/* Repository row */}
-                    <RepoItemWithGlow repoPath={repo.path}>
-                      {/* Drop indicator - top */}
-                      {dropRepoTargetIndex === index &&
-                        draggedRepoIndexRef.current !== null &&
-                        draggedRepoIndexRef.current > index && (
-                          <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
-                        )}
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        draggable={!searchQuery && !!onReorderRepositories}
-                        onDragStart={(e) => handleRepoDragStart(e, index, repo)}
-                        onDragEnd={handleRepoDragEnd}
-                        onDragOver={(e) => handleRepoDragOver(e, index)}
-                        onDragLeave={handleRepoDragLeave}
-                        onDrop={(e) => handleRepoDrop(e, index)}
-                        onContextMenu={(e) => handleRepoContextMenu(e, repo)}
-                        onClick={() => {
-                          // Only toggle expand/collapse, don't auto-activate worktree
-                          toggleRepoExpanded(repo.path);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            toggleRepoExpanded(repo.path);
-                          }
-                        }}
-                        className={cn(
-                          'group relative flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer',
-                          !isSelected && 'hover:bg-accent/30',
-                          draggedRepoIndexRef.current === index && 'opacity-50'
-                        )}
+            {showSections ? (
+              <div className="space-y-2">
+                {groupedSections.map((section) => {
+                  const isGroupCollapsed = !!collapsedGroups[section.groupId];
+                  const isUngrouped = section.groupId === UNGROUPED_SECTION_ID;
+                  return (
+                    <div key={section.groupId}>
+                      {/* Section Header */}
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupCollapsed(section.groupId)}
+                        className="flex h-7 w-full items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent/30 hover:text-foreground transition-colors select-none"
                       >
-                        {/* Row 1: Chevron + Icon + Name + Tag + CreateWorktree + Settings */}
-                        <div className="relative z-10 flex w-full items-center gap-1">
-                          <span className="shrink-0 w-5 h-5 flex items-center justify-center">
-                            <ChevronRight
-                              className={cn(
-                                'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
-                                isExpanded && 'rotate-90'
-                              )}
-                            />
-                          </span>
-                          <FolderGit2
-                            className={cn(
-                              'h-4 w-4 shrink-0',
-                              isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
-                            )}
+                        <ChevronRight
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0 transition-transform duration-150',
+                            !isGroupCollapsed && 'rotate-90'
+                          )}
+                        />
+                        {section.emoji && <span className="shrink-0 text-sm">{section.emoji}</span>}
+                        {!isUngrouped && section.color && (
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: section.color }}
                           />
-                          <span className="min-w-0 flex-1 truncate font-medium text-sm text-left">
-                            {repo.name}
-                          </span>
-
-                          {/* Group Tag */}
-                          {!hideGroups && group && (
-                            <span
-                              className="shrink-0 inline-flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px]"
-                              style={{
-                                backgroundColor: tagBg ?? undefined,
-                                borderColor: tagBorder ?? undefined,
-                                color: group.color,
-                              }}
-                            >
-                              {group.emoji && (
-                                <span className="text-[0.9em] opacity-90">{group.emoji}</span>
-                              )}
-                              <span className="truncate max-w-[60px]">{group.name}</span>
-                            </span>
-                          )}
-
-                          {/* Create Worktree Button */}
-                          {isSelected ? (
-                            // Selected repo: open dialog directly with current branches
-                            <CreateWorktreeDialog
-                              branches={branches}
-                              projectName={repo.name}
-                              workdir={workdir}
-                              isLoading={isCreating}
-                              onSubmit={async (options) => {
-                                await onCreateWorktree(options);
-                                refetchExpandedWorktrees();
-                              }}
-                              trigger={
-                                <button
-                                  type="button"
-                                  className="shrink-0 p-1 rounded hover:bg-muted"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.currentTarget.blur();
-                                  }}
-                                  title={t('New Worktree')}
-                                >
-                                  <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-                                </button>
-                              }
-                            />
-                          ) : (
-                            // Non-selected repo: switch to repo first, then open dialog
-                            <button
-                              type="button"
-                              className="shrink-0 p-1 rounded hover:bg-muted"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.currentTarget.blur();
-                                // Switch to this repo and trigger dialog open after branches load
-                                setRepoMenuTarget(repo);
-                                onSelectRepo(repo.path);
-                                setPendingCreateWorktree(true);
-                              }}
-                              title={t('New Worktree')}
-                            >
-                              <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-                            </button>
-                          )}
-
-                          {/* Repository Settings Button */}
-                          <button
-                            type="button"
-                            className="shrink-0 p-1 rounded hover:bg-muted"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRepoSettingsTarget(repo);
-                              setRepoSettingsOpen(true);
-                            }}
-                            title={t('Repository Settings')}
-                          >
-                            <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
-                          </button>
-                        </div>
-
-                        {/* Row 3: Path */}
-                        <span
-                          className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
-                          title={repo.path}
-                        >
-                          {repo.path}
-                        </span>
-                      </div>
-                      {/* Drop indicator - bottom */}
-                      {dropRepoTargetIndex === index &&
-                        draggedRepoIndexRef.current !== null &&
-                        draggedRepoIndexRef.current < index && (
-                          <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
                         )}
-                    </RepoItemWithGlow>
-
-                    {/* Worktrees under this repo */}
-                    <AnimatePresence initial={false}>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2, ease: 'easeInOut' }}
-                          className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
-                        >
-                          {repoError ? (
-                            <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
-                              <span className="text-destructive">{t('Not a Git repository')}</span>
-                              {onInitGit && isSelected && (
-                                <Button
-                                  onClick={async () => {
-                                    await onInitGit();
-                                    refetchExpandedWorktrees();
-                                  }}
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 text-xs w-fit"
-                                >
-                                  <GitBranch className="mr-1 h-3 w-3" />
-                                  {t('Init')}
-                                </Button>
-                              )}
+                        <span className="min-w-0 flex-1 truncate text-left">{section.name}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                          {section.repos.length}
+                        </span>
+                      </button>
+                      {/* Section Content */}
+                      <AnimatePresence initial={false}>
+                        {!isGroupCollapsed && (
+                          <motion.div
+                            key={`group-content-${section.groupId}`}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            variants={heightVariants}
+                            transition={springStandard}
+                            className="overflow-hidden"
+                          >
+                            <div className="space-y-1 pt-0.5">
+                              {section.repos.map(({ repo, originalIndex }) => {
+                                return renderRepoItem(repo, originalIndex, section.groupId);
+                              })}
                             </div>
-                          ) : repoLoading ? (
-                            <div className="space-y-1">
-                              {[0, 1].map((i) => (
-                                <div
-                                  key={`skeleton-${i}`}
-                                  className="h-8 animate-pulse rounded-lg bg-muted"
-                                />
-                              ))}
-                            </div>
-                          ) : repoWorktrees.length === 0 ? (
-                            <div className="py-2 px-2 text-xs text-muted-foreground">
-                              {searchQuery
-                                ? t('No matching worktrees')
-                                : t('No worktrees. Create one to get started.')}
-                            </div>
-                          ) : (
-                            repoWorktrees.map((worktree, wtIndex) => (
-                              <WorktreeTreeItem
-                                key={worktree.path}
-                                worktree={worktree}
-                                repoPath={repo.path}
-                                branches={branches}
-                                isActive={activeWorktree?.path === worktree.path}
-                                onClick={() => {
-                                  // Select repo if not already selected
-                                  if (!isSelected) {
-                                    onSelectRepo(repo.path);
-                                  }
-                                  onSelectWorktree(worktree);
-                                }}
-                                onDelete={() => setWorktreeToDelete(worktree)}
-                                onMerge={
-                                  onMergeWorktree ? () => onMergeWorktree(worktree) : undefined
-                                }
-                                draggable={!searchQuery && !!onReorderWorktrees && isSelected}
-                                onDragStart={(e) => handleWorktreeDragStart(e, wtIndex, worktree)}
-                                onDragEnd={handleWorktreeDragEnd}
-                                onDragOver={(e) => handleWorktreeDragOver(e, wtIndex)}
-                                onDragLeave={handleWorktreeDragLeave}
-                                onDrop={(e) => handleWorktreeDrop(e, wtIndex)}
-                                showDropIndicator={dropWorktreeTargetIndex === wtIndex}
-                                dropDirection={
-                                  dropWorktreeTargetIndex === wtIndex &&
-                                  draggedWorktreeIndexRef.current !== null
-                                    ? draggedWorktreeIndexRef.current > wtIndex
-                                      ? 'top'
-                                      : 'bottom'
-                                    : null
-                                }
-                              />
-                            ))
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filteredRepos.map(({ repo, originalIndex }) =>
+                  renderRepoItem(repo, originalIndex)
+                )}
+              </div>
+            )}
           </LayoutGroup>
         )}
       </div>

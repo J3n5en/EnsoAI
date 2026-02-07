@@ -1114,7 +1114,10 @@ export class GitService {
    * 智能 Push（公共逻辑）
    * 如果 non-fast-forward，自动先 pull 再重试
    */
-  private async smartPush(pushFn: () => Promise<void>, pullFn: () => Promise<void>): Promise<void> {
+  private async smartPush(
+    pushFn: () => Promise<unknown>,
+    pullFn: () => Promise<void>
+  ): Promise<void> {
     try {
       await pushFn();
     } catch (error) {

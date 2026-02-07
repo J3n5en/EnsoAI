@@ -30,7 +30,6 @@ import { Button } from '@/components/ui/button';
 import { CodeBlock } from '@/components/ui/code-block';
 import {
   Dialog,
-  DialogClose,
   DialogDescription,
   DialogFooter,
   DialogHeader,

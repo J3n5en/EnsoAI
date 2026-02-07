@@ -1,5 +1,6 @@
-import { LayoutGroup, motion } from 'framer-motion';
+import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
+  ChevronRight,
   Clock,
   FolderGit2,
   FolderMinus,
@@ -9,7 +10,14 @@ import {
   Settings2,
 } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ALL_GROUP_ID, type RepositoryGroup, type TabId, TEMP_REPO_ID } from '@/App/constants';
+import {
+  ALL_GROUP_ID,
+  type RepositoryGroup,
+  type TabId,
+  TEMP_REPO_ID,
+  UNGROUPED_SECTION_ID,
+} from '@/App/constants';
+import { getStoredGroupCollapsedState, saveGroupCollapsedState } from '@/App/storage';
 import {
   CreateGroupDialog,
   GroupEditDialog,
@@ -36,8 +44,7 @@ import {
 } from '@/components/ui/empty';
 import { RepoItemWithGlow } from '@/components/ui/glow-wrappers';
 import { useI18n } from '@/i18n';
-import { hexToRgba } from '@/lib/colors';
-import { springFast } from '@/lib/motion';
+import { heightVariants, springFast, springStandard } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { RunningProjectsPopover } from './RunningProjectsPopover';
@@ -113,8 +120,19 @@ export function RepositorySidebar({
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [editGroupDialogOpen, setEditGroupDialogOpen] = useState(false);
 
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
+    getStoredGroupCollapsedState()
+  );
+
+  const toggleGroupCollapsed = useCallback((groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = { ...prev, [groupId]: !prev[groupId] };
+      saveGroupCollapsedState(next);
+      return next;
+    });
+  }, []);
+
   const activeGroup = groups.find((g) => g.id === activeGroupId);
-  const groupsById = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
   const repositoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const group of groups) {
@@ -126,10 +144,12 @@ export function RepositorySidebar({
   // Drag reorder
   const draggedIndexRef = useRef<number | null>(null);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
+  const dragGroupRef = useRef<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number, repo: Repository) => {
     draggedIndexRef.current = index;
+    dragGroupRef.current = repo.groupId ?? UNGROUPED_SECTION_ID;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(index));
 
@@ -160,23 +180,39 @@ export function RepositorySidebar({
       dragImageRef.current = null;
     }
     draggedIndexRef.current = null;
+    dragGroupRef.current = null;
     setDropTargetIndex(null);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedIndexRef.current !== null && draggedIndexRef.current !== index) {
-      setDropTargetIndex(index);
-    }
-  }, []);
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, index: number, targetGroupId?: string) => {
+      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      if (!canDropInGroup) {
+        setDropTargetIndex(null);
+        return;
+      }
+
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (draggedIndexRef.current !== null && draggedIndexRef.current !== index) {
+        setDropTargetIndex(index);
+      }
+    },
+    []
+  );
 
   const handleDragLeave = useCallback(() => {
     setDropTargetIndex(null);
   }, []);
 
   const handleDrop = useCallback(
-    (e: React.DragEvent, toIndex: number) => {
+    (e: React.DragEvent, toIndex: number, targetGroupId?: string) => {
+      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      if (!canDropInGroup) {
+        setDropTargetIndex(null);
+        return;
+      }
+
       e.preventDefault();
       const fromIndex = draggedIndexRef.current;
       if (fromIndex !== null && fromIndex !== toIndex && onReorderRepositories) {
@@ -209,6 +245,8 @@ export function RepositorySidebar({
   };
 
   // Filter by group and search
+  const showSections = activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
+
   const filteredRepos = useMemo(() => {
     let filtered = repositories;
     if (activeGroupId !== ALL_GROUP_ID) {
@@ -220,6 +258,138 @@ export function RepositorySidebar({
     }
     return filtered.map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
   }, [repositories, activeGroupId, searchQuery]);
+
+  const groupedSections = useMemo(() => {
+    if (!showSections) return [];
+
+    const sections: Array<{
+      groupId: string;
+      name: string;
+      emoji: string;
+      color: string;
+      repos: Array<{ repo: Repository; originalIndex: number }>;
+    }> = [];
+
+    // Build sections for each group (in order)
+    const sortedGroups = [...groups].sort((a, b) => a.order - b.order);
+    for (const group of sortedGroups) {
+      const groupRepos = repositories
+        .filter((r) => r.groupId === group.id)
+        .map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
+      if (groupRepos.length > 0) {
+        sections.push({
+          groupId: group.id,
+          name: group.name,
+          emoji: group.emoji,
+          color: group.color,
+          repos: groupRepos,
+        });
+      }
+    }
+
+    // Ungrouped section
+    const ungroupedRepos = repositories
+      .filter((r) => !r.groupId)
+      .map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
+    if (ungroupedRepos.length > 0) {
+      sections.push({
+        groupId: UNGROUPED_SECTION_ID,
+        name: t('Ungrouped'),
+        emoji: '',
+        color: '',
+        repos: ungroupedRepos,
+      });
+    }
+
+    return sections;
+  }, [showSections, groups, repositories, t]);
+
+  const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
+    const isSelected = selectedRepo === repo.path;
+    return (
+      <RepoItemWithGlow key={repo.path} repoPath={repo.path}>
+        {/* Drop indicator - top */}
+        {dropTargetIndex === originalIndex &&
+          draggedIndexRef.current !== null &&
+          draggedIndexRef.current > originalIndex && (
+            <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+          )}
+        <button
+          type="button"
+          draggable={!searchQuery}
+          onDragStart={(e) => handleDragStart(e, originalIndex, repo)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => handleDragOver(e, originalIndex, sectionGroupId)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, originalIndex, sectionGroupId)}
+          onClick={() => onSelectRepo(repo.path)}
+          onContextMenu={(e) => handleContextMenu(e, repo)}
+          className={cn(
+            'group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
+            isSelected ? 'text-accent-foreground' : 'hover:bg-accent/50',
+            draggedIndexRef.current === originalIndex && 'opacity-50'
+          )}
+        >
+          {/* Sliding highlight background */}
+          {isSelected && (
+            <motion.div
+              layoutId="repo-sidebar-highlight"
+              className="absolute inset-0 rounded-lg bg-accent"
+              transition={springFast}
+            />
+          )}
+          {/* Repo name + Settings */}
+          <div className="relative z-10 flex w-full items-center gap-2">
+            <FolderGit2
+              className={cn(
+                'h-4 w-4 shrink-0',
+                isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
+              )}
+            />
+            <span className="truncate font-medium flex-1">{repo.name}</span>
+            {/* Repository Settings */}
+            <div
+              role="button"
+              tabIndex={0}
+              className="shrink-0 p-1 rounded hover:bg-muted cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRepoSettingsTarget(repo);
+                setRepoSettingsOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setRepoSettingsTarget(repo);
+                  setRepoSettingsOpen(true);
+                }
+              }}
+              title={t('Repository Settings')}
+            >
+              <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+          </div>
+          {/* Path */}
+          <div
+            className={cn(
+              'relative z-10 w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [direction:rtl] [text-align:left]',
+              isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
+            )}
+            title={repo.path}
+          >
+            {repo.path}
+          </div>
+        </button>
+        {/* Drop indicator - bottom */}
+        {dropTargetIndex === originalIndex &&
+          draggedIndexRef.current !== null &&
+          draggedIndexRef.current < originalIndex && (
+            <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
+          )}
+      </RepoItemWithGlow>
+    );
+  };
 
   return (
     <aside
@@ -341,116 +511,68 @@ export function RepositorySidebar({
           </Empty>
         ) : (
           <LayoutGroup>
-            <div className="space-y-1">
-              {filteredRepos.map(({ repo, originalIndex }) => {
-                const group = repo.groupId ? groupsById.get(repo.groupId) : undefined;
-                const tagBg = group ? hexToRgba(group.color, 0.12) : null;
-                const tagBorder = group ? hexToRgba(group.color, 0.35) : null;
-                const isSelected = selectedRepo === repo.path;
-
-                return (
-                  <RepoItemWithGlow key={repo.path} repoPath={repo.path}>
-                    {/* Drop indicator - top */}
-                    {dropTargetIndex === originalIndex &&
-                      draggedIndexRef.current !== null &&
-                      draggedIndexRef.current > originalIndex && (
-                        <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
-                      )}
-                    <button
-                      type="button"
-                      draggable={!searchQuery}
-                      onDragStart={(e) => handleDragStart(e, originalIndex, repo)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={(e) => handleDragOver(e, originalIndex)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, originalIndex)}
-                      onClick={() => onSelectRepo(repo.path)}
-                      onContextMenu={(e) => handleContextMenu(e, repo)}
-                      className={cn(
-                        'group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
-                        isSelected ? 'text-accent-foreground' : 'hover:bg-accent/50',
-                        draggedIndexRef.current === originalIndex && 'opacity-50'
-                      )}
-                    >
-                      {/* Sliding highlight background */}
-                      {isSelected && (
-                        <motion.div
-                          layoutId="repo-sidebar-highlight"
-                          className="absolute inset-0 rounded-lg bg-accent"
-                          transition={springFast}
-                        />
-                      )}
-                      {/* Repo name + Tag + Settings */}
-                      <div className="relative z-10 flex w-full items-center gap-2">
-                        <FolderGit2
+            {showSections ? (
+              <div className="space-y-2">
+                {groupedSections.map((section) => {
+                  const isCollapsed = !!collapsedGroups[section.groupId];
+                  const isUngrouped = section.groupId === UNGROUPED_SECTION_ID;
+                  return (
+                    <div key={section.groupId}>
+                      {/* Section Header */}
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupCollapsed(section.groupId)}
+                        className="flex h-7 w-full items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent/30 hover:text-foreground transition-colors select-none"
+                      >
+                        <ChevronRight
                           className={cn(
-                            'h-4 w-4 shrink-0',
-                            isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
+                            'h-3.5 w-3.5 shrink-0 transition-transform duration-150',
+                            !isCollapsed && 'rotate-90'
                           )}
                         />
-                        <span className="truncate font-medium flex-1">{repo.name}</span>
-
-                        {/* Group Tag - only show when groups are not hidden */}
-                        {!hideGroups && group && (
+                        {section.emoji && <span className="shrink-0 text-sm">{section.emoji}</span>}
+                        {!isUngrouped && section.color && (
                           <span
-                            className="shrink-0 inline-flex h-5 items-center gap-1 rounded-md border px-1.5 text-[10px] text-foreground/80"
-                            style={{
-                              backgroundColor: tagBg ?? undefined,
-                              borderColor: tagBorder ?? undefined,
-                              color: group.color,
-                            }}
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: section.color }}
+                          />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-left">{section.name}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                          {section.repos.length}
+                        </span>
+                      </button>
+                      {/* Section Content */}
+                      <AnimatePresence initial={false}>
+                        {!isCollapsed && (
+                          <motion.div
+                            key={`content-${section.groupId}`}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            variants={heightVariants}
+                            transition={springStandard}
+                            className="overflow-hidden"
                           >
-                            {group.emoji && (
-                              <span className="text-[0.9em] opacity-90">{group.emoji}</span>
-                            )}
-                            <span className="truncate max-w-[60px]">{group.name}</span>
-                          </span>
+                            <div className="space-y-1 pt-0.5">
+                              {section.repos.map(({ repo, originalIndex }) =>
+                                renderRepoItem(repo, originalIndex, section.groupId)
+                              )}
+                            </div>
+                          </motion.div>
                         )}
-
-                        {/* Repository Settings */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className="shrink-0 p-1 rounded hover:bg-muted cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRepoSettingsTarget(repo);
-                            setRepoSettingsOpen(true);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setRepoSettingsTarget(repo);
-                              setRepoSettingsOpen(true);
-                            }
-                          }}
-                          title={t('Repository Settings')}
-                        >
-                          <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
-                      </div>
-                      {/* Path */}
-                      <div
-                        className={cn(
-                          'relative z-10 w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [direction:rtl] [text-align:left]',
-                          isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
-                        )}
-                        title={repo.path}
-                      >
-                        {repo.path}
-                      </div>
-                    </button>
-                    {/* Drop indicator - bottom */}
-                    {dropTargetIndex === originalIndex &&
-                      draggedIndexRef.current !== null &&
-                      draggedIndexRef.current < originalIndex && (
-                        <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
-                      )}
-                  </RepoItemWithGlow>
-                );
-              })}
-            </div>
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filteredRepos.map(({ repo, originalIndex }) =>
+                  renderRepoItem(repo, originalIndex)
+                )}
+              </div>
+            )}
           </LayoutGroup>
         )}
       </div>

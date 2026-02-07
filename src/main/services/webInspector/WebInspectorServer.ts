@@ -133,7 +133,7 @@ export class WebInspectorServer {
   }
 
   isRunning(): boolean {
-    return this.server?.listening;
+    return this.server?.listening ?? false;
   }
 
   getStatus(): { running: boolean; port: number } {

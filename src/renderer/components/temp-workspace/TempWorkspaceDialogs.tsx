@@ -98,9 +98,7 @@ export function TempWorkspaceDialogs({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose asChild>
-              <Button variant="outline">{t('Cancel')}</Button>
-            </AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
             <Button
               variant="destructive"
               onClick={async () => {

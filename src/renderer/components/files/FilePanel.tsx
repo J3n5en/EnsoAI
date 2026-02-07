@@ -166,7 +166,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
       // Convert to relative path if within rootPath, otherwise use full path
       let displayPath = path;
       const normalizedRoot = rootPath ? normalizePath(rootPath) : '';
-      if (normalizedRoot && path.startsWith(normalizedRoot + '/')) {
+      if (normalizedRoot && path.startsWith(`${normalizedRoot}/`)) {
         displayPath = path.slice(normalizedRoot.length + 1);
       }
       terminalWrite(sessionId, `@${displayPath} `);

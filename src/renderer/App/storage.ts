@@ -24,6 +24,7 @@ export const STORAGE_KEYS = {
   REPOSITORY_SETTINGS: 'enso-repository-settings', // per-repo settings (init script, etc.)
   REPOSITORY_GROUPS: 'enso-repository-groups',
   ACTIVE_GROUP: 'enso-active-group',
+  GROUP_COLLAPSED_STATE: 'enso-group-collapsed-state',
 } as const;
 
 // Helper to get initial value from localStorage
@@ -252,4 +253,20 @@ export const migrateRepositoryGroups = (): void => {
   if (localStorage.getItem(STORAGE_KEYS.ACTIVE_GROUP) === null) {
     localStorage.setItem(STORAGE_KEYS.ACTIVE_GROUP, ALL_GROUP_ID);
   }
+};
+
+export const getStoredGroupCollapsedState = (): Record<string, boolean> => {
+  const saved = localStorage.getItem(STORAGE_KEYS.GROUP_COLLAPSED_STATE);
+  if (saved) {
+    try {
+      return JSON.parse(saved) as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+};
+
+export const saveGroupCollapsedState = (state: Record<string, boolean>): void => {
+  localStorage.setItem(STORAGE_KEYS.GROUP_COLLAPSED_STATE, JSON.stringify(state));
 };
