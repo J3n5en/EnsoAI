@@ -733,6 +733,10 @@ export const zhTranslations: Record<string, string> = {
   'Always Show': '始终显示',
   'Hide While Running': '运行时隐藏',
   Manual: '手动打开',
+  'Only open via Ctrl+G shortcut, Esc to close': '仅通过 Ctrl+G 手动打开，Esc 关闭',
+  'Panel stays visible, remains open after sending': '面板始终显示，发送后不关闭',
+  'Auto-hide when agent is running, show when idle (requires Stop Hook)':
+    'Agent 运行时自动隐藏，空闲时显示（依赖 Stop Hook）',
   'Requires Enhanced Notification': '需开启增强通知',
   'Feature Dependency': '功能依赖提示',
   '"Hide While Running" mode requires "Enhanced Notification". Display mode will be switched to "Always Show".':

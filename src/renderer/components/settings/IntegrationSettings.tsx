@@ -229,29 +229,39 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
           {claudeCodeIntegration.enhancedInputEnabled && (
             <div className="ml-4 space-y-2 border-l-2 border-muted pl-4">
               <span className="text-xs font-medium text-muted-foreground">{t('Display Mode')}</span>
-              <div className="flex flex-wrap gap-4">
-                <label className="flex items-center gap-2 text-sm">
+              <div className="space-y-1">
+                <label className="flex items-start gap-2 rounded-md p-2 hover:bg-muted/50 cursor-pointer">
                   <input
                     type="radio"
                     name="enhancedInputAutoPopup"
                     checked={claudeCodeIntegration.enhancedInputAutoPopup === 'manual'}
                     onChange={() => setClaudeCodeIntegration({ enhancedInputAutoPopup: 'manual' })}
-                    className="h-4 w-4"
+                    className="h-4 w-4 mt-0.5 shrink-0"
                   />
-                  {t('Manual')}
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-medium">{t('Manual')}</span>
+                    <p className="text-xs text-muted-foreground">
+                      {t('Only open via Ctrl+G shortcut, Esc to close')}
+                    </p>
+                  </div>
                 </label>
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex items-start gap-2 rounded-md p-2 hover:bg-muted/50 cursor-pointer">
                   <input
                     type="radio"
                     name="enhancedInputAutoPopup"
                     checked={claudeCodeIntegration.enhancedInputAutoPopup === 'always'}
                     onChange={() => setClaudeCodeIntegration({ enhancedInputAutoPopup: 'always' })}
-                    className="h-4 w-4"
+                    className="h-4 w-4 mt-0.5 shrink-0"
                   />
-                  {t('Always Show')}
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-medium">{t('Always Show')}</span>
+                    <p className="text-xs text-muted-foreground">
+                      {t('Panel stays visible, remains open after sending')}
+                    </p>
+                  </div>
                 </label>
                 <label
-                  className={`flex items-center gap-2 text-sm ${!claudeCodeIntegration.stopHookEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`flex items-start gap-2 rounded-md p-2 ${!claudeCodeIntegration.stopHookEnabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted/50 cursor-pointer'}`}
                 >
                   <input
                     type="radio"
@@ -264,12 +274,14 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
                       setClaudeCodeIntegration({ enhancedInputAutoPopup: 'hideWhileRunning' })
                     }
                     disabled={!claudeCodeIntegration.stopHookEnabled}
-                    className="h-4 w-4"
+                    className="h-4 w-4 mt-0.5 shrink-0"
                   />
-                  {t('Hide While Running')}
-                  <span className="text-xs text-muted-foreground">
-                    ({t('Requires Enhanced Notification')})
-                  </span>
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-medium">{t('Hide While Running')}</span>
+                    <p className="text-xs text-muted-foreground">
+                      {t('Auto-hide when agent is running, show when idle (requires Stop Hook)')}
+                    </p>
+                  </div>
                 </label>
               </div>
             </div>
