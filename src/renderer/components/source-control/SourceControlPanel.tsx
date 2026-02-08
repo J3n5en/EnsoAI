@@ -52,7 +52,7 @@ import { CommitHistoryList } from './CommitHistoryList';
 import { panelTransition } from './constants';
 import { DiffViewer } from './DiffViewer';
 import { RepositoryList } from './RepositoryList';
-import type { Repository, SelectedFile } from './types';
+import type { Repository } from './types';
 import { usePanelResize } from './usePanelResize';
 
 interface SourceControlPanelProps {
@@ -95,7 +95,7 @@ export function SourceControlPanel({
   const [expandedCommitHash, setExpandedCommitHash] = useState<string | null>(null);
 
   // Submodule commit history state
-  const [selectedSubmoduleCommit, setSelectedSubmoduleCommit] = useState<{
+  const [selectedSubmoduleCommit, _setSelectedSubmoduleCommit] = useState<{
     hash: string;
     filePath: string | null;
     submodulePath: string;
@@ -456,7 +456,7 @@ export function SourceControlPanel({
   );
 
   // Submodule commit diff
-  const { data: submoduleCommitDiff, isLoading: submoduleCommitDiffLoading } = useCommitDiff(
+  const { data: _submoduleCommitDiff, isLoading: _submoduleCommitDiffLoading } = useCommitDiff(
     rootPath ?? null,
     selectedSubmoduleCommit?.hash ?? null,
     selectedSubmoduleCommit?.filePath ?? null,
