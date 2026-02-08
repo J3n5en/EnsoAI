@@ -858,48 +858,25 @@ export function AgentTerminal({
     async (content: string, imagePaths: string[]) => {
       if (!write || !terminalSessionId) return;
 
-      // Build the message to send
       let message = content;
 
-      // Handle images by adding their paths
       if (imagePaths.length > 0) {
-        // Add image paths with proper escaping
-        // Paths with spaces need quotes
-        const escapedPaths = imagePaths.map((path) => (path.includes(' ') ? `"${path}"` : path));
-
-        // Follow spec: append images as [image]: <path>
-        message += `\n\n${escapedPaths.map((path) => `[image]: ${path}`).join('\n')}`;
+        const escapedPaths = imagePaths.map((p) => (p.includes(' ') ? `"${p}"` : p));
+        message += `\n\n${escapedPaths.join(' ')}`;
       }
 
-      // IMPORTANT:
-      // - Pure text can be sent via PTY write.
-      // - Messages with images contain internal newlines; sending those newlines via PTY write
-      //   often gets interpreted as multiple Enters (or paste newline) by interactive CLIs.
-      //   Use xterm's `terminal.paste()` so bracketed-paste (when supported) can preserve newlines.
+      // For multi-line content (images), write raw bracketed paste markers
+      // to PTY directly. Avoids xterm's terminal.paste() which converts
+      // \n→\r and breaks multi-image payloads.
       const hasInternalNewlines = message.includes('\n');
-      if (hasInternalNewlines && terminal) {
-        terminal.paste(message);
+      if (hasInternalNewlines) {
+        write(`\x1b[200~${message}\x1b[201~`);
       } else {
         write(message);
       }
 
-      // Then submit.
-      // Empirically, for multi-line pasted content some CLIs treat the first Enter as
-      // “finish editing” and require another Enter to actually submit.
-      // So we send a double Enter only when the payload contains internal newlines.
-      setTimeout(
-        () => {
-          write('\r');
-          if (hasInternalNewlines) {
-            setTimeout(() => {
-              write('\r');
-            }, 80);
-          }
-        },
-        hasInternalNewlines ? 120 : 30
-      );
+      setTimeout(() => write('\r'), hasInternalNewlines ? 300 : 30);
 
-      // Focus terminal
       terminal?.focus();
     },
     [write, terminalSessionId, terminal]

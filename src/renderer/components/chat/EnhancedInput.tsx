@@ -1,8 +1,14 @@
 import { Paperclip, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
 import { toLocalFileUrl } from '@/lib/localFileUrl';
+
+function getFileName(filePath: string): string {
+  const sep = filePath.includes('\\') ? '\\' : '/';
+  return filePath.slice(filePath.lastIndexOf(sep) + 1);
+}
 
 interface EnhancedInputProps {
   open: boolean;
@@ -44,6 +50,7 @@ export function EnhancedInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [manualMinH, setManualMinH] = useState<number | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -369,55 +376,73 @@ export function EnhancedInput({
           />
         </div>
 
-        {/* Image previews */}
-        {imagePaths.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-            {imagePaths.map((path, index) => (
-              <div
-                key={path}
-                className="relative group h-10 w-10 rounded-md overflow-hidden border"
-              >
-                <img
-                  src={toLocalFileUrl(path)}
-                  alt={`Preview ${index + 1}`}
-                  className="h-full w-full object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeImagePath(index)}
-                  className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"
+        {/* Bottom bar: file chips (scrollable) + action buttons */}
+        <div className="flex items-center gap-1 px-2 pb-1.5">
+          {/* File chips - scrollable */}
+          {imagePaths.length > 0 && (
+            <div className="flex-1 min-w-0 overflow-x-auto flex items-center gap-1 scrollbar-none">
+              {imagePaths.map((path, index) => (
+                <span
+                  key={path}
+                  className="inline-flex items-center shrink-0 max-w-[160px] h-5 rounded border border-border bg-muted/50 text-xs"
                 >
-                  <X className="h-3.5 w-3.5 text-white" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPath(path)}
+                    className="truncate px-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {getFileName(path)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeImagePath(index)}
+                    className="shrink-0 h-full px-0.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors rounded-r"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
-        {/* Bottom action bar */}
-        <div className="flex items-center justify-end gap-0.5 px-2 pb-1.5">
-          <button
-            type="button"
-            onClick={handleSelectFiles}
-            disabled={imagePaths.length >= MAX_IMAGES}
-            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-40"
-            aria-label={t('Select Image')}
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void handleSend();
-            }}
-            disabled={!content.trim() && imagePaths.length === 0}
-            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-40"
-            aria-label={t('Send')}
-          >
-            <Send className="h-3.5 w-3.5" />
-          </button>
+          {/* Action buttons - always right-aligned */}
+          <div className="flex items-center gap-0.5 shrink-0 ml-auto">
+            <button
+              type="button"
+              onClick={handleSelectFiles}
+              disabled={imagePaths.length >= MAX_IMAGES}
+              className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-40"
+              aria-label={t('Select Image')}
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleSend();
+              }}
+              disabled={!content.trim() && imagePaths.length === 0}
+              className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-40"
+              aria-label={t('Send')}
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Image preview modal */}
+      <Dialog open={previewPath != null} onOpenChange={(o) => !o && setPreviewPath(null)}>
+        <DialogPopup className="max-w-[80vw] max-h-[80vh] p-2">
+          {previewPath && (
+            <img
+              src={toLocalFileUrl(previewPath)}
+              alt={getFileName(previewPath)}
+              className="max-w-full max-h-[75vh] object-contain rounded"
+            />
+          )}
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 }
