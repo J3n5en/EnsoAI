@@ -1,5 +1,5 @@
-import { Send, Upload, X } from 'lucide-react';
-import { type CSSProperties, useCallback, useEffect, useRef } from 'react';
+import { Paperclip, Send, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
 import { toLocalFileUrl } from '@/lib/localFileUrl';
@@ -9,12 +9,6 @@ interface EnhancedInputProps {
   onOpenChange: (open: boolean) => void;
   onSend: (content: string, imagePaths: string[]) => void;
   sessionId?: string;
-  statusLineHeight?: number; // StatusLine 高度，用于调整位置
-  /**
-   * Optional style override for the outer absolute-positioned container.
-   * Used by AgentPanel top-level rendering to position the panel within the active group column.
-   */
-  containerStyle?: CSSProperties;
   /** Current content for the textarea (store-controlled) */
   content: string;
   /** Current image paths (store-controlled) */
@@ -31,18 +25,13 @@ interface EnhancedInputProps {
 
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-// When the panel uses rounded corners, leaving a tiny gap above the status line
-// prevents the bottom radius from visually colliding with (or being clipped by) the
-// status line background.
-const STATUS_LINE_GAP_PX = 1;
+const DEFAULT_MIN_H = 60;
 
 export function EnhancedInput({
   open,
   onOpenChange,
   onSend,
   sessionId: _sessionId,
-  statusLineHeight = 0,
-  containerStyle,
   content,
   imagePaths,
   onContentChange,
@@ -54,6 +43,26 @@ export function EnhancedInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [manualMinH, setManualMinH] = useState<number | null>(null);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const startY = e.clientY;
+    const startH = textarea.offsetHeight;
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = startY - ev.clientY;
+      setManualMinH(Math.max(DEFAULT_MIN_H, startH + delta));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
 
   const removeImagePath = useCallback(
     (index: number) => {
@@ -62,14 +71,16 @@ export function EnhancedInput({
     [imagePaths, onImagesChange]
   );
 
-  // Auto-resize textarea
+  // Auto-resize textarea, respecting manual min height from drag
   // biome-ignore lint/correctness/useExhaustiveDependencies: content triggers height recalculation
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [content]);
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const scrollH = ta.scrollHeight;
+    const minH = manualMinH ?? DEFAULT_MIN_H;
+    ta.style.height = `${Math.max(scrollH, minH)}px`;
+  }, [content, manualMinH]);
 
   // Focus textarea when opened, session changes, or panel becomes active
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId triggers focus on session switch
@@ -309,101 +320,102 @@ export function EnhancedInput({
 
   if (!open) return null;
 
-  const resolvedContainerStyle: CSSProperties = containerStyle ?? {
-    left: 0,
-    right: 5,
-  };
-
   return (
     <div
       ref={containerRef}
-      className="absolute z-50 pointer-events-auto bg-background rounded-lg overflow-hidden border-t shadow-[0_-10px_20px_-14px_rgba(0,0,0,0.35)]"
-      style={{
-        ...resolvedContainerStyle,
-        bottom: Math.max(0, statusLineHeight + STATUS_LINE_GAP_PX),
-      }}
+      className="pointer-events-auto bg-background overflow-hidden border-t"
       onKeyDown={handlePanelKeyDown}
     >
-      <div className="px-4 pt-1 pb-[5px]">
-        {/* Header (actions) */}
-        <div className="flex items-center justify-between gap-1 mb-0">
-          <div className="ml-2 flex min-w-0 items-center gap-1">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-            <button
-              type="button"
-              onClick={handleSelectFiles}
-              disabled={imagePaths.length >= MAX_IMAGES}
-              className="h-4 w-4 p-0 rounded hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-64"
-              aria-label={t('Select Image')}
-            >
-              <Upload className="h-3 w-3" />
-            </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileSelect}
+      />
 
-            {/* Image previews (16x16) */}
-            {imagePaths.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {imagePaths.map((path, index) => (
-                  <div key={path} className="relative group h-4 w-4 rounded overflow-hidden border">
-                    <img
-                      src={toLocalFileUrl(path)}
-                      alt={`Preview ${index + 1}`}
-                      className="h-full w-full object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeImagePath(index)}
-                      className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-3 w-3 text-white" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="h-4 w-4 p-0 rounded hover:bg-accent transition-colors"
-            aria-label={t('Close')}
-          >
-            <X className="h-3 w-3" />
-          </button>
+      <div className="relative mx-3 my-2 rounded-lg border border-border bg-muted/30">
+        {/* Close button (top-right) */}
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className="absolute top-1 right-1 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors z-10"
+          aria-label={t('Close')}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+
+        {/* Resize handle */}
+        <div
+          className="h-3 cursor-ns-resize group flex items-center justify-center"
+          onMouseDown={handleResizeStart}
+        >
+          <div className="w-8 h-0.5 rounded-full bg-border group-hover:bg-muted-foreground transition-colors" />
         </div>
 
-        <div className="flex items-start gap-2">
-          <div className="flex-1 relative" onDrop={handleDrop} onDragOver={handleDragOver}>
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={(e) => onContentChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onBlur={handleBlur}
-              placeholder={t('Type your message... (Shift+Enter for newline)')}
-              className="w-full min-h-[40px] max-h-40 p-3 pr-12 resize-none bg-muted rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              rows={1}
-            />
+        {/* Textarea */}
+        <div onDrop={handleDrop} onDragOver={handleDragOver}>
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => onContentChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onBlur={handleBlur}
+            placeholder={t('Type your message... (Shift+Enter for newline)')}
+            className="w-full min-h-[60px] px-3 resize-none bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/60"
+            rows={1}
+          />
+        </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                void handleSend();
-              }}
-              disabled={!content.trim() && imagePaths.length === 0}
-              className="absolute bottom-4 right-[9px] h-4 w-4 p-0 rounded hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-64"
-              aria-label={t('Send')}
-            >
-              <Send className="h-3 w-3" />
-            </button>
+        {/* Image previews */}
+        {imagePaths.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+            {imagePaths.map((path, index) => (
+              <div
+                key={path}
+                className="relative group h-10 w-10 rounded-md overflow-hidden border"
+              >
+                <img
+                  src={toLocalFileUrl(path)}
+                  alt={`Preview ${index + 1}`}
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeImagePath(index)}
+                  className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="h-3.5 w-3.5 text-white" />
+                </button>
+              </div>
+            ))}
           </div>
+        )}
+
+        {/* Bottom action bar */}
+        <div className="flex items-center justify-end gap-0.5 px-2 pb-1.5">
+          <button
+            type="button"
+            onClick={handleSelectFiles}
+            disabled={imagePaths.length >= MAX_IMAGES}
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-40"
+            aria-label={t('Select Image')}
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleSend();
+            }}
+            disabled={!content.trim() && imagePaths.length === 0}
+            className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:pointer-events-none disabled:opacity-40"
+            aria-label={t('Send')}
+          >
+            <Send className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </div>

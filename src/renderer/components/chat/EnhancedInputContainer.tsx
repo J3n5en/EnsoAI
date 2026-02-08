@@ -1,12 +1,10 @@
-import { type CSSProperties, memo } from 'react';
+import { memo } from 'react';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
 import { EnhancedInput } from './EnhancedInput';
 
 interface EnhancedInputContainerProps {
   sessionId: string;
-  statusLineHeight: number;
-  containerStyle?: CSSProperties;
   onSend: (content: string, imagePaths: string[]) => void;
   /** Whether the parent panel is active (used to trigger focus on tab switch) */
   isActive?: boolean;
@@ -18,8 +16,6 @@ interface EnhancedInputContainerProps {
  */
 export const EnhancedInputContainer = memo(function EnhancedInputContainer({
   sessionId,
-  statusLineHeight,
-  containerStyle,
   onSend,
   isActive = false,
 }: EnhancedInputContainerProps) {
@@ -44,28 +40,24 @@ export const EnhancedInputContainer = memo(function EnhancedInputContainer({
   if (!open) return null;
 
   return (
-    <div className="absolute inset-x-2 top-2 bottom-0 pointer-events-none">
-      <EnhancedInput
-        open
-        onOpenChange={(newOpen) => {
-          if (!newOpen) {
-            setEnhancedInputOpen(sessionId, false);
-          }
-        }}
-        onSend={(sendContent, sendImagePaths) => {
-          onSend(sendContent, sendImagePaths);
-          clearEnhancedInput(sessionId, keepOpenAfterSend);
-        }}
-        sessionId={sessionId}
-        statusLineHeight={statusLineHeight}
-        containerStyle={containerStyle}
-        content={content}
-        imagePaths={imagePaths}
-        onContentChange={(newContent) => setEnhancedInputContent(sessionId, newContent)}
-        onImagesChange={(newImagePaths) => setEnhancedInputImages(sessionId, newImagePaths)}
-        keepOpenAfterSend={keepOpenAfterSend}
-        isActive={isActive}
-      />
-    </div>
+    <EnhancedInput
+      open
+      onOpenChange={(newOpen) => {
+        if (!newOpen) {
+          setEnhancedInputOpen(sessionId, false);
+        }
+      }}
+      onSend={(sendContent, sendImagePaths) => {
+        onSend(sendContent, sendImagePaths);
+        clearEnhancedInput(sessionId, keepOpenAfterSend);
+      }}
+      sessionId={sessionId}
+      content={content}
+      imagePaths={imagePaths}
+      onContentChange={(newContent) => setEnhancedInputContent(sessionId, newContent)}
+      onImagesChange={(newImagePaths) => setEnhancedInputImages(sessionId, newImagePaths)}
+      keepOpenAfterSend={keepOpenAfterSend}
+      isActive={isActive}
+    />
   );
 });

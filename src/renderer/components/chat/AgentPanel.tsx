@@ -1,6 +1,6 @@
 import type { AIProvider } from '@shared/types';
 import { Plus, Settings, Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEMP_REPO_ID } from '@/App/constants';
 import { normalizePath, pathsEqual } from '@/App/storage';
 import { ResizeHandle } from '@/components/terminal/ResizeHandle';
@@ -114,6 +114,49 @@ function createSession(
     environment,
   };
 }
+
+/**
+ * Measures the combined height of the bottom bar (EnhancedInput + StatusLine)
+ * and reports it so the terminal container can leave enough space.
+ */
+const GroupBottomBar = memo(function GroupBottomBar({
+  groupId,
+  onHeightChange,
+  children,
+}: {
+  groupId: string;
+  onHeightChange: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    let last = -1;
+    const report = () => {
+      const height = Math.ceil(el.getBoundingClientRect().height);
+      if (height === last) return;
+      last = height;
+      onHeightChange((prev) => {
+        if (prev[groupId] === height) return prev;
+        return { ...prev, [groupId]: height };
+      });
+    };
+
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    report();
+    return () => observer.disconnect();
+  }, [groupId, onHeightChange]);
+
+  return (
+    <div ref={ref} className="mt-auto pointer-events-auto">
+      {children}
+    </div>
+  );
+});
 
 export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }: AgentPanelProps) {
   const { t } = useI18n();
@@ -1484,55 +1527,17 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         })}
       </div>
 
-      {/* Enhanced Input Panel (top-level overlay, scoped to active group column) */}
-      {(() => {
-        if (!claudeCodeIntegration.enhancedInputEnabled) return null;
-
-        // Get active session ID from current active group
-        const activeGroup = groups.find((g) => g.id === activeGroupId);
-        const activeSessionId = activeGroup?.activeSessionId;
-        if (!activeSessionId) return null;
-
-        // Validate session exists before rendering
-        const session = allSessions.find((s) => s.id === activeSessionId);
-        if (!session) return null;
-
-        // Find which group/column the session belongs to (within current worktree)
-        const groupIndex = groups.findIndex((g) => g.sessionIds.includes(activeSessionId));
-        const position = groupIndex >= 0 ? currentGroupPositions[groupIndex] : undefined;
-
-        const enhancedInputGroupId = groupIndex >= 0 ? groups[groupIndex]?.id : undefined;
-        const statusLineHeight = enhancedInputGroupId
-          ? (statusLineHeightsByGroupId[enhancedInputGroupId] ?? 0)
-          : 0;
-
-        const sender = enhancedInputSenderRef.current.get(activeSessionId);
-
-        return (
-          <EnhancedInputContainer
-            sessionId={activeSessionId}
-            statusLineHeight={statusLineHeight}
-            containerStyle={
-              position
-                ? {
-                    left: `${position.left}%`,
-                    width: `${position.width}%`,
-                  }
-                : undefined
-            }
-            onSend={(content, imagePaths) => {
-              sender?.(content, imagePaths);
-            }}
-            isActive={isActive}
-          />
-        );
-      })()}
-
       {/* Session bars (floating) - rendered for each group in current worktree */}
       {/* pointer-events-none on container, AgentGroup handles its own pointer-events */}
       {currentGroupState.groups.map((group, index) => {
         const position = currentGroupPositions[index];
         if (!position) return null;
+
+        const isActiveGroup = group.id === activeGroupId;
+        const sender =
+          isActiveGroup && group.activeSessionId
+            ? enhancedInputSenderRef.current.get(group.activeSessionId)
+            : undefined;
 
         return (
           <div
@@ -1563,21 +1568,21 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
               quickTerminalHasProcess={hasRunningProcess}
               onToggleQuickTerminal={quickTerminalEnabled ? handleToggleQuickTerminal : undefined}
             />
-            {/* Status Line at bottom of each group - only render container when enabled */}
-            {statusLineEnabled && (
-              <div className="mt-auto pointer-events-auto">
-                <StatusLine
-                  sessionId={group.activeSessionId}
-                  onHeightChange={(height) => {
-                    setStatusLineHeightsByGroupId((prev) => {
-                      // Avoid unnecessary renders.
-                      if (prev[group.id] === height) return prev;
-                      return { ...prev, [group.id]: height };
-                    });
-                  }}
-                />
-              </div>
-            )}
+            {/* Bottom bar: Enhanced Input + Status Line, height measured for terminal offset */}
+            <GroupBottomBar groupId={group.id} onHeightChange={setStatusLineHeightsByGroupId}>
+              {isActiveGroup &&
+                claudeCodeIntegration.enhancedInputEnabled &&
+                group.activeSessionId != null && (
+                  <EnhancedInputContainer
+                    sessionId={group.activeSessionId}
+                    onSend={(content, imagePaths) => {
+                      sender?.(content, imagePaths);
+                    }}
+                    isActive={isActive}
+                  />
+                )}
+              {statusLineEnabled && <StatusLine sessionId={group.activeSessionId} />}
+            </GroupBottomBar>
           </div>
         );
       })}
