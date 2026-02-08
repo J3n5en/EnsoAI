@@ -875,7 +875,8 @@ export function AgentTerminal({
         write(message);
       }
 
-      setTimeout(() => write('\r'), hasInternalNewlines ? 300 : 30);
+      const delay = imagePaths.length > 0 ? 800 : hasInternalNewlines ? 300 : 30;
+      setTimeout(() => write('\r'), delay);
 
       terminal?.focus();
     },

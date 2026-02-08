@@ -32,6 +32,9 @@ export const EnhancedInputContainer = memo(function EnhancedInputContainer({
   );
   const keepOpenAfterSend = enhancedInputAutoPopup === 'always';
 
+  // Get cwd from session for file mention search
+  const cwd = useAgentSessionsStore((state) => state.sessions.find((s) => s.id === sessionId)?.cwd);
+
   // Default state if not found
   const open = enhancedInputState?.open ?? false;
   const content = enhancedInputState?.content ?? '';
@@ -58,6 +61,7 @@ export const EnhancedInputContainer = memo(function EnhancedInputContainer({
       onImagesChange={(newImagePaths) => setEnhancedInputImages(sessionId, newImagePaths)}
       keepOpenAfterSend={keepOpenAfterSend}
       isActive={isActive}
+      cwd={cwd}
     />
   );
 });

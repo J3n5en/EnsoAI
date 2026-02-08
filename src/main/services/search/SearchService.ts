@@ -130,14 +130,19 @@ export class SearchService {
   async searchFiles(params: FileSearchParams): Promise<FileSearchResult[]> {
     const { rootPath, query, maxResults = MAX_FILE_RESULTS } = params;
 
-    if (!query.trim()) return [];
-
     const allFiles = await getAllFilesWithRipgrep(rootPath);
 
-    // 计算匹配分数并排序
+    // Empty query: return files sorted by path (shallow files first)
+    if (!query.trim()) {
+      return allFiles
+        .map((file) => ({ ...file, score: 0 }))
+        .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+        .slice(0, maxResults);
+    }
+
+    // Fuzzy match and rank
     const scoredResults = allFiles
       .map((file) => {
-        // 同时匹配文件名和相对路径
         const nameScore = fuzzyMatch(query, file.name);
         const pathScore = fuzzyMatch(query, file.relativePath) * 0.8;
         return {
