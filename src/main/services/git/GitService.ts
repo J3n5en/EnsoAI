@@ -21,6 +21,7 @@ import simpleGit, { type SimpleGit, type StatusResult } from 'simple-git';
 import { getProxyEnvVars } from '../proxy/ProxyConfig';
 import { getEnhancedPath } from '../terminal/PtyManager';
 import { decodeBuffer, gitShow } from './encoding';
+import { withSafeDirectoryEnv } from './safeDirectory';
 
 const execAsync = promisify(exec);
 
@@ -49,20 +50,27 @@ export class GitService {
   private workdir: string;
 
   constructor(workdir: string) {
-    this.git = simpleGit(workdir).env({
-      ...process.env,
-      ...getProxyEnvVars(),
-      PATH: getEnhancedPath(),
-    });
+    const gitEnv = withSafeDirectoryEnv(
+      {
+        ...process.env,
+        ...getProxyEnvVars(),
+        PATH: getEnhancedPath(),
+      },
+      workdir
+    );
+    this.git = simpleGit(workdir).env(gitEnv);
     this.workdir = workdir;
   }
 
-  private getGitEnv(): NodeJS.ProcessEnv {
-    return {
-      ...process.env,
-      ...getProxyEnvVars(),
-      PATH: getEnhancedPath(),
-    };
+  private getGitEnv(workdir = this.workdir): NodeJS.ProcessEnv {
+    return withSafeDirectoryEnv(
+      {
+        ...process.env,
+        ...getProxyEnvVars(),
+        PATH: getEnhancedPath(),
+      },
+      workdir
+    );
   }
 
   private async readPorcelainV2Limited(maxEntries: number): Promise<LimitedGitStatus> {
@@ -345,7 +353,7 @@ export class GitService {
         'gh pr list --state merged --json headRefName --limit 200',
         {
           cwd: this.workdir,
-          env: { ...process.env, ...getProxyEnvVars(), PATH: getEnhancedPath() },
+          env: this.getGitEnv(),
           timeout: 5000,
         }
       );
@@ -855,7 +863,7 @@ export class GitService {
       // Check if gh is installed
       await execAsync('gh --version', {
         cwd: this.workdir,
-        env: { ...process.env, PATH: getEnhancedPath() },
+        env: this.getGitEnv(),
       });
     } catch {
       return { installed: false, authenticated: false, error: 'gh CLI not installed' };
@@ -865,7 +873,7 @@ export class GitService {
       // Check if gh is authenticated
       await execAsync('gh auth status', {
         cwd: this.workdir,
-        env: { ...process.env, ...getProxyEnvVars(), PATH: getEnhancedPath() },
+        env: this.getGitEnv(),
       });
       return { installed: true, authenticated: true };
     } catch {
@@ -879,7 +887,7 @@ export class GitService {
         'gh pr list --state open --json number,title,headRefName,state,author,updatedAt,isDraft --limit 50',
         {
           cwd: this.workdir,
-          env: { ...process.env, ...getProxyEnvVars(), PATH: getEnhancedPath() },
+          env: this.getGitEnv(),
         }
       );
 
@@ -1006,11 +1014,8 @@ export class GitService {
       for (const submodule of submodules) {
         if (submodule.initialized) {
           try {
-            const subGit = simpleGit(path.join(this.workdir, submodule.path)).env({
-              ...process.env,
-              ...getProxyEnvVars(),
-              PATH: getEnhancedPath(),
-            });
+            const submoduleWorkdir = path.join(this.workdir, submodule.path);
+            const subGit = simpleGit(submoduleWorkdir).env(this.getGitEnv(submoduleWorkdir));
             const subStatus = await subGit.status();
             submodule.branch = subStatus.current || undefined;
             submodule.tracking = subStatus.tracking || undefined;
@@ -1080,11 +1085,7 @@ export class GitService {
       throw new Error('Invalid submodule path: path traversal detected');
     }
 
-    return simpleGit(absolutePath).env({
-      ...process.env,
-      ...getProxyEnvVars(),
-      PATH: getEnhancedPath(),
-    });
+    return simpleGit(absolutePath).env(this.getGitEnv(absolutePath));
   }
 
   /**
@@ -1414,11 +1415,16 @@ export class GitService {
           onProgress({ stage, progress });
         }
       },
-    }).env({
-      ...process.env,
-      ...getProxyEnvVars(),
-      PATH: getEnhancedPath(),
-    });
+    }).env(
+      withSafeDirectoryEnv(
+        {
+          ...process.env,
+          ...getProxyEnvVars(),
+          PATH: getEnhancedPath(),
+        },
+        targetPath
+      )
+    );
 
     // Execute clone with progress flag
     await git.clone(remoteUrl, targetPath, ['--progress']);

@@ -8,6 +8,9 @@ import jschardet from 'jschardet';
 import simpleGit from 'simple-git';
 import { FileWatcher } from '../services/files/FileWatcher';
 import { registerAllowedLocalFileRoot } from '../services/files/LocalFileAccess';
+import { withSafeDirectoryEnv } from '../services/git/safeDirectory';
+import { getProxyEnvVars } from '../services/proxy/ProxyConfig';
+import { getEnhancedPath } from '../services/terminal/PtyManager';
 
 /**
  * Normalize encoding name to a consistent format
@@ -220,7 +223,16 @@ export function registerFileHandlers(): void {
       // 检查 gitignore
       if (gitRoot) {
         try {
-          const git = simpleGit(gitRoot);
+          const git = simpleGit(gitRoot).env(
+            withSafeDirectoryEnv(
+              {
+                ...process.env,
+                ...getProxyEnvVars(),
+                PATH: getEnhancedPath(),
+              },
+              gitRoot
+            )
+          );
           const relativePaths = result.map((f) => relative(gitRoot, f.path));
           const ignoredResult = await git.checkIgnore(relativePaths);
           const ignoredSet = new Set(ignoredResult);

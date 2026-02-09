@@ -22,6 +22,7 @@ import simpleGit, { type SimpleGit } from 'simple-git';
 import { getProxyEnvVars } from '../proxy/ProxyConfig';
 import { getEnhancedPath } from '../terminal/PtyManager';
 import { gitShow } from './encoding';
+import { withSafeDirectoryEnv } from './safeDirectory';
 
 const execAsync = promisify(exec);
 
@@ -29,11 +30,16 @@ const execAsync = promisify(exec);
  * Create a simpleGit instance with enhanced PATH for git-lfs and other tools
  */
 function createGit(workdir: string): SimpleGit {
-  return simpleGit(workdir).env({
-    ...process.env,
-    ...getProxyEnvVars(),
-    PATH: getEnhancedPath(),
-  });
+  return simpleGit(workdir).env(
+    withSafeDirectoryEnv(
+      {
+        ...process.env,
+        ...getProxyEnvVars(),
+        PATH: getEnhancedPath(),
+      },
+      workdir
+    )
+  );
 }
 
 /**
