@@ -667,6 +667,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   // 监听 Claude stop hook 通知，精确更新 output state 并发送完成通知
   const setOutputState = useAgentSessionsStore((s) => s.setOutputState);
+  const getActivityState = useWorktreeActivityStore((s) => s.getActivityState);
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onAgentStop(({ sessionId }) => {
       const session = allSessions.find((s) => s.id === sessionId);
@@ -684,12 +685,15 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         // 1. enhancedInputEnabled
         // 2. enhancedInputAutoPopup is 'always' or 'hideWhileRunning'
         // 3. stopHookEnabled (for Claude Code)
+        // 4. NOT in 'waiting_input' state (AskUserQuestion or Permission Prompt active)
         const autoPopupMode = claudeCodeIntegration.enhancedInputAutoPopup;
+        const activityState = getActivityState(session.cwd);
         const shouldAutoPopup =
           session.agentId === 'claude' &&
           claudeCodeIntegration.enhancedInputEnabled &&
           (autoPopupMode === 'always' || autoPopupMode === 'hideWhileRunning') &&
-          claudeCodeIntegration.stopHookEnabled;
+          claudeCodeIntegration.stopHookEnabled &&
+          activityState !== 'waiting_input';
 
         // Auto popup enhanced input if enabled
         // Now we set the open state in store - it persists per session
@@ -718,6 +722,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     cwd,
     isActive,
     setOutputState,
+    getActivityState,
     claudeCodeIntegration,
     setEnhancedInputOpen,
   ]);
