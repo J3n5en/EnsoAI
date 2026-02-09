@@ -23,6 +23,7 @@ export function CommitBox({
   const [message, setMessage] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const { commitMessageGenerator } = useSettingsStore();
+  const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
 
   const handleCommit = () => {
     const finalMessage = message.trim();
@@ -80,7 +81,7 @@ export function CommitBox({
   const canGenerate = commitMessageGenerator.enabled && rootPath && !isGenerating && !isCommitting;
 
   return (
-    <div className="flex shrink-0 flex-col border-t bg-background">
+    <div className={cn('flex shrink-0 flex-col border-t', !bgImageEnabled && 'bg-background')}>
       {/* Message Input with Generate Button */}
       <div className="relative">
         <textarea

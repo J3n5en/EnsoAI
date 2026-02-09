@@ -24,6 +24,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useSourceControlStore } from '@/stores/sourceControl';
 import { ChangesTree } from './ChangesTree';
 import { CodeReviewModal } from './CodeReviewModal';
+import { useChangesActions } from './useChangesActions';
 
 interface ChangesListProps {
   staged: FileChange[];
@@ -176,20 +177,22 @@ export function ChangesList({
   const trackedChanges = unstaged.filter((f) => f.status !== 'U');
   const untrackedChanges = unstaged.filter((f) => f.status === 'U');
 
-  const handleUnstageAll = () => {
-    const paths = staged.map((f) => f.path);
-    if (paths.length > 0) onUnstage(paths);
-  };
-
-  const handleStageTracked = () => {
-    const paths = trackedChanges.map((f) => f.path);
-    if (paths.length > 0) onStage(paths);
-  };
-
-  const handleStageUntracked = () => {
-    const paths = untrackedChanges.map((f) => f.path);
-    if (paths.length > 0) onStage(paths);
-  };
+  // Use shared hook for batch operations
+  const {
+    handleUnstageAll,
+    handleStageTracked,
+    handleDiscardTracked,
+    handleStageUntracked,
+    handleDeleteAllUntracked,
+  } = useChangesActions({
+    staged,
+    trackedChanges,
+    untrackedChanges,
+    onStage,
+    onUnstage,
+    onDiscard,
+    onDeleteUntracked,
+  });
 
   // If tree mode, use ChangesTree component
   if (viewMode === 'tree') {
@@ -350,13 +353,23 @@ export function ChangesList({
                   <h3 className="text-xs font-medium text-muted-foreground">
                     {t('Changes ({{count}})', { count: trackedChanges.length })}
                   </h3>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={handleStageTracked}
-                  >
-                    {t('Stage all')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={handleDiscardTracked}
+                      title={t('Discard all changes')}
+                    >
+                      {t('Discard all')}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={handleStageTracked}
+                    >
+                      {t('Stage all')}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-0.5">
                   {trackedChanges.map((file) => (
@@ -384,13 +397,25 @@ export function ChangesList({
                   <h3 className="text-xs font-medium text-muted-foreground">
                     {t('Untracked changes ({{count}})', { count: untrackedChanges.length })}
                   </h3>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={handleStageUntracked}
-                  >
-                    {t('Stage all')}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {onDeleteUntracked && (
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={handleDeleteAllUntracked}
+                        title={t('Delete all untracked files')}
+                      >
+                        {t('Delete all')}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={handleStageUntracked}
+                    >
+                      {t('Stage all')}
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-0.5">
                   {untrackedChanges.map((file) => (

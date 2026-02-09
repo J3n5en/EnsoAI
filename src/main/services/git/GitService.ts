@@ -338,29 +338,7 @@ export class GitService {
       return branches;
     }
 
-    // Get list of branches merged into base branch
-    const mergedSet = new Set<string>();
-    try {
-      const mergedOutput = await this.git.raw(['branch', '-a', '--merged', baseBranch]);
-      const mergedLines = mergedOutput
-        .trim()
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line && !line.includes('->')) // Skip symbolic refs like "remotes/origin/HEAD -> origin/main"
-        .map((line) => line.replace(/^[*+]\s*/, '')); // Remove current branch (*) or worktree (+) marker
-
-      for (const line of mergedLines) {
-        mergedSet.add(line);
-      }
-    } catch {
-      // If merged detection fails, just return branches without merged info
-      return branches;
-    }
-
-    // Extract base branch name without remote prefix
-    const baseBranchName = baseBranch.replace(/^remotes\//, '').replace(/^origin\//, '');
-
-    // Get merged PR information from GitHub CLI (if available)
+    // Get merged PR information from GitHub CLI
     const mergedPRBranches = new Set<string>();
     try {
       const { stdout } = await execAsync(
@@ -368,7 +346,7 @@ export class GitService {
         {
           cwd: this.workdir,
           env: { ...process.env, ...getProxyEnvVars(), PATH: getEnhancedPath() },
-          timeout: 5000, // 5 second timeout
+          timeout: 5000,
         }
       );
       const prs = JSON.parse(stdout) as Array<{ headRefName: string }>;
@@ -379,20 +357,12 @@ export class GitService {
       // gh CLI not available or not authenticated, skip PR detection
     }
 
-    // Mark branches as merged
+    // Mark branches as merged (only via PR detection)
     return branches.map((branch) => {
-      const isBaseBranch =
-        branch.name === baseBranchName ||
-        branch.name === `remotes/origin/${baseBranchName}` ||
-        branch.name === baseBranch;
-
-      // Check if this branch has a merged PR
-      const branchNameWithoutRemote = branch.name.replace('remotes/origin/', '');
-      const hasMergedPR = mergedPRBranches.has(branchNameWithoutRemote);
-
+      const branchNameWithoutRemote = branch.name.replace(/^(remotes\/)?origin\//, '');
       return {
         ...branch,
-        merged: !isBaseBranch && (mergedSet.has(branch.name) || hasMergedPR),
+        merged: mergedPRBranches.has(branchNameWithoutRemote),
       };
     });
   }
@@ -1144,7 +1114,10 @@ export class GitService {
    * 智能 Push（公共逻辑）
    * 如果 non-fast-forward，自动先 pull 再重试
    */
-  private async smartPush(pushFn: () => Promise<void>, pullFn: () => Promise<void>): Promise<void> {
+  private async smartPush(
+    pushFn: () => Promise<unknown>,
+    pullFn: () => Promise<void>
+  ): Promise<void> {
     try {
       await pushFn();
     } catch (error) {

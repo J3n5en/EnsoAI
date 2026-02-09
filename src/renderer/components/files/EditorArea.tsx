@@ -114,7 +114,13 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     null
   );
   const [monacoInstance, setMonacoInstance] = useState<Monaco | null>(null);
-  const { terminalTheme, editorSettings, claudeCodeIntegration } = useSettingsStore();
+  const {
+    terminalTheme,
+    editorSettings,
+    claudeCodeIntegration,
+    backgroundImageEnabled,
+    backgroundOpacity,
+  } = useSettingsStore();
   const write = useTerminalWriteStore((state) => state.write);
   const focus = useTerminalWriteStore((state) => state.focus);
 
@@ -277,11 +283,14 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     };
   }, [tabs, activeTabPath, onContentChange]);
 
-  // Define custom theme on mount and when terminal theme changes
+  // Define custom theme on mount and when terminal theme / background image settings change
   useEffect(() => {
-    defineMonacoTheme(terminalTheme);
+    defineMonacoTheme(terminalTheme, {
+      backgroundImageEnabled,
+      backgroundOpacity,
+    });
     themeDefinedRef.current = true;
-  }, [terminalTheme]);
+  }, [terminalTheme, backgroundImageEnabled, backgroundOpacity]);
 
   // Handle pending cursor navigation (jump to line and select match)
   // Only handles same-file search; new file search is handled by handleEditorMount
@@ -891,7 +900,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
       {/* Breadcrumb */}
       {activeTab && breadcrumbSegments.length > 0 && (
-        <div className="shrink-0 border-b bg-background px-3 py-1">
+        <div className="shrink-0 border-b px-3 py-1">
           <Breadcrumb>
             <BreadcrumbList className="flex-nowrap text-xs">
               {breadcrumbSegments.map((segment, index) => (
@@ -976,7 +985,9 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                     cursorStyle: editorSettings.cursorStyle,
                     cursorBlinking: editorSettings.cursorBlinking,
                     // Brackets
-                    bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
+                    bracketPairColorization: {
+                      enabled: editorSettings.bracketPairColorization,
+                    },
                     matchBrackets: editorSettings.matchBrackets,
                     guides: {
                       bracketPairs: editorSettings.bracketPairGuides,
@@ -1013,7 +1024,9 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
               <div
                 ref={previewRef}
                 className="min-h-0 overflow-auto border-l bg-background"
-                style={{ width: previewMode === 'split' ? `${previewWidth}%` : '100%' }}
+                style={{
+                  width: previewMode === 'split' ? `${previewWidth}%` : '100%',
+                }}
                 onScroll={handlePreviewScroll}
               >
                 <MarkdownPreview

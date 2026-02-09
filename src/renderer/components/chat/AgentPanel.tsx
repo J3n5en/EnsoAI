@@ -16,6 +16,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
+import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { initAgentStatusListener } from '@/stores/agentStatus';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
@@ -206,9 +207,11 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     setQuickTerminalOpen,
   ]);
 
+  const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
   const terminalBgColor = useMemo(() => {
+    if (bgImageEnabled) return 'transparent';
     return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
-  }, [terminalTheme]);
+  }, [terminalTheme, bgImageEnabled]);
   const statusLineEnabled = claudeCodeIntegration.statusLineEnabled;
   const defaultAgentId = useMemo(() => getDefaultAgentId(agentSettings), [agentSettings]);
   const { setAgentCount, registerAgentCloseHandler } = useWorktreeActivityStore();
@@ -648,17 +651,26 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [cwd, setActiveId, updateCurrentGroupState]
   );
 
+  // Notification payload may carry either UI session id or Claude sessionId.
+  const findSessionByNotificationId = useCallback(
+    (incomingSessionId: string) =>
+      allSessions.find((s) => s.id === incomingSessionId || s.sessionId === incomingSessionId),
+    [allSessions]
+  );
+
   // 监听通知点击，激活对应 session 并切换 worktree
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onClick((sessionId) => {
-      const session = allSessions.find((s) => s.id === sessionId);
+      const session = findSessionByNotificationId(sessionId);
       if (session && !pathsEqual(session.cwd, cwd) && onSwitchWorktree) {
         onSwitchWorktree(session.cwd);
       }
-      handleSelectSession(sessionId);
+      if (session) {
+        handleSelectSession(session.id);
+      }
     });
     return unsubscribe;
-  }, [handleSelectSession, allSessions, cwd, onSwitchWorktree]);
+  }, [handleSelectSession, findSessionByNotificationId, cwd, onSwitchWorktree]);
 
   // Enhanced input sender ref (unchanged)
   const enhancedInputSenderRef = useRef<
@@ -670,15 +682,15 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const getActivityState = useWorktreeActivityStore((s) => s.getActivityState);
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onAgentStop(({ sessionId }) => {
-      const session = allSessions.find((s) => s.id === sessionId);
+      const session = findSessionByNotificationId(sessionId);
       if (session) {
         // Check if user is currently viewing this session
         const activeGroup = groups.find((g) => g.id === activeGroupId);
         const isViewingSession =
-          activeGroup?.activeSessionId === sessionId && pathsEqual(session.cwd, cwd) && isActive;
+          activeGroup?.activeSessionId === session.id && pathsEqual(session.cwd, cwd) && isActive;
 
         // Update output state to idle (will become 'unread' if user is not viewing)
-        setOutputState(sessionId, 'idle', isViewingSession);
+        setOutputState(session.id, 'idle', isViewingSession);
 
         // Check if enhanced input is enabled and should auto popup
         // Auto popup requires:
@@ -709,13 +721,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         window.electronAPI.notification.show({
           title: t('{{command}} completed', { command: agentName }),
           body: notificationBody,
-          sessionId,
+          sessionId: session.id,
         });
       }
     });
     return unsubscribe;
   }, [
-    allSessions,
+    findSessionByNotificationId,
     t,
     groups,
     activeGroupId,
@@ -734,7 +746,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onAskUserQuestion(
       ({ sessionId, toolInput }) => {
-        const session = allSessions.find((s) => s.id === sessionId);
+        const session = findSessionByNotificationId(sessionId);
         if (session) {
           const agentName = AGENT_INFO[session.agentId]?.name || session.agentCommand;
 
@@ -750,13 +762,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           window.electronAPI.notification.show({
             title: `${agentName} 等待输入`,
             body: questionPreview,
-            sessionId,
+            sessionId: session.id,
           });
         }
       }
     );
     return unsubscribe;
-  }, [allSessions]);
+  }, [findSessionByNotificationId]);
 
   // 监听 Claude status line 更新
   useEffect(() => {
@@ -1319,7 +1331,12 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       {/* Empty state overlay - shown when current worktree has no sessions */}
       {/* IMPORTANT: Don't use early return here - terminals must stay mounted to prevent PTY destruction */}
       {showEmptyState && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+        <div
+          className={cn(
+            'absolute inset-0 z-20 flex items-center justify-center',
+            !bgImageEnabled && 'bg-background'
+          )}
+        >
           <Empty className="border-0">
             <EmptyMedia variant="icon">
               <Sparkles className="h-4.5 w-4.5" />

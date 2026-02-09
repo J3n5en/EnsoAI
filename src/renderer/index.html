@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: local-file:; connect-src 'self' local-file: https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http: local-file: local-image:; media-src 'self' https: http: local-file: local-image: blob: data:; connect-src 'self' local-file: local-image: https://cdn.jsdelivr.net; worker-src 'self' blob: https://cdn.jsdelivr.net">
     <title>EnsoAi</title>
   </head>
   <body class="bg-background text-foreground antialiased">

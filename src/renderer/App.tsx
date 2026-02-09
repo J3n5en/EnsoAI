@@ -39,10 +39,12 @@ import {
 } from './App/storage';
 import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
 import { usePanelResize } from './App/usePanelResize';
+import { DevToolsOverlay } from './components/DevToolsOverlay';
 import { UnsavedPromptHost } from './components/files/UnsavedPromptHost';
 import { AddRepositoryDialog } from './components/git';
 import { CloneProgressFloat } from './components/git/CloneProgressFloat';
 import { ActionPanel } from './components/layout/ActionPanel';
+import { BackgroundLayer } from './components/layout/BackgroundLayer';
 import { MainContent } from './components/layout/MainContent';
 import { RepositorySidebar } from './components/layout/RepositorySidebar';
 import { TemporaryWorkspacePanel } from './components/layout/TemporaryWorkspacePanel';
@@ -270,6 +272,8 @@ export default function App() {
   const editorSettings = useSettingsStore((s) => s.editorSettings);
   const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const hideGroups = useSettingsStore((s) => s.hideGroups);
+  const backgroundImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
+  const backgroundOpacity = useSettingsStore((s) => s.backgroundOpacity);
   const temporaryWorkspaceEnabled = useSettingsStore((s) => s.temporaryWorkspaceEnabled);
   const defaultTemporaryPath = useSettingsStore((s) => s.defaultTemporaryPath);
   const isWindows = window.electronAPI?.env.platform === 'win32';
@@ -543,10 +547,15 @@ export default function App() {
         await window.electronAPI.file.write(path, tab.content, tab.encoding);
         useEditorStore.getState().markFileSaved(path);
 
-        window.electronAPI.app.respondCloseSaveRequest(requestId, { ok: true });
+        window.electronAPI.app.respondCloseSaveRequest(requestId, {
+          ok: true,
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        window.electronAPI.app.respondCloseSaveRequest(requestId, { ok: false, error: message });
+        window.electronAPI.app.respondCloseSaveRequest(requestId, {
+          ok: false,
+          error: message,
+        });
       }
     });
     return cleanup;
@@ -581,42 +590,40 @@ export default function App() {
         });
       } else {
         // New unsaved config detected
-        providerToastRef.current = toastManager.add({
+        providerToastRef.current = addToast({
           type: 'info',
           title: t('New provider detected'),
           description: t('Click to save this config'),
-          data: {
-            actions: [
-              {
-                label: t('Preview'),
-                onClick: () => {
-                  setSettingsCategory('integration');
-                  setScrollToProvider(true);
-                  openSettings();
-                  setPendingProviderAction('preview');
-                },
-                variant: 'ghost',
+          actions: [
+            {
+              label: t('Preview'),
+              onClick: () => {
+                setSettingsCategory('integration');
+                setScrollToProvider(true);
+                openSettings();
+                setPendingProviderAction('preview');
               },
-              {
-                label: t('Save'),
-                onClick: () => {
-                  setSettingsCategory('integration');
-                  setScrollToProvider(true);
-                  openSettings();
-                  setPendingProviderAction('save');
-                },
-                variant: 'outline',
+              variant: 'ghost',
+            },
+            {
+              label: t('Save'),
+              onClick: () => {
+                setSettingsCategory('integration');
+                setScrollToProvider(true);
+                openSettings();
+                setPendingProviderAction('save');
               },
-              {
-                label: t('Open Settings'),
-                onClick: () => {
-                  setSettingsCategory('integration');
-                  setScrollToProvider(true);
-                  openSettings();
-                },
+              variant: 'outline',
+            },
+            {
+              label: t('Open Settings'),
+              onClick: () => {
+                setSettingsCategory('integration');
+                setScrollToProvider(true);
+                openSettings();
               },
-            ],
-          },
+            },
+          ],
         });
       }
     });
@@ -735,7 +742,10 @@ export default function App() {
     const savedWorktreeMap = getStoredWorktreeMap();
     if (oldWorktreePath && savedSelectedRepo && !savedWorktreeMap[savedSelectedRepo]) {
       // Migrate old data to new format
-      const migrated = { ...savedWorktreeMap, [savedSelectedRepo]: oldWorktreePath };
+      const migrated = {
+        ...savedWorktreeMap,
+        [savedSelectedRepo]: oldWorktreePath,
+      };
       localStorage.setItem(STORAGE_KEYS.ACTIVE_WORKTREES, JSON.stringify(migrated));
       setRepoWorktreeMap(migrated);
       localStorage.removeItem(STORAGE_KEYS.ACTIVE_WORKTREE);
@@ -1080,7 +1090,9 @@ export default function App() {
       for (const key of localKeys) {
         queryClient.invalidateQueries({ queryKey: ['git', key, worktreePath] });
       }
-      queryClient.invalidateQueries({ queryKey: ['git', 'submodule', 'changes', worktreePath] });
+      queryClient.invalidateQueries({
+        queryKey: ['git', 'submodule', 'changes', worktreePath],
+      });
 
       // Fetch remote then refresh branch data (with race condition check)
       window.electronAPI.git
@@ -1088,8 +1100,12 @@ export default function App() {
         .then(() => {
           // Only refresh if this is still the current worktree
           if (currentWorktreePathRef.current === worktreePath) {
-            queryClient.invalidateQueries({ queryKey: ['git', 'branches', worktreePath] });
-            queryClient.invalidateQueries({ queryKey: ['git', 'status', worktreePath] });
+            queryClient.invalidateQueries({
+              queryKey: ['git', 'branches', worktreePath],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ['git', 'status', worktreePath],
+            });
           }
         })
         .catch(() => {
@@ -1588,10 +1604,118 @@ export default function App() {
     setPendingProviderAction(null);
   }, [settingsDisplayMode, settingsDialogOpen, activeTab, pendingProviderAction]);
 
+  // Manage background image: toggle body class, force body transparent,
+  // and directly override theme CSS variables on body via inline style
+  // (CSS class-based overrides in @layer base may be overridden by Tailwind's cascade)
+  //
+  // Opacity semantics (user-facing slider):
+  //   0%   = pure theme background (white/black), no image visible
+  //   100% = full image visible, panels fully transparent
+  // Internally: backgroundOpacity = image visibility (0..1)
+  //             panelOpacity = 1 - backgroundOpacity (overlay opacity)
+  useEffect(() => {
+    const body = document.body;
+    const html = document.documentElement;
+
+    if (backgroundImageEnabled) {
+      body.classList.add('bg-image-enabled');
+      // Force body transparent via inline style to override Tailwind's bg-background utility
+      body.style.backgroundColor = 'transparent';
+
+      // Determine current theme mode
+      const isDark = html.classList.contains('dark');
+      // Panel overlay opacity is INVERTED: higher image opacity = more transparent panels
+      const panelOpacity = 1 - backgroundOpacity;
+
+      // Directly set BOTH base CSS variables AND Tailwind color tokens on body
+      // (Tailwind's bg-background uses var(--color-background), which may not cascade via var(--background))
+      if (isDark) {
+        const bg = `oklch(0.145 0.014 285.82 / ${panelOpacity})`;
+        const muted = `oklch(0.269 0.014 285.82 / ${panelOpacity})`;
+        // Base variables
+        body.style.setProperty('--background', bg);
+        body.style.setProperty('--card', bg);
+        body.style.setProperty('--popover', bg);
+        body.style.setProperty('--muted', muted);
+        body.style.setProperty('--accent', muted);
+        body.style.setProperty('--border', muted);
+        body.style.setProperty('--input', muted);
+        // Tailwind color tokens (used by bg-background utility)
+        body.style.setProperty('--color-background', bg);
+        body.style.setProperty('--color-card', bg);
+        body.style.setProperty('--color-popover', bg);
+        body.style.setProperty('--color-muted', muted);
+        body.style.setProperty('--color-accent', muted);
+        body.style.setProperty('--color-border', muted);
+        body.style.setProperty('--color-input', muted);
+      } else {
+        const bg = `oklch(1 0 0 / ${panelOpacity})`;
+        const muted = `oklch(0.965 0.003 285.82 / ${panelOpacity})`;
+        body.style.setProperty('--background', bg);
+        body.style.setProperty('--card', bg);
+        body.style.setProperty('--popover', bg);
+        body.style.setProperty('--muted', muted);
+        body.style.setProperty('--accent', muted);
+        body.style.setProperty('--color-background', bg);
+        body.style.setProperty('--color-card', bg);
+        body.style.setProperty('--color-popover', bg);
+        body.style.setProperty('--color-muted', muted);
+        body.style.setProperty('--color-accent', muted);
+      }
+    } else {
+      body.classList.remove('bg-image-enabled');
+      body.style.backgroundColor = '';
+      // Remove all inline overrides to restore CSS-defined values
+      const varsToRemove = [
+        '--background',
+        '--card',
+        '--popover',
+        '--muted',
+        '--accent',
+        '--border',
+        '--input',
+        '--color-background',
+        '--color-card',
+        '--color-popover',
+        '--color-muted',
+        '--color-accent',
+        '--color-border',
+        '--color-input',
+      ];
+      for (const v of varsToRemove) body.style.removeProperty(v);
+    }
+
+    return () => {
+      body.classList.remove('bg-image-enabled');
+      body.style.backgroundColor = '';
+      const varsToRemove = [
+        '--background',
+        '--card',
+        '--popover',
+        '--muted',
+        '--accent',
+        '--border',
+        '--input',
+        '--color-background',
+        '--color-card',
+        '--color-popover',
+        '--color-muted',
+        '--color-accent',
+        '--color-border',
+        '--color-input',
+      ];
+      for (const v of varsToRemove) body.style.removeProperty(v);
+    };
+  }, [backgroundImageEnabled, backgroundOpacity]);
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="relative z-0 flex h-screen flex-col overflow-hidden">
+      <BackgroundLayer />
       {/* Custom Title Bar for Windows/Linux */}
       <WindowTitleBar onOpenSettings={openSettings} />
+
+      {/* DevTools Overlay for macOS traffic lights protection */}
+      <DevToolsOverlay />
 
       {/* Main Layout */}
       <div className={`flex flex-1 overflow-hidden ${resizing ? 'select-none' : ''}`}>

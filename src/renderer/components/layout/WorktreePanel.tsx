@@ -242,7 +242,7 @@ export function WorktreePanel({
 
       {/* Search bar */}
       <div className="px-3 py-2">
-        <div className="flex h-8 items-center gap-2 rounded-lg border bg-background px-2">
+        <div className="flex h-8 items-center gap-2 rounded-lg border px-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
@@ -436,7 +436,10 @@ export function WorktreePanel({
               variant="destructive"
               onClick={() => {
                 if (worktreeToDelete) {
-                  onRemoveWorktree(worktreeToDelete, { deleteBranch, force: forceDelete });
+                  onRemoveWorktree(worktreeToDelete, {
+                    deleteBranch,
+                    force: forceDelete,
+                  });
                   setWorktreeToDelete(null);
                   setDeleteBranch(false);
                   setForceDelete(false);
@@ -510,8 +513,14 @@ function WorktreeItem({
   // Subscribe to activity store
   const activities = useWorktreeActivityStore((s) => s.activities);
   const diffStatsMap = useWorktreeActivityStore((s) => s.diffStats);
-  const activity = activities[worktree.path] || { agentCount: 0, terminalCount: 0 };
-  const diffStats = diffStatsMap[worktree.path] || { insertions: 0, deletions: 0 };
+  const activity = activities[worktree.path] || {
+    agentCount: 0,
+    terminalCount: 0,
+  };
+  const diffStats = diffStatsMap[worktree.path] || {
+    insertions: 0,
+    deletions: 0,
+  };
   const closeAgentSessions = useWorktreeActivityStore((s) => s.closeAgentSessions);
   const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;

@@ -20,6 +20,7 @@ import { useI18n } from '@/i18n';
 import { heightVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSourceControlStore } from '@/stores/sourceControl';
+import { useChangesActions } from './useChangesActions';
 
 interface ChangesTreeProps {
   staged: FileChange[];
@@ -345,20 +346,22 @@ export function ChangesTree({
     return true;
   }, [allFolderPaths, expandedFolders]);
 
-  const handleUnstageAll = () => {
-    const paths = staged.map((f) => f.path);
-    if (paths.length > 0) onUnstage(paths);
-  };
-
-  const handleStageTracked = () => {
-    const paths = trackedChanges.map((f) => f.path);
-    if (paths.length > 0) onStage(paths);
-  };
-
-  const handleStageUntracked = () => {
-    const paths = untrackedChanges.map((f) => f.path);
-    if (paths.length > 0) onStage(paths);
-  };
+  // Use shared hook for batch operations
+  const {
+    handleUnstageAll,
+    handleStageTracked,
+    handleDiscardTracked,
+    handleStageUntracked,
+    handleDeleteAllUntracked,
+  } = useChangesActions({
+    staged,
+    trackedChanges,
+    untrackedChanges,
+    onStage,
+    onUnstage,
+    onDiscard,
+    onDeleteUntracked,
+  });
 
   const handleToggleAll = useCallback(() => {
     if (allExpanded) {
@@ -456,13 +459,23 @@ export function ChangesTree({
               <h3 className="text-xs font-medium text-muted-foreground">
                 {t('Changes ({{count}})', { count: trackedChanges.length })}
               </h3>
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                onClick={handleStageTracked}
-              >
-                {t('Stage all')}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={handleDiscardTracked}
+                  title={t('Discard all changes')}
+                >
+                  {t('Discard all')}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={handleStageTracked}
+                >
+                  {t('Stage all')}
+                </button>
+              </div>
             </div>
             <div className="space-y-0.5">
               {trackedTree.map((node) => (
@@ -490,13 +503,25 @@ export function ChangesTree({
               <h3 className="text-xs font-medium text-muted-foreground">
                 {t('Untracked changes ({{count}})', { count: untrackedChanges.length })}
               </h3>
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                onClick={handleStageUntracked}
-              >
-                {t('Stage all')}
-              </button>
+              <div className="flex items-center gap-2">
+                {onDeleteUntracked && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={handleDeleteAllUntracked}
+                    title={t('Delete all untracked files')}
+                  >
+                    {t('Delete all')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={handleStageUntracked}
+                >
+                  {t('Stage all')}
+                </button>
+              </div>
             </div>
             <div className="space-y-0.5">
               {untrackedTree.map((node) => (

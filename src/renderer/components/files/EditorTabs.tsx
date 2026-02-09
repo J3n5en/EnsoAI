@@ -101,7 +101,7 @@ export function EditorTabs({
   }
 
   return (
-    <div className="h-10 shrink-0 overflow-hidden border-b bg-muted/30">
+    <div className="h-10 shrink-0 overflow-hidden border-b">
       <ScrollArea className="h-full">
         <div className="flex h-9 w-max pb-1">
           {tabs.map((tab, index) => {
@@ -130,8 +130,8 @@ export function EditorTabs({
                 className={cn(
                   'group relative flex h-9 min-w-[120px] max-w-[180px] cursor-pointer select-none items-center gap-2 border-r px-3 text-sm transition-colors',
                   isActive
-                    ? 'bg-background text-foreground'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    ? 'text-foreground'
+                    : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
                 )}
               >
                 {/* Active indicator - 使用 layoutId 实现平滑滑动 */}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { SESSIONS_STORAGE_KEY, useAgentSessionsStore } from './agentSessions';
 
 // Agent activity state for tree sidebar display
 export type AgentActivityState = 'idle' | 'running' | 'waiting_input' | 'completed';
@@ -195,8 +196,7 @@ export const useWorktreeActivityStore = create<WorktreeActivityState>()(
 
     clearWorktree: (worktreePath) =>
       set((state) => {
-        // Clean up sessionWorktreeMap entries for this worktree
-        cleanupSessionWorktreeMap(worktreePath);
+        // Clean up session mappings - agentSessions handles session cleanup
         const { [worktreePath]: _, ...restActivities } = state.activities;
         const { [worktreePath]: __, ...restActivityStates } = state.activityStates;
         return { activities: restActivities, activityStates: restActivityStates };
@@ -260,32 +260,57 @@ useWorktreeActivityStore.subscribe(
   }
 );
 
-// Session to worktree path mapping for activity state updates
-const sessionWorktreeMap = new Map<string, string>();
+let cachedPersistedRaw: string | null = null;
+let cachedPersistedSessions: Array<{ id: string; sessionId?: string; cwd?: string }> | null = null;
 
-/**
- * Clean up sessionWorktreeMap entries for a specific worktree path
- */
-function cleanupSessionWorktreeMap(worktreePath: string): void {
-  for (const [sessionId, path] of sessionWorktreeMap.entries()) {
-    if (path === worktreePath) {
-      sessionWorktreeMap.delete(sessionId);
-    }
+function getPersistedSessions(): Array<{ id: string; sessionId?: string; cwd?: string }> {
+  const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
+  if (!raw) {
+    cachedPersistedRaw = null;
+    cachedPersistedSessions = null;
+    return [];
   }
+  if (raw === cachedPersistedRaw && cachedPersistedSessions) {
+    return cachedPersistedSessions;
+  }
+  const parsed = JSON.parse(raw) as {
+    sessions?: Array<{ id: string; sessionId?: string; cwd?: string }>;
+  };
+  const sessions = parsed.sessions ?? [];
+  cachedPersistedRaw = raw;
+  cachedPersistedSessions = sessions;
+  return sessions;
 }
 
 /**
- * Register a session's worktree path for activity state tracking
+ * Find worktree path (cwd) for a given session ID from agentSessions store
+ * Uses getState() to ensure fresh data during HMR
  */
-export function registerSessionWorktree(sessionId: string, worktreePath: string): void {
-  sessionWorktreeMap.set(sessionId, worktreePath);
-}
+function findWorktreePath(sessionId: string): string | undefined {
+  const sessions = useAgentSessionsStore.getState().sessions;
+  const session = sessions.find((s) => s.id === sessionId || s.sessionId === sessionId);
+  if (session?.cwd) {
+    return session.cwd;
+  }
 
-/**
- * Unregister a session from activity state tracking
- */
-export function unregisterSessionWorktree(sessionId: string): void {
-  sessionWorktreeMap.delete(sessionId);
+  // HMR safety fallback:
+  // if callbacks hold stale store references after hot reload,
+  // resolve session -> cwd from persisted sessions snapshot.
+  if (sessions.length > 0) {
+    return undefined;
+  }
+
+  try {
+    const persistedSession = getPersistedSessions().find(
+      (s) => s.id === sessionId || s.sessionId === sessionId
+    );
+    return persistedSession?.cwd;
+  } catch {
+    // Ignore parse/storage errors; diagnostics below will show unresolved mapping.
+    cachedPersistedRaw = null;
+    cachedPersistedSessions = null;
+    return undefined;
+  }
 }
 
 /**
@@ -296,7 +321,7 @@ export function unregisterSessionWorktree(sessionId: string): void {
 export function initAgentActivityListener(): () => void {
   // Listen for agent stop notification -> set 'completed'
   const unsubStop = window.electronAPI.notification.onAgentStop((data: { sessionId: string }) => {
-    const worktreePath = sessionWorktreeMap.get(data.sessionId);
+    const worktreePath = findWorktreePath(data.sessionId);
     if (worktreePath) {
       // Get store method inside callback to ensure fresh reference after HMR
       useWorktreeActivityStore.getState().setActivityState(worktreePath, 'completed');
@@ -306,7 +331,7 @@ export function initAgentActivityListener(): () => void {
   // Listen for ask user question notification -> set 'waiting_input'
   const unsubAsk = window.electronAPI.notification.onAskUserQuestion(
     (data: { sessionId: string }) => {
-      const worktreePath = sessionWorktreeMap.get(data.sessionId);
+      const worktreePath = findWorktreePath(data.sessionId);
       if (worktreePath) {
         // Get store method inside callback to ensure fresh reference after HMR
         useWorktreeActivityStore.getState().setActivityState(worktreePath, 'waiting_input');

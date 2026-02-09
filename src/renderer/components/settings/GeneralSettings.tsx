@@ -245,7 +245,7 @@ export function GeneralSettings() {
   const isCustomShell = shellConfig.shellType === 'custom';
 
   const [customArgsText, setCustomArgsText] = React.useState(() =>
-    stringifyShellArgs(shellConfig.customShellArgs || []),
+    stringifyShellArgs(shellConfig.customShellArgs || [])
   );
 
   React.useEffect(() => {
@@ -261,7 +261,9 @@ export function GeneralSettings() {
 
   const isWindows = window.electronAPI?.env.platform === 'win32';
   const shellPathPlaceholder = isWindows ? 'cmd.exe' : '/bin/bash';
-  const shellArgsPlaceholder = isWindows ? '/k "C:\\Program Files\\init.bat"' : "-l -c '/usr/local/bin/app'";
+  const shellArgsPlaceholder = isWindows
+    ? '/k "C:\\Program Files\\init.bat"'
+    : "-l -c '/usr/local/bin/app'";
 
   return (
     <div className="space-y-6">
@@ -476,7 +478,7 @@ export function GeneralSettings() {
             >
               <SelectTrigger className="w-64">
                 <SelectValue>
-                  {isCustomShell ? t('Custom') : (currentShell?.name || shellConfig.shellType)}
+                  {isCustomShell ? t('Custom') : currentShell?.name || shellConfig.shellType}
                 </SelectValue>
               </SelectTrigger>
               <SelectPopup>
@@ -817,12 +819,10 @@ export function GeneralSettings() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose asChild>
-              <Button variant="outline">{t('Cancel')}</Button>
-            </AlertDialogClose>
-            <AlertDialogClose asChild>
-              <Button onClick={handleSelectTempPath}>{t('Choose directory')}</Button>
-            </AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            <AlertDialogClose
+              render={<Button onClick={handleSelectTempPath}>{t('Choose directory')}</Button>}
+            />
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>

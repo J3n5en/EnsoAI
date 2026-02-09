@@ -20,7 +20,7 @@ import { useTerminalWriteStore } from '@/stores/terminalWrite';
 const toastManager = Toast.createToastManager();
 const anchoredToastManager = Toast.createToastManager();
 
-type BaseToastObject = (ReturnType<typeof Toast.useToastManager>['toasts'])[number];
+type BaseToastObject = ReturnType<typeof Toast.useToastManager>['toasts'][number];
 type BaseToastAddOptions = Parameters<typeof toastManager.add>[0];
 
 const TOAST_ICONS = {
@@ -114,7 +114,6 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
         {toasts.map((toast) => {
           const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
           const actions = getToastActions(toast);
-          const actionProps = toast.actionProps;
 
           return (
             <Toast.Root
@@ -201,15 +200,13 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                 </div>
 
                 {/* Bottom actions */}
-                {((toast.actions?.length ?? 0) > 0 ||
-                  toast.actionProps ||
-                  toast.type === 'error') && (
+                {(actions.length > 0 || toast.actionProps || toast.type === 'error') && (
                   <div
                     className="mt-2 flex items-center justify-end gap-1"
                     data-slot="toast-actions"
                   >
-                    {(toast.actions?.length ?? 0) > 0 &&
-                      toast.actions?.map((action) => (
+                    {actions.length > 0 &&
+                      actions.map((action) => (
                         <Toast.Action
                           key={action.label?.toString() ?? Math.random()}
                           className={buttonVariants({
@@ -217,9 +214,9 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                             variant: action.variant ?? 'default',
                           })}
                           data-slot="toast-action"
-                          onClick={(event) => {
+                          onClick={() => {
                             action.onClick?.();
-                            toast.onClose?.(event);
+                            toastManager.close(toast.id);
                           }}
                         >
                           {action.label}

@@ -6,7 +6,7 @@ import type { AgentGroupState } from '@/components/chat/types';
 import { createInitialGroupState } from '@/components/chat/types';
 
 // Global storage key for all sessions across all repos
-const SESSIONS_STORAGE_KEY = 'enso-agent-sessions';
+export const SESSIONS_STORAGE_KEY = 'enso-agent-sessions';
 
 // Runtime output state for each session (not persisted)
 export type OutputState = 'idle' | 'outputting' | 'unread';

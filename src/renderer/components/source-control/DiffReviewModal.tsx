@@ -922,7 +922,6 @@ export function DiffReviewModal({
         viewZoneIdsRef.current = [];
       }
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: using ref for handleDeleteComment
   }, [editorReady, open, selectedFile, currentFileComments, t]);
 
   // Cleanup on unmount
