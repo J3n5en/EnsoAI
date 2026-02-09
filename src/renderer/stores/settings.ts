@@ -583,12 +583,18 @@ interface SettingsState {
   autoCreateSessionOnTempActivate: boolean; // Auto-create agent/terminal session when temp session becomes active
   // Background image (Beta)
   backgroundImageEnabled: boolean;
-  backgroundImagePath: string; // Local path or URL
+  backgroundImagePath: string; // Local file path (for file mode)
+  backgroundUrlPath: string; // Remote URL path (for url mode)
+  backgroundFolderPath: string; // Local folder path (for folder mode)
+  backgroundSourceType: 'file' | 'folder' | 'url'; // Source type: single file, folder, or remote URL
+  backgroundRandomEnabled: boolean; // Auto-random: periodically refresh folder/URL source
+  backgroundRandomInterval: number; // Auto-random interval in seconds (default 300)
   backgroundOpacity: number; // 0-1, background image opacity
   backgroundBlur: number; // 0-20, blur px
   backgroundBrightness: number; // 0-2, CSS brightness filter (1 = normal)
   backgroundSaturation: number; // 0-2, CSS saturate filter (1 = normal)
   backgroundSizeMode: 'cover' | 'contain' | 'repeat' | 'center';
+  _backgroundRefreshKey: number; // Transient: trigger folder re-scan (not persisted)
   // MCP, Prompts management
   mcpServers: McpServer[];
   promptPresets: PromptPreset[];
@@ -668,11 +674,17 @@ interface SettingsState {
   // Background image methods
   setBackgroundImageEnabled: (enabled: boolean) => void;
   setBackgroundImagePath: (path: string) => void;
+  setBackgroundUrlPath: (path: string) => void;
+  setBackgroundFolderPath: (path: string) => void;
+  setBackgroundSourceType: (type: 'file' | 'folder' | 'url') => void;
+  setBackgroundRandomEnabled: (enabled: boolean) => void;
+  setBackgroundRandomInterval: (interval: number) => void;
   setBackgroundOpacity: (opacity: number) => void;
   setBackgroundBlur: (blur: number) => void;
   setBackgroundBrightness: (brightness: number) => void;
   setBackgroundSaturation: (saturation: number) => void;
   setBackgroundSizeMode: (mode: 'cover' | 'contain' | 'repeat' | 'center') => void;
+  triggerBackgroundRefresh: () => void;
   // MCP management
   addMcpServer: (server: McpServer) => void;
   updateMcpServer: (id: string, updates: Partial<McpServer>) => void;
@@ -769,11 +781,17 @@ export const useSettingsStore = create<SettingsState>()(
       // Background image defaults
       backgroundImageEnabled: false,
       backgroundImagePath: '',
+      backgroundUrlPath: '',
+      backgroundFolderPath: '',
+      backgroundSourceType: 'file',
+      backgroundRandomEnabled: false,
+      backgroundRandomInterval: 300,
       backgroundOpacity: 0.85,
       backgroundBlur: 0,
       backgroundBrightness: 1,
       backgroundSaturation: 1,
       backgroundSizeMode: 'cover',
+      _backgroundRefreshKey: 0,
       // MCP, Prompts defaults
       mcpServers: [],
       promptPresets: [],
@@ -1024,6 +1042,16 @@ export const useSettingsStore = create<SettingsState>()(
       // Background image methods
       setBackgroundImageEnabled: (backgroundImageEnabled) => set({ backgroundImageEnabled }),
       setBackgroundImagePath: (backgroundImagePath) => set({ backgroundImagePath }),
+      setBackgroundUrlPath: (backgroundUrlPath) => set({ backgroundUrlPath }),
+      setBackgroundFolderPath: (backgroundFolderPath) => set({ backgroundFolderPath }),
+      setBackgroundSourceType: (backgroundSourceType) => set({ backgroundSourceType }),
+      setBackgroundRandomEnabled: (backgroundRandomEnabled) => set({ backgroundRandomEnabled }),
+      setBackgroundRandomInterval: (backgroundRandomInterval) => {
+        const safeValue = Number.isFinite(backgroundRandomInterval)
+          ? Math.max(5, Math.min(86400, backgroundRandomInterval))
+          : 300;
+        set({ backgroundRandomInterval: safeValue });
+      },
       setBackgroundOpacity: (backgroundOpacity) => {
         const safeValue = Number.isFinite(backgroundOpacity)
           ? backgroundOpacity
@@ -1053,6 +1081,8 @@ export const useSettingsStore = create<SettingsState>()(
         set({ backgroundSaturation: clamped });
       },
       setBackgroundSizeMode: (backgroundSizeMode) => set({ backgroundSizeMode }),
+      triggerBackgroundRefresh: () =>
+        set((state) => ({ _backgroundRefreshKey: state._backgroundRefreshKey + 1 })),
       // MCP management
       addMcpServer: (server) =>
         set((state) => ({
@@ -1167,6 +1197,11 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'enso-settings',
       storage: createJSONStorage(() => electronStorage),
+      // Exclude transient fields from persistence
+      partialize: (state) => {
+        const { _backgroundRefreshKey, ...rest } = state;
+        return rest as SettingsState;
+      },
       // Deep merge nested objects to preserve new default fields when upgrading
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<SettingsState>;
@@ -1230,6 +1265,33 @@ export const useSettingsStore = create<SettingsState>()(
         const sanitizedBackgroundImagePath = sanitizeString(
           persisted.backgroundImagePath,
           currentState.backgroundImagePath
+        );
+        const sanitizedBackgroundUrlPath = sanitizeString(
+          persisted.backgroundUrlPath,
+          currentState.backgroundUrlPath
+        );
+        const sanitizedBackgroundFolderPath = sanitizeString(
+          persisted.backgroundFolderPath,
+          currentState.backgroundFolderPath
+        );
+        const sourceTypes: SettingsState['backgroundSourceType'][] = ['file', 'folder', 'url'];
+        const sanitizedBackgroundSourceType = sourceTypes.includes(
+          persisted.backgroundSourceType as SettingsState['backgroundSourceType']
+        )
+          ? (persisted.backgroundSourceType as SettingsState['backgroundSourceType'])
+          : currentState.backgroundSourceType;
+        const migratedBackgroundUrlPath =
+          sanitizedBackgroundUrlPath ||
+          (sanitizedBackgroundSourceType === 'url' ? sanitizedBackgroundImagePath : '');
+        const sanitizedBackgroundRandomEnabled = sanitizeBoolean(
+          persisted.backgroundRandomEnabled,
+          currentState.backgroundRandomEnabled
+        );
+        const sanitizedBackgroundRandomInterval = clampNumber(
+          persisted.backgroundRandomInterval,
+          5,
+          86400,
+          currentState.backgroundRandomInterval
         );
         const sanitizedBackgroundSizeMode = sanitizeSizeMode(
           persisted.backgroundSizeMode,
@@ -1328,6 +1390,11 @@ export const useSettingsStore = create<SettingsState>()(
           },
           backgroundImageEnabled: sanitizedBackgroundImageEnabled,
           backgroundImagePath: sanitizedBackgroundImagePath,
+          backgroundUrlPath: migratedBackgroundUrlPath,
+          backgroundFolderPath: sanitizedBackgroundFolderPath,
+          backgroundSourceType: sanitizedBackgroundSourceType,
+          backgroundRandomEnabled: sanitizedBackgroundRandomEnabled,
+          backgroundRandomInterval: sanitizedBackgroundRandomInterval,
           backgroundOpacity: sanitizedBackgroundOpacity,
           backgroundBlur: sanitizedBackgroundBlur,
           backgroundBrightness: sanitizedBackgroundBrightness,
