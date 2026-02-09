@@ -345,6 +345,10 @@ export function AppearanceSettings() {
     setBackgroundOpacity,
     backgroundBlur,
     setBackgroundBlur,
+    backgroundBrightness,
+    setBackgroundBrightness,
+    backgroundSaturation,
+    setBackgroundSaturation,
     backgroundSizeMode,
     setBackgroundSizeMode,
     favoriteTerminalThemes,
@@ -602,6 +606,53 @@ export function AppearanceSettings() {
               className="w-full h-1 rounded-full appearance-none cursor-pointer bg-input accent-primary"
             />
           </div>
+
+          {/* More - Brightness & Saturation */}
+          <Collapsible className="space-y-3">
+            <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+              {t('More')}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4">
+              {/* Brightness */}
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <label className="text-sm font-medium">{t('Brightness')}</label>
+                  <span className="text-sm text-muted-foreground">
+                    {Math.round(backgroundBrightness * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={1}
+                  value={Math.round(backgroundBrightness * 100)}
+                  onChange={(e) => setBackgroundBrightness(Number(e.target.value) / 100)}
+                  className="w-full h-1 rounded-full appearance-none cursor-pointer bg-input accent-primary"
+                />
+              </div>
+
+              {/* Saturation */}
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <label className="text-sm font-medium">{t('Saturation')}</label>
+                  <span className="text-sm text-muted-foreground">
+                    {Math.round(backgroundSaturation * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={1}
+                  value={Math.round(backgroundSaturation * 100)}
+                  onChange={(e) => setBackgroundSaturation(Number(e.target.value) / 100)}
+                  className="w-full h-1 rounded-full appearance-none cursor-pointer bg-input accent-primary"
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Size Mode */}
           <div className="space-y-2">

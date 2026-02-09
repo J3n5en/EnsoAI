@@ -586,6 +586,8 @@ interface SettingsState {
   backgroundImagePath: string; // Local path or URL
   backgroundOpacity: number; // 0-1, background image opacity
   backgroundBlur: number; // 0-20, blur px
+  backgroundBrightness: number; // 0-2, CSS brightness filter (1 = normal)
+  backgroundSaturation: number; // 0-2, CSS saturate filter (1 = normal)
   backgroundSizeMode: 'cover' | 'contain' | 'repeat' | 'center';
   // MCP, Prompts management
   mcpServers: McpServer[];
@@ -668,6 +670,8 @@ interface SettingsState {
   setBackgroundImagePath: (path: string) => void;
   setBackgroundOpacity: (opacity: number) => void;
   setBackgroundBlur: (blur: number) => void;
+  setBackgroundBrightness: (brightness: number) => void;
+  setBackgroundSaturation: (saturation: number) => void;
   setBackgroundSizeMode: (mode: 'cover' | 'contain' | 'repeat' | 'center') => void;
   // MCP management
   addMcpServer: (server: McpServer) => void;
@@ -767,6 +771,8 @@ export const useSettingsStore = create<SettingsState>()(
       backgroundImagePath: '',
       backgroundOpacity: 0.85,
       backgroundBlur: 0,
+      backgroundBrightness: 1,
+      backgroundSaturation: 1,
       backgroundSizeMode: 'cover',
       // MCP, Prompts defaults
       mcpServers: [],
@@ -1032,6 +1038,20 @@ export const useSettingsStore = create<SettingsState>()(
         const clamped = Math.min(20, Math.max(0, safeValue));
         set({ backgroundBlur: clamped });
       },
+      setBackgroundBrightness: (backgroundBrightness) => {
+        const safeValue = Number.isFinite(backgroundBrightness)
+          ? backgroundBrightness
+          : get().backgroundBrightness;
+        const clamped = Math.min(2, Math.max(0, safeValue));
+        set({ backgroundBrightness: clamped });
+      },
+      setBackgroundSaturation: (backgroundSaturation) => {
+        const safeValue = Number.isFinite(backgroundSaturation)
+          ? backgroundSaturation
+          : get().backgroundSaturation;
+        const clamped = Math.min(2, Math.max(0, safeValue));
+        set({ backgroundSaturation: clamped });
+      },
       setBackgroundSizeMode: (backgroundSizeMode) => set({ backgroundSizeMode }),
       // MCP management
       addMcpServer: (server) =>
@@ -1191,6 +1211,18 @@ export const useSettingsStore = create<SettingsState>()(
           20,
           currentState.backgroundBlur
         );
+        const sanitizedBackgroundBrightness = clampNumber(
+          persisted.backgroundBrightness,
+          0,
+          2,
+          currentState.backgroundBrightness
+        );
+        const sanitizedBackgroundSaturation = clampNumber(
+          persisted.backgroundSaturation,
+          0,
+          2,
+          currentState.backgroundSaturation
+        );
         const sanitizedBackgroundImageEnabled = sanitizeBoolean(
           persisted.backgroundImageEnabled,
           currentState.backgroundImageEnabled
@@ -1298,6 +1330,8 @@ export const useSettingsStore = create<SettingsState>()(
           backgroundImagePath: sanitizedBackgroundImagePath,
           backgroundOpacity: sanitizedBackgroundOpacity,
           backgroundBlur: sanitizedBackgroundBlur,
+          backgroundBrightness: sanitizedBackgroundBrightness,
+          backgroundSaturation: sanitizedBackgroundSaturation,
           backgroundSizeMode: sanitizedBackgroundSizeMode,
           editorSettings: {
             ...currentState.editorSettings,

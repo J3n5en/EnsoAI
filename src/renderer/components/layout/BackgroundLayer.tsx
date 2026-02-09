@@ -53,8 +53,9 @@ export function BackgroundLayer() {
   const {
     backgroundImageEnabled,
     backgroundImagePath,
-    backgroundOpacity,
     backgroundBlur,
+    backgroundBrightness,
+    backgroundSaturation,
     backgroundSizeMode,
   } = useSettingsStore();
 
@@ -67,9 +68,19 @@ export function BackgroundLayer() {
     return null;
   }
 
-  const opacity = Number.isFinite(backgroundOpacity) ? backgroundOpacity : 1;
+  // Image always renders at full opacity - the panel overlay controls the tinting effect
+  // This ensures dark mode overlay actually darkens the image rather than fading it out
   const blur = Number.isFinite(backgroundBlur) ? backgroundBlur : 0;
+  const brightness = Number.isFinite(backgroundBrightness) ? backgroundBrightness : 1;
+  const saturation = Number.isFinite(backgroundSaturation) ? backgroundSaturation : 1;
   const sizeMode = backgroundSizeMode || "cover";
+
+  // Build filter string: combine blur, brightness and saturate
+  const filters: string[] = [];
+  if (blur > 0) filters.push(`blur(${blur}px)`);
+  if (brightness !== 1) filters.push(`brightness(${brightness})`);
+  if (saturation !== 1) filters.push(`saturate(${saturation})`);
+  const filterStr = filters.length > 0 ? filters.join(" ") : "none";
 
   return (
     <div
@@ -81,8 +92,7 @@ export function BackgroundLayer() {
         backgroundSize: sizeMode,
         backgroundPosition: "center",
         backgroundRepeat: sizeMode === "repeat" ? "repeat" : "no-repeat",
-        opacity,
-        filter: `blur(${blur}px)`,
+        filter: filterStr,
         transition: "opacity 0.3s ease, filter 0.3s ease",
       }}
       aria-hidden="true"
