@@ -44,6 +44,21 @@ export function registerWindowHandlers(mainWindow: BrowserWindow): () => void {
     safeWindowOperation(() => mainWindow.webContents.openDevTools());
   });
 
+  // macOS: show/hide traffic lights (window control buttons)
+  ipcMain.handle(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS_VISIBLE, (_event, visible: unknown) => {
+    if (typeof visible !== 'boolean') return;
+    return safeWindowOperation(() => {
+      if (process.platform === 'darwin') {
+        mainWindow.setWindowButtonVisibility(visible);
+      }
+    });
+  });
+
+  // Check if fullscreen
+  ipcMain.handle(IPC_CHANNELS.WINDOW_IS_FULLSCREEN, () => {
+    return safeWindowOperation(() => mainWindow.isFullScreen()) ?? false;
+  });
+
   // Maximize/unmaximize event handlers
   const handleMaximize = () => {
     safeWindowOperation(() => {
@@ -57,9 +72,26 @@ export function registerWindowHandlers(mainWindow: BrowserWindow): () => void {
     });
   };
 
+  // Fullscreen event handlers
+  const handleEnterFullScreen = () => {
+    safeWindowOperation(() => {
+      mainWindow.webContents.send(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGED, true);
+    });
+  };
+
+  const handleLeaveFullScreen = () => {
+    safeWindowOperation(() => {
+      mainWindow.webContents.send(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGED, false);
+    });
+  };
+
   // Listen for maximize/unmaximize events and notify renderer
   mainWindow.on('maximize', handleMaximize);
   mainWindow.on('unmaximize', handleUnmaximize);
+
+  // Listen for fullscreen events and notify renderer
+  mainWindow.on('enter-full-screen', handleEnterFullScreen);
+  mainWindow.on('leave-full-screen', handleLeaveFullScreen);
 
   // Return cleanup function to remove handlers when window is closed
   return () => {
@@ -68,10 +100,14 @@ export function registerWindowHandlers(mainWindow: BrowserWindow): () => void {
     ipcMain.removeHandler(IPC_CHANNELS.WINDOW_CLOSE);
     ipcMain.removeHandler(IPC_CHANNELS.WINDOW_IS_MAXIMIZED);
     ipcMain.removeHandler(IPC_CHANNELS.WINDOW_OPEN_DEVTOOLS);
+    ipcMain.removeHandler(IPC_CHANNELS.WINDOW_SET_TRAFFIC_LIGHTS_VISIBLE);
+    ipcMain.removeHandler(IPC_CHANNELS.WINDOW_IS_FULLSCREEN);
     // 只有在窗口未销毁时才移除事件监听器
     if (!mainWindow.isDestroyed()) {
       mainWindow.off('maximize', handleMaximize);
       mainWindow.off('unmaximize', handleUnmaximize);
+      mainWindow.off('enter-full-screen', handleEnterFullScreen);
+      mainWindow.off('leave-full-screen', handleLeaveFullScreen);
     }
   };
 }

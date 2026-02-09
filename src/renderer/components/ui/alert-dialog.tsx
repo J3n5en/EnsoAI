@@ -2,10 +2,16 @@
 
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
 
+import { useTrafficLightsGuard } from '@/hooks/useTrafficLightsGuard';
 import { cn } from '@/lib/utils';
 import { Z_INDEX } from '@/lib/z-index';
 
-const AlertDialog = AlertDialogPrimitive.Root;
+// Traffic lights guard is driven by the controlled `open` prop.
+// Uncontrolled AlertDialogs (without `open`) will not trigger the guard.
+function AlertDialog(props: AlertDialogPrimitive.Root.Props) {
+  useTrafficLightsGuard(props.open ?? false);
+  return <AlertDialogPrimitive.Root {...props} />;
+}
 
 const AlertDialogPortal = AlertDialogPrimitive.Portal;
 

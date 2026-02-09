@@ -3,10 +3,16 @@
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { XIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTrafficLightsGuard } from '@/hooks/useTrafficLightsGuard';
 import { cn } from '@/lib/utils';
 import { Z_INDEX } from '@/lib/z-index';
 
-const Dialog = DialogPrimitive.Root;
+// Traffic lights guard is driven by the controlled `open` prop.
+// Uncontrolled Dialogs (without `open`) will not trigger the guard.
+function Dialog(props: DialogPrimitive.Root.Props) {
+  useTrafficLightsGuard(props.open ?? false);
+  return <DialogPrimitive.Root {...props} />;
+}
 
 const DialogPortal = DialogPrimitive.Portal;
 

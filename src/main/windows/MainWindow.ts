@@ -6,6 +6,19 @@ import { IPC_CHANNELS } from '@shared/types';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { autoUpdaterService } from '../services/updater/AutoUpdater';
 
+/** Default macOS traffic lights position (matches BrowserWindow trafficLightPosition) */
+const TRAFFIC_LIGHTS_DEFAULT_POSITION = { x: 16, y: 16 };
+
+/**
+ * Offset when DevTools is docked left — keeps buttons visible to the right of the panel.
+ *
+ * Assumes left-docked DevTools with a default width of ~240px. Electron does not
+ * expose an API to query DevTools dock direction or panel width, so this is a
+ * best-effort heuristic. If the user resizes or re-docks DevTools, the position
+ * may not be perfectly aligned.
+ */
+const TRAFFIC_LIGHTS_DEVTOOLS_POSITION = { x: 240, y: 16 };
+
 interface WindowState {
   width: number;
   height: number;
@@ -66,7 +79,7 @@ export function createMainWindow(): BrowserWindow {
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     // macOS 需要 frame 来显示 traffic lights；Windows/Linux 使用无边框窗口
     frame: isMac,
-    ...(isMac && { trafficLightPosition: { x: 16, y: 16 } }),
+    ...(isMac && { trafficLightPosition: TRAFFIC_LIGHTS_DEFAULT_POSITION }),
     // Windows 启用 thickFrame 以支持窗口边缘拖拽调整大小
     ...(isWindows && { thickFrame: true }),
     show: false,
@@ -88,6 +101,21 @@ export function createMainWindow(): BrowserWindow {
   win.once('ready-to-show', () => {
     win.show();
   });
+
+  // DevTools state management for traffic lights adjustment.
+  // When DevTools is docked on the left, move traffic lights to the right
+  // so they are not obscured by the DevTools panel.
+  if (isMac) {
+    win.webContents.on('devtools-opened', () => {
+      win.setWindowButtonPosition(TRAFFIC_LIGHTS_DEVTOOLS_POSITION);
+      win.webContents.send(IPC_CHANNELS.WINDOW_DEVTOOLS_STATE_CHANGED, true);
+    });
+
+    win.webContents.on('devtools-closed', () => {
+      win.setWindowButtonPosition(TRAFFIC_LIGHTS_DEFAULT_POSITION);
+      win.webContents.send(IPC_CHANNELS.WINDOW_DEVTOOLS_STATE_CHANGED, false);
+    });
+  }
 
   // Confirm before close (skip in dev mode)
   let forceClose = false;

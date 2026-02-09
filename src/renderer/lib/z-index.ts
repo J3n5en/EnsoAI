@@ -28,6 +28,8 @@ export const Z_INDEX = {
   TOOLTIP: 100,
   /** Toast notifications and system-level alerts */
   TOAST: 110,
+  /** macOS DevTools overlay — covers original traffic lights position */
+  DEVTOOLS_OVERLAY: 120,
 } as const;
 
 export type ZIndex = keyof typeof Z_INDEX;

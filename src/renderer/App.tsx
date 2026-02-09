@@ -39,25 +39,26 @@ import {
   saveGroups,
   saveTabOrder,
   saveWorktreeOrderMap,
-} from "./App/storage";
-import { useAppKeyboardShortcuts } from "./App/useAppKeyboardShortcuts";
-import { usePanelResize } from "./App/usePanelResize";
-import { UnsavedPromptHost } from "./components/files/UnsavedPromptHost";
-import { AddRepositoryDialog } from "./components/git";
-import { CloneProgressFloat } from "./components/git/CloneProgressFloat";
-import { ActionPanel } from "./components/layout/ActionPanel";
+} from './App/storage';
+import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
+import { usePanelResize } from './App/usePanelResize';
+import { DevToolsOverlay } from './components/DevToolsOverlay';
+import { UnsavedPromptHost } from './components/files/UnsavedPromptHost';
+import { AddRepositoryDialog } from './components/git';
+import { CloneProgressFloat } from './components/git/CloneProgressFloat';
+import { ActionPanel } from './components/layout/ActionPanel';
 import { BackgroundLayer } from "./components/layout/BackgroundLayer";
-import { MainContent } from "./components/layout/MainContent";
-import { RepositorySidebar } from "./components/layout/RepositorySidebar";
-import { TemporaryWorkspacePanel } from "./components/layout/TemporaryWorkspacePanel";
-import { TreeSidebar } from "./components/layout/TreeSidebar";
-import { WindowTitleBar } from "./components/layout/WindowTitleBar";
-import { WorktreePanel } from "./components/layout/WorktreePanel";
-import type { SettingsCategory } from "./components/settings/constants";
-import { DraggableSettingsWindow } from "./components/settings/DraggableSettingsWindow";
-import { TempWorkspaceDialogs } from "./components/temp-workspace/TempWorkspaceDialogs";
-import { UpdateNotification } from "./components/UpdateNotification";
-import { Button } from "./components/ui/button";
+import { MainContent } from './components/layout/MainContent';
+import { RepositorySidebar } from './components/layout/RepositorySidebar';
+import { TemporaryWorkspacePanel } from './components/layout/TemporaryWorkspacePanel';
+import { TreeSidebar } from './components/layout/TreeSidebar';
+import { WindowTitleBar } from './components/layout/WindowTitleBar';
+import { WorktreePanel } from './components/layout/WorktreePanel';
+import type { SettingsCategory } from './components/settings/constants';
+import { DraggableSettingsWindow } from './components/settings/DraggableSettingsWindow';
+import { TempWorkspaceDialogs } from './components/temp-workspace/TempWorkspaceDialogs';
+import { UpdateNotification } from './components/UpdateNotification';
+import { Button } from './components/ui/button';
 import {
   Dialog,
   DialogDescription,
@@ -1860,6 +1861,9 @@ export default function App() {
       <BackgroundLayer />
       {/* Custom Title Bar for Windows/Linux */}
       <WindowTitleBar onOpenSettings={openSettings} />
+
+      {/* DevTools Overlay for macOS traffic lights protection */}
+      <DevToolsOverlay />
 
       {/* Main Layout */}
       <div
