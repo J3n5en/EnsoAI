@@ -1,5 +1,9 @@
-import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
-import { LayoutGroup, motion } from 'framer-motion';
+import type {
+  GitBranch as GitBranchType,
+  GitWorktree,
+  WorktreeCreateOptions,
+} from "@shared/types";
+import { LayoutGroup, motion } from "framer-motion";
 import {
   Copy,
   FolderOpen,
@@ -13,9 +17,9 @@ import {
   Terminal,
   Trash2,
   X,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GitSyncButton } from '@/components/git/GitSyncButton';
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GitSyncButton } from "@/components/git/GitSyncButton";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -24,25 +28,29 @@ import {
   AlertDialogHeader,
   AlertDialogPopup,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
-import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/ui/glow-card';
-import { toastManager } from '@/components/ui/toast';
-import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
-import { useGitSync } from '@/hooks/useGitSync';
-import { useWorktreeOutputState } from '@/hooks/useOutputState';
-import { useShouldPoll } from '@/hooks/useWindowFocus';
-import { useI18n } from '@/i18n';
-import { springFast } from '@/lib/motion';
-import { cn } from '@/lib/utils';
-import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
+} from "@/components/ui/empty";
+import {
+  GlowBorder,
+  type GlowState,
+  useGlowEffectEnabled,
+} from "@/components/ui/glow-card";
+import { toastManager } from "@/components/ui/toast";
+import { CreateWorktreeDialog } from "@/components/worktree/CreateWorktreeDialog";
+import { useGitSync } from "@/hooks/useGitSync";
+import { useWorktreeOutputState } from "@/hooks/useOutputState";
+import { useShouldPoll } from "@/hooks/useWindowFocus";
+import { useI18n } from "@/i18n";
+import { springFast } from "@/lib/motion";
+import { cn } from "@/lib/utils";
+import { useWorktreeActivityStore } from "@/stores/worktreeActivity";
 
 interface WorktreePanelProps {
   worktrees: GitWorktree[];
@@ -56,7 +64,7 @@ interface WorktreePanelProps {
   onCreateWorktree: (options: WorktreeCreateOptions) => Promise<void>;
   onRemoveWorktree: (
     worktree: GitWorktree,
-    options?: { deleteBranch?: boolean; force?: boolean }
+    options?: { deleteBranch?: boolean; force?: boolean },
   ) => void;
   onMergeWorktree?: (worktree: GitWorktree) => void;
   onReorderWorktrees?: (fromIndex: number, toIndex: number) => void;
@@ -91,8 +99,10 @@ export function WorktreePanel({
   onExpandRepository,
 }: WorktreePanelProps) {
   const { t, tNode } = useI18n();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(
+    null,
+  );
   const [deleteBranch, setDeleteBranch] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
 
@@ -104,12 +114,13 @@ export function WorktreePanel({
   const handleDragStart = useCallback(
     (e: React.DragEvent, index: number, worktree: GitWorktree) => {
       draggedIndexRef.current = index;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', String(index));
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(index));
 
       // Create styled drag image
-      const dragImage = document.createElement('div');
-      dragImage.textContent = worktree.branch || worktree.path.split(/[\\/]/).pop() || '';
+      const dragImage = document.createElement("div");
+      dragImage.textContent =
+        worktree.branch || worktree.path.split(/[\\/]/).pop() || "";
       dragImage.style.cssText = `
         position: fixed;
         top: -9999px;
@@ -125,9 +136,13 @@ export function WorktreePanel({
       `;
       document.body.appendChild(dragImage);
       dragImageRef.current = dragImage;
-      e.dataTransfer.setDragImage(dragImage, dragImage.offsetWidth / 2, dragImage.offsetHeight / 2);
+      e.dataTransfer.setDragImage(
+        dragImage,
+        dragImage.offsetWidth / 2,
+        dragImage.offsetHeight / 2,
+      );
     },
-    []
+    [],
   );
 
   const handleDragEnd = useCallback(() => {
@@ -141,7 +156,7 @@ export function WorktreePanel({
 
   const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = "move";
     if (draggedIndexRef.current !== null && draggedIndexRef.current !== index) {
       setDropTargetIndex(index);
     }
@@ -160,7 +175,7 @@ export function WorktreePanel({
       }
       setDropTargetIndex(null);
     },
-    [onReorderWorktrees]
+    [onReorderWorktrees],
   );
 
   // Keep track of original indices for drag reorder when filtering
@@ -169,12 +184,12 @@ export function WorktreePanel({
     .filter(
       ({ worktree: wt }) =>
         wt.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        wt.path.toLowerCase().includes(searchQuery.toLowerCase())
+        wt.path.toLowerCase().includes(searchQuery.toLowerCase()),
     );
 
   // Get the main worktree path for git operations
   const mainWorktree = worktrees.find((wt) => wt.isMainWorktree);
-  const workdir = mainWorktree?.path || '';
+  const workdir = mainWorktree?.path || "";
 
   const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
   const activities = useWorktreeActivityStore((s) => s.activities);
@@ -185,7 +200,9 @@ export function WorktreePanel({
     const activePaths = worktrees
       .filter((wt) => {
         const activity = activities[wt.path];
-        return activity && (activity.agentCount > 0 || activity.terminalCount > 0);
+        return (
+          activity && (activity.agentCount > 0 || activity.terminalCount > 0)
+        );
       })
       .map((wt) => wt.path);
 
@@ -203,8 +220,8 @@ export function WorktreePanel({
       {/* Header with buttons */}
       <div
         className={cn(
-          'flex h-12 items-center justify-end gap-1 border-b px-3 drag-region',
-          repositoryCollapsed && 'pl-[70px]'
+          "flex h-12 items-center justify-end gap-1 border-b px-3 drag-region",
+          repositoryCollapsed && "pl-[70px]",
         )}
       >
         {/* Expand repository button when collapsed */}
@@ -213,7 +230,7 @@ export function WorktreePanel({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onExpandRepository}
-            title={t('Expand Repository')}
+            title={t("Expand Repository")}
           >
             <FolderOpen className="h-4 w-4" />
           </button>
@@ -223,7 +240,7 @@ export function WorktreePanel({
           type="button"
           className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
           onClick={onRefresh}
-          title={t('Refresh')}
+          title={t("Refresh")}
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -233,7 +250,7 @@ export function WorktreePanel({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onCollapse}
-            title={t('Collapse')}
+            title={t("Collapse")}
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
@@ -242,11 +259,11 @@ export function WorktreePanel({
 
       {/* Search bar */}
       <div className="px-3 py-2">
-        <div className="flex h-8 items-center gap-2 rounded-lg border bg-background px-2">
+        <div className="flex h-8 items-center gap-2 rounded-lg border px-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
-            placeholder={t('Search worktrees')}
+            placeholder={t("Search worktrees")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
@@ -262,20 +279,24 @@ export function WorktreePanel({
               <GitBranch className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">{t('Not a Git repository')}</EmptyTitle>
+              <EmptyTitle className="text-base">
+                {t("Not a Git repository")}
+              </EmptyTitle>
               <EmptyDescription>
-                {t('This directory is not a Git repository. Initialize it to enable Git features.')}
+                {t(
+                  "This directory is not a Git repository. Initialize it to enable Git features.",
+                )}
               </EmptyDescription>
             </EmptyHeader>
             <div className="mt-2 flex gap-2">
               <Button onClick={onRefresh} variant="outline" size="sm">
                 <RefreshCw className="mr-2 h-4 w-4" />
-                {t('Refresh')}
+                {t("Refresh")}
               </Button>
               {onInitGit && (
                 <Button onClick={onInitGit} size="sm">
                   <GitBranch className="mr-2 h-4 w-4" />
-                  {t('Initialize repository')}
+                  {t("Initialize repository")}
                 </Button>
               )}
             </div>
@@ -293,12 +314,12 @@ export function WorktreePanel({
             </EmptyMedia>
             <EmptyHeader>
               <EmptyTitle className="text-base">
-                {searchQuery ? t('No matching worktrees') : t('No worktrees')}
+                {searchQuery ? t("No matching worktrees") : t("No worktrees")}
               </EmptyTitle>
               <EmptyDescription>
                 {searchQuery
-                  ? t('Try a different search term')
-                  : t('Create your first worktree to get started')}
+                  ? t("Try a different search term")
+                  : t("Create your first worktree to get started")}
               </EmptyDescription>
             </EmptyHeader>
             {!searchQuery && (
@@ -311,7 +332,7 @@ export function WorktreePanel({
                 trigger={
                   <Button variant="outline" className="mt-2">
                     <Plus className="mr-2 h-4 w-4" />
-                    {t('Create Worktree')}
+                    {t("Create Worktree")}
                   </Button>
                 }
               />
@@ -328,19 +349,26 @@ export function WorktreePanel({
                   isActive={activeWorktree?.path === worktree.path}
                   onClick={() => onSelectWorktree(worktree)}
                   onDelete={() => setWorktreeToDelete(worktree)}
-                  onMerge={onMergeWorktree ? () => onMergeWorktree(worktree) : undefined}
+                  onMerge={
+                    onMergeWorktree
+                      ? () => onMergeWorktree(worktree)
+                      : undefined
+                  }
                   draggable={!searchQuery && !!onReorderWorktrees}
-                  onDragStart={(e) => handleDragStart(e, originalIndex, worktree)}
+                  onDragStart={(e) =>
+                    handleDragStart(e, originalIndex, worktree)
+                  }
                   onDragEnd={handleDragEnd}
                   onDragOver={(e) => handleDragOver(e, originalIndex)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, originalIndex)}
                   showDropIndicator={dropTargetIndex === originalIndex}
                   dropDirection={
-                    dropTargetIndex === originalIndex && draggedIndexRef.current !== null
+                    dropTargetIndex === originalIndex &&
+                    draggedIndexRef.current !== null
                       ? draggedIndexRef.current > originalIndex
-                        ? 'top'
-                        : 'bottom'
+                        ? "top"
+                        : "bottom"
                       : null
                   }
                 />
@@ -364,7 +392,7 @@ export function WorktreePanel({
               className="flex h-8 w-full items-center justify-start gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             >
               <Plus className="h-4 w-4" />
-              {t('New Worktree')}
+              {t("New Worktree")}
             </button>
           }
         />
@@ -382,19 +410,21 @@ export function WorktreePanel({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('Delete Worktree')}</AlertDialogTitle>
+            <AlertDialogTitle>{t("Delete Worktree")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {tNode('Are you sure you want to delete worktree {{name}}?', {
+              {tNode("Are you sure you want to delete worktree {{name}}?", {
                 name: <strong>{worktreeToDelete?.branch}</strong>,
               })}
               {worktreeToDelete?.prunable ? (
                 <span className="block mt-2 text-muted-foreground">
-                  {t('This directory has already been removed; Git records will be cleaned up.')}
+                  {t(
+                    "This directory has already been removed; Git records will be cleaned up.",
+                  )}
                 </span>
               ) : (
                 <span className="block mt-2 text-destructive">
                   {t(
-                    'This will delete the directory and all files inside. This action cannot be undone!'
+                    "This will delete the directory and all files inside. This action cannot be undone!",
                   )}
                 </span>
               )}
@@ -410,7 +440,7 @@ export function WorktreePanel({
                   className="h-4 w-4 rounded border-input"
                 />
                 <span>
-                  {tNode('Also delete branch {{name}}', {
+                  {tNode("Also delete branch {{name}}", {
                     name: <strong>{worktreeToDelete.branch}</strong>,
                   })}
                 </span>
@@ -425,25 +455,30 @@ export function WorktreePanel({
                   className="h-4 w-4 rounded border-input"
                 />
                 <span className="text-muted-foreground">
-                  {t('Force delete (ignore uncommitted changes)')}
+                  {t("Force delete (ignore uncommitted changes)")}
                 </span>
               </label>
             )}
           </div>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            <AlertDialogClose
+              render={<Button variant="outline">{t("Cancel")}</Button>}
+            />
             <Button
               variant="destructive"
               onClick={() => {
                 if (worktreeToDelete) {
-                  onRemoveWorktree(worktreeToDelete, { deleteBranch, force: forceDelete });
+                  onRemoveWorktree(worktreeToDelete, {
+                    deleteBranch,
+                    force: forceDelete,
+                  });
                   setWorktreeToDelete(null);
                   setDeleteBranch(false);
                   setForceDelete(false);
                 }
               }}
             >
-              {t('Delete')}
+              {t("Delete")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -466,7 +501,7 @@ interface WorktreeItemProps {
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
   showDropIndicator?: boolean;
-  dropDirection?: 'top' | 'bottom' | null;
+  dropDirection?: "top" | "bottom" | null;
   branches?: GitBranchType[];
 }
 
@@ -491,14 +526,23 @@ function WorktreeItem({
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const isMain =
-    worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
-  const branchDisplay = worktree.branch || t('Detached');
+    worktree.isMainWorktree ||
+    worktree.branch === "main" ||
+    worktree.branch === "master";
+  const branchDisplay = worktree.branch || t("Detached");
   const isPrunable = worktree.prunable;
   const glowEnabled = useGlowEffectEnabled();
 
   // Git sync operations
-  const { ahead, behind, tracking, currentBranch, isSyncing, handleSync, handlePublish } =
-    useGitSync({ workdir: worktree.path, enabled: isActive });
+  const {
+    ahead,
+    behind,
+    tracking,
+    currentBranch,
+    isSyncing,
+    handleSync,
+    handlePublish,
+  } = useGitSync({ workdir: worktree.path, enabled: isActive });
 
   // Check if branch is merged to main
   const isMerged = useMemo(() => {
@@ -510,10 +554,20 @@ function WorktreeItem({
   // Subscribe to activity store
   const activities = useWorktreeActivityStore((s) => s.activities);
   const diffStatsMap = useWorktreeActivityStore((s) => s.diffStats);
-  const activity = activities[worktree.path] || { agentCount: 0, terminalCount: 0 };
-  const diffStats = diffStatsMap[worktree.path] || { insertions: 0, deletions: 0 };
-  const closeAgentSessions = useWorktreeActivityStore((s) => s.closeAgentSessions);
-  const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
+  const activity = activities[worktree.path] || {
+    agentCount: 0,
+    terminalCount: 0,
+  };
+  const diffStats = diffStatsMap[worktree.path] || {
+    insertions: 0,
+    deletions: 0,
+  };
+  const closeAgentSessions = useWorktreeActivityStore(
+    (s) => s.closeAgentSessions,
+  );
+  const closeTerminalSessions = useWorktreeActivityStore(
+    (s) => s.closeTerminalSessions,
+  );
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
   const hasDiffStats = diffStats.insertions > 0 || diffStats.deletions > 0;
 
@@ -524,17 +578,17 @@ function WorktreeItem({
     try {
       await navigator.clipboard.writeText(worktree.path);
       toastManager.add({
-        title: t('Copied'),
-        description: t('Path copied to clipboard'),
-        type: 'success',
+        title: t("Copied"),
+        description: t("Path copied to clipboard"),
+        type: "success",
         timeout: 2000,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toastManager.add({
-        title: t('Copy failed'),
-        description: message || t('Failed to copy content'),
-        type: 'error',
+        title: t("Copy failed"),
+        description: message || t("Failed to copy content"),
+        type: "error",
         timeout: 3000,
       });
     }
@@ -579,7 +633,7 @@ function WorktreeItem({
   const worktreeItemContent = (
     <>
       {/* Drop indicator - top */}
-      {showDropIndicator && dropDirection === 'top' && (
+      {showDropIndicator && dropDirection === "top" && (
         <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
       )}
       <button
@@ -593,9 +647,9 @@ function WorktreeItem({
         onClick={onClick}
         onContextMenu={handleContextMenu}
         className={cn(
-          'relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors cursor-pointer',
-          isPrunable && 'opacity-50',
-          isActive ? 'text-accent-foreground' : 'hover:bg-accent/50'
+          "relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors cursor-pointer",
+          isPrunable && "opacity-50",
+          isActive ? "text-accent-foreground" : "hover:bg-accent/50",
         )}
       >
         {isActive && (
@@ -609,28 +663,30 @@ function WorktreeItem({
         <div className="relative z-10 flex w-full items-center gap-2">
           <GitBranch
             className={cn(
-              'h-4 w-4 shrink-0',
+              "h-4 w-4 shrink-0",
               isPrunable
-                ? 'text-destructive'
+                ? "text-destructive"
                 : isActive
-                  ? 'text-accent-foreground'
-                  : 'text-muted-foreground'
+                  ? "text-accent-foreground"
+                  : "text-muted-foreground",
             )}
           />
-          <span className={cn('truncate font-medium', isPrunable && 'line-through')}>
+          <span
+            className={cn("truncate font-medium", isPrunable && "line-through")}
+          >
             {branchDisplay}
           </span>
           {isPrunable ? (
             <span className="shrink-0 rounded bg-destructive/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-destructive">
-              {t('Deleted')}
+              {t("Deleted")}
             </span>
           ) : isMain ? (
             <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-              {t('Main')}
+              {t("Main")}
             </span>
           ) : isMerged ? (
             <span className="shrink-0 rounded bg-success/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-success-foreground">
-              {t('Merged')}
+              {t("Merged")}
             </span>
           ) : null}
           {/* Git sync status - inline with branch name */}
@@ -648,9 +704,9 @@ function WorktreeItem({
         {/* Path - use rtl direction to show ellipsis at start, keeping end visible */}
         <div
           className={cn(
-            'relative z-10 w-full overflow-hidden whitespace-nowrap text-ellipsis pl-6 text-xs [direction:rtl] [text-align:left] [unicode-bidi:plaintext]',
-            isPrunable && 'line-through',
-            isActive ? 'text-accent-foreground/70' : 'text-muted-foreground'
+            "relative z-10 w-full overflow-hidden whitespace-nowrap text-ellipsis pl-6 text-xs [direction:rtl] [text-align:left] [unicode-bidi:plaintext]",
+            isPrunable && "line-through",
+            isActive ? "text-accent-foreground/70" : "text-muted-foreground",
           )}
           title={worktree.path}
         >
@@ -680,7 +736,9 @@ function WorktreeItem({
                   </span>
                 )}
                 {diffStats.deletions > 0 && (
-                  <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
+                  <span className="text-red-600 dark:text-red-400">
+                    -{diffStats.deletions}
+                  </span>
                 )}
               </span>
             )}
@@ -688,7 +746,7 @@ function WorktreeItem({
         )}
       </button>
       {/* Drop indicator - bottom */}
-      {showDropIndicator && dropDirection === 'bottom' && (
+      {showDropIndicator && dropDirection === "bottom" && (
         <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
       )}
     </>
@@ -710,7 +768,7 @@ function WorktreeItem({
           <div
             className="fixed inset-0 z-50"
             onClick={() => setMenuOpen(false)}
-            onKeyDown={(e) => e.key === 'Escape' && setMenuOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && setMenuOpen(false)}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenuOpen(false);
@@ -734,7 +792,7 @@ function WorktreeItem({
                 }}
               >
                 <X className="h-4 w-4" />
-                {t('Close All Sessions')}
+                {t("Close All Sessions")}
               </button>
             )}
 
@@ -750,7 +808,7 @@ function WorktreeItem({
               >
                 <X className="h-4 w-4" />
                 <Sparkles className="h-4 w-4" />
-                {t('Close Agent Sessions')}
+                {t("Close Agent Sessions")}
               </button>
             )}
 
@@ -766,7 +824,7 @@ function WorktreeItem({
               >
                 <X className="h-4 w-4" />
                 <Terminal className="h-4 w-4" />
-                {t('Close Terminal Sessions')}
+                {t("Close Terminal Sessions")}
               </button>
             )}
 
@@ -783,7 +841,7 @@ function WorktreeItem({
               }}
             >
               <FolderOpen className="h-4 w-4" />
-              {t('Open folder')}
+              {t("Open folder")}
             </button>
 
             {/* Copy Path */}
@@ -796,7 +854,7 @@ function WorktreeItem({
               }}
             >
               <Copy className="h-4 w-4" />
-              {t('Copy Path')}
+              {t("Copy Path")}
             </button>
 
             {/* Merge to Branch */}
@@ -810,7 +868,7 @@ function WorktreeItem({
                 }}
               >
                 <GitMerge className="h-4 w-4" />
-                {t('Merge to Branch...')}
+                {t("Merge to Branch...")}
               </button>
             )}
 
@@ -821,8 +879,8 @@ function WorktreeItem({
             <button
               type="button"
               className={cn(
-                'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-accent/50',
-                isMain && 'pointer-events-none opacity-50'
+                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-accent/50",
+                isMain && "pointer-events-none opacity-50",
               )}
               onClick={() => {
                 setMenuOpen(false);
@@ -831,7 +889,7 @@ function WorktreeItem({
               disabled={isMain}
             >
               <Trash2 className="h-4 w-4" />
-              {isPrunable ? t('Clean up records') : t('Delete')}
+              {isPrunable ? t("Clean up records") : t("Delete")}
             </button>
           </div>
         </>

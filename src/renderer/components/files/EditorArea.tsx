@@ -1,6 +1,13 @@
-import Editor, { type OnMount } from '@monaco-editor/react';
-import { ChevronRight, Eye, EyeOff, FileCode, Maximize2, MessageSquare } from 'lucide-react';
-import type * as monaco from 'monaco-editor';
+import Editor, { type OnMount } from "@monaco-editor/react";
+import {
+  ChevronRight,
+  Eye,
+  EyeOff,
+  FileCode,
+  Maximize2,
+  MessageSquare,
+} from "lucide-react";
+import type * as monaco from "monaco-editor";
 import {
   forwardRef,
   useCallback,
@@ -9,8 +16,8 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+} from "react";
+import { createRoot, type Root } from "react-dom/client";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -18,33 +25,33 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
+} from "@/components/ui/breadcrumb";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
-import { useDebouncedSave } from '@/hooks/useDebouncedSave';
-import { useI18n } from '@/i18n';
-import type { EditorTab, PendingCursor } from '@/stores/editor';
-import { useEditorStore } from '@/stores/editor';
-import { useSettingsStore } from '@/stores/settings';
-import { useTerminalWriteStore } from '@/stores/terminalWrite';
-import { CommentForm, useEditorLineComment } from './EditorLineComment';
-import { EditorTabs } from './EditorTabs';
-import { isImageFile, isPdfFile } from './fileIcons';
-import { ImagePreview } from './ImagePreview';
-import { MarkdownPreview } from './MarkdownPreview';
-import { CUSTOM_THEME_NAME, defineMonacoTheme } from './monacoTheme';
-import { PdfPreview } from './PdfPreview';
+} from "@/components/ui/empty";
+import { useDebouncedSave } from "@/hooks/useDebouncedSave";
+import { useI18n } from "@/i18n";
+import type { EditorTab, PendingCursor } from "@/stores/editor";
+import { useEditorStore } from "@/stores/editor";
+import { useSettingsStore } from "@/stores/settings";
+import { useTerminalWriteStore } from "@/stores/terminalWrite";
+import { CommentForm, useEditorLineComment } from "./EditorLineComment";
+import { EditorTabs } from "./EditorTabs";
+import { isImageFile, isPdfFile } from "./fileIcons";
+import { ImagePreview } from "./ImagePreview";
+import { MarkdownPreview } from "./MarkdownPreview";
+import { CUSTOM_THEME_NAME, defineMonacoTheme } from "./monacoTheme";
+import { PdfPreview } from "./PdfPreview";
 // Import for side effects (Monaco setup)
-import './monacoSetup';
+import "./monacoSetup";
 
 type Monaco = typeof monaco;
 
-type MarkdownPreviewMode = 'off' | 'split' | 'fullscreen';
+type MarkdownPreviewMode = "off" | "split" | "fullscreen";
 
 export interface EditorAreaRef {
   getSelectedText: () => string;
@@ -53,8 +60,8 @@ export interface EditorAreaRef {
 
 function isMarkdownFile(path: string | null): boolean {
   if (!path) return false;
-  const ext = path.split('.').pop()?.toLowerCase();
-  return ext === 'md' || ext === 'markdown';
+  const ext = path.split(".").pop()?.toLowerCase();
+  return ext === "md" || ext === "markdown";
 }
 
 interface EditorAreaProps {
@@ -81,963 +88,1033 @@ interface EditorAreaProps {
   onToggleFileTree?: () => void;
 }
 
-export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function EditorArea(
-  {
-    tabs,
-    activeTab,
-    activeTabPath,
-    pendingCursor,
-    rootPath,
-    sessionId,
-    onTabClick,
-    onTabClose,
-    onCloseOthers,
-    onCloseAll,
-    onCloseLeft,
-    onCloseRight,
-    onTabReorder,
-    onContentChange,
-    onViewStateChange,
-    onSave,
-    onClearPendingCursor,
-    onBreadcrumbClick,
-    onGlobalSearch,
-    isFileTreeCollapsed,
-    onToggleFileTree,
-  }: EditorAreaProps,
-  ref: React.Ref<EditorAreaRef>
-) {
-  const { t } = useI18n();
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const monacoRef = useRef<Monaco | null>(null);
-  const [editorInstance, setEditorInstance] = useState<monaco.editor.IStandaloneCodeEditor | null>(
-    null
-  );
-  const [monacoInstance, setMonacoInstance] = useState<Monaco | null>(null);
-  const { terminalTheme, editorSettings, claudeCodeIntegration } = useSettingsStore();
-  const write = useTerminalWriteStore((state) => state.write);
-  const focus = useTerminalWriteStore((state) => state.focus);
+export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(
+  function EditorArea(
+    {
+      tabs,
+      activeTab,
+      activeTabPath,
+      pendingCursor,
+      rootPath,
+      sessionId,
+      onTabClick,
+      onTabClose,
+      onCloseOthers,
+      onCloseAll,
+      onCloseLeft,
+      onCloseRight,
+      onTabReorder,
+      onContentChange,
+      onViewStateChange,
+      onSave,
+      onClearPendingCursor,
+      onBreadcrumbClick,
+      onGlobalSearch,
+      isFileTreeCollapsed,
+      onToggleFileTree,
+    }: EditorAreaProps,
+    ref: React.Ref<EditorAreaRef>,
+  ) {
+    const { t } = useI18n();
+    const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+    const monacoRef = useRef<Monaco | null>(null);
+    const [editorInstance, setEditorInstance] =
+      useState<monaco.editor.IStandaloneCodeEditor | null>(null);
+    const [monacoInstance, setMonacoInstance] = useState<Monaco | null>(null);
+    const {
+      terminalTheme,
+      editorSettings,
+      claudeCodeIntegration,
+      backgroundImageEnabled,
+      backgroundOpacity,
+    } = useSettingsStore();
+    const write = useTerminalWriteStore((state) => state.write);
+    const focus = useTerminalWriteStore((state) => state.focus);
 
-  // Markdown preview state
-  const isMarkdown = isMarkdownFile(activeTabPath);
-  const isImage = isImageFile(activeTabPath);
-  const isPdf = isPdfFile(activeTabPath);
-  const [previewMode, setPreviewMode] = useState<MarkdownPreviewMode>('off');
-  const [editorReady, setEditorReady] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(50); // percentage
+    // Markdown preview state
+    const isMarkdown = isMarkdownFile(activeTabPath);
+    const isImage = isImageFile(activeTabPath);
+    const isPdf = isPdfFile(activeTabPath);
+    const [previewMode, setPreviewMode] = useState<MarkdownPreviewMode>("off");
+    const [editorReady, setEditorReady] = useState(false);
+    const [previewWidth, setPreviewWidth] = useState(50); // percentage
 
-  // Sync preview mode from pendingCursor
-  useEffect(() => {
-    if (pendingCursor?.previewMode && isMarkdown) {
-      setPreviewMode(pendingCursor.previewMode);
-    }
-  }, [pendingCursor?.previewMode, isMarkdown]);
-  const resizingRef = useRef(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const isSyncingScrollRef = useRef(false); // Prevent scroll loop
-  const setCurrentCursorLine = useEditorStore((state) => state.setCurrentCursorLine);
-  const themeDefinedRef = useRef(false);
-  const selectionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectionWidgetRef = useRef<monaco.editor.IContentWidget | null>(null);
-  const widgetRootRef = useRef<Root | null>(null);
-  const widgetPositionRef = useRef<monaco.IPosition | null>(null);
-  const hasPendingAutoSaveRef = useRef(false);
-  const blurDisposableRef = useRef<monaco.IDisposable | null>(null);
-  const activeTabPathRef = useRef<string | null>(null);
-  const pendingCursorRef = useRef<PendingCursor | null>(null);
-  const editorForPathRef = useRef<string | null>(null);
+    // Sync preview mode from pendingCursor
+    useEffect(() => {
+      if (pendingCursor?.previewMode && isMarkdown) {
+        setPreviewMode(pendingCursor.previewMode);
+      }
+    }, [pendingCursor?.previewMode, isMarkdown]);
+    const resizingRef = useRef(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const previewRef = useRef<HTMLDivElement>(null);
+    const isSyncingScrollRef = useRef(false); // Prevent scroll loop
+    const setCurrentCursorLine = useEditorStore(
+      (state) => state.setCurrentCursorLine,
+    );
+    const themeDefinedRef = useRef(false);
+    const selectionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    );
+    const selectionWidgetRef = useRef<monaco.editor.IContentWidget | null>(
+      null,
+    );
+    const widgetRootRef = useRef<Root | null>(null);
+    const widgetPositionRef = useRef<monaco.IPosition | null>(null);
+    const hasPendingAutoSaveRef = useRef(false);
+    const blurDisposableRef = useRef<monaco.IDisposable | null>(null);
+    const activeTabPathRef = useRef<string | null>(null);
+    const pendingCursorRef = useRef<PendingCursor | null>(null);
+    const editorForPathRef = useRef<string | null>(null);
 
-  // Line comment feature
-  useEditorLineComment({
-    editor: editorInstance,
-    monacoInstance: monacoInstance,
-    filePath: activeTabPath,
-    rootPath: rootPath ?? null,
-    sessionId: sessionId ?? null,
-    enabled: editorReady && !!sessionId,
-  });
+    // Line comment feature
+    useEditorLineComment({
+      editor: editorInstance,
+      monacoInstance: monacoInstance,
+      filePath: activeTabPath,
+      rootPath: rootPath ?? null,
+      sessionId: sessionId ?? null,
+      enabled: editorReady && !!sessionId,
+    });
 
-  // Calculate breadcrumb segments from active file path
-  const breadcrumbSegments = useMemo(() => {
-    if (!activeTabPath || !rootPath) return [];
+    // Calculate breadcrumb segments from active file path
+    const breadcrumbSegments = useMemo(() => {
+      if (!activeTabPath || !rootPath) return [];
 
-    const relativePath = activeTabPath.startsWith(rootPath)
-      ? activeTabPath.slice(rootPath.length).replace(/^\//, '')
-      : activeTabPath;
+      const relativePath = activeTabPath.startsWith(rootPath)
+        ? activeTabPath.slice(rootPath.length).replace(/^\//, "")
+        : activeTabPath;
 
-    if (!relativePath) return [];
+      if (!relativePath) return [];
 
-    const parts = relativePath.split('/');
-    return parts.map((name, index) => ({
-      name,
-      path: `${rootPath}/${parts.slice(0, index + 1).join('/')}`,
-      isLast: index === parts.length - 1,
-    }));
-  }, [activeTabPath, rootPath]);
+      const parts = relativePath.split("/");
+      return parts.map((name, index) => ({
+        name,
+        path: `${rootPath}/${parts.slice(0, index + 1).join("/")}`,
+        isLast: index === parts.length - 1,
+      }));
+    }, [activeTabPath, rootPath]);
 
-  // Keep refs in sync with state
-  useEffect(() => {
-    activeTabPathRef.current = activeTabPath;
-  }, [activeTabPath]);
+    // Keep refs in sync with state
+    useEffect(() => {
+      activeTabPathRef.current = activeTabPath;
+    }, [activeTabPath]);
 
-  // Sync ref immediately during render (not in useEffect) to ensure
-  // it's available when Monaco's onMount callback fires
-  pendingCursorRef.current = pendingCursor;
+    // Sync ref immediately during render (not in useEffect) to ensure
+    // it's available when Monaco's onMount callback fires
+    pendingCursorRef.current = pendingCursor;
 
-  // Auto save: Debounced save for 'afterDelay' mode
-  // Use ref-based debounce to avoid closure issues with activeTabPath
-  const {
-    trigger: triggerDebouncedSave,
-    cancel: cancelDebouncedSave,
-    flush: flushDebouncedSave,
-  } = useDebouncedSave(editorSettings.autoSaveDelay);
+    // Auto save: Debounced save for 'afterDelay' mode
+    // Use ref-based debounce to avoid closure issues with activeTabPath
+    const {
+      trigger: triggerDebouncedSave,
+      cancel: cancelDebouncedSave,
+      flush: flushDebouncedSave,
+    } = useDebouncedSave(editorSettings.autoSaveDelay);
 
-  // Auto save: Handle blur listener for onFocusChange mode
-  // This effect ensures listener is properly registered/unregistered when autoSave mode changes
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) return;
+    // Auto save: Handle blur listener for onFocusChange mode
+    // This effect ensures listener is properly registered/unregistered when autoSave mode changes
+    useEffect(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
 
-    // Cleanup previous listener
-    if (blurDisposableRef.current) {
-      blurDisposableRef.current.dispose();
-      blurDisposableRef.current = null;
-    }
-
-    // Register new listener if onFocusChange mode
-    if (editorSettings.autoSave === 'onFocusChange') {
-      const handleBlur = () => {
-        const path = activeTabPathRef.current;
-        if (path && hasPendingAutoSaveRef.current) {
-          onSave(path);
-          hasPendingAutoSaveRef.current = false;
-        }
-      };
-      blurDisposableRef.current = editor.onDidBlurEditorText(handleBlur);
-    }
-
-    return () => {
+      // Cleanup previous listener
       if (blurDisposableRef.current) {
         blurDisposableRef.current.dispose();
         blurDisposableRef.current = null;
       }
-    };
-  }, [editorSettings.autoSave, onSave]);
 
-  // Auto save: Save on window focus change
-  useEffect(() => {
-    const handleWindowBlur = () => {
-      if (
-        activeTabPath &&
-        editorSettings.autoSave === 'onWindowChange' &&
-        hasPendingAutoSaveRef.current
-      ) {
-        onSave(activeTabPath);
-        hasPendingAutoSaveRef.current = false;
-      }
-    };
-
-    window.addEventListener('blur', handleWindowBlur);
-    return () => window.removeEventListener('blur', handleWindowBlur);
-  }, [activeTabPath, editorSettings.autoSave, onSave]);
-
-  // Listen for external file changes and update open tabs
-  useEffect(() => {
-    const unsubscribe = window.electronAPI.file.onChange(async (event) => {
-      // Only handle update events (create/delete don't need tab updates)
-      if (event.type !== 'update') return;
-
-      // Check if the changed file is open in any tab
-      const changedTab = tabs.find((tab) => tab.path === event.path);
-      if (!changedTab) return;
-
-      try {
-        const { content: latestContent } = await window.electronAPI.file.read(event.path);
-        onContentChange(event.path, latestContent, changedTab.isDirty);
-
-        if (event.path === activeTabPath && editorRef.current) {
-          const editor = editorRef.current;
-          const currentValue = editor.getValue();
-          if (currentValue !== latestContent) {
-            const position = editor.getPosition();
-            editor.setValue(latestContent);
-            if (position) {
-              editor.setPosition(position);
-            }
+      // Register new listener if onFocusChange mode
+      if (editorSettings.autoSave === "onFocusChange") {
+        const handleBlur = () => {
+          const path = activeTabPathRef.current;
+          if (path && hasPendingAutoSaveRef.current) {
+            onSave(path);
+            hasPendingAutoSaveRef.current = false;
           }
-        }
-      } catch (error) {
-        console.warn(`Failed to reload file ${event.path}:`, error);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [tabs, activeTabPath, onContentChange]);
-
-  // Define custom theme on mount and when terminal theme changes
-  useEffect(() => {
-    defineMonacoTheme(terminalTheme);
-    themeDefinedRef.current = true;
-  }, [terminalTheme]);
-
-  // Handle pending cursor navigation (jump to line and select match)
-  // Only handles same-file search; new file search is handled by handleEditorMount
-  useEffect(() => {
-    if (
-      !pendingCursor ||
-      !editorRef.current ||
-      pendingCursor.path !== activeTabPath ||
-      editorForPathRef.current !== activeTabPath
-    ) {
-      return;
-    }
-
-    const editor = editorRef.current;
-    const { line, column, matchLength } = pendingCursor;
-    const startColumn = (column ?? 0) + 1;
-
-    if (matchLength && matchLength > 0) {
-      const selection = {
-        startLineNumber: line,
-        startColumn,
-        endLineNumber: line,
-        endColumn: startColumn + matchLength,
-      };
-      editor.setSelection(selection);
-      editor.revealRangeInCenter(selection);
-    } else {
-      editor.setPosition({ lineNumber: line, column: startColumn });
-      editor.revealLineInCenter(line);
-    }
-    editor.focus();
-
-    onClearPendingCursor();
-  }, [pendingCursor, activeTabPath, onClearPendingCursor]);
-
-  const handleEditorMount: OnMount = useCallback(
-    (editor, m) => {
-      editorRef.current = editor;
-      monacoRef.current = m;
-      setEditorInstance(editor);
-      setMonacoInstance(m);
-      editorForPathRef.current = activeTabPath;
-      setEditorReady(true);
-
-      // Add Cmd/Ctrl+S shortcut
-      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
-        if (activeTabPath) {
-          onSave(activeTabPath);
-        }
-      });
-
-      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
-        const selection = editor.getSelection();
-        const selectedText =
-          !selection || selection.isEmpty()
-            ? ''
-            : (editor.getModel()?.getValueInRange(selection) ?? '');
-        onGlobalSearch?.(selectedText);
-      });
-
-      // Restore view state if available
-      if (activeTab?.viewState) {
-        editor.restoreViewState(activeTab.viewState as monaco.editor.ICodeEditorViewState);
+        };
+        blurDisposableRef.current = editor.onDidBlurEditorText(handleBlur);
       }
 
-      // Handle pending cursor navigation on mount (for search result navigation)
-      // Use ref to get latest value since onMount may be called after state update
-      const cursor = pendingCursorRef.current;
-      if (cursor && cursor.path === activeTabPath) {
-        const { line, column, matchLength } = cursor;
-        const startColumn = (column ?? 0) + 1;
-
-        setTimeout(() => {
-          if (matchLength && matchLength > 0) {
-            const selection = {
-              startLineNumber: line,
-              startColumn,
-              endLineNumber: line,
-              endColumn: startColumn + matchLength,
-            };
-            editor.setSelection(selection);
-            editor.revealRangeInCenter(selection);
-          } else {
-            editor.setPosition({ lineNumber: line, column: startColumn });
-            editor.revealLineInCenter(line);
-          }
-          editor.focus();
-        }, 100);
-        onClearPendingCursor();
-      }
-
-      // Sync scroll from editor to preview (for markdown files)
-      editor.onDidScrollChange((e) => {
-        if (!previewRef.current || isSyncingScrollRef.current) return;
-        const scrollTop = e.scrollTop;
-        const scrollHeight = e.scrollHeight;
-        const clientHeight = editor.getLayoutInfo().height;
-        const maxScroll = scrollHeight - clientHeight;
-        if (maxScroll <= 0) return;
-
-        const scrollRatio = scrollTop / maxScroll;
-        const previewMaxScroll = previewRef.current.scrollHeight - previewRef.current.clientHeight;
-
-        isSyncingScrollRef.current = true;
-        previewRef.current.scrollTop = scrollRatio * previewMaxScroll;
-        requestAnimationFrame(() => {
-          isSyncingScrollRef.current = false;
-        });
-      });
-    },
-    [activeTab?.viewState, activeTabPath, onSave, onGlobalSearch, onClearPendingCursor]
-  );
-
-  // Selection comment widget and cursor tracking
-  useEffect(() => {
-    if (!editorReady) return;
-    const editor = editorRef.current;
-    const m = monacoRef.current;
-    if (!editor || !m) return;
-
-    // Always track cursor line for "Open in editor" functionality
-    const cursorDisposable = editor.onDidChangeCursorSelection((e) => {
-      setCurrentCursorLine(e.selection.startLineNumber);
-    });
-
-    // If no sessionId, only track cursor line
-    if (!sessionId) {
-      if (selectionWidgetRef.current) {
-        editor.removeContentWidget(selectionWidgetRef.current);
-        selectionWidgetRef.current = null;
-      }
       return () => {
-        cursorDisposable.dispose();
+        if (blurDisposableRef.current) {
+          blurDisposableRef.current.dispose();
+          blurDisposableRef.current = null;
+        }
       };
-    }
+    }, [editorSettings.autoSave, onSave]);
 
-    // Clean up any stale widget from previous effect run
-    if (selectionWidgetRef.current) {
-      try {
-        editor.removeContentWidget(selectionWidgetRef.current);
-      } catch {
-        // Ignore if already removed
+    // Auto save: Save on window focus change
+    useEffect(() => {
+      const handleWindowBlur = () => {
+        if (
+          activeTabPath &&
+          editorSettings.autoSave === "onWindowChange" &&
+          hasPendingAutoSaveRef.current
+        ) {
+          onSave(activeTabPath);
+          hasPendingAutoSaveRef.current = false;
+        }
+      };
+
+      window.addEventListener("blur", handleWindowBlur);
+      return () => window.removeEventListener("blur", handleWindowBlur);
+    }, [activeTabPath, editorSettings.autoSave, onSave]);
+
+    // Listen for external file changes and update open tabs
+    useEffect(() => {
+      const unsubscribe = window.electronAPI.file.onChange(async (event) => {
+        // Only handle update events (create/delete don't need tab updates)
+        if (event.type !== "update") return;
+
+        // Check if the changed file is open in any tab
+        const changedTab = tabs.find((tab) => tab.path === event.path);
+        if (!changedTab) return;
+
+        try {
+          const { content: latestContent } = await window.electronAPI.file.read(
+            event.path,
+          );
+          onContentChange(event.path, latestContent, changedTab.isDirty);
+
+          if (event.path === activeTabPath && editorRef.current) {
+            const editor = editorRef.current;
+            const currentValue = editor.getValue();
+            if (currentValue !== latestContent) {
+              const position = editor.getPosition();
+              editor.setValue(latestContent);
+              if (position) {
+                editor.setPosition(position);
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to reload file ${event.path}:`, error);
+        }
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    }, [tabs, activeTabPath, onContentChange]);
+
+    // Define custom theme on mount and when terminal theme / background image settings change
+    useEffect(() => {
+      defineMonacoTheme(terminalTheme, {
+        backgroundImageEnabled,
+        backgroundOpacity,
+      });
+      themeDefinedRef.current = true;
+    }, [terminalTheme, backgroundImageEnabled, backgroundOpacity]);
+
+    // Handle pending cursor navigation (jump to line and select match)
+    // Only handles same-file search; new file search is handled by handleEditorMount
+    useEffect(() => {
+      if (
+        !pendingCursor ||
+        !editorRef.current ||
+        pendingCursor.path !== activeTabPath ||
+        editorForPathRef.current !== activeTabPath
+      ) {
+        return;
       }
-      selectionWidgetRef.current = null;
-      widgetPositionRef.current = null;
-    }
 
-    // Create selection action widget (button)
-    const widgetDomNode = document.createElement('div');
-    widgetDomNode.className = 'monaco-selection-widget';
-    widgetDomNode.style.zIndex = '100';
+      const editor = editorRef.current;
+      const { line, column, matchLength } = pendingCursor;
+      const startColumn = (column ?? 0) + 1;
 
-    // Create comment form widget
-    const commentWidgetDomNode = document.createElement('div');
-    commentWidgetDomNode.className = 'monaco-selection-comment-widget';
-    commentWidgetDomNode.style.cssText = 'z-index: 100; width: 320px;';
-
-    let commentWidgetRoot: Root | null = null;
-    let commentWidgetInstance: monaco.editor.IContentWidget | null = null;
-
-    const showCommentForm = () => {
-      const selection = editor.getSelection();
-      if (!selection || selection.isEmpty() || !activeTabPath) return;
-
-      // Hide button widget
-      if (selectionWidgetRef.current) {
-        editor.removeContentWidget(selectionWidgetRef.current);
-        selectionWidgetRef.current = null;
+      if (matchLength && matchLength > 0) {
+        const selection = {
+          startLineNumber: line,
+          startColumn,
+          endLineNumber: line,
+          endColumn: startColumn + matchLength,
+        };
+        editor.setSelection(selection);
+        editor.revealRangeInCenter(selection);
+      } else {
+        editor.setPosition({ lineNumber: line, column: startColumn });
+        editor.revealLineInCenter(line);
       }
+      editor.focus();
 
-      // Convert to relative path
-      let displayPath = activeTabPath;
-      if (rootPath && activeTabPath.startsWith(rootPath)) {
-        displayPath = activeTabPath.slice(rootPath.length).replace(/^\//, '');
-      }
+      onClearPendingCursor();
+    }, [pendingCursor, activeTabPath, onClearPendingCursor]);
 
-      // Create comment widget
-      const commentWidget: monaco.editor.IContentWidget = {
-        getId: () => 'selection.comment.widget',
-        getDomNode: () => commentWidgetDomNode,
-        getPosition: () => ({
-          position: {
-            // Use actual cursor position (not selection end)
-            lineNumber: selection.positionLineNumber,
-            column: selection.positionColumn,
+    const handleEditorMount: OnMount = useCallback(
+      (editor, m) => {
+        editorRef.current = editor;
+        monacoRef.current = m;
+        setEditorInstance(editor);
+        setMonacoInstance(m);
+        editorForPathRef.current = activeTabPath;
+        setEditorReady(true);
+
+        // Add Cmd/Ctrl+S shortcut
+        editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
+          if (activeTabPath) {
+            onSave(activeTabPath);
+          }
+        });
+
+        editor.addCommand(
+          m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF,
+          () => {
+            const selection = editor.getSelection();
+            const selectedText =
+              !selection || selection.isEmpty()
+                ? ""
+                : (editor.getModel()?.getValueInRange(selection) ?? "");
+            onGlobalSearch?.(selectedText);
           },
-          preference: [m.editor.ContentWidgetPositionPreference.BELOW],
-        }),
-      };
+        );
 
-      commentWidgetInstance = commentWidget;
+        // Restore view state if available
+        if (activeTab?.viewState) {
+          editor.restoreViewState(
+            activeTab.viewState as monaco.editor.ICodeEditorViewState,
+          );
+        }
 
-      // Render comment form
-      if (commentWidgetRoot) {
-        commentWidgetRoot.unmount();
-      }
-      commentWidgetRoot = createRoot(commentWidgetDomNode);
-      commentWidgetRoot.render(
-        <CommentForm
-          lineNumber={selection.startLineNumber}
-          endLineNumber={selection.endLineNumber}
-          filePath={displayPath}
-          onSubmit={(text) => {
-            // Verify terminal writer exists
-            const writer = useTerminalWriteStore.getState().writers.get(sessionId);
-            if (!writer) {
-              console.warn('Terminal writer not found for session:', sessionId);
-              return;
+        // Handle pending cursor navigation on mount (for search result navigation)
+        // Use ref to get latest value since onMount may be called after state update
+        const cursor = pendingCursorRef.current;
+        if (cursor && cursor.path === activeTabPath) {
+          const { line, column, matchLength } = cursor;
+          const startColumn = (column ?? 0) + 1;
+
+          setTimeout(() => {
+            if (matchLength && matchLength > 0) {
+              const selection = {
+                startLineNumber: line,
+                startColumn,
+                endLineNumber: line,
+                endColumn: startColumn + matchLength,
+              };
+              editor.setSelection(selection);
+              editor.revealRangeInCenter(selection);
+            } else {
+              editor.setPosition({ lineNumber: line, column: startColumn });
+              editor.revealLineInCenter(line);
             }
+            editor.focus();
+          }, 100);
+          onClearPendingCursor();
+        }
 
-            // Format: path#L1-L10 or path#L5
-            const lineRef =
-              selection.startLineNumber === selection.endLineNumber
-                ? `L${selection.startLineNumber}`
-                : `L${selection.startLineNumber}-L${selection.endLineNumber}`;
-            const message = text
-              ? `${displayPath}#${lineRef}\nUser comment: "${text}"`
-              : `${displayPath}#${lineRef}`;
-            write(sessionId, `${message}\r`);
+        // Sync scroll from editor to preview (for markdown files)
+        editor.onDidScrollChange((e) => {
+          if (!previewRef.current || isSyncingScrollRef.current) return;
+          const scrollTop = e.scrollTop;
+          const scrollHeight = e.scrollHeight;
+          const clientHeight = editor.getLayoutInfo().height;
+          const maxScroll = scrollHeight - clientHeight;
+          if (maxScroll <= 0) return;
 
-            // Close comment widget
-            if (commentWidgetInstance) {
-              editor.removeContentWidget(commentWidgetInstance);
-              commentWidgetInstance = null;
-            }
+          const scrollRatio = scrollTop / maxScroll;
+          const previewMaxScroll =
+            previewRef.current.scrollHeight - previewRef.current.clientHeight;
 
-            // Focus terminal after short delay
-            setTimeout(() => {
-              focus(sessionId);
-            }, 100);
-          }}
-          onCancel={() => {
-            if (commentWidgetInstance) {
-              editor.removeContentWidget(commentWidgetInstance);
-              commentWidgetInstance = null;
-            }
-          }}
-        />
-      );
-
-      editor.addContentWidget(commentWidget);
-    };
-
-    // Render the button
-    if (widgetRootRef.current) {
-      widgetRootRef.current.unmount();
-    }
-    widgetRootRef.current = createRoot(widgetDomNode);
-    widgetRootRef.current.render(
-      <button
-        type="button"
-        className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
-        onClick={showCommentForm}
-        onMouseDown={(e) => e.preventDefault()}
-      >
-        <MessageSquare className="h-3.5 w-3.5" />
-        {t('Add comment')}
-      </button>
+          isSyncingScrollRef.current = true;
+          previewRef.current.scrollTop = scrollRatio * previewMaxScroll;
+          requestAnimationFrame(() => {
+            isSyncingScrollRef.current = false;
+          });
+        });
+      },
+      [
+        activeTab?.viewState,
+        activeTabPath,
+        onSave,
+        onGlobalSearch,
+        onClearPendingCursor,
+      ],
     );
 
-    const selectionWidget: monaco.editor.IContentWidget = {
-      getId: () => 'selection.action.widget',
-      getDomNode: () => widgetDomNode,
-      getPosition: () =>
-        widgetPositionRef.current
-          ? {
-              position: widgetPositionRef.current,
-              preference: [
-                m.editor.ContentWidgetPositionPreference.BELOW,
-                m.editor.ContentWidgetPositionPreference.ABOVE,
-              ],
-            }
-          : null,
-    };
+    // Selection comment widget and cursor tracking
+    useEffect(() => {
+      if (!editorReady) return;
+      const editor = editorRef.current;
+      const m = monacoRef.current;
+      if (!editor || !m) return;
 
-    const selectionDisposable = editor.onDidChangeCursorSelection((e) => {
-      if (!activeTabPath) return;
+      // Always track cursor line for "Open in editor" functionality
+      const cursorDisposable = editor.onDidChangeCursorSelection((e) => {
+        setCurrentCursorLine(e.selection.startLineNumber);
+      });
 
-      const selection = e.selection;
-      const model = editor.getModel();
-      if (!model) return;
-
-      const selectedText = model.getValueInRange(selection);
-
-      // Hide comment widget if selection changes
-      if (commentWidgetInstance) {
-        editor.removeContentWidget(commentWidgetInstance);
-        commentWidgetInstance = null;
-      }
-
-      // Show/hide selection button widget
-      if (!selection.isEmpty() && selectedText.trim().length > 0) {
-        widgetPositionRef.current = {
-          lineNumber: selection.positionLineNumber,
-          column: selection.positionColumn,
-        };
-        if (!selectionWidgetRef.current) {
-          selectionWidgetRef.current = selectionWidget;
-          editor.addContentWidget(selectionWidget);
-        } else {
-          editor.layoutContentWidget(selectionWidgetRef.current);
-        }
-      } else {
+      // If no sessionId, only track cursor line
+      if (!sessionId) {
         if (selectionWidgetRef.current) {
           editor.removeContentWidget(selectionWidgetRef.current);
           selectionWidgetRef.current = null;
-          widgetPositionRef.current = null;
         }
+        return () => {
+          cursorDisposable.dispose();
+        };
       }
 
-      // Send selection_changed notification to Claude Code (debounced)
-      if (claudeCodeIntegration.enabled) {
-        if (selectionDebounceRef.current) {
-          clearTimeout(selectionDebounceRef.current);
-        }
-        selectionDebounceRef.current = setTimeout(() => {
-          window.electronAPI.mcp.sendSelectionChanged({
-            text: selectedText,
-            filePath: activeTabPath,
-            fileUrl: `file://${activeTabPath}`,
-            selection: {
-              start: {
-                line: selection.startLineNumber,
-                character: selection.startColumn,
-              },
-              end: {
-                line: selection.endLineNumber,
-                character: selection.endColumn,
-              },
-              isEmpty: selection.isEmpty(),
-            },
-          });
-        }, claudeCodeIntegration.selectionChangedDebounce);
-      }
-    });
-
-    return () => {
-      cursorDisposable.dispose();
-      selectionDisposable.dispose();
-      if (selectionDebounceRef.current) {
-        clearTimeout(selectionDebounceRef.current);
-        selectionDebounceRef.current = null;
-      }
-      const currentEditor = editorRef.current;
-      if (selectionWidgetRef.current && currentEditor) {
+      // Clean up any stale widget from previous effect run
+      if (selectionWidgetRef.current) {
         try {
-          currentEditor.removeContentWidget(selectionWidgetRef.current);
+          editor.removeContentWidget(selectionWidgetRef.current);
         } catch {
-          // Editor may have been disposed, ignore
+          // Ignore if already removed
         }
         selectionWidgetRef.current = null;
         widgetPositionRef.current = null;
       }
-      if (commentWidgetInstance && currentEditor) {
-        try {
-          currentEditor.removeContentWidget(commentWidgetInstance);
-        } catch {
-          // Ignore
+
+      // Create selection action widget (button)
+      const widgetDomNode = document.createElement("div");
+      widgetDomNode.className = "monaco-selection-widget";
+      widgetDomNode.style.zIndex = "100";
+
+      // Create comment form widget
+      const commentWidgetDomNode = document.createElement("div");
+      commentWidgetDomNode.className = "monaco-selection-comment-widget";
+      commentWidgetDomNode.style.cssText = "z-index: 100; width: 320px;";
+
+      let commentWidgetRoot: Root | null = null;
+      let commentWidgetInstance: monaco.editor.IContentWidget | null = null;
+
+      const showCommentForm = () => {
+        const selection = editor.getSelection();
+        if (!selection || selection.isEmpty() || !activeTabPath) return;
+
+        // Hide button widget
+        if (selectionWidgetRef.current) {
+          editor.removeContentWidget(selectionWidgetRef.current);
+          selectionWidgetRef.current = null;
         }
-      }
+
+        // Convert to relative path
+        let displayPath = activeTabPath;
+        if (rootPath && activeTabPath.startsWith(rootPath)) {
+          displayPath = activeTabPath.slice(rootPath.length).replace(/^\//, "");
+        }
+
+        // Create comment widget
+        const commentWidget: monaco.editor.IContentWidget = {
+          getId: () => "selection.comment.widget",
+          getDomNode: () => commentWidgetDomNode,
+          getPosition: () => ({
+            position: {
+              // Use actual cursor position (not selection end)
+              lineNumber: selection.positionLineNumber,
+              column: selection.positionColumn,
+            },
+            preference: [m.editor.ContentWidgetPositionPreference.BELOW],
+          }),
+        };
+
+        commentWidgetInstance = commentWidget;
+
+        // Render comment form
+        if (commentWidgetRoot) {
+          commentWidgetRoot.unmount();
+        }
+        commentWidgetRoot = createRoot(commentWidgetDomNode);
+        commentWidgetRoot.render(
+          <CommentForm
+            lineNumber={selection.startLineNumber}
+            endLineNumber={selection.endLineNumber}
+            filePath={displayPath}
+            onSubmit={(text) => {
+              // Verify terminal writer exists
+              const writer = useTerminalWriteStore
+                .getState()
+                .writers.get(sessionId);
+              if (!writer) {
+                console.warn(
+                  "Terminal writer not found for session:",
+                  sessionId,
+                );
+                return;
+              }
+
+              // Format: path#L1-L10 or path#L5
+              const lineRef =
+                selection.startLineNumber === selection.endLineNumber
+                  ? `L${selection.startLineNumber}`
+                  : `L${selection.startLineNumber}-L${selection.endLineNumber}`;
+              const message = text
+                ? `${displayPath}#${lineRef}\nUser comment: "${text}"`
+                : `${displayPath}#${lineRef}`;
+              write(sessionId, `${message}\r`);
+
+              // Close comment widget
+              if (commentWidgetInstance) {
+                editor.removeContentWidget(commentWidgetInstance);
+                commentWidgetInstance = null;
+              }
+
+              // Focus terminal after short delay
+              setTimeout(() => {
+                focus(sessionId);
+              }, 100);
+            }}
+            onCancel={() => {
+              if (commentWidgetInstance) {
+                editor.removeContentWidget(commentWidgetInstance);
+                commentWidgetInstance = null;
+              }
+            }}
+          />,
+        );
+
+        editor.addContentWidget(commentWidget);
+      };
+
+      // Render the button
       if (widgetRootRef.current) {
         widgetRootRef.current.unmount();
-        widgetRootRef.current = null;
       }
-      if (commentWidgetRoot) {
-        commentWidgetRoot.unmount();
-      }
-    };
-  }, [
-    editorReady,
-    sessionId,
-    activeTabPath,
-    rootPath,
-    t,
-    setCurrentCursorLine,
-    write,
-    focus,
-    claudeCodeIntegration.enabled,
-    claudeCodeIntegration.selectionChangedDebounce,
-  ]);
+      widgetRootRef.current = createRoot(widgetDomNode);
+      widgetRootRef.current.render(
+        <button
+          type="button"
+          className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
+          onClick={showCommentForm}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          {t("Add comment")}
+        </button>,
+      );
 
-  const handleEditorChange = useCallback(
-    (value: string | undefined) => {
-      if (activeTabPath && value !== undefined) {
-        const autoSaveEnabled = editorSettings.autoSave !== 'off';
-        // Show dirty indicator when auto save is off or when it triggers on focus/window change
-        const shouldShowDirty =
-          !autoSaveEnabled ||
-          editorSettings.autoSave === 'onFocusChange' ||
-          editorSettings.autoSave === 'onWindowChange';
-        onContentChange(activeTabPath, value, shouldShowDirty);
+      const selectionWidget: monaco.editor.IContentWidget = {
+        getId: () => "selection.action.widget",
+        getDomNode: () => widgetDomNode,
+        getPosition: () =>
+          widgetPositionRef.current
+            ? {
+                position: widgetPositionRef.current,
+                preference: [
+                  m.editor.ContentWidgetPositionPreference.BELOW,
+                  m.editor.ContentWidgetPositionPreference.ABOVE,
+                ],
+              }
+            : null,
+      };
 
-        // Mark as pending for focus/window change modes
-        if (autoSaveEnabled) {
-          hasPendingAutoSaveRef.current = true;
+      const selectionDisposable = editor.onDidChangeCursorSelection((e) => {
+        if (!activeTabPath) return;
+
+        const selection = e.selection;
+        const model = editor.getModel();
+        if (!model) return;
+
+        const selectedText = model.getValueInRange(selection);
+
+        // Hide comment widget if selection changes
+        if (commentWidgetInstance) {
+          editor.removeContentWidget(commentWidgetInstance);
+          commentWidgetInstance = null;
         }
 
-        // Trigger auto save based on mode
-        if (editorSettings.autoSave === 'afterDelay') {
-          triggerDebouncedSave(activeTabPath, (path) => {
-            onSave(path);
-            hasPendingAutoSaveRef.current = false;
-          });
+        // Show/hide selection button widget
+        if (!selection.isEmpty() && selectedText.trim().length > 0) {
+          widgetPositionRef.current = {
+            lineNumber: selection.positionLineNumber,
+            column: selection.positionColumn,
+          };
+          if (!selectionWidgetRef.current) {
+            selectionWidgetRef.current = selectionWidget;
+            editor.addContentWidget(selectionWidget);
+          } else {
+            editor.layoutContentWidget(selectionWidgetRef.current);
+          }
+        } else {
+          if (selectionWidgetRef.current) {
+            editor.removeContentWidget(selectionWidgetRef.current);
+            selectionWidgetRef.current = null;
+            widgetPositionRef.current = null;
+          }
         }
-      }
-    },
-    [activeTabPath, onContentChange, editorSettings.autoSave, triggerDebouncedSave, onSave]
-  );
 
-  const handleTabClose = useCallback(
-    async (path: string, e?: React.MouseEvent) => {
-      e?.stopPropagation();
-
-      // Auto-save before closing based on mode (VS Code behavior):
-      // - afterDelay: save (debounced save may still be pending)
-      // - onFocusChange: save (closing tab should trigger save like focus change)
-      // - onWindowChange: don't save (user needs to manually save)
-      // - off: don't save (manual save only)
-      const shouldAutoSaveOnClose =
-        editorSettings.autoSave === 'afterDelay' || editorSettings.autoSave === 'onFocusChange';
-
-      // Sync save before closing (await to ensure file is written before tab is removed)
-      // We need to save directly because saveFile.mutate reads from tabs which will be removed
-      if (
-        path === activeTabPath &&
-        editorRef.current &&
-        hasPendingAutoSaveRef.current &&
-        shouldAutoSaveOnClose
-      ) {
-        const currentContent = editorRef.current.getValue();
-        const tab = tabs.find((t) => t.path === path);
-        onContentChange(path, currentContent, false);
-        await window.electronAPI.file.write(path, currentContent, tab?.encoding);
-        hasPendingAutoSaveRef.current = false;
-      }
-
-      // Cancel pending debounced save
-      cancelDebouncedSave();
-
-      // Save view state before closing
-      if (editorRef.current && path === activeTabPath) {
-        const viewState = editorRef.current.saveViewState();
-        if (viewState) {
-          onViewStateChange(path, viewState);
+        // Send selection_changed notification to Claude Code (debounced)
+        if (claudeCodeIntegration.enabled) {
+          if (selectionDebounceRef.current) {
+            clearTimeout(selectionDebounceRef.current);
+          }
+          selectionDebounceRef.current = setTimeout(() => {
+            window.electronAPI.mcp.sendSelectionChanged({
+              text: selectedText,
+              filePath: activeTabPath,
+              fileUrl: `file://${activeTabPath}`,
+              selection: {
+                start: {
+                  line: selection.startLineNumber,
+                  character: selection.startColumn,
+                },
+                end: {
+                  line: selection.endLineNumber,
+                  character: selection.endColumn,
+                },
+                isEmpty: selection.isEmpty(),
+              },
+            });
+          }, claudeCodeIntegration.selectionChangedDebounce);
         }
-      }
+      });
 
-      onTabClose(path);
-    },
-    [
+      return () => {
+        cursorDisposable.dispose();
+        selectionDisposable.dispose();
+        if (selectionDebounceRef.current) {
+          clearTimeout(selectionDebounceRef.current);
+          selectionDebounceRef.current = null;
+        }
+        const currentEditor = editorRef.current;
+        if (selectionWidgetRef.current && currentEditor) {
+          try {
+            currentEditor.removeContentWidget(selectionWidgetRef.current);
+          } catch {
+            // Editor may have been disposed, ignore
+          }
+          selectionWidgetRef.current = null;
+          widgetPositionRef.current = null;
+        }
+        if (commentWidgetInstance && currentEditor) {
+          try {
+            currentEditor.removeContentWidget(commentWidgetInstance);
+          } catch {
+            // Ignore
+          }
+        }
+        if (widgetRootRef.current) {
+          widgetRootRef.current.unmount();
+          widgetRootRef.current = null;
+        }
+        if (commentWidgetRoot) {
+          commentWidgetRoot.unmount();
+        }
+      };
+    }, [
+      editorReady,
+      sessionId,
       activeTabPath,
-      onTabClose,
-      onViewStateChange,
-      cancelDebouncedSave,
-      editorSettings.autoSave,
-      onContentChange,
-      tabs,
-    ]
-  );
+      rootPath,
+      t,
+      setCurrentCursorLine,
+      write,
+      focus,
+      claudeCodeIntegration.enabled,
+      claudeCodeIntegration.selectionChangedDebounce,
+    ]);
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      getSelectedText: () => {
-        const editor = editorRef.current;
-        if (!editor) return '';
-        const selection = editor.getSelection();
-        if (!selection || selection.isEmpty()) return '';
-        return editor.getModel()?.getValueInRange(selection) ?? '';
-      },
-      requestCloseTab: (path: string) => {
-        void handleTabClose(path);
-      },
-    }),
-    [handleTabClose]
-  );
+    const handleEditorChange = useCallback(
+      (value: string | undefined) => {
+        if (activeTabPath && value !== undefined) {
+          const autoSaveEnabled = editorSettings.autoSave !== "off";
+          // Show dirty indicator when auto save is off or when it triggers on focus/window change
+          const shouldShowDirty =
+            !autoSaveEnabled ||
+            editorSettings.autoSave === "onFocusChange" ||
+            editorSettings.autoSave === "onWindowChange";
+          onContentChange(activeTabPath, value, shouldShowDirty);
 
-  // Save view state when switching tabs
-  const handleTabClick = useCallback(
-    (path: string) => {
-      // Flush pending debounced save when switching tabs (save immediately)
-      flushDebouncedSave();
+          // Mark as pending for focus/window change modes
+          if (autoSaveEnabled) {
+            hasPendingAutoSaveRef.current = true;
+          }
 
-      if (editorRef.current && activeTabPath && activeTabPath !== path) {
-        const viewState = editorRef.current.saveViewState();
-        if (viewState) {
-          onViewStateChange(activeTabPath, viewState);
+          // Trigger auto save based on mode
+          if (editorSettings.autoSave === "afterDelay") {
+            triggerDebouncedSave(activeTabPath, (path) => {
+              onSave(path);
+              hasPendingAutoSaveRef.current = false;
+            });
+          }
         }
-      }
-      onTabClick(path);
-    },
-    [activeTabPath, onTabClick, onViewStateChange, flushDebouncedSave]
-  );
+      },
+      [
+        activeTabPath,
+        onContentChange,
+        editorSettings.autoSave,
+        triggerDebouncedSave,
+        onSave,
+      ],
+    );
 
-  // Determine Monaco theme - use custom theme synced with terminal
-  const monacoTheme = themeDefinedRef.current ? CUSTOM_THEME_NAME : 'vs-dark';
+    const handleTabClose = useCallback(
+      async (path: string, e?: React.MouseEvent) => {
+        e?.stopPropagation();
 
-  // Handle resize divider for markdown preview
-  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    resizingRef.current = true;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+        // Auto-save before closing based on mode (VS Code behavior):
+        // - afterDelay: save (debounced save may still be pending)
+        // - onFocusChange: save (closing tab should trigger save like focus change)
+        // - onWindowChange: don't save (user needs to manually save)
+        // - off: don't save (manual save only)
+        const shouldAutoSaveOnClose =
+          editorSettings.autoSave === "afterDelay" ||
+          editorSettings.autoSave === "onFocusChange";
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!resizingRef.current || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const newPreviewWidth = ((rect.right - moveEvent.clientX) / rect.width) * 100;
-      // Clamp between 20% and 80%
-      setPreviewWidth(Math.min(80, Math.max(20, newPreviewWidth)));
-    };
+        // Sync save before closing (await to ensure file is written before tab is removed)
+        // We need to save directly because saveFile.mutate reads from tabs which will be removed
+        if (
+          path === activeTabPath &&
+          editorRef.current &&
+          hasPendingAutoSaveRef.current &&
+          shouldAutoSaveOnClose
+        ) {
+          const currentContent = editorRef.current.getValue();
+          const tab = tabs.find((t) => t.path === path);
+          onContentChange(path, currentContent, false);
+          await window.electronAPI.file.write(
+            path,
+            currentContent,
+            tab?.encoding,
+          );
+          hasPendingAutoSaveRef.current = false;
+        }
 
-    const handleMouseUp = () => {
-      resizingRef.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+        // Cancel pending debounced save
+        cancelDebouncedSave();
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, []);
+        // Save view state before closing
+        if (editorRef.current && path === activeTabPath) {
+          const viewState = editorRef.current.saveViewState();
+          if (viewState) {
+            onViewStateChange(path, viewState);
+          }
+        }
 
-  // Sync scroll from preview to editor
-  const handlePreviewScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    if (!editorRef.current || isSyncingScrollRef.current) return;
-    const target = e.currentTarget;
-    const scrollTop = target.scrollTop;
-    const maxScroll = target.scrollHeight - target.clientHeight;
-    if (maxScroll <= 0) return;
+        onTabClose(path);
+      },
+      [
+        activeTabPath,
+        onTabClose,
+        onViewStateChange,
+        cancelDebouncedSave,
+        editorSettings.autoSave,
+        onContentChange,
+        tabs,
+      ],
+    );
 
-    const scrollRatio = scrollTop / maxScroll;
-    const editor = editorRef.current;
-    const editorScrollHeight = editor.getScrollHeight();
-    const editorClientHeight = editor.getLayoutInfo().height;
-    const editorMaxScroll = editorScrollHeight - editorClientHeight;
+    useImperativeHandle(
+      ref,
+      () => ({
+        getSelectedText: () => {
+          const editor = editorRef.current;
+          if (!editor) return "";
+          const selection = editor.getSelection();
+          if (!selection || selection.isEmpty()) return "";
+          return editor.getModel()?.getValueInRange(selection) ?? "";
+        },
+        requestCloseTab: (path: string) => {
+          void handleTabClose(path);
+        },
+      }),
+      [handleTabClose],
+    );
 
-    isSyncingScrollRef.current = true;
-    editor.setScrollTop(scrollRatio * editorMaxScroll);
-    requestAnimationFrame(() => {
-      isSyncingScrollRef.current = false;
-    });
-  }, []);
+    // Save view state when switching tabs
+    const handleTabClick = useCallback(
+      (path: string) => {
+        // Flush pending debounced save when switching tabs (save immediately)
+        flushDebouncedSave();
 
-  // Cycle through preview modes: off -> split -> fullscreen -> off
-  const cyclePreviewMode = useCallback(() => {
-    setPreviewMode((current) => {
-      if (current === 'off') return 'split';
-      if (current === 'split') return 'fullscreen';
-      return 'off';
-    });
-  }, []);
+        if (editorRef.current && activeTabPath && activeTabPath !== path) {
+          const viewState = editorRef.current.saveViewState();
+          if (viewState) {
+            onViewStateChange(activeTabPath, viewState);
+          }
+        }
+        onTabClick(path);
+      },
+      [activeTabPath, onTabClick, onViewStateChange, flushDebouncedSave],
+    );
 
-  return (
-    <div className="flex h-full flex-col">
-      {/* Tabs */}
-      <div className="flex items-center">
-        {isFileTreeCollapsed && onToggleFileTree && (
-          <button
-            type="button"
-            onClick={onToggleFileTree}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-            title={t('Show file tree')}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        )}
-        <div className="min-w-0 flex-1">
-          <EditorTabs
-            tabs={tabs}
-            activeTabPath={activeTabPath}
-            onTabClick={handleTabClick}
-            onTabClose={handleTabClose}
-            onClose={onTabClose}
-            onCloseOthers={onCloseOthers}
-            onCloseAll={onCloseAll}
-            onCloseLeft={onCloseLeft}
-            onCloseRight={onCloseRight}
-            onTabReorder={onTabReorder}
-          />
-        </div>
-        {/* Markdown Preview Toggle */}
-        {isMarkdown && (
-          <button
-            type="button"
-            onClick={cyclePreviewMode}
-            className="flex h-10 w-10 shrink-0 items-center justify-center border-b text-muted-foreground hover:text-foreground transition-colors"
-            title={
-              previewMode === 'off'
-                ? t('Show split preview')
-                : previewMode === 'split'
-                  ? t('Switch to fullscreen preview')
-                  : t('Close preview')
-            }
-          >
-            {previewMode === 'off' ? (
-              <EyeOff className="h-4 w-4" />
-            ) : previewMode === 'split' ? (
-              <Eye className="h-4 w-4" />
-            ) : (
-              <Maximize2 className="h-4 w-4" />
-            )}
-          </button>
-        )}
-      </div>
+    // Determine Monaco theme - use custom theme synced with terminal
+    const monacoTheme = themeDefinedRef.current ? CUSTOM_THEME_NAME : "vs-dark";
 
-      {/* Breadcrumb */}
-      {activeTab && breadcrumbSegments.length > 0 && (
-        <div className="shrink-0 border-b bg-background px-3 py-1">
-          <Breadcrumb>
-            <BreadcrumbList className="flex-nowrap text-xs">
-              {breadcrumbSegments.map((segment, index) => (
-                <span key={segment.path} className="contents">
-                  {index > 0 && <BreadcrumbSeparator className="[&>svg]:size-3" />}
-                  <BreadcrumbItem className="min-w-0">
-                    {segment.isLast ? (
-                      <BreadcrumbPage className="truncate">{segment.name}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink
-                        render={<button type="button" />}
-                        className="truncate"
-                        onClick={() => onBreadcrumbClick?.(segment.path)}
-                      >
-                        {segment.name}
-                      </BreadcrumbLink>
-                    )}
-                  </BreadcrumbItem>
-                </span>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-      )}
+    // Handle resize divider for markdown preview
+    const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+      e.preventDefault();
+      resizingRef.current = true;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
 
-      {/* Editor */}
-      <div ref={containerRef} className="relative min-h-0 min-w-0 flex-1 flex">
-        {activeTab ? (
-          <>
-            {/* Editor Panel */}
-            <div
-              className="relative h-full overflow-hidden"
-              style={{
-                width:
-                  !isMarkdown || previewMode === 'off'
-                    ? '100%'
-                    : previewMode === 'split'
-                      ? `${100 - previewWidth}%`
-                      : 0,
-              }}
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!resizingRef.current || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const newPreviewWidth =
+          ((rect.right - moveEvent.clientX) / rect.width) * 100;
+        // Clamp between 20% and 80%
+        setPreviewWidth(Math.min(80, Math.max(20, newPreviewWidth)));
+      };
+
+      const handleMouseUp = () => {
+        resizingRef.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    }, []);
+
+    // Sync scroll from preview to editor
+    const handlePreviewScroll = useCallback(
+      (e: React.UIEvent<HTMLDivElement>) => {
+        if (!editorRef.current || isSyncingScrollRef.current) return;
+        const target = e.currentTarget;
+        const scrollTop = target.scrollTop;
+        const maxScroll = target.scrollHeight - target.clientHeight;
+        if (maxScroll <= 0) return;
+
+        const scrollRatio = scrollTop / maxScroll;
+        const editor = editorRef.current;
+        const editorScrollHeight = editor.getScrollHeight();
+        const editorClientHeight = editor.getLayoutInfo().height;
+        const editorMaxScroll = editorScrollHeight - editorClientHeight;
+
+        isSyncingScrollRef.current = true;
+        editor.setScrollTop(scrollRatio * editorMaxScroll);
+        requestAnimationFrame(() => {
+          isSyncingScrollRef.current = false;
+        });
+      },
+      [],
+    );
+
+    // Cycle through preview modes: off -> split -> fullscreen -> off
+    const cyclePreviewMode = useCallback(() => {
+      setPreviewMode((current) => {
+        if (current === "off") return "split";
+        if (current === "split") return "fullscreen";
+        return "off";
+      });
+    }, []);
+
+    return (
+      <div className="flex h-full flex-col">
+        {/* Tabs */}
+        <div className="flex items-center">
+          {isFileTreeCollapsed && onToggleFileTree && (
+            <button
+              type="button"
+              onClick={onToggleFileTree}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              title={t("Show file tree")}
             >
-              {isImage ? (
-                <ImagePreview path={activeTab.path} sessionId={sessionId ?? undefined} />
-              ) : isPdf ? (
-                <PdfPreview path={activeTab.path} sessionId={sessionId ?? undefined} />
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
+          <div className="min-w-0 flex-1">
+            <EditorTabs
+              tabs={tabs}
+              activeTabPath={activeTabPath}
+              onTabClick={handleTabClick}
+              onTabClose={handleTabClose}
+              onClose={onTabClose}
+              onCloseOthers={onCloseOthers}
+              onCloseAll={onCloseAll}
+              onCloseLeft={onCloseLeft}
+              onCloseRight={onCloseRight}
+              onTabReorder={onTabReorder}
+            />
+          </div>
+          {/* Markdown Preview Toggle */}
+          {isMarkdown && (
+            <button
+              type="button"
+              onClick={cyclePreviewMode}
+              className="flex h-10 w-10 shrink-0 items-center justify-center border-b text-muted-foreground hover:text-foreground transition-colors"
+              title={
+                previewMode === "off"
+                  ? t("Show split preview")
+                  : previewMode === "split"
+                    ? t("Switch to fullscreen preview")
+                    : t("Close preview")
+              }
+            >
+              {previewMode === "off" ? (
+                <EyeOff className="h-4 w-4" />
+              ) : previewMode === "split" ? (
+                <Eye className="h-4 w-4" />
               ) : (
-                <Editor
-                  key={activeTab.path}
-                  width="100%"
-                  height="100%"
-                  path={activeTab.path}
-                  value={activeTab.content}
-                  theme={monacoTheme}
-                  onChange={handleEditorChange}
-                  onMount={handleEditorMount}
-                  options={{
-                    // Display
-                    minimap: {
-                      enabled:
-                        isMarkdown && previewMode !== 'off' ? false : editorSettings.minimapEnabled,
-                      side: 'right',
-                      showSlider: 'mouseover',
-                      renderCharacters: false,
-                      maxColumn: 80,
-                    },
-                    lineNumbers: editorSettings.lineNumbers,
-                    wordWrap: editorSettings.wordWrap,
-                    renderWhitespace: editorSettings.renderWhitespace,
-                    renderLineHighlight: editorSettings.renderLineHighlight,
-                    folding: editorSettings.folding,
-                    links: editorSettings.links,
-                    smoothScrolling: editorSettings.smoothScrolling,
-                    // Font
-                    fontSize: editorSettings.fontSize,
-                    fontFamily: editorSettings.fontFamily,
-                    fontLigatures: editorSettings.fontLigatures,
-                    lineHeight: editorSettings.lineHeight,
-                    // Indentation
-                    tabSize: editorSettings.tabSize,
-                    insertSpaces: editorSettings.insertSpaces,
-                    // Cursor
-                    cursorStyle: editorSettings.cursorStyle,
-                    cursorBlinking: editorSettings.cursorBlinking,
-                    // Brackets
-                    bracketPairColorization: { enabled: editorSettings.bracketPairColorization },
-                    matchBrackets: editorSettings.matchBrackets,
-                    guides: {
-                      bracketPairs: editorSettings.bracketPairGuides,
-                      indentation: editorSettings.indentationGuides,
-                    },
-                    // Editing
-                    autoClosingBrackets: editorSettings.autoClosingBrackets,
-                    autoClosingQuotes: editorSettings.autoClosingQuotes,
-                    // Fixed options
-                    padding: {
-                      top: editorSettings.paddingTop,
-                      bottom: editorSettings.paddingBottom,
-                    },
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    fixedOverflowWidgets: true,
-                  }}
-                />
+                <Maximize2 className="h-4 w-4" />
               )}
-            </div>
+            </button>
+          )}
+        </div>
 
-            {/* Resize Divider (only for split mode) */}
-            {isMarkdown && previewMode === 'split' && (
-              <div
-                className="group relative w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 transition-colors"
-                onMouseDown={handleResizeMouseDown}
-              >
-                <div className="absolute inset-y-0 -left-1 -right-1" />
-              </div>
-            )}
-
-            {/* Preview Panel (for split and fullscreen modes) */}
-            {isMarkdown && previewMode !== 'off' && (
-              <div
-                ref={previewRef}
-                className="min-h-0 overflow-auto border-l bg-background"
-                style={{ width: previewMode === 'split' ? `${previewWidth}%` : '100%' }}
-                onScroll={handlePreviewScroll}
-              >
-                <MarkdownPreview
-                  content={activeTab.content}
-                  filePath={activeTab.path}
-                  rootPath={rootPath}
-                />
-              </div>
-            )}
-          </>
-        ) : (
-          <Empty className="flex-1">
-            <EmptyMedia variant="icon">
-              <FileCode className="h-4.5 w-4.5" />
-            </EmptyMedia>
-            <EmptyHeader>
-              <EmptyTitle>{t('Start editing')}</EmptyTitle>
-              <EmptyDescription>
-                {t('Select a file from the file tree to begin editing')}
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+        {/* Breadcrumb */}
+        {activeTab && breadcrumbSegments.length > 0 && (
+          <div className="shrink-0 border-b px-3 py-1">
+            <Breadcrumb>
+              <BreadcrumbList className="flex-nowrap text-xs">
+                {breadcrumbSegments.map((segment, index) => (
+                  <span key={segment.path} className="contents">
+                    {index > 0 && (
+                      <BreadcrumbSeparator className="[&>svg]:size-3" />
+                    )}
+                    <BreadcrumbItem className="min-w-0">
+                      {segment.isLast ? (
+                        <BreadcrumbPage className="truncate">
+                          {segment.name}
+                        </BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink
+                          render={<button type="button" />}
+                          className="truncate"
+                          onClick={() => onBreadcrumbClick?.(segment.path)}
+                        >
+                          {segment.name}
+                        </BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                  </span>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
         )}
+
+        {/* Editor */}
+        <div
+          ref={containerRef}
+          className="relative min-h-0 min-w-0 flex-1 flex"
+        >
+          {activeTab ? (
+            <>
+              {/* Editor Panel */}
+              <div
+                className="relative h-full overflow-hidden"
+                style={{
+                  width:
+                    !isMarkdown || previewMode === "off"
+                      ? "100%"
+                      : previewMode === "split"
+                        ? `${100 - previewWidth}%`
+                        : 0,
+                }}
+              >
+                {isImage ? (
+                  <ImagePreview
+                    path={activeTab.path}
+                    sessionId={sessionId ?? undefined}
+                  />
+                ) : isPdf ? (
+                  <PdfPreview
+                    path={activeTab.path}
+                    sessionId={sessionId ?? undefined}
+                  />
+                ) : (
+                  <Editor
+                    key={activeTab.path}
+                    width="100%"
+                    height="100%"
+                    path={activeTab.path}
+                    value={activeTab.content}
+                    theme={monacoTheme}
+                    onChange={handleEditorChange}
+                    onMount={handleEditorMount}
+                    options={{
+                      // Display
+                      minimap: {
+                        enabled:
+                          isMarkdown && previewMode !== "off"
+                            ? false
+                            : editorSettings.minimapEnabled,
+                        side: "right",
+                        showSlider: "mouseover",
+                        renderCharacters: false,
+                        maxColumn: 80,
+                      },
+                      lineNumbers: editorSettings.lineNumbers,
+                      wordWrap: editorSettings.wordWrap,
+                      renderWhitespace: editorSettings.renderWhitespace,
+                      renderLineHighlight: editorSettings.renderLineHighlight,
+                      folding: editorSettings.folding,
+                      links: editorSettings.links,
+                      smoothScrolling: editorSettings.smoothScrolling,
+                      // Font
+                      fontSize: editorSettings.fontSize,
+                      fontFamily: editorSettings.fontFamily,
+                      fontLigatures: editorSettings.fontLigatures,
+                      lineHeight: editorSettings.lineHeight,
+                      // Indentation
+                      tabSize: editorSettings.tabSize,
+                      insertSpaces: editorSettings.insertSpaces,
+                      // Cursor
+                      cursorStyle: editorSettings.cursorStyle,
+                      cursorBlinking: editorSettings.cursorBlinking,
+                      // Brackets
+                      bracketPairColorization: {
+                        enabled: editorSettings.bracketPairColorization,
+                      },
+                      matchBrackets: editorSettings.matchBrackets,
+                      guides: {
+                        bracketPairs: editorSettings.bracketPairGuides,
+                        indentation: editorSettings.indentationGuides,
+                      },
+                      // Editing
+                      autoClosingBrackets: editorSettings.autoClosingBrackets,
+                      autoClosingQuotes: editorSettings.autoClosingQuotes,
+                      // Fixed options
+                      padding: {
+                        top: editorSettings.paddingTop,
+                        bottom: editorSettings.paddingBottom,
+                      },
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      fixedOverflowWidgets: true,
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Resize Divider (only for split mode) */}
+              {isMarkdown && previewMode === "split" && (
+                <div
+                  className="group relative w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/50 transition-colors"
+                  onMouseDown={handleResizeMouseDown}
+                >
+                  <div className="absolute inset-y-0 -left-1 -right-1" />
+                </div>
+              )}
+
+              {/* Preview Panel (for split and fullscreen modes) */}
+              {isMarkdown && previewMode !== "off" && (
+                <div
+                  ref={previewRef}
+                  className="min-h-0 overflow-auto border-l bg-background"
+                  style={{
+                    width:
+                      previewMode === "split" ? `${previewWidth}%` : "100%",
+                  }}
+                  onScroll={handlePreviewScroll}
+                >
+                  <MarkdownPreview
+                    content={activeTab.content}
+                    filePath={activeTab.path}
+                    rootPath={rootPath}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <Empty className="flex-1">
+              <EmptyMedia variant="icon">
+                <FileCode className="h-4.5 w-4.5" />
+              </EmptyMedia>
+              <EmptyHeader>
+                <EmptyTitle>{t("Start editing")}</EmptyTitle>
+                <EmptyDescription>
+                  {t("Select a file from the file tree to begin editing")}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);

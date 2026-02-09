@@ -1,14 +1,14 @@
-import { motion } from 'framer-motion';
-import { X } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Menu, MenuItem, MenuPopup, MenuSeparator } from '@/components/ui/menu';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { toastManager } from '@/components/ui/toast';
-import { useI18n } from '@/i18n';
-import { springFast } from '@/lib/motion';
-import { cn } from '@/lib/utils';
-import type { EditorTab } from '@/stores/editor';
-import { getFileIcon, getFileIconColor } from './fileIcons';
+import { motion } from "framer-motion";
+import { X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Menu, MenuItem, MenuPopup, MenuSeparator } from "@/components/ui/menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { toastManager } from "@/components/ui/toast";
+import { useI18n } from "@/i18n";
+import { springFast } from "@/lib/motion";
+import { cn } from "@/lib/utils";
+import type { EditorTab } from "@/stores/editor";
+import { getFileIcon, getFileIconColor } from "./fileIcons";
 
 interface EditorTabsProps {
   tabs: EditorTab[];
@@ -43,13 +43,13 @@ export function EditorTabs({
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
     draggedIndexRef.current = index;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(index));
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = "move";
   }, []);
 
   const handleDrop = useCallback(
@@ -61,7 +61,7 @@ export function EditorTabs({
       }
       draggedIndexRef.current = null;
     },
-    [onTabReorder]
+    [onTabReorder],
   );
 
   const menuTabIndex = useMemo(() => {
@@ -72,24 +72,25 @@ export function EditorTabs({
   const canCloseOthers = !!onCloseOthers && !!menuTabPath && tabs.length > 1;
   const canCloseAll = !!onCloseAll && tabs.length > 0;
   const canCloseLeft = !!onCloseLeft && menuTabIndex > 0;
-  const canCloseRight = !!onCloseRight && menuTabIndex >= 0 && menuTabIndex < tabs.length - 1;
+  const canCloseRight =
+    !!onCloseRight && menuTabIndex >= 0 && menuTabIndex < tabs.length - 1;
 
   const handleCopyPath = useCallback(async () => {
     if (!menuTabPath) return;
     try {
       await navigator.clipboard.writeText(menuTabPath);
       toastManager.add({
-        title: t('Copied'),
-        description: t('Path copied to clipboard'),
-        type: 'success',
+        title: t("Copied"),
+        description: t("Path copied to clipboard"),
+        type: "success",
         timeout: 2000,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toastManager.add({
-        title: t('Copy failed'),
-        description: message || t('Failed to copy content'),
-        type: 'error',
+        title: t("Copy failed"),
+        description: message || t("Failed to copy content"),
+        type: "error",
         timeout: 3000,
       });
     }
@@ -101,7 +102,7 @@ export function EditorTabs({
   }
 
   return (
-    <div className="h-10 shrink-0 overflow-hidden border-b bg-muted/30">
+    <div className="h-10 shrink-0 overflow-hidden border-b">
       <ScrollArea className="h-full">
         <div className="flex h-9 w-max pb-1">
           {tabs.map((tab, index) => {
@@ -124,14 +125,14 @@ export function EditorTabs({
                   setMenuPosition({ x: e.clientX, y: e.clientY });
                   setMenuOpen(true);
                 }}
-                onKeyDown={(e) => e.key === 'Enter' && onTabClick(tab.path)}
+                onKeyDown={(e) => e.key === "Enter" && onTabClick(tab.path)}
                 role="button"
                 tabIndex={0}
                 className={cn(
-                  'group relative flex h-9 min-w-[120px] max-w-[180px] cursor-pointer select-none items-center gap-2 border-r px-3 text-sm transition-colors',
+                  "group relative flex h-9 min-w-[120px] max-w-[180px] cursor-pointer select-none items-center gap-2 border-r px-3 text-sm transition-colors",
                   isActive
-                    ? 'bg-background text-foreground'
-                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    ? "text-foreground"
+                    : "bg-muted/30 text-muted-foreground hover:bg-muted/50",
                 )}
               >
                 {/* Active indicator - 使用 layoutId 实现平滑滑动 */}
@@ -144,7 +145,7 @@ export function EditorTabs({
                 )}
 
                 {/* Icon */}
-                <Icon className={cn('h-4 w-4 shrink-0', iconColor)} />
+                <Icon className={cn("h-4 w-4 shrink-0", iconColor)} />
 
                 {/* Title */}
                 <span className="flex-1 truncate">
@@ -157,9 +158,9 @@ export function EditorTabs({
                   type="button"
                   onClick={(e) => onTabClose(tab.path, e)}
                   className={cn(
-                    'shrink-0 rounded p-0.5 text-primary opacity-0 transition-opacity hover:bg-primary/20',
-                    'group-hover:opacity-100',
-                    isActive && 'opacity-60'
+                    "shrink-0 rounded p-0.5 text-primary opacity-0 transition-opacity hover:bg-primary/20",
+                    "group-hover:opacity-100",
+                    isActive && "opacity-60",
                   )}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -173,7 +174,7 @@ export function EditorTabs({
       <Menu open={menuOpen} onOpenChange={setMenuOpen}>
         <MenuPopup
           style={{
-            position: 'fixed',
+            position: "fixed",
             left: menuPosition.x,
             top: menuPosition.y,
           }}
@@ -186,7 +187,7 @@ export function EditorTabs({
               setMenuOpen(false);
             }}
           >
-            {t('Close Tab')}
+            {t("Close Tab")}
           </MenuItem>
           <MenuItem
             disabled={!canCloseOthers}
@@ -196,7 +197,7 @@ export function EditorTabs({
               setMenuOpen(false);
             }}
           >
-            {t('Close Others')}
+            {t("Close Others")}
           </MenuItem>
           <MenuSeparator />
           <MenuItem
@@ -207,7 +208,7 @@ export function EditorTabs({
               setMenuOpen(false);
             }}
           >
-            {t('Close Tabs to the Left')}
+            {t("Close Tabs to the Left")}
           </MenuItem>
           <MenuItem
             disabled={!canCloseRight}
@@ -217,7 +218,7 @@ export function EditorTabs({
               setMenuOpen(false);
             }}
           >
-            {t('Close Tabs to the Right')}
+            {t("Close Tabs to the Right")}
           </MenuItem>
           <MenuSeparator />
           <MenuItem
@@ -228,11 +229,11 @@ export function EditorTabs({
               setMenuOpen(false);
             }}
           >
-            {t('Close All Tabs')}
+            {t("Close All Tabs")}
           </MenuItem>
           <MenuSeparator />
           <MenuItem disabled={!menuTabPath} onClick={handleCopyPath}>
-            {t('Copy Path')}
+            {t("Copy Path")}
           </MenuItem>
         </MenuPopup>
       </Menu>

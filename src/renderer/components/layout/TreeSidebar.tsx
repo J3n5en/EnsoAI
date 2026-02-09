@@ -3,8 +3,8 @@ import type {
   GitWorktree,
   TempWorkspaceItem,
   WorktreeCreateOptions,
-} from '@shared/types';
-import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
+} from "@shared/types";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import {
   ChevronRight,
   Clock,
@@ -25,8 +25,8 @@ import {
   Terminal,
   Trash2,
   X,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ALL_GROUP_ID,
   type Repository,
@@ -34,7 +34,7 @@ import {
   type TabId,
   TEMP_REPO_ID,
   UNGROUPED_SECTION_ID,
-} from '@/App/constants';
+} from "@/App/constants";
 import {
   DEFAULT_REPOSITORY_SETTINGS,
   getRepositorySettings,
@@ -44,18 +44,18 @@ import {
   type RepositorySettings,
   saveGroupCollapsedState,
   saveRepositorySettings,
-} from '@/App/storage';
-import { GitSyncButton } from '@/components/git/GitSyncButton';
+} from "@/App/storage";
+import { GitSyncButton } from "@/components/git/GitSyncButton";
 import {
   CreateGroupDialog,
   GroupEditDialog,
   GroupSelector,
   MoveToGroupSubmenu,
-} from '@/components/group';
-import { RepositoryManagerDialog } from '@/components/repository/RepositoryManagerDialog';
-import { RepositorySettingsDialog } from '@/components/repository/RepositorySettingsDialog';
-import { TempWorkspaceContextMenu } from '@/components/temp-workspace/TempWorkspaceContextMenu';
-import { ActivityIndicator } from '@/components/ui/activity-indicator';
+} from "@/components/group";
+import { RepositoryManagerDialog } from "@/components/repository/RepositoryManagerDialog";
+import { RepositorySettingsDialog } from "@/components/repository/RepositorySettingsDialog";
+import { TempWorkspaceContextMenu } from "@/components/temp-workspace/TempWorkspaceContextMenu";
+import { ActivityIndicator } from "@/components/ui/activity-indicator";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -64,29 +64,33 @@ import {
   AlertDialogHeader,
   AlertDialogPopup,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
-import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/ui/glow-card';
-import { RepoItemWithGlow } from '@/components/ui/glow-wrappers';
-import { toastManager } from '@/components/ui/toast';
-import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
-import { useGitSync } from '@/hooks/useGitSync';
-import { useWorktreeOutputState } from '@/hooks/useOutputState';
-import { useShouldPoll } from '@/hooks/useWindowFocus';
-import { useWorktreeListMultiple } from '@/hooks/useWorktree';
-import { useI18n } from '@/i18n';
-import { heightVariants, springFast, springStandard } from '@/lib/motion';
-import { cn } from '@/lib/utils';
-import { useSettingsStore } from '@/stores/settings';
-import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
-import { RunningProjectsPopover } from './RunningProjectsPopover';
+} from "@/components/ui/empty";
+import {
+  GlowBorder,
+  type GlowState,
+  useGlowEffectEnabled,
+} from "@/components/ui/glow-card";
+import { RepoItemWithGlow } from "@/components/ui/glow-wrappers";
+import { toastManager } from "@/components/ui/toast";
+import { CreateWorktreeDialog } from "@/components/worktree/CreateWorktreeDialog";
+import { useGitSync } from "@/hooks/useGitSync";
+import { useWorktreeOutputState } from "@/hooks/useOutputState";
+import { useShouldPoll } from "@/hooks/useWindowFocus";
+import { useWorktreeListMultiple } from "@/hooks/useWorktree";
+import { useI18n } from "@/i18n";
+import { heightVariants, springFast, springStandard } from "@/lib/motion";
+import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/stores/settings";
+import { useWorktreeActivityStore } from "@/stores/worktreeActivity";
+import { RunningProjectsPopover } from "./RunningProjectsPopover";
 
 interface TreeSidebarProps {
   repositories: Repository[];
@@ -104,7 +108,7 @@ interface TreeSidebarProps {
   onCreateWorktree: (options: WorktreeCreateOptions) => Promise<void>;
   onRemoveWorktree: (
     worktree: GitWorktree,
-    options?: { deleteBranch?: boolean; force?: boolean }
+    options?: { deleteBranch?: boolean; force?: boolean },
   ) => void;
   onMergeWorktree?: (worktree: GitWorktree) => void;
   onReorderRepositories?: (fromIndex: number, toIndex: number) => void;
@@ -119,8 +123,17 @@ interface TreeSidebarProps {
   groups: RepositoryGroup[];
   activeGroupId: string;
   onSwitchGroup: (groupId: string) => void;
-  onCreateGroup: (name: string, emoji: string, color: string) => RepositoryGroup;
-  onUpdateGroup: (groupId: string, name: string, emoji: string, color: string) => void;
+  onCreateGroup: (
+    name: string,
+    emoji: string,
+    color: string,
+  ) => RepositoryGroup;
+  onUpdateGroup: (
+    groupId: string,
+    name: string,
+    emoji: string,
+    color: string,
+  ) => void;
   onDeleteGroup: (groupId: string) => void;
   onMoveToGroup?: (repoPath: string, groupId: string | null) => void;
   onSwitchTab?: (tab: TabId) => void;
@@ -174,7 +187,7 @@ export function TreeSidebar({
   onSwitchWorktreeByPath,
   temporaryWorkspaceEnabled = false,
   tempWorkspaces = [],
-  tempBasePath = '',
+  tempBasePath = "",
   onSelectTempWorkspace,
   onCreateTempWorkspace,
   onRequestTempRename,
@@ -185,16 +198,16 @@ export function TreeSidebar({
   const { t, tNode } = useI18n();
   const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const hideGroups = useSettingsStore((s) => s.hideGroups);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [tempExpanded, setTempExpanded] = useState(true);
   const [expandedRepoList, setExpandedRepoList] = useState<string[]>([]);
 
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [editGroupDialogOpen, setEditGroupDialogOpen] = useState(false);
 
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
-    getStoredGroupCollapsedState()
-  );
+  const [collapsedGroups, setCollapsedGroups] = useState<
+    Record<string, boolean>
+  >(() => getStoredGroupCollapsedState());
 
   const toggleGroupCollapsed = useCallback((groupId: string) => {
     setCollapsedGroups((prev) => {
@@ -208,17 +221,22 @@ export function TreeSidebar({
   const repositoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const group of groups) {
-      counts[group.id] = repositories.filter((r) => r.groupId === group.id).length;
+      counts[group.id] = repositories.filter(
+        (r) => r.groupId === group.id,
+      ).length;
     }
     return counts;
   }, [groups, repositories]);
   const sortedTempWorkspaces = useMemo(
     () => [...tempWorkspaces].sort((a, b) => b.createdAt - a.createdAt),
-    [tempWorkspaces]
+    [tempWorkspaces],
   );
 
   // Convert list to set for fast lookups
-  const expandedRepos = useMemo(() => new Set(expandedRepoList), [expandedRepoList]);
+  const expandedRepos = useMemo(
+    () => new Set(expandedRepoList),
+    [expandedRepoList],
+  );
 
   // Fetch worktrees for expanded repos only
   const {
@@ -236,15 +254,16 @@ export function TreeSidebar({
 
   // Repository settings dialog
   const [repoSettingsOpen, setRepoSettingsOpen] = useState(false);
-  const [repoSettingsTarget, setRepoSettingsTarget] = useState<Repository | null>(null);
+  const [repoSettingsTarget, setRepoSettingsTarget] =
+    useState<Repository | null>(null);
 
   // Repository manager dialog
   const [repoManagerOpen, setRepoManagerOpen] = useState(false);
 
   // Cached repository settings to avoid repeated localStorage reads
-  const [repoSettingsMap, setRepoSettingsMap] = useState<Record<string, RepositorySettings>>(
-    getStoredRepositorySettings
-  );
+  const [repoSettingsMap, setRepoSettingsMap] = useState<
+    Record<string, RepositorySettings>
+  >(getStoredRepositorySettings);
   const refreshRepoSettings = useCallback(() => {
     setRepoSettingsMap(getStoredRepositorySettings());
   }, []);
@@ -253,7 +272,8 @@ export function TreeSidebar({
   }, [refreshRepoSettings]);
 
   // Create worktree dialog (triggered from context menu)
-  const [createWorktreeDialogOpen, setCreateWorktreeDialogOpen] = useState(false);
+  const [createWorktreeDialogOpen, setCreateWorktreeDialogOpen] =
+    useState(false);
   const [pendingCreateWorktree, setPendingCreateWorktree] = useState(false);
   const [waitingForBranchRefresh, setWaitingForBranchRefresh] = useState(false);
 
@@ -266,7 +286,13 @@ export function TreeSidebar({
       refetchExpandedWorktrees();
       setWaitingForBranchRefresh(true);
     }
-  }, [selectedRepo, pendingCreateWorktree, repoMenuTarget, onRefresh, refetchExpandedWorktrees]);
+  }, [
+    selectedRepo,
+    pendingCreateWorktree,
+    repoMenuTarget,
+    onRefresh,
+    refetchExpandedWorktrees,
+  ]);
 
   // Wait for branches to update before opening dialog
   useEffect(() => {
@@ -281,7 +307,9 @@ export function TreeSidebar({
   }, [branches, waitingForBranchRefresh]);
 
   // Worktree delete dialog
-  const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(null);
+  const [worktreeToDelete, setWorktreeToDelete] = useState<GitWorktree | null>(
+    null,
+  );
   const [deleteBranch, setDeleteBranch] = useState(false);
   const [forceDelete, setForceDelete] = useState(false);
 
@@ -289,16 +317,22 @@ export function TreeSidebar({
   const draggedRepoIndexRef = useRef<number | null>(null);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const dragGroupRef = useRef<string | null>(null);
-  const [dropRepoTargetIndex, setDropRepoTargetIndex] = useState<number | null>(null);
+  const [dropRepoTargetIndex, setDropRepoTargetIndex] = useState<number | null>(
+    null,
+  );
 
   // Drag reorder for worktrees
   const draggedWorktreeIndexRef = useRef<number | null>(null);
-  const [dropWorktreeTargetIndex, setDropWorktreeTargetIndex] = useState<number | null>(null);
+  const [dropWorktreeTargetIndex, setDropWorktreeTargetIndex] = useState<
+    number | null
+  >(null);
 
   // Get the main worktree path for git operations (from selected repo's worktrees)
-  const selectedRepoWorktrees = selectedRepo ? worktreesMap[selectedRepo] || [] : [];
+  const selectedRepoWorktrees = selectedRepo
+    ? worktreesMap[selectedRepo] || []
+    : [];
   const mainWorktree = selectedRepoWorktrees.find((wt) => wt.isMainWorktree);
-  const workdir = mainWorktree?.path || selectedRepo || '';
+  const workdir = mainWorktree?.path || selectedRepo || "";
 
   const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
   const activities = useWorktreeActivityStore((s) => s.activities);
@@ -311,7 +345,9 @@ export function TreeSidebar({
     const activePaths = allWorktrees
       .filter((wt) => {
         const activity = activities[wt.path];
-        return activity && (activity.agentCount > 0 || activity.terminalCount > 0);
+        return (
+          activity && (activity.agentCount > 0 || activity.terminalCount > 0)
+        );
       })
       .map((wt) => wt.path);
 
@@ -357,9 +393,11 @@ export function TreeSidebar({
       if (!selectedRepo) {
         toggleSelectedRepoExpandedRef.current = null;
       } else if (selectedRepo === TEMP_REPO_ID) {
-        toggleSelectedRepoExpandedRef.current = () => setTempExpanded((prev) => !prev);
+        toggleSelectedRepoExpandedRef.current = () =>
+          setTempExpanded((prev) => !prev);
       } else {
-        toggleSelectedRepoExpandedRef.current = () => toggleRepoExpanded(selectedRepo);
+        toggleSelectedRepoExpandedRef.current = () =>
+          toggleRepoExpanded(selectedRepo);
       }
     }
     return () => {
@@ -370,15 +408,16 @@ export function TreeSidebar({
   }, [toggleSelectedRepoExpandedRef, selectedRepo, toggleRepoExpanded]);
 
   // Repository drag handlers
-  const handleRepoDragStart = useCallback((e: React.DragEvent, index: number, repo: Repository) => {
-    draggedRepoIndexRef.current = index;
-    dragGroupRef.current = repo.groupId ?? UNGROUPED_SECTION_ID;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', `repo:${index}`);
+  const handleRepoDragStart = useCallback(
+    (e: React.DragEvent, index: number, repo: Repository) => {
+      draggedRepoIndexRef.current = index;
+      dragGroupRef.current = repo.groupId ?? UNGROUPED_SECTION_ID;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", `repo:${index}`);
 
-    const dragImage = document.createElement('div');
-    dragImage.textContent = repo.name;
-    dragImage.style.cssText = `
+      const dragImage = document.createElement("div");
+      dragImage.textContent = repo.name;
+      dragImage.style.cssText = `
       position: fixed;
       top: -9999px;
       left: -9999px;
@@ -391,10 +430,16 @@ export function TreeSidebar({
       white-space: nowrap;
       pointer-events: none;
     `;
-    document.body.appendChild(dragImage);
-    dragImageRef.current = dragImage;
-    e.dataTransfer.setDragImage(dragImage, dragImage.offsetWidth / 2, dragImage.offsetHeight / 2);
-  }, []);
+      document.body.appendChild(dragImage);
+      dragImageRef.current = dragImage;
+      e.dataTransfer.setDragImage(
+        dragImage,
+        dragImage.offsetWidth / 2,
+        dragImage.offsetHeight / 2,
+      );
+    },
+    [],
+  );
 
   const handleRepoDragEnd = useCallback(() => {
     if (dragImageRef.current) {
@@ -408,19 +453,23 @@ export function TreeSidebar({
 
   const handleRepoDragOver = useCallback(
     (e: React.DragEvent, originalIndex: number, targetGroupId?: string) => {
-      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      const canDropInGroup =
+        !targetGroupId || dragGroupRef.current === targetGroupId;
       if (!canDropInGroup) {
         setDropRepoTargetIndex(null);
         return;
       }
 
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (draggedRepoIndexRef.current !== null && draggedRepoIndexRef.current !== originalIndex) {
+      e.dataTransfer.dropEffect = "move";
+      if (
+        draggedRepoIndexRef.current !== null &&
+        draggedRepoIndexRef.current !== originalIndex
+      ) {
         setDropRepoTargetIndex(originalIndex);
       }
     },
-    []
+    [],
   );
 
   const handleRepoDragLeave = useCallback(() => {
@@ -429,7 +478,8 @@ export function TreeSidebar({
 
   const handleRepoDrop = useCallback(
     (e: React.DragEvent, toIndex: number, targetGroupId?: string) => {
-      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      const canDropInGroup =
+        !targetGroupId || dragGroupRef.current === targetGroupId;
       if (!canDropInGroup) {
         setDropRepoTargetIndex(null);
         return;
@@ -437,23 +487,28 @@ export function TreeSidebar({
 
       e.preventDefault();
       const fromIndex = draggedRepoIndexRef.current;
-      if (fromIndex !== null && fromIndex !== toIndex && onReorderRepositories) {
+      if (
+        fromIndex !== null &&
+        fromIndex !== toIndex &&
+        onReorderRepositories
+      ) {
         onReorderRepositories(fromIndex, toIndex);
       }
       setDropRepoTargetIndex(null);
     },
-    [onReorderRepositories]
+    [onReorderRepositories],
   );
 
   // Worktree drag handlers
   const handleWorktreeDragStart = useCallback(
     (e: React.DragEvent, index: number, worktree: GitWorktree) => {
       draggedWorktreeIndexRef.current = index;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', `worktree:${index}`);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", `worktree:${index}`);
 
-      const dragImage = document.createElement('div');
-      dragImage.textContent = worktree.branch || worktree.path.split(/[\\/]/).pop() || '';
+      const dragImage = document.createElement("div");
+      dragImage.textContent =
+        worktree.branch || worktree.path.split(/[\\/]/).pop() || "";
       dragImage.style.cssText = `
         position: fixed;
         top: -9999px;
@@ -469,9 +524,13 @@ export function TreeSidebar({
       `;
       document.body.appendChild(dragImage);
       dragImageRef.current = dragImage;
-      e.dataTransfer.setDragImage(dragImage, dragImage.offsetWidth / 2, dragImage.offsetHeight / 2);
+      e.dataTransfer.setDragImage(
+        dragImage,
+        dragImage.offsetWidth / 2,
+        dragImage.offsetHeight / 2,
+      );
     },
-    []
+    [],
   );
 
   const handleWorktreeDragEnd = useCallback(() => {
@@ -483,13 +542,19 @@ export function TreeSidebar({
     setDropWorktreeTargetIndex(null);
   }, []);
 
-  const handleWorktreeDragOver = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (draggedWorktreeIndexRef.current !== null && draggedWorktreeIndexRef.current !== index) {
-      setDropWorktreeTargetIndex(index);
-    }
-  }, []);
+  const handleWorktreeDragOver = useCallback(
+    (e: React.DragEvent, index: number) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (
+        draggedWorktreeIndexRef.current !== null &&
+        draggedWorktreeIndexRef.current !== index
+      ) {
+        setDropWorktreeTargetIndex(index);
+      }
+    },
+    [],
+  );
 
   const handleWorktreeDragLeave = useCallback(() => {
     setDropWorktreeTargetIndex(null);
@@ -504,7 +569,7 @@ export function TreeSidebar({
       }
       setDropWorktreeTargetIndex(null);
     },
-    [onReorderWorktrees]
+    [onReorderWorktrees],
   );
 
   // Repository context menu
@@ -529,14 +594,17 @@ export function TreeSidebar({
     setRepoToRemove(null);
   };
 
-  const showSections = activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
+  const showSections =
+    activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
 
   const filteredRepos = useMemo(() => {
     let filtered = repositories;
 
     // Filter hidden repositories using cached settings
     filtered = filtered.filter((repo) => {
-      const settings = repoSettingsMap[normalizePath(repo.path)] || DEFAULT_REPOSITORY_SETTINGS;
+      const settings =
+        repoSettingsMap[normalizePath(repo.path)] ||
+        DEFAULT_REPOSITORY_SETTINGS;
       return !settings.hidden;
     });
 
@@ -550,12 +618,17 @@ export function TreeSidebar({
         if (repo.name.toLowerCase().includes(query)) return true;
         const repoWorktrees = worktreesMap[repo.path] || [];
         return repoWorktrees.some(
-          (wt) => wt.branch?.toLowerCase().includes(query) || wt.path.toLowerCase().includes(query)
+          (wt) =>
+            wt.branch?.toLowerCase().includes(query) ||
+            wt.path.toLowerCase().includes(query),
         );
       });
     }
 
-    return filtered.map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
+    return filtered.map((repo) => ({
+      repo,
+      originalIndex: repositories.indexOf(repo),
+    }));
   }, [repositories, worktreesMap, searchQuery, activeGroupId, repoSettingsMap]);
 
   const groupedSections = useMemo(() => {
@@ -563,7 +636,9 @@ export function TreeSidebar({
 
     // Use the same hidden filter as filteredRepos
     const visibleRepos = repositories.filter((repo) => {
-      const settings = repoSettingsMap[normalizePath(repo.path)] || DEFAULT_REPOSITORY_SETTINGS;
+      const settings =
+        repoSettingsMap[normalizePath(repo.path)] ||
+        DEFAULT_REPOSITORY_SETTINGS;
       return !settings.hidden;
     });
 
@@ -597,9 +672,9 @@ export function TreeSidebar({
     if (ungroupedRepos.length > 0) {
       sections.push({
         groupId: UNGROUPED_SECTION_ID,
-        name: t('Ungrouped'),
-        emoji: '',
-        color: '',
+        name: t("Ungrouped"),
+        emoji: "",
+        color: "",
         repos: ungroupedRepos,
       });
     }
@@ -614,24 +689,34 @@ export function TreeSidebar({
       if (!searchQuery) return repoWorktrees;
       const query = searchQuery.toLowerCase();
       return repoWorktrees.filter(
-        (wt) => wt.branch?.toLowerCase().includes(query) || wt.path.toLowerCase().includes(query)
+        (wt) =>
+          wt.branch?.toLowerCase().includes(query) ||
+          wt.path.toLowerCase().includes(query),
       );
     },
-    [worktreesMap, searchQuery]
+    [worktreesMap, searchQuery],
   );
 
-  const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
+  const renderRepoItem = (
+    repo: Repository,
+    originalIndex: number,
+    sectionGroupId?: string,
+  ) => {
     const isSelected = selectedRepo === repo.path;
     const isExpanded = expandedRepos.has(repo.path);
     const repoWorktrees = getFilteredWorktrees(repo.path);
     const repoError = errorsMap[repo.path];
-    const repoLoading = loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
+    const repoLoading =
+      loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
     const repoWts = worktreesMap[repo.path] || [];
     const repoMainWorktree = repoWts.find((wt) => wt.isMainWorktree);
     const workdir = repoMainWorktree?.path || repo.path;
 
     return (
-      <div key={repo.path} className={cn('relative rounded-lg', isSelected && 'pb-2')}>
+      <div
+        key={repo.path}
+        className={cn("relative rounded-lg", isSelected && "pb-2")}
+      >
         {/* Sliding highlight background for selected repo */}
         {isSelected && (
           <motion.div
@@ -654,7 +739,9 @@ export function TreeSidebar({
             draggable={!searchQuery && !!onReorderRepositories}
             onDragStart={(e) => handleRepoDragStart(e, originalIndex, repo)}
             onDragEnd={handleRepoDragEnd}
-            onDragOver={(e) => handleRepoDragOver(e, originalIndex, sectionGroupId)}
+            onDragOver={(e) =>
+              handleRepoDragOver(e, originalIndex, sectionGroupId)
+            }
             onDragLeave={handleRepoDragLeave}
             onDrop={(e) => handleRepoDrop(e, originalIndex, sectionGroupId)}
             onContextMenu={(e) => handleRepoContextMenu(e, repo)}
@@ -662,15 +749,15 @@ export function TreeSidebar({
               toggleRepoExpanded(repo.path);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
+              if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 toggleRepoExpanded(repo.path);
               }
             }}
             className={cn(
-              'group relative flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer',
-              !isSelected && 'hover:bg-accent/30',
-              draggedRepoIndexRef.current === originalIndex && 'opacity-50'
+              "group relative flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer",
+              !isSelected && "hover:bg-accent/30",
+              draggedRepoIndexRef.current === originalIndex && "opacity-50",
             )}
           >
             {/* Row 1: Chevron + Icon + Name + CreateWorktree + Settings */}
@@ -678,15 +765,17 @@ export function TreeSidebar({
               <span className="shrink-0 w-5 h-5 flex items-center justify-center">
                 <ChevronRight
                   className={cn(
-                    'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
-                    isExpanded && 'rotate-90'
+                    "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                    isExpanded && "rotate-90",
                   )}
                 />
               </span>
               <FolderGit2
                 className={cn(
-                  'h-4 w-4 shrink-0',
-                  isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
+                  "h-4 w-4 shrink-0",
+                  isSelected
+                    ? "text-accent-foreground"
+                    : "text-muted-foreground",
                 )}
               />
               <span className="min-w-0 flex-1 truncate font-medium text-sm text-left">
@@ -712,7 +801,7 @@ export function TreeSidebar({
                         e.stopPropagation();
                         e.currentTarget.blur();
                       }}
-                      title={t('New Worktree')}
+                      title={t("New Worktree")}
                     >
                       <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                     </button>
@@ -729,7 +818,7 @@ export function TreeSidebar({
                     onSelectRepo(repo.path);
                     setPendingCreateWorktree(true);
                   }}
-                  title={t('New Worktree')}
+                  title={t("New Worktree")}
                 >
                   <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                 </button>
@@ -744,7 +833,7 @@ export function TreeSidebar({
                   setRepoSettingsTarget(repo);
                   setRepoSettingsOpen(true);
                 }}
-                title={t('Repository Settings')}
+                title={t("Repository Settings")}
               >
                 <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -771,14 +860,16 @@ export function TreeSidebar({
           {isExpanded && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
+              animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
               className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
             >
               {repoError ? (
                 <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
-                  <span className="text-destructive">{t('Not a Git repository')}</span>
+                  <span className="text-destructive">
+                    {t("Not a Git repository")}
+                  </span>
                   {onInitGit && isSelected && (
                     <Button
                       onClick={async () => {
@@ -790,21 +881,24 @@ export function TreeSidebar({
                       className="h-6 text-xs w-fit"
                     >
                       <GitBranch className="mr-1 h-3 w-3" />
-                      {t('Init')}
+                      {t("Init")}
                     </Button>
                   )}
                 </div>
               ) : repoLoading ? (
                 <div className="space-y-1">
                   {[0, 1].map((i) => (
-                    <div key={`skeleton-${i}`} className="h-8 animate-pulse rounded-lg bg-muted" />
+                    <div
+                      key={`skeleton-${i}`}
+                      className="h-8 animate-pulse rounded-lg bg-muted"
+                    />
                   ))}
                 </div>
               ) : repoWorktrees.length === 0 ? (
                 <div className="py-2 px-2 text-xs text-muted-foreground">
                   {searchQuery
-                    ? t('No matching worktrees')
-                    : t('No worktrees. Create one to get started.')}
+                    ? t("No matching worktrees")
+                    : t("No worktrees. Create one to get started.")}
                 </div>
               ) : (
                 repoWorktrees.map((worktree, wtIndex) => (
@@ -821,9 +915,17 @@ export function TreeSidebar({
                       onSelectWorktree(worktree);
                     }}
                     onDelete={() => setWorktreeToDelete(worktree)}
-                    onMerge={onMergeWorktree ? () => onMergeWorktree(worktree) : undefined}
-                    draggable={!searchQuery && !!onReorderWorktrees && isSelected}
-                    onDragStart={(e) => handleWorktreeDragStart(e, wtIndex, worktree)}
+                    onMerge={
+                      onMergeWorktree
+                        ? () => onMergeWorktree(worktree)
+                        : undefined
+                    }
+                    draggable={
+                      !searchQuery && !!onReorderWorktrees && isSelected
+                    }
+                    onDragStart={(e) =>
+                      handleWorktreeDragStart(e, wtIndex, worktree)
+                    }
                     onDragEnd={handleWorktreeDragEnd}
                     onDragOver={(e) => handleWorktreeDragOver(e, wtIndex)}
                     onDragLeave={handleWorktreeDragLeave}
@@ -833,8 +935,8 @@ export function TreeSidebar({
                       dropWorktreeTargetIndex === wtIndex &&
                       draggedWorktreeIndexRef.current !== null
                         ? draggedWorktreeIndexRef.current > wtIndex
-                          ? 'top'
-                          : 'bottom'
+                          ? "top"
+                          : "bottom"
                         : null
                     }
                   />
@@ -850,8 +952,8 @@ export function TreeSidebar({
   return (
     <aside
       className={cn(
-        'flex h-full w-full flex-col border-r bg-background transition-colors',
-        isFileDragOver && 'bg-primary/10'
+        "flex h-full w-full flex-col border-r bg-background transition-colors",
+        isFileDragOver && "bg-primary/10",
       )}
     >
       {/* Header */}
@@ -862,7 +964,7 @@ export function TreeSidebar({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={() => setRepoManagerOpen(true)}
-            title={t('Manage Repositories')}
+            title={t("Manage Repositories")}
           >
             <List className="h-4 w-4" />
           </button>
@@ -874,7 +976,7 @@ export function TreeSidebar({
               onRefresh();
               refetchExpandedWorktrees();
             }}
-            title={t('Refresh')}
+            title={t("Refresh")}
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -887,7 +989,7 @@ export function TreeSidebar({
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
               onClick={onCollapse}
-              title={t('Collapse')}
+              title={t("Collapse")}
             >
               <PanelLeftClose className="h-4 w-4" />
             </button>
@@ -908,11 +1010,11 @@ export function TreeSidebar({
       )}
 
       <div className="px-3 py-2">
-        <div className="flex h-8 items-center gap-2 rounded-lg border bg-background px-2">
+        <div className="flex h-8 items-center gap-2 rounded-lg border px-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
-            placeholder={t('Search')}
+            placeholder={t("Search")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
@@ -929,14 +1031,16 @@ export function TreeSidebar({
               tabIndex={0}
               onClick={() => setTempExpanded((prev) => !prev)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   setTempExpanded((prev) => !prev);
                 }
               }}
               className={cn(
-                'group relative flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer',
-                selectedRepo === TEMP_REPO_ID ? 'text-accent-foreground' : 'hover:bg-accent/30'
+                "group relative flex w-full flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors cursor-pointer",
+                selectedRepo === TEMP_REPO_ID
+                  ? "text-accent-foreground"
+                  : "hover:bg-accent/30",
               )}
             >
               {selectedRepo === TEMP_REPO_ID && (
@@ -950,14 +1054,14 @@ export function TreeSidebar({
                 <span className="shrink-0 w-5 h-5 flex items-center justify-center">
                   <ChevronRight
                     className={cn(
-                      'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
-                      tempExpanded && 'rotate-90'
+                      "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                      tempExpanded && "rotate-90",
                     )}
                   />
                 </span>
                 <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate font-medium text-sm text-left">
-                  {t('Temp Session')}
+                  {t("Temp Session")}
                 </span>
                 {onCreateTempWorkspace && (
                   <button
@@ -967,7 +1071,7 @@ export function TreeSidebar({
                       e.stopPropagation();
                       onCreateTempWorkspace();
                     }}
-                    title={t('New Temp Session')}
+                    title={t("New Temp Session")}
                   >
                     <Plus className="h-3.5 w-3.5 text-muted-foreground" />
                   </button>
@@ -984,14 +1088,14 @@ export function TreeSidebar({
               {tempExpanded && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
+                  animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
                   className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
                 >
                   {sortedTempWorkspaces.length === 0 ? (
                     <div className="py-2 px-2 text-xs text-muted-foreground">
-                      {t('No temp sessions')}
+                      {t("No temp sessions")}
                     </div>
                   ) : (
                     sortedTempWorkspaces.map((item) => (
@@ -999,7 +1103,8 @@ export function TreeSidebar({
                         key={item.id}
                         item={item}
                         isActive={
-                          selectedRepo === TEMP_REPO_ID && activeWorktree?.path === item.path
+                          selectedRepo === TEMP_REPO_ID &&
+                          activeWorktree?.path === item.path
                         }
                         onSelect={() => onSelectTempWorkspace?.(item.path)}
                         onRequestRename={() => onRequestTempRename?.(item.id)}
@@ -1019,9 +1124,11 @@ export function TreeSidebar({
               <FolderGit2 className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">{t('Add Repository')}</EmptyTitle>
+              <EmptyTitle className="text-base">
+                {t("Add Repository")}
+              </EmptyTitle>
               <EmptyDescription>
-                {t('Add a Git repository from a local folder to get started')}
+                {t("Add a Git repository from a local folder to get started")}
               </EmptyDescription>
             </EmptyHeader>
             <Button
@@ -1033,7 +1140,7 @@ export function TreeSidebar({
               className="mt-2"
             >
               <Plus className="mr-2 h-4 w-4" />
-              {t('Add Repository')}
+              {t("Add Repository")}
             </Button>
           </Empty>
         ) : filteredRepos.length === 0 ? (
@@ -1042,8 +1149,12 @@ export function TreeSidebar({
               <Search className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">{t('No matching results')}</EmptyTitle>
-              <EmptyDescription>{t('Try a different search term')}</EmptyDescription>
+              <EmptyTitle className="text-base">
+                {t("No matching results")}
+              </EmptyTitle>
+              <EmptyDescription>
+                {t("Try a different search term")}
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -1063,18 +1174,24 @@ export function TreeSidebar({
                       >
                         <ChevronRight
                           className={cn(
-                            'h-3.5 w-3.5 shrink-0 transition-transform duration-150',
-                            !isGroupCollapsed && 'rotate-90'
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                            !isGroupCollapsed && "rotate-90",
                           )}
                         />
-                        {section.emoji && <span className="shrink-0 text-sm">{section.emoji}</span>}
+                        {section.emoji && (
+                          <span className="shrink-0 text-sm">
+                            {section.emoji}
+                          </span>
+                        )}
                         {!isUngrouped && section.color && (
                           <span
                             className="h-2 w-2 shrink-0 rounded-full"
                             style={{ backgroundColor: section.color }}
                           />
                         )}
-                        <span className="min-w-0 flex-1 truncate text-left">{section.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-left">
+                          {section.name}
+                        </span>
                         <span className="shrink-0 text-[10px] text-muted-foreground/70">
                           {section.repos.length}
                         </span>
@@ -1093,7 +1210,11 @@ export function TreeSidebar({
                           >
                             <div className="space-y-1 pt-0.5">
                               {section.repos.map(({ repo, originalIndex }) => {
-                                return renderRepoItem(repo, originalIndex, section.groupId);
+                                return renderRepoItem(
+                                  repo,
+                                  originalIndex,
+                                  section.groupId,
+                                );
                               })}
                             </div>
                           </motion.div>
@@ -1106,7 +1227,7 @@ export function TreeSidebar({
             ) : (
               <div className="space-y-1">
                 {filteredRepos.map(({ repo, originalIndex }) =>
-                  renderRepoItem(repo, originalIndex)
+                  renderRepoItem(repo, originalIndex),
                 )}
               </div>
             )}
@@ -1126,7 +1247,7 @@ export function TreeSidebar({
             }}
           >
             <Plus className="h-4 w-4" />
-            {t('Add Repository')}
+            {t("Add Repository")}
           </button>
         </div>
       </div>
@@ -1137,7 +1258,7 @@ export function TreeSidebar({
           <div
             className="fixed inset-0 z-50"
             onClick={() => setRepoMenuOpen(false)}
-            onKeyDown={(e) => e.key === 'Escape' && setRepoMenuOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && setRepoMenuOpen(false)}
             onContextMenu={(e) => {
               e.preventDefault();
               setRepoMenuOpen(false);
@@ -1167,7 +1288,7 @@ export function TreeSidebar({
               }}
             >
               <Plus className="h-4 w-4" />
-              {t('New Worktree')}
+              {t("New Worktree")}
             </button>
 
             {/* Repository Settings */}
@@ -1183,7 +1304,7 @@ export function TreeSidebar({
               }}
             >
               <Settings2 className="h-4 w-4" />
-              {t('Repository Settings')}
+              {t("Repository Settings")}
             </button>
 
             {/* Hide Repository */}
@@ -1193,7 +1314,9 @@ export function TreeSidebar({
               onClick={() => {
                 setRepoMenuOpen(false);
                 if (repoMenuTarget) {
-                  const currentSettings = getRepositorySettings(repoMenuTarget.path);
+                  const currentSettings = getRepositorySettings(
+                    repoMenuTarget.path,
+                  );
                   saveRepositorySettings(repoMenuTarget.path, {
                     ...currentSettings,
                     hidden: true,
@@ -1202,23 +1325,27 @@ export function TreeSidebar({
                   // If hiding the currently selected repo, switch to next visible one
                   if (selectedRepo === repoMenuTarget.path) {
                     const nextVisible = repositories.find(
-                      (r) => r.path !== repoMenuTarget.path && !getRepositorySettings(r.path).hidden
+                      (r) =>
+                        r.path !== repoMenuTarget.path &&
+                        !getRepositorySettings(r.path).hidden,
                     );
                     if (nextVisible) {
                       onSelectRepo(nextVisible.path);
                     }
                   }
                   toastManager.add({
-                    title: t('Repository hidden'),
-                    description: t('Hidden repositories will not appear in the sidebar'),
-                    type: 'success',
+                    title: t("Repository hidden"),
+                    description: t(
+                      "Hidden repositories will not appear in the sidebar",
+                    ),
+                    type: "success",
                     timeout: 3000,
                   });
                 }
               }}
             >
               <EyeOff className="h-4 w-4" />
-              {t('Hide Repository')}
+              {t("Hide Repository")}
             </button>
 
             {!hideGroups && onMoveToGroup && groups.length > 0 && (
@@ -1244,7 +1371,7 @@ export function TreeSidebar({
               onClick={handleRemoveRepoClick}
             >
               <FolderMinus className="h-4 w-4" />
-              {t('Remove repository')}
+              {t("Remove repository")}
             </button>
           </div>
         </>
@@ -1261,20 +1388,27 @@ export function TreeSidebar({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('Remove repository')}</AlertDialogTitle>
+            <AlertDialogTitle>{t("Remove repository")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {tNode('Are you sure you want to remove {{name}} from the workspace?', {
-                name: <strong>{repoToRemove?.name}</strong>,
-              })}
+              {tNode(
+                "Are you sure you want to remove {{name}} from the workspace?",
+                {
+                  name: <strong>{repoToRemove?.name}</strong>,
+                },
+              )}
               <span className="block mt-2 text-muted-foreground">
-                {t('This will only remove it from the app and will not delete local files.')}
+                {t(
+                  "This will only remove it from the app and will not delete local files.",
+                )}
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            <AlertDialogClose
+              render={<Button variant="outline">{t("Cancel")}</Button>}
+            />
             <Button variant="destructive" onClick={handleConfirmRemoveRepo}>
-              {t('Remove')}
+              {t("Remove")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -1293,19 +1427,21 @@ export function TreeSidebar({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('Delete Worktree')}</AlertDialogTitle>
+            <AlertDialogTitle>{t("Delete Worktree")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {tNode('Are you sure you want to delete worktree {{name}}?', {
+              {tNode("Are you sure you want to delete worktree {{name}}?", {
                 name: <strong>{worktreeToDelete?.branch}</strong>,
               })}
               {worktreeToDelete?.prunable ? (
                 <span className="block mt-2 text-muted-foreground">
-                  {t('This directory has already been removed; Git records will be cleaned up.')}
+                  {t(
+                    "This directory has already been removed; Git records will be cleaned up.",
+                  )}
                 </span>
               ) : (
                 <span className="block mt-2 text-destructive">
                   {t(
-                    'This will delete the directory and all files inside. This action cannot be undone!'
+                    "This will delete the directory and all files inside. This action cannot be undone!",
                   )}
                 </span>
               )}
@@ -1321,7 +1457,7 @@ export function TreeSidebar({
                   className="h-4 w-4 rounded border-input"
                 />
                 <span>
-                  {tNode('Also delete branch {{name}}', {
+                  {tNode("Also delete branch {{name}}", {
                     name: <strong>{worktreeToDelete.branch}</strong>,
                   })}
                 </span>
@@ -1336,18 +1472,23 @@ export function TreeSidebar({
                   className="h-4 w-4 rounded border-input"
                 />
                 <span className="text-muted-foreground">
-                  {t('Force delete (ignore uncommitted changes)')}
+                  {t("Force delete (ignore uncommitted changes)")}
                 </span>
               </label>
             )}
           </div>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            <AlertDialogClose
+              render={<Button variant="outline">{t("Cancel")}</Button>}
+            />
             <Button
               variant="destructive"
               onClick={() => {
                 if (worktreeToDelete) {
-                  onRemoveWorktree(worktreeToDelete, { deleteBranch, force: forceDelete });
+                  onRemoveWorktree(worktreeToDelete, {
+                    deleteBranch,
+                    force: forceDelete,
+                  });
                   setWorktreeToDelete(null);
                   setDeleteBranch(false);
                   setForceDelete(false);
@@ -1355,7 +1496,7 @@ export function TreeSidebar({
                 }
               }}
             >
-              {t('Delete')}
+              {t("Delete")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -1366,7 +1507,7 @@ export function TreeSidebar({
         open={createWorktreeDialogOpen}
         onOpenChange={setCreateWorktreeDialogOpen}
         branches={branches}
-        projectName={selectedRepo?.split('/').pop() || ''}
+        projectName={selectedRepo?.split("/").pop() || ""}
         workdir={workdir}
         isLoading={isCreating}
         onSubmit={async (options) => {
@@ -1406,7 +1547,9 @@ export function TreeSidebar({
         open={editGroupDialogOpen}
         onOpenChange={setEditGroupDialogOpen}
         group={activeGroup || null}
-        repositoryCount={activeGroup ? repositoryCounts[activeGroup.id] || 0 : 0}
+        repositoryCount={
+          activeGroup ? repositoryCounts[activeGroup.id] || 0 : 0
+        }
         onUpdate={onUpdateGroup}
         onDelete={onDeleteGroup}
       />
@@ -1450,8 +1593,8 @@ function TempWorkspaceTreeItem({
           onClick={onSelect}
           onContextMenu={handleContextMenu}
           className={cn(
-            'group relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pl-[24px] text-left transition-colors',
-            isActive ? 'text-accent-foreground' : 'hover:bg-accent/30'
+            "group relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pl-[24px] text-left transition-colors",
+            isActive ? "text-accent-foreground" : "hover:bg-accent/30",
           )}
         >
           {isActive && (
@@ -1462,9 +1605,11 @@ function TempWorkspaceTreeItem({
             />
           )}
           <GitBranch className="relative z-10 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="relative z-10 min-w-0 flex-1 truncate text-sm">{item.title}</span>
+          <span className="relative z-10 min-w-0 flex-1 truncate text-sm">
+            {item.title}
+          </span>
           <span className="relative z-10 shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-            {t('Main')}
+            {t("Main")}
           </span>
           {hasActivity && (
             <div className="relative z-10 flex items-center gap-1.5 shrink-0 text-[10px] text-muted-foreground">
@@ -1512,7 +1657,7 @@ interface WorktreeTreeItemProps {
   onDragLeave?: () => void;
   onDrop?: (e: React.DragEvent) => void;
   showDropIndicator?: boolean;
-  dropDirection?: 'top' | 'bottom' | null;
+  dropDirection?: "top" | "bottom" | null;
   branches?: GitBranchType[];
 }
 
@@ -1537,8 +1682,10 @@ function WorktreeTreeItem({
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const isMain =
-    worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
-  const branchDisplay = worktree.branch || t('Detached');
+    worktree.isMainWorktree ||
+    worktree.branch === "main" ||
+    worktree.branch === "master";
+  const branchDisplay = worktree.branch || t("Detached");
   const isPrunable = worktree.prunable;
   const glowEnabled = useGlowEffectEnabled();
 
@@ -1553,18 +1700,30 @@ function WorktreeTreeItem({
   const activities = useWorktreeActivityStore((s) => s.activities);
   const diffStatsMap = useWorktreeActivityStore((s) => s.diffStats);
   const activityStates = useWorktreeActivityStore((s) => s.activityStates);
-  const activity = activities[worktree.path] || { agentCount: 0, terminalCount: 0 };
-  const diffStats = diffStatsMap[worktree.path] || { insertions: 0, deletions: 0 };
-  const activityState = activityStates[worktree.path] || 'idle';
-  const closeAgentSessions = useWorktreeActivityStore((s) => s.closeAgentSessions);
-  const closeTerminalSessions = useWorktreeActivityStore((s) => s.closeTerminalSessions);
-  const clearActivityState = useWorktreeActivityStore((s) => s.clearActivityState);
+  const activity = activities[worktree.path] || {
+    agentCount: 0,
+    terminalCount: 0,
+  };
+  const diffStats = diffStatsMap[worktree.path] || {
+    insertions: 0,
+    deletions: 0,
+  };
+  const activityState = activityStates[worktree.path] || "idle";
+  const closeAgentSessions = useWorktreeActivityStore(
+    (s) => s.closeAgentSessions,
+  );
+  const closeTerminalSessions = useWorktreeActivityStore(
+    (s) => s.closeTerminalSessions,
+  );
+  const clearActivityState = useWorktreeActivityStore(
+    (s) => s.clearActivityState,
+  );
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
   const hasDiffStats = diffStats.insertions > 0 || diffStats.deletions > 0;
 
   // Auto-clear completed state after 5 seconds when worktree is active
   useEffect(() => {
-    if (isActive && activityState === 'completed') {
+    if (isActive && activityState === "completed") {
       const timer = setTimeout(() => {
         clearActivityState(worktree.path);
       }, 5000);
@@ -1590,17 +1749,17 @@ function WorktreeTreeItem({
     try {
       await navigator.clipboard.writeText(worktree.path);
       toastManager.add({
-        title: t('Copied'),
-        description: t('Path copied to clipboard'),
-        type: 'success',
+        title: t("Copied"),
+        description: t("Path copied to clipboard"),
+        type: "success",
         timeout: 2000,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toastManager.add({
-        title: t('Copy failed'),
-        description: message || t('Failed to copy content'),
-        type: 'error',
+        title: t("Copy failed"),
+        description: message || t("Failed to copy content"),
+        type: "error",
         timeout: 3000,
       });
     }
@@ -1641,7 +1800,7 @@ function WorktreeTreeItem({
   const buttonContent = (
     <>
       {/* Drop indicator - top */}
-      {showDropIndicator && dropDirection === 'top' && (
+      {showDropIndicator && dropDirection === "top" && (
         <div className="absolute -top-0.5 left-0 right-0 h-0.5 bg-primary rounded-full" />
       )}
       <button
@@ -1655,33 +1814,42 @@ function WorktreeTreeItem({
         onClick={onClick}
         onContextMenu={handleContextMenu}
         className={cn(
-          'relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors text-sm',
-          isPrunable && 'opacity-50',
+          "relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors text-sm",
+          isPrunable && "opacity-50",
           isActive
-            ? 'border border-primary bg-primary/10'
-            : 'border border-transparent hover:bg-accent/50'
+            ? "border border-primary bg-primary/10"
+            : "border border-transparent hover:bg-accent/50",
         )}
       >
         <GitBranch
           className={cn(
-            'h-3.5 w-3.5 shrink-0',
-            isPrunable ? 'text-destructive' : isActive ? 'text-primary' : 'text-muted-foreground'
+            "h-3.5 w-3.5 shrink-0",
+            isPrunable
+              ? "text-destructive"
+              : isActive
+                ? "text-primary"
+                : "text-muted-foreground",
           )}
         />
-        <span className={cn('min-w-0 flex-1 truncate', isPrunable && 'line-through')}>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            isPrunable && "line-through",
+          )}
+        >
           {branchDisplay}
         </span>
         {isPrunable ? (
           <span className="shrink-0 rounded bg-destructive/20 px-1 py-0.5 text-[9px] font-medium uppercase text-destructive">
-            {t('Deleted')}
+            {t("Deleted")}
           </span>
         ) : isMain ? (
           <span className="shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-            {t('Main')}
+            {t("Main")}
           </span>
         ) : isMerged ? (
           <span className="shrink-0 rounded bg-success/20 px-1 py-0.5 text-[9px] font-medium uppercase text-success-foreground">
-            {t('Merged')}
+            {t("Merged")}
           </span>
         ) : null}
         {/* Git sync status */}
@@ -1716,14 +1884,16 @@ function WorktreeTreeItem({
                 </span>
               )}
               {diffStats.deletions > 0 && (
-                <span className="text-red-600 dark:text-red-400">-{diffStats.deletions}</span>
+                <span className="text-red-600 dark:text-red-400">
+                  -{diffStats.deletions}
+                </span>
               )}
             </span>
           )}
         </div>
       </button>
       {/* Drop indicator - bottom */}
-      {showDropIndicator && dropDirection === 'bottom' && (
+      {showDropIndicator && dropDirection === "bottom" && (
         <div className="absolute -bottom-0.5 left-0 right-0 h-0.5 bg-primary rounded-full" />
       )}
     </>
@@ -1739,11 +1909,16 @@ function WorktreeTreeItem({
         </span>
         {/* Button with optional glow border */}
         {glowEnabled ? (
-          <GlowBorder state={outputState as GlowState} className="rounded-xl flex-1 min-w-0">
+          <GlowBorder
+            state={outputState as GlowState}
+            className="rounded-xl flex-1 min-w-0"
+          >
             {buttonContent}
           </GlowBorder>
         ) : (
-          <div className="relative rounded-xl flex-1 min-w-0">{buttonContent}</div>
+          <div className="relative rounded-xl flex-1 min-w-0">
+            {buttonContent}
+          </div>
         )}
       </div>
 
@@ -1753,7 +1928,7 @@ function WorktreeTreeItem({
           <div
             className="fixed inset-0 z-50"
             onClick={() => setMenuOpen(false)}
-            onKeyDown={(e) => e.key === 'Escape' && setMenuOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && setMenuOpen(false)}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenuOpen(false);
@@ -1777,7 +1952,7 @@ function WorktreeTreeItem({
                 }}
               >
                 <X className="h-4 w-4" />
-                {t('Close All Sessions')}
+                {t("Close All Sessions")}
               </button>
             )}
 
@@ -1793,7 +1968,7 @@ function WorktreeTreeItem({
               >
                 <X className="h-4 w-4" />
                 <Sparkles className="h-4 w-4" />
-                {t('Close Agent Sessions')}
+                {t("Close Agent Sessions")}
               </button>
             )}
 
@@ -1809,7 +1984,7 @@ function WorktreeTreeItem({
               >
                 <X className="h-4 w-4" />
                 <Terminal className="h-4 w-4" />
-                {t('Close Terminal Sessions')}
+                {t("Close Terminal Sessions")}
               </button>
             )}
 
@@ -1826,7 +2001,7 @@ function WorktreeTreeItem({
               }}
             >
               <FolderOpen className="h-4 w-4" />
-              {t('Open folder')}
+              {t("Open folder")}
             </button>
 
             {/* Copy Path */}
@@ -1839,7 +2014,7 @@ function WorktreeTreeItem({
               }}
             >
               <Copy className="h-4 w-4" />
-              {t('Copy Path')}
+              {t("Copy Path")}
             </button>
 
             {/* Merge to Branch */}
@@ -1853,7 +2028,7 @@ function WorktreeTreeItem({
                 }}
               >
                 <GitMerge className="h-4 w-4" />
-                {t('Merge to Branch...')}
+                {t("Merge to Branch...")}
               </button>
             )}
 
@@ -1864,8 +2039,8 @@ function WorktreeTreeItem({
             <button
               type="button"
               className={cn(
-                'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-accent/50',
-                isMain && 'pointer-events-none opacity-50'
+                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-accent/50",
+                isMain && "pointer-events-none opacity-50",
               )}
               onClick={() => {
                 setMenuOpen(false);
@@ -1874,7 +2049,7 @@ function WorktreeTreeItem({
               disabled={isMain}
             >
               <Trash2 className="h-4 w-4" />
-              {isPrunable ? t('Clean up records') : t('Delete')}
+              {isPrunable ? t("Clean up records") : t("Delete")}
             </button>
           </div>
         </>

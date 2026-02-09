@@ -1,5 +1,5 @@
-import type { TempWorkspaceItem } from '@shared/types';
-import { motion } from 'framer-motion';
+import type { TempWorkspaceItem } from "@shared/types";
+import { motion } from "framer-motion";
 import {
   FolderGit2,
   GitBranch,
@@ -9,21 +9,21 @@ import {
   Search,
   Sparkles,
   Terminal,
-} from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { TempWorkspaceContextMenu } from '@/components/temp-workspace/TempWorkspaceContextMenu';
-import { Button } from '@/components/ui/button';
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { TempWorkspaceContextMenu } from "@/components/temp-workspace/TempWorkspaceContextMenu";
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
-import { useI18n } from '@/i18n';
-import { springFast } from '@/lib/motion';
-import { cn } from '@/lib/utils';
-import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
+} from "@/components/ui/empty";
+import { useI18n } from "@/i18n";
+import { springFast } from "@/lib/motion";
+import { cn } from "@/lib/utils";
+import { useWorktreeActivityStore } from "@/stores/worktreeActivity";
 
 interface TemporaryWorkspacePanelProps {
   items: TempWorkspaceItem[];
@@ -47,9 +47,12 @@ export function TemporaryWorkspacePanel({
   onCollapse,
 }: TemporaryWorkspacePanelProps) {
   const { t } = useI18n();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const sortedItems = useMemo(() => [...items].sort((a, b) => b.createdAt - a.createdAt), [items]);
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => b.createdAt - a.createdAt),
+    [items],
+  );
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return sortedItems;
     const query = searchQuery.toLowerCase();
@@ -57,7 +60,7 @@ export function TemporaryWorkspacePanel({
       (item) =>
         item.title.toLowerCase().includes(query) ||
         item.folderName.toLowerCase().includes(query) ||
-        item.path.toLowerCase().includes(query)
+        item.path.toLowerCase().includes(query),
     );
   }, [sortedItems, searchQuery]);
 
@@ -69,7 +72,7 @@ export function TemporaryWorkspacePanel({
           type="button"
           className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
           onClick={onRefresh}
-          title={t('Refresh')}
+          title={t("Refresh")}
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -78,7 +81,7 @@ export function TemporaryWorkspacePanel({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onCollapse}
-            title={t('Collapse')}
+            title={t("Collapse")}
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
@@ -87,11 +90,11 @@ export function TemporaryWorkspacePanel({
 
       {/* Search bar */}
       <div className="px-3 py-2">
-        <div className="flex h-8 items-center gap-2 rounded-lg border bg-background px-2">
+        <div className="flex h-8 items-center gap-2 rounded-lg border px-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
-            placeholder={t('Search sessions')}
+            placeholder={t("Search sessions")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
@@ -107,12 +110,16 @@ export function TemporaryWorkspacePanel({
               <FolderGit2 className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">{t('No temp sessions')}</EmptyTitle>
-              <EmptyDescription>{t('Create a temp session to get started')}</EmptyDescription>
+              <EmptyTitle className="text-base">
+                {t("No temp sessions")}
+              </EmptyTitle>
+              <EmptyDescription>
+                {t("Create a temp session to get started")}
+              </EmptyDescription>
             </EmptyHeader>
             {!searchQuery && (
               <Button onClick={onCreate} variant="outline" className="mt-2">
-                {t('New Temp Session')}
+                {t("New Temp Session")}
               </Button>
             )}
           </Empty>
@@ -140,7 +147,7 @@ export function TemporaryWorkspacePanel({
           onClick={onCreate}
         >
           <Plus className="h-4 w-4" />
-          {t('New Temp Session')}
+          {t("New Temp Session")}
         </button>
       </div>
     </aside>
@@ -182,8 +189,8 @@ function TemporaryWorkspaceItemRow({
         onClick={onSelect}
         onContextMenu={handleContextMenu}
         className={cn(
-          'relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
-          isActive ? 'text-accent-foreground' : 'hover:bg-accent/50'
+          "relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors",
+          isActive ? "text-accent-foreground" : "hover:bg-accent/50",
         )}
       >
         {isActive && (
@@ -195,9 +202,11 @@ function TemporaryWorkspaceItemRow({
         )}
         <div className="relative z-10 flex w-full items-center gap-2">
           <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {item.title}
+          </span>
           <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-600 dark:text-emerald-400">
-            {t('Main')}
+            {t("Main")}
           </span>
         </div>
         <div

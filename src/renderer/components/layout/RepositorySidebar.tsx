@@ -1,4 +1,4 @@
-import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import {
   ChevronRight,
   Clock,
@@ -8,23 +8,26 @@ import {
   Plus,
   Search,
   Settings2,
-} from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+} from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ALL_GROUP_ID,
   type RepositoryGroup,
   type TabId,
   TEMP_REPO_ID,
   UNGROUPED_SECTION_ID,
-} from '@/App/constants';
-import { getStoredGroupCollapsedState, saveGroupCollapsedState } from '@/App/storage';
+} from "@/App/constants";
+import {
+  getStoredGroupCollapsedState,
+  saveGroupCollapsedState,
+} from "@/App/storage";
 import {
   CreateGroupDialog,
   GroupEditDialog,
   GroupSelector,
   MoveToGroupSubmenu,
-} from '@/components/group';
-import { RepositorySettingsDialog } from '@/components/repository/RepositorySettingsDialog';
+} from "@/components/group";
+import { RepositorySettingsDialog } from "@/components/repository/RepositorySettingsDialog";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -33,21 +36,21 @@ import {
   AlertDialogHeader,
   AlertDialogPopup,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from '@/components/ui/empty';
-import { RepoItemWithGlow } from '@/components/ui/glow-wrappers';
-import { useI18n } from '@/i18n';
-import { heightVariants, springFast, springStandard } from '@/lib/motion';
-import { cn } from '@/lib/utils';
-import { useSettingsStore } from '@/stores/settings';
-import { RunningProjectsPopover } from './RunningProjectsPopover';
+} from "@/components/ui/empty";
+import { RepoItemWithGlow } from "@/components/ui/glow-wrappers";
+import { useI18n } from "@/i18n";
+import { heightVariants, springFast, springStandard } from "@/lib/motion";
+import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/stores/settings";
+import { RunningProjectsPopover } from "./RunningProjectsPopover";
 
 interface Repository {
   name: string;
@@ -70,8 +73,17 @@ interface RepositorySidebarProps {
   groups: RepositoryGroup[];
   activeGroupId: string;
   onSwitchGroup: (groupId: string) => void;
-  onCreateGroup: (name: string, emoji: string, color: string) => RepositoryGroup;
-  onUpdateGroup: (groupId: string, name: string, emoji: string, color: string) => void;
+  onCreateGroup: (
+    name: string,
+    emoji: string,
+    color: string,
+  ) => RepositoryGroup;
+  onUpdateGroup: (
+    groupId: string,
+    name: string,
+    emoji: string,
+    color: string,
+  ) => void;
   onDeleteGroup: (groupId: string) => void;
   onMoveToGroup?: (repoPath: string, groupId: string | null) => void;
   onSwitchTab?: (tab: TabId) => void;
@@ -105,24 +117,25 @@ export function RepositorySidebar({
   onSwitchWorktreeByPath,
   isFileDragOver,
   temporaryWorkspaceEnabled = false,
-  tempBasePath = '',
+  tempBasePath = "",
 }: RepositorySidebarProps) {
   const { t, tNode } = useI18n();
   const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const hideGroups = useSettingsStore((s) => s.hideGroups);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [menuRepo, setMenuRepo] = useState<Repository | null>(null);
   const [repoToRemove, setRepoToRemove] = useState<Repository | null>(null);
   const [repoSettingsOpen, setRepoSettingsOpen] = useState(false);
-  const [repoSettingsTarget, setRepoSettingsTarget] = useState<Repository | null>(null);
+  const [repoSettingsTarget, setRepoSettingsTarget] =
+    useState<Repository | null>(null);
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
   const [editGroupDialogOpen, setEditGroupDialogOpen] = useState(false);
 
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() =>
-    getStoredGroupCollapsedState()
-  );
+  const [collapsedGroups, setCollapsedGroups] = useState<
+    Record<string, boolean>
+  >(() => getStoredGroupCollapsedState());
 
   const toggleGroupCollapsed = useCallback((groupId: string) => {
     setCollapsedGroups((prev) => {
@@ -136,7 +149,9 @@ export function RepositorySidebar({
   const repositoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const group of groups) {
-      counts[group.id] = repositories.filter((r) => r.groupId === group.id).length;
+      counts[group.id] = repositories.filter(
+        (r) => r.groupId === group.id,
+      ).length;
     }
     return counts;
   }, [groups, repositories]);
@@ -147,16 +162,17 @@ export function RepositorySidebar({
   const dragGroupRef = useRef<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
 
-  const handleDragStart = useCallback((e: React.DragEvent, index: number, repo: Repository) => {
-    draggedIndexRef.current = index;
-    dragGroupRef.current = repo.groupId ?? UNGROUPED_SECTION_ID;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, index: number, repo: Repository) => {
+      draggedIndexRef.current = index;
+      dragGroupRef.current = repo.groupId ?? UNGROUPED_SECTION_ID;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(index));
 
-    // Create styled drag image
-    const dragImage = document.createElement('div');
-    dragImage.textContent = repo.name;
-    dragImage.style.cssText = `
+      // Create styled drag image
+      const dragImage = document.createElement("div");
+      dragImage.textContent = repo.name;
+      dragImage.style.cssText = `
         position: fixed;
         top: -9999px;
         left: -9999px;
@@ -169,10 +185,16 @@ export function RepositorySidebar({
         white-space: nowrap;
         pointer-events: none;
       `;
-    document.body.appendChild(dragImage);
-    dragImageRef.current = dragImage;
-    e.dataTransfer.setDragImage(dragImage, dragImage.offsetWidth / 2, dragImage.offsetHeight / 2);
-  }, []);
+      document.body.appendChild(dragImage);
+      dragImageRef.current = dragImage;
+      e.dataTransfer.setDragImage(
+        dragImage,
+        dragImage.offsetWidth / 2,
+        dragImage.offsetHeight / 2,
+      );
+    },
+    [],
+  );
 
   const handleDragEnd = useCallback(() => {
     if (dragImageRef.current) {
@@ -186,19 +208,23 @@ export function RepositorySidebar({
 
   const handleDragOver = useCallback(
     (e: React.DragEvent, index: number, targetGroupId?: string) => {
-      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      const canDropInGroup =
+        !targetGroupId || dragGroupRef.current === targetGroupId;
       if (!canDropInGroup) {
         setDropTargetIndex(null);
         return;
       }
 
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (draggedIndexRef.current !== null && draggedIndexRef.current !== index) {
+      e.dataTransfer.dropEffect = "move";
+      if (
+        draggedIndexRef.current !== null &&
+        draggedIndexRef.current !== index
+      ) {
         setDropTargetIndex(index);
       }
     },
-    []
+    [],
   );
 
   const handleDragLeave = useCallback(() => {
@@ -207,7 +233,8 @@ export function RepositorySidebar({
 
   const handleDrop = useCallback(
     (e: React.DragEvent, toIndex: number, targetGroupId?: string) => {
-      const canDropInGroup = !targetGroupId || dragGroupRef.current === targetGroupId;
+      const canDropInGroup =
+        !targetGroupId || dragGroupRef.current === targetGroupId;
       if (!canDropInGroup) {
         setDropTargetIndex(null);
         return;
@@ -215,12 +242,16 @@ export function RepositorySidebar({
 
       e.preventDefault();
       const fromIndex = draggedIndexRef.current;
-      if (fromIndex !== null && fromIndex !== toIndex && onReorderRepositories) {
+      if (
+        fromIndex !== null &&
+        fromIndex !== toIndex &&
+        onReorderRepositories
+      ) {
         onReorderRepositories(fromIndex, toIndex);
       }
       setDropTargetIndex(null);
     },
-    [onReorderRepositories]
+    [onReorderRepositories],
   );
 
   const handleContextMenu = (e: React.MouseEvent, repo: Repository) => {
@@ -245,7 +276,8 @@ export function RepositorySidebar({
   };
 
   // Filter by group and search
-  const showSections = activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
+  const showSections =
+    activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
 
   const filteredRepos = useMemo(() => {
     let filtered = repositories;
@@ -254,9 +286,14 @@ export function RepositorySidebar({
     }
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((repo) => repo.name.toLowerCase().includes(query));
+      filtered = filtered.filter((repo) =>
+        repo.name.toLowerCase().includes(query),
+      );
     }
-    return filtered.map((repo) => ({ repo, originalIndex: repositories.indexOf(repo) }));
+    return filtered.map((repo) => ({
+      repo,
+      originalIndex: repositories.indexOf(repo),
+    }));
   }, [repositories, activeGroupId, searchQuery]);
 
   const groupedSections = useMemo(() => {
@@ -294,9 +331,9 @@ export function RepositorySidebar({
     if (ungroupedRepos.length > 0) {
       sections.push({
         groupId: UNGROUPED_SECTION_ID,
-        name: t('Ungrouped'),
-        emoji: '',
-        color: '',
+        name: t("Ungrouped"),
+        emoji: "",
+        color: "",
         repos: ungroupedRepos,
       });
     }
@@ -304,7 +341,11 @@ export function RepositorySidebar({
     return sections;
   }, [showSections, groups, repositories, t]);
 
-  const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
+  const renderRepoItem = (
+    repo: Repository,
+    originalIndex: number,
+    sectionGroupId?: string,
+  ) => {
     const isSelected = selectedRepo === repo.path;
     return (
       <RepoItemWithGlow key={repo.path} repoPath={repo.path}>
@@ -325,9 +366,9 @@ export function RepositorySidebar({
           onClick={() => onSelectRepo(repo.path)}
           onContextMenu={(e) => handleContextMenu(e, repo)}
           className={cn(
-            'group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
-            isSelected ? 'text-accent-foreground' : 'hover:bg-accent/50',
-            draggedIndexRef.current === originalIndex && 'opacity-50'
+            "group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors",
+            isSelected ? "text-accent-foreground" : "hover:bg-accent/50",
+            draggedIndexRef.current === originalIndex && "opacity-50",
           )}
         >
           {/* Sliding highlight background */}
@@ -342,8 +383,8 @@ export function RepositorySidebar({
           <div className="relative z-10 flex w-full items-center gap-2">
             <FolderGit2
               className={cn(
-                'h-4 w-4 shrink-0',
-                isSelected ? 'text-accent-foreground' : 'text-muted-foreground'
+                "h-4 w-4 shrink-0",
+                isSelected ? "text-accent-foreground" : "text-muted-foreground",
               )}
             />
             <span className="truncate font-medium flex-1">{repo.name}</span>
@@ -358,14 +399,14 @@ export function RepositorySidebar({
                 setRepoSettingsOpen(true);
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   e.stopPropagation();
                   setRepoSettingsTarget(repo);
                   setRepoSettingsOpen(true);
                 }
               }}
-              title={t('Repository Settings')}
+              title={t("Repository Settings")}
             >
               <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
@@ -373,8 +414,10 @@ export function RepositorySidebar({
           {/* Path */}
           <div
             className={cn(
-              'relative z-10 w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [direction:rtl] [text-align:left]',
-              isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
+              "relative z-10 w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [direction:rtl] [text-align:left]",
+              isSelected
+                ? "text-accent-foreground/70"
+                : "text-muted-foreground",
             )}
             title={repo.path}
           >
@@ -394,8 +437,8 @@ export function RepositorySidebar({
   return (
     <aside
       className={cn(
-        'flex h-full w-full flex-col border-r bg-background transition-colors',
-        isFileDragOver && 'bg-primary/10'
+        "flex h-full w-full flex-col border-r bg-background transition-colors",
+        isFileDragOver && "bg-primary/10",
       )}
     >
       {/* Header */}
@@ -411,7 +454,7 @@ export function RepositorySidebar({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
             onClick={onCollapse}
-            title={t('Collapse')}
+            title={t("Collapse")}
           >
             <PanelLeftClose className="h-4 w-4" />
           </button>
@@ -433,11 +476,11 @@ export function RepositorySidebar({
 
       {/* Search */}
       <div className="px-3 py-2">
-        <div className="flex h-8 items-center gap-2 rounded-lg border bg-background px-2">
+        <div className="flex h-8 items-center gap-2 rounded-lg border px-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             type="text"
-            placeholder={t('Search repositories')}
+            placeholder={t("Search repositories")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
@@ -454,8 +497,10 @@ export function RepositorySidebar({
                 type="button"
                 onClick={() => onSelectRepo(TEMP_REPO_ID)}
                 className={cn(
-                  'group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
-                  selectedRepo === TEMP_REPO_ID ? 'text-accent-foreground' : 'hover:bg-accent/50'
+                  "group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors",
+                  selectedRepo === TEMP_REPO_ID
+                    ? "text-accent-foreground"
+                    : "hover:bg-accent/50",
                 )}
               >
                 {selectedRepo === TEMP_REPO_ID && (
@@ -467,10 +512,12 @@ export function RepositorySidebar({
                 )}
                 <div className="relative z-10 flex w-full items-center gap-2">
                   <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate font-medium">{t('Temp Session')}</span>
+                  <span className="truncate font-medium">
+                    {t("Temp Session")}
+                  </span>
                 </div>
                 <span className="relative z-10 pl-6 text-xs text-muted-foreground">
-                  {tempBasePath || t('Quick scratch sessions')}
+                  {tempBasePath || t("Quick scratch sessions")}
                 </span>
               </button>
             </RepoItemWithGlow>
@@ -482,8 +529,12 @@ export function RepositorySidebar({
               <Search className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">{t('No matching repositories')}</EmptyTitle>
-              <EmptyDescription>{t('Try a different search term')}</EmptyDescription>
+              <EmptyTitle className="text-base">
+                {t("No matching repositories")}
+              </EmptyTitle>
+              <EmptyDescription>
+                {t("Try a different search term")}
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : repositories.length === 0 ? (
@@ -492,9 +543,11 @@ export function RepositorySidebar({
               <FolderGit2 className="h-4.5 w-4.5" />
             </EmptyMedia>
             <EmptyHeader>
-              <EmptyTitle className="text-base">{t('Add Repository')}</EmptyTitle>
+              <EmptyTitle className="text-base">
+                {t("Add Repository")}
+              </EmptyTitle>
               <EmptyDescription>
-                {t('Add a Git repository from a local folder to get started')}
+                {t("Add a Git repository from a local folder to get started")}
               </EmptyDescription>
             </EmptyHeader>
             <Button
@@ -506,7 +559,7 @@ export function RepositorySidebar({
               className="mt-2"
             >
               <Plus className="mr-2 h-4 w-4" />
-              {t('Add Repository')}
+              {t("Add Repository")}
             </Button>
           </Empty>
         ) : (
@@ -526,18 +579,24 @@ export function RepositorySidebar({
                       >
                         <ChevronRight
                           className={cn(
-                            'h-3.5 w-3.5 shrink-0 transition-transform duration-150',
-                            !isCollapsed && 'rotate-90'
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                            !isCollapsed && "rotate-90",
                           )}
                         />
-                        {section.emoji && <span className="shrink-0 text-sm">{section.emoji}</span>}
+                        {section.emoji && (
+                          <span className="shrink-0 text-sm">
+                            {section.emoji}
+                          </span>
+                        )}
                         {!isUngrouped && section.color && (
                           <span
                             className="h-2 w-2 shrink-0 rounded-full"
                             style={{ backgroundColor: section.color }}
                           />
                         )}
-                        <span className="min-w-0 flex-1 truncate text-left">{section.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-left">
+                          {section.name}
+                        </span>
                         <span className="shrink-0 text-[10px] text-muted-foreground/70">
                           {section.repos.length}
                         </span>
@@ -556,7 +615,11 @@ export function RepositorySidebar({
                           >
                             <div className="space-y-1 pt-0.5">
                               {section.repos.map(({ repo, originalIndex }) =>
-                                renderRepoItem(repo, originalIndex, section.groupId)
+                                renderRepoItem(
+                                  repo,
+                                  originalIndex,
+                                  section.groupId,
+                                ),
                               )}
                             </div>
                           </motion.div>
@@ -569,7 +632,7 @@ export function RepositorySidebar({
             ) : (
               <div className="space-y-1">
                 {filteredRepos.map(({ repo, originalIndex }) =>
-                  renderRepoItem(repo, originalIndex)
+                  renderRepoItem(repo, originalIndex),
                 )}
               </div>
             )}
@@ -589,7 +652,7 @@ export function RepositorySidebar({
             }}
           >
             <Plus className="h-4 w-4" />
-            {t('Add Repository')}
+            {t("Add Repository")}
           </button>
         </div>
       </div>
@@ -600,7 +663,7 @@ export function RepositorySidebar({
           <div
             className="fixed inset-0 z-50"
             onClick={() => setMenuOpen(false)}
-            onKeyDown={(e) => e.key === 'Escape' && setMenuOpen(false)}
+            onKeyDown={(e) => e.key === "Escape" && setMenuOpen(false)}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenuOpen(false);
@@ -635,7 +698,7 @@ export function RepositorySidebar({
               onClick={handleRemoveClick}
             >
               <FolderMinus className="h-4 w-4" />
-              {t('Remove repository')}
+              {t("Remove repository")}
             </button>
           </div>
         </>
@@ -652,20 +715,27 @@ export function RepositorySidebar({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('Remove repository')}</AlertDialogTitle>
+            <AlertDialogTitle>{t("Remove repository")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {tNode('Are you sure you want to remove {{name}} from the workspace?', {
-                name: <strong>{repoToRemove?.name}</strong>,
-              })}
+              {tNode(
+                "Are you sure you want to remove {{name}} from the workspace?",
+                {
+                  name: <strong>{repoToRemove?.name}</strong>,
+                },
+              )}
               <span className="block mt-2 text-muted-foreground">
-                {t('This will only remove it from the app and will not delete local files.')}
+                {t(
+                  "This will only remove it from the app and will not delete local files.",
+                )}
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            <AlertDialogClose
+              render={<Button variant="outline">{t("Cancel")}</Button>}
+            />
             <Button variant="destructive" onClick={handleConfirmRemove}>
-              {t('Remove')}
+              {t("Remove")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -690,7 +760,9 @@ export function RepositorySidebar({
         open={editGroupDialogOpen}
         onOpenChange={setEditGroupDialogOpen}
         group={activeGroup || null}
-        repositoryCount={activeGroup ? repositoryCounts[activeGroup.id] || 0 : 0}
+        repositoryCount={
+          activeGroup ? repositoryCounts[activeGroup.id] || 0 : 0
+        }
         onUpdate={onUpdateGroup}
         onDelete={onDeleteGroup}
       />
