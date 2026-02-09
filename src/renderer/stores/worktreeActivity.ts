@@ -259,45 +259,42 @@ useWorktreeActivityStore.subscribe(
   }
 );
 
-// Session to worktree path mapping for activity state updates
-// Uses the same storage as agentSessions ('enso-agent-sessions') to avoid duplication
+// Import agentSessions store
+import { useAgentSessionsStore } from './agentSessions';
+
 const SESSIONS_STORAGE_KEY = 'enso-agent-sessions';
 
 /**
- * Find worktree path (cwd) for a given session ID from persisted agentSessions
+ * Find worktree path (cwd) for a given session ID from agentSessions store
+ * Uses getState() to ensure fresh data during HMR
  */
 function findWorktreePath(sessionId: string): string | undefined {
+  const sessions = useAgentSessionsStore.getState().sessions;
+  const session = sessions.find((s) => s.id === sessionId || s.sessionId === sessionId);
+  if (session?.cwd) {
+    return session.cwd;
+  }
+
+  // HMR safety fallback:
+  // if callbacks hold stale store references after hot reload,
+  // resolve session -> cwd from persisted sessions snapshot.
+  let persistedMatch: string | undefined;
   try {
-    const saved = localStorage.getItem(SESSIONS_STORAGE_KEY);
-    if (saved) {
-      const data = JSON.parse(saved);
-      if (data.sessions?.length > 0) {
-        const session = data.sessions.find((s: { id: string; cwd?: string }) => s.id === sessionId);
-        return session?.cwd;
-      }
+    const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as {
+        sessions?: Array<{ id: string; sessionId?: string; cwd?: string }>;
+      };
+      const persistedSession = parsed.sessions?.find(
+        (s) => s.id === sessionId || s.sessionId === sessionId
+      );
+      persistedMatch = persistedSession?.cwd;
     }
   } catch {
-    // Ignore errors
+    // Ignore parse/storage errors; diagnostics below will show unresolved mapping.
   }
-  return undefined;
-}
 
-/**
- * Register a session's worktree path for activity state tracking
- * Note: The mapping is persisted via agentSessions store, no action needed here
- */
-export function registerSessionWorktree(sessionId: string, worktreePath: string): void {
-  // Mapping is automatically persisted by agentSessions.ts
-  // No additional storage needed
-}
-
-/**
- * Unregister a session from activity state tracking
- * Note: The mapping is automatically cleaned up by agentSessions store
- */
-export function unregisterSessionWorktree(sessionId: string): void {
-  // Mapping is automatically cleaned up by agentSessions store
-  // No additional cleanup needed
+  return persistedMatch;
 }
 
 /**

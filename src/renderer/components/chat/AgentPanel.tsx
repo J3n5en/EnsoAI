@@ -581,31 +581,40 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [cwd, setActiveId, updateCurrentGroupState]
   );
 
+  // Notification payload may carry either UI session id or Claude sessionId.
+  const findSessionByNotificationId = useCallback(
+    (incomingSessionId: string) =>
+      allSessions.find((s) => s.id === incomingSessionId || s.sessionId === incomingSessionId),
+    [allSessions]
+  );
+
   // 监听通知点击，激活对应 session 并切换 worktree
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onClick((sessionId) => {
-      const session = allSessions.find((s) => s.id === sessionId);
+      const session = findSessionByNotificationId(sessionId);
       if (session && !pathsEqual(session.cwd, cwd) && onSwitchWorktree) {
         onSwitchWorktree(session.cwd);
       }
-      handleSelectSession(sessionId);
+      if (session) {
+        handleSelectSession(session.id);
+      }
     });
     return unsubscribe;
-  }, [handleSelectSession, allSessions, cwd, onSwitchWorktree]);
+  }, [handleSelectSession, findSessionByNotificationId, cwd, onSwitchWorktree]);
 
   // 监听 Claude stop hook 通知，精确更新 output state 并发送完成通知
   const setOutputState = useAgentSessionsStore((s) => s.setOutputState);
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onAgentStop(({ sessionId }) => {
-      const session = allSessions.find((s) => s.id === sessionId);
+      const session = findSessionByNotificationId(sessionId);
       if (session) {
         // Check if user is currently viewing this session
         const activeGroup = groups.find((g) => g.id === activeGroupId);
         const isViewingSession =
-          activeGroup?.activeSessionId === sessionId && pathsEqual(session.cwd, cwd) && isActive;
+          activeGroup?.activeSessionId === session.id && pathsEqual(session.cwd, cwd) && isActive;
 
         // Update output state to idle (will become 'unread' if user is not viewing)
-        setOutputState(sessionId, 'idle', isViewingSession);
+        setOutputState(session.id, 'idle', isViewingSession);
 
         // Send system notification
         const projectName = session.cwd.split('/').pop() || 'Unknown';
@@ -615,18 +624,18 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         window.electronAPI.notification.show({
           title: t('{{command}} completed', { command: agentName }),
           body: notificationBody,
-          sessionId,
+          sessionId: session.id,
         });
       }
     });
     return unsubscribe;
-  }, [allSessions, t, groups, activeGroupId, cwd, isActive, setOutputState]);
+  }, [findSessionByNotificationId, t, groups, activeGroupId, cwd, isActive, setOutputState]);
 
   // 监听 Claude AskUserQuestion 通知
   useEffect(() => {
     const unsubscribe = window.electronAPI.notification.onAskUserQuestion(
       ({ sessionId, toolInput }) => {
-        const session = allSessions.find((s) => s.id === sessionId);
+        const session = findSessionByNotificationId(sessionId);
         if (session) {
           const agentName = AGENT_INFO[session.agentId]?.name || session.agentCommand;
 
@@ -642,13 +651,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           window.electronAPI.notification.show({
             title: `${agentName} 等待输入`,
             body: questionPreview,
-            sessionId,
+            sessionId: session.id,
           });
         }
       }
     );
     return unsubscribe;
-  }, [allSessions]);
+  }, [findSessionByNotificationId]);
 
   // 监听 Claude status line 更新
   useEffect(() => {
