@@ -274,7 +274,7 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   showProviderSwitcher: true,
   enableProviderDisableFeature: false,
   providers: [],
-  enhancedInputEnabled: true, // Enable enhanced input by default
+  enhancedInputEnabled: false, // Disable enhanced input by default
   enhancedInputAutoPopup: 'hideWhileRunning', // Hide while running by default
 };
 
