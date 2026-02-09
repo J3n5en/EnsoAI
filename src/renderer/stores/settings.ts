@@ -581,6 +581,20 @@ interface SettingsState {
   temporaryWorkspaceEnabled: boolean; // Enable Temp Session (Beta)
   defaultTemporaryPath: string; // Default path for temp sessions
   autoCreateSessionOnTempActivate: boolean; // Auto-create agent/terminal session when temp session becomes active
+  // Background image (Beta)
+  backgroundImageEnabled: boolean;
+  backgroundImagePath: string; // Local file path (for file mode)
+  backgroundUrlPath: string; // Remote URL path (for url mode)
+  backgroundFolderPath: string; // Local folder path (for folder mode)
+  backgroundSourceType: 'file' | 'folder' | 'url'; // Source type: single file, folder, or remote URL
+  backgroundRandomEnabled: boolean; // Auto-random: periodically refresh folder/URL source
+  backgroundRandomInterval: number; // Auto-random interval in seconds (default 300)
+  backgroundOpacity: number; // 0-1, background image opacity
+  backgroundBlur: number; // 0-20, blur px
+  backgroundBrightness: number; // 0-2, CSS brightness filter (1 = normal)
+  backgroundSaturation: number; // 0-2, CSS saturate filter (1 = normal)
+  backgroundSizeMode: 'cover' | 'contain' | 'repeat' | 'center';
+  _backgroundRefreshKey: number; // Transient: trigger folder re-scan (not persisted)
   // MCP, Prompts management
   mcpServers: McpServer[];
   promptPresets: PromptPreset[];
@@ -657,6 +671,20 @@ interface SettingsState {
   setTemporaryWorkspaceEnabled: (enabled: boolean) => void;
   setDefaultTemporaryPath: (path: string) => void;
   setAutoCreateSessionOnTempActivate: (enabled: boolean) => void;
+  // Background image methods
+  setBackgroundImageEnabled: (enabled: boolean) => void;
+  setBackgroundImagePath: (path: string) => void;
+  setBackgroundUrlPath: (path: string) => void;
+  setBackgroundFolderPath: (path: string) => void;
+  setBackgroundSourceType: (type: 'file' | 'folder' | 'url') => void;
+  setBackgroundRandomEnabled: (enabled: boolean) => void;
+  setBackgroundRandomInterval: (interval: number) => void;
+  setBackgroundOpacity: (opacity: number) => void;
+  setBackgroundBlur: (blur: number) => void;
+  setBackgroundBrightness: (brightness: number) => void;
+  setBackgroundSaturation: (saturation: number) => void;
+  setBackgroundSizeMode: (mode: 'cover' | 'contain' | 'repeat' | 'center') => void;
+  triggerBackgroundRefresh: () => void;
   // MCP management
   addMcpServer: (server: McpServer) => void;
   updateMcpServer: (id: string, updates: Partial<McpServer>) => void;
@@ -750,6 +778,20 @@ export const useSettingsStore = create<SettingsState>()(
       temporaryWorkspaceEnabled: false,
       defaultTemporaryPath: '', // Empty means use default ~/ensoai/temporary
       autoCreateSessionOnTempActivate: false,
+      // Background image defaults
+      backgroundImageEnabled: false,
+      backgroundImagePath: '',
+      backgroundUrlPath: '',
+      backgroundFolderPath: '',
+      backgroundSourceType: 'file',
+      backgroundRandomEnabled: false,
+      backgroundRandomInterval: 300,
+      backgroundOpacity: 0.85,
+      backgroundBlur: 0,
+      backgroundBrightness: 1,
+      backgroundSaturation: 1,
+      backgroundSizeMode: 'cover',
+      _backgroundRefreshKey: 0,
       // MCP, Prompts defaults
       mcpServers: [],
       promptPresets: [],
@@ -997,6 +1039,50 @@ export const useSettingsStore = create<SettingsState>()(
       setDefaultTemporaryPath: (defaultTemporaryPath) => set({ defaultTemporaryPath }),
       setAutoCreateSessionOnTempActivate: (autoCreateSessionOnTempActivate) =>
         set({ autoCreateSessionOnTempActivate }),
+      // Background image methods
+      setBackgroundImageEnabled: (backgroundImageEnabled) => set({ backgroundImageEnabled }),
+      setBackgroundImagePath: (backgroundImagePath) => set({ backgroundImagePath }),
+      setBackgroundUrlPath: (backgroundUrlPath) => set({ backgroundUrlPath }),
+      setBackgroundFolderPath: (backgroundFolderPath) => set({ backgroundFolderPath }),
+      setBackgroundSourceType: (backgroundSourceType) => set({ backgroundSourceType }),
+      setBackgroundRandomEnabled: (backgroundRandomEnabled) => set({ backgroundRandomEnabled }),
+      setBackgroundRandomInterval: (backgroundRandomInterval) => {
+        const safeValue = Number.isFinite(backgroundRandomInterval)
+          ? Math.max(5, Math.min(86400, backgroundRandomInterval))
+          : 300;
+        set({ backgroundRandomInterval: safeValue });
+      },
+      setBackgroundOpacity: (backgroundOpacity) => {
+        const safeValue = Number.isFinite(backgroundOpacity)
+          ? backgroundOpacity
+          : get().backgroundOpacity;
+        const clamped = Math.min(1, Math.max(0, safeValue));
+        set({ backgroundOpacity: clamped });
+      },
+      setBackgroundBlur: (backgroundBlur) => {
+        const safeValue = Number.isFinite(backgroundBlur)
+          ? backgroundBlur
+          : get().backgroundBlur;
+        const clamped = Math.min(20, Math.max(0, safeValue));
+        set({ backgroundBlur: clamped });
+      },
+      setBackgroundBrightness: (backgroundBrightness) => {
+        const safeValue = Number.isFinite(backgroundBrightness)
+          ? backgroundBrightness
+          : get().backgroundBrightness;
+        const clamped = Math.min(2, Math.max(0, safeValue));
+        set({ backgroundBrightness: clamped });
+      },
+      setBackgroundSaturation: (backgroundSaturation) => {
+        const safeValue = Number.isFinite(backgroundSaturation)
+          ? backgroundSaturation
+          : get().backgroundSaturation;
+        const clamped = Math.min(2, Math.max(0, safeValue));
+        set({ backgroundSaturation: clamped });
+      },
+      setBackgroundSizeMode: (backgroundSizeMode) => set({ backgroundSizeMode }),
+      triggerBackgroundRefresh: () =>
+        set((state) => ({ _backgroundRefreshKey: state._backgroundRefreshKey + 1 })),
       // MCP management
       addMcpServer: (server) =>
         set((state) => ({
@@ -1111,9 +1197,106 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'enso-settings',
       storage: createJSONStorage(() => electronStorage),
+      // Exclude transient fields from persistence
+      partialize: (state) => {
+        const { _backgroundRefreshKey, ...rest } = state;
+        return rest as SettingsState;
+      },
       // Deep merge nested objects to preserve new default fields when upgrading
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<SettingsState>;
+
+        const clampNumber = (value: unknown, min: number, max: number, fallback: number) => {
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return Math.min(max, Math.max(min, value));
+          }
+          if (typeof value === 'string') {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) {
+              return Math.min(max, Math.max(min, parsed));
+            }
+          }
+          return fallback;
+        };
+
+        const sanitizeBoolean = (value: unknown, fallback: boolean) =>
+          typeof value === 'boolean' ? value : fallback;
+
+        const sanitizeString = (value: unknown, fallback: string) =>
+          (typeof value === 'string' ? value : fallback);
+
+        const sizeModes: SettingsState['backgroundSizeMode'][] = ['cover', 'contain', 'repeat', 'center'];
+        const sanitizeSizeMode = (
+          value: unknown,
+          fallback: SettingsState['backgroundSizeMode']
+        ): SettingsState['backgroundSizeMode'] =>
+          sizeModes.includes(value as SettingsState['backgroundSizeMode'])
+            ? (value as SettingsState['backgroundSizeMode'])
+            : fallback;
+
+        const sanitizedBackgroundOpacity = clampNumber(
+          persisted.backgroundOpacity,
+          0,
+          1,
+          currentState.backgroundOpacity
+        );
+        const sanitizedBackgroundBlur = clampNumber(
+          persisted.backgroundBlur,
+          0,
+          20,
+          currentState.backgroundBlur
+        );
+        const sanitizedBackgroundBrightness = clampNumber(
+          persisted.backgroundBrightness,
+          0,
+          2,
+          currentState.backgroundBrightness
+        );
+        const sanitizedBackgroundSaturation = clampNumber(
+          persisted.backgroundSaturation,
+          0,
+          2,
+          currentState.backgroundSaturation
+        );
+        const sanitizedBackgroundImageEnabled = sanitizeBoolean(
+          persisted.backgroundImageEnabled,
+          currentState.backgroundImageEnabled
+        );
+        const sanitizedBackgroundImagePath = sanitizeString(
+          persisted.backgroundImagePath,
+          currentState.backgroundImagePath
+        );
+        const sanitizedBackgroundUrlPath = sanitizeString(
+          persisted.backgroundUrlPath,
+          currentState.backgroundUrlPath
+        );
+        const sanitizedBackgroundFolderPath = sanitizeString(
+          persisted.backgroundFolderPath,
+          currentState.backgroundFolderPath
+        );
+        const sourceTypes: SettingsState['backgroundSourceType'][] = ['file', 'folder', 'url'];
+        const sanitizedBackgroundSourceType = sourceTypes.includes(
+          persisted.backgroundSourceType as SettingsState['backgroundSourceType']
+        )
+          ? (persisted.backgroundSourceType as SettingsState['backgroundSourceType'])
+          : currentState.backgroundSourceType;
+        const migratedBackgroundUrlPath =
+          sanitizedBackgroundUrlPath ||
+          (sanitizedBackgroundSourceType === 'url' ? sanitizedBackgroundImagePath : '');
+        const sanitizedBackgroundRandomEnabled = sanitizeBoolean(
+          persisted.backgroundRandomEnabled,
+          currentState.backgroundRandomEnabled
+        );
+        const sanitizedBackgroundRandomInterval = clampNumber(
+          persisted.backgroundRandomInterval,
+          5,
+          86400,
+          currentState.backgroundRandomInterval
+        );
+        const sanitizedBackgroundSizeMode = sanitizeSizeMode(
+          persisted.backgroundSizeMode,
+          currentState.backgroundSizeMode
+        );
 
         // Migrate legacy 'canvas' renderer to 'webgl' (canvas support was removed)
         // Cast to string for comparison since persisted data may contain old values
@@ -1205,6 +1388,18 @@ export const useSettingsStore = create<SettingsState>()(
             ...currentState.workspaceKeybindings,
             ...persisted.workspaceKeybindings,
           },
+          backgroundImageEnabled: sanitizedBackgroundImageEnabled,
+          backgroundImagePath: sanitizedBackgroundImagePath,
+          backgroundUrlPath: migratedBackgroundUrlPath,
+          backgroundFolderPath: sanitizedBackgroundFolderPath,
+          backgroundSourceType: sanitizedBackgroundSourceType,
+          backgroundRandomEnabled: sanitizedBackgroundRandomEnabled,
+          backgroundRandomInterval: sanitizedBackgroundRandomInterval,
+          backgroundOpacity: sanitizedBackgroundOpacity,
+          backgroundBlur: sanitizedBackgroundBlur,
+          backgroundBrightness: sanitizedBackgroundBrightness,
+          backgroundSaturation: sanitizedBackgroundSaturation,
+          backgroundSizeMode: sanitizedBackgroundSizeMode,
           editorSettings: {
             ...currentState.editorSettings,
             ...persisted.editorSettings,

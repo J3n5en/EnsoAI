@@ -2,6 +2,8 @@ import { Plus, Sparkles } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/i18n';
+import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
 import { type Session, SessionBar } from './SessionBar';
 import type { AgentGroup as AgentGroupType } from './types';
 
@@ -47,6 +49,7 @@ export function AgentGroup({
   onToggleQuickTerminal,
 }: AgentGroupProps) {
   const { t } = useI18n();
+  const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
   const [showAgentMenu, setShowAgentMenu] = useState(false);
 
   // Get sessions belonging to this group, preserving group.sessionIds order (for drag reorder)
@@ -77,7 +80,7 @@ export function AgentGroup({
     return (
       // biome-ignore lint/a11y/useKeyWithClickEvents: click activates group
       <div
-        className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-muted-foreground pointer-events-auto bg-background"
+        className={cn("absolute inset-0 flex flex-col items-center justify-center gap-4 text-muted-foreground pointer-events-auto", !bgImageEnabled && "bg-background")}
         onClick={onGroupClick}
       >
         <Sparkles className="h-12 w-12 opacity-50" />

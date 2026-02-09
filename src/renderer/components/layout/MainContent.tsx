@@ -231,12 +231,18 @@ export function MainContent({
   // Check if we have a currently selected worktree
   const hasActiveWorktree = Boolean(repoPath && worktreePath);
 
+  // When background image is enabled, avoid stacking multiple semi-transparent bg-background layers
+  // Keep bg-background on <main> only (1 layer), remove from all inner elements to prevent double-stacking
+  const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
+  const innerBg = bgImageEnabled ? '' : 'bg-background';
+
   return (
     <main className={cn('flex min-w-[535px] flex-1 flex-col overflow-hidden bg-background')}>
       {/* Header with tabs */}
       <header
         className={cn(
-          'flex h-12 shrink-0 items-center justify-between border-b px-4 drag-region bg-background',
+          'flex h-12 shrink-0 items-center justify-between border-b px-4 drag-region',
+          innerBg,
           needsTrafficLightPadding && 'pl-[80px]'
         )}
       >
@@ -391,7 +397,8 @@ export function MainContent({
         {/* Chat tab - ALWAYS keep AgentPanel mounted to preserve terminal sessions across repo switches */}
         <div
           className={cn(
-            'absolute inset-0 bg-background',
+            'absolute inset-0',
+            innerBg,
             activeTab === 'chat' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
@@ -406,7 +413,7 @@ export function MainContent({
               />
               {/* Show overlay when no worktree is actively selected */}
               {!hasActiveWorktree && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+                <div className={cn("absolute inset-0 z-20 flex items-center justify-center", innerBg)}>
                   <Empty className="border-0">
                     <EmptyMedia variant="icon">
                       <Sparkles className="h-4.5 w-4.5" />
@@ -428,7 +435,7 @@ export function MainContent({
               )}
             </>
           ) : (
-            <div className="h-full bg-background flex items-center justify-center">
+            <div className={cn("h-full flex items-center justify-center", innerBg)}>
               <Empty className="border-0">
                 <EmptyMedia variant="icon">
                   <Sparkles className="h-4.5 w-4.5" />
@@ -452,7 +459,8 @@ export function MainContent({
         {/* Terminal tab - keep mounted to preserve shell sessions */}
         <div
           className={cn(
-            'absolute inset-0 bg-background',
+            'absolute inset-0',
+            innerBg,
             activeTab === 'terminal' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
@@ -465,7 +473,8 @@ export function MainContent({
         {/* File tab - keep mounted to preserve editor state */}
         <div
           className={cn(
-            'absolute inset-0 bg-background',
+            'absolute inset-0',
+            innerBg,
             activeTab === 'file' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
@@ -478,7 +487,8 @@ export function MainContent({
         {/* Source Control tab - keep mounted to preserve selection state */}
         <div
           className={cn(
-            'absolute inset-0 bg-background',
+            'absolute inset-0',
+            innerBg,
             activeTab === 'source-control' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
@@ -494,7 +504,8 @@ export function MainContent({
         {settingsDisplayMode === 'tab' && (
           <div
             className={cn(
-              'absolute inset-0 bg-background',
+              'absolute inset-0',
+              innerBg,
               activeTab === 'settings' ? 'z-10' : 'invisible pointer-events-none z-0'
             )}
           >

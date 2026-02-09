@@ -73,6 +73,7 @@
     --input: oklch(0.922 0.003 285.82);
     --ring: oklch(0.708 0.014 285.82);
     --radius: 0.5rem;
+    --panel-bg-opacity: 1;
   }
 
   .dark {
@@ -101,6 +102,27 @@
     --border: oklch(0.269 0.014 285.82);
     --input: oklch(0.269 0.014 285.82);
     --ring: oklch(0.439 0.014 285.82);
+  }
+
+  /* Background Image Support - Light Mode */
+  /* --panel-bg-opacity is set dynamically via JS on <body> to respect slider value */
+  .bg-image-enabled {
+    --background: oklch(1 0 0 / var(--panel-bg-opacity));
+    --card: oklch(1 0 0 / var(--panel-bg-opacity));
+    --popover: oklch(1 0 0 / var(--panel-bg-opacity));
+    --muted: oklch(0.965 0.003 285.82 / var(--panel-bg-opacity));
+    --accent: oklch(0.965 0.003 285.82 / var(--panel-bg-opacity));
+  }
+
+  /* Background Image Support - Dark Mode */
+  .dark .bg-image-enabled {
+    --background: oklch(0.145 0.014 285.82 / var(--panel-bg-opacity));
+    --card: oklch(0.145 0.014 285.82 / var(--panel-bg-opacity));
+    --popover: oklch(0.145 0.014 285.82 / var(--panel-bg-opacity));
+    --muted: oklch(0.269 0.014 285.82 / var(--panel-bg-opacity));
+    --accent: oklch(0.269 0.014 285.82 / var(--panel-bg-opacity));
+    --border: oklch(0.269 0.014 285.82 / var(--panel-bg-opacity));
+    --input: oklch(0.269 0.014 285.82 / var(--panel-bg-opacity));
   }
 }
 

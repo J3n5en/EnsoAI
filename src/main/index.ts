@@ -1,10 +1,24 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { extname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
 import { IPC_CHANNELS } from '@shared/types';
 import { app, BrowserWindow, ipcMain, Menu, net, protocol } from 'electron';
+
+// Register custom protocol privileges
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-image',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 // Fix environment for packaged app (macOS GUI apps don't inherit shell env)
 if (process.platform === 'darwin') {
@@ -223,6 +237,215 @@ app.whenReady().then(async () => {
 
       return net.fetch(fileUrl.toString());
     } catch {
+      return new Response('Bad Request', { status: 400 });
+    }
+  });
+
+  // Register protocol to handle local background images (no root check, but extension check)
+  protocol.handle('local-image', async (request) => {
+    try {
+      const urlObj = new URL(request.url);
+
+      // Remote image proxy: local-image://remote-fetch?url=<encoded-remote-url>
+      // Uses net.fetch() from the main process to bypass renderer CORS/redirect issues
+      // Use raw URL string check as primary detection (custom protocol hostname parsing can be unreliable)
+      const isRemoteFetch =
+        request.url.startsWith('local-image://remote-fetch') ||
+        urlObj.hostname === 'remote-fetch';
+
+      if (isRemoteFetch) {
+        // Extract remote URL: try searchParams first, then manual regex as fallback
+        let fetchUrl = urlObj.searchParams.get('url');
+        if (!fetchUrl) {
+          const match = request.url.match(/[?&]url=([^&]+)/);
+          fetchUrl = match ? decodeURIComponent(match[1]) : null;
+        }
+        if (!fetchUrl) {
+          console.error('[local-image] Remote fetch: missing url parameter');
+          return new Response('Missing url parameter', { status: 400 });
+        }
+
+        // Do NOT forward _t cache-busting param to the remote server —
+        // some APIs reject unknown query params (400). The _t on the
+        // local-image:// URL is enough for renderer-side cache invalidation.
+        console.log('[local-image] Proxying remote image:', fetchUrl);
+
+        try {
+          const response = await net.fetch(fetchUrl, { redirect: 'follow' });
+
+          if (!response.ok) {
+            console.error(`[local-image] Remote fetch failed: HTTP ${response.status} for ${fetchUrl}`);
+            return new Response(`Remote fetch failed: ${response.status}`, { status: response.status });
+          }
+
+          const contentType = response.headers.get('content-type') || 'image/jpeg';
+          console.log(`[local-image] Remote image OK: ${fetchUrl} (${contentType})`);
+
+          return new Response(response.body, {
+            status: 200,
+            headers: {
+              'Content-Type': contentType,
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'no-cache',
+            },
+          });
+        } catch (fetchErr) {
+          console.error('[local-image] Remote fetch error:', fetchUrl, fetchErr);
+          return new Response('Remote fetch error', { status: 502 });
+        }
+      }
+
+      // Manual path parsing to handle Windows drive letters robustly
+      // Standard fileURLToPath can be flaky with custom protocols if hostname is interpreted as drive letter
+      let filePath = '';
+
+      if (urlObj.hostname && /^[a-zA-Z]$/.test(urlObj.hostname) && process.platform === 'win32') {
+        // Case: local-image://c/Users/... (hostname='c')
+        filePath = `${urlObj.hostname}:${decodeURIComponent(urlObj.pathname)}`;
+      } else {
+        // Case: local-image:///C:/Users/... (pathname='/C:/Users/...')
+        let pathname = decodeURIComponent(urlObj.pathname);
+        if (process.platform === 'win32' && /^\/[a-zA-Z]:/.test(pathname)) {
+          pathname = pathname.slice(1);
+        }
+        filePath = pathname;
+      }
+      
+      // Normalize slashes for Windows
+      if (process.platform === 'win32') {
+        filePath = filePath.replace(/\//g, '\\');
+      }
+
+      console.log(`[local-image] Request URL: ${request.url}`);
+      console.log(`[local-image] Parsed Path: ${filePath}`);
+
+      // Security check: only allow image/video extensions
+      const ext = extname(filePath).toLowerCase();
+      const allowedExts = [
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
+        '.mp4', '.webm', '.ogg', '.mov',
+        '',
+      ];
+      
+      if (!allowedExts.includes(ext) && ext !== '') {
+        console.warn(`[local-image] Blocked extension: ${ext} for path: ${filePath}`);
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      // Reject directory paths (e.g. folder source type before random file is resolved)
+      try {
+        if (statSync(filePath).isDirectory()) {
+          return new Response('Not a file', { status: 400 });
+        }
+      } catch {
+        // stat failed → file doesn't exist, will be caught below
+      }
+
+      // Video files: stream with Range request support for <video> element
+      const videoExts = new Set(['.mp4', '.webm', '.ogg', '.mov']);
+      const videoMimeTypes: Record<string, string> = {
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.ogg': 'video/ogg',
+        '.mov': 'video/quicktime',
+      };
+      if (videoExts.has(ext)) {
+        try {
+          const fileStat = statSync(filePath);
+          const fileSize = fileStat.size;
+          const mimeType = videoMimeTypes[ext] || 'application/octet-stream';
+          const rangeHeader = request.headers.get('Range');
+
+          if (rangeHeader) {
+            const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+            if (match) {
+              const start = parseInt(match[1], 10);
+              const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+              const chunkSize = end - start + 1;
+
+              const fsStream = createReadStream(filePath, { start, end });
+              let closed = false;
+              const readable = new ReadableStream({
+                start(controller) {
+                  fsStream.on('data', (chunk: Buffer) => {
+                    if (!closed) {
+                      try { controller.enqueue(chunk); } catch { closed = true; }
+                    }
+                  });
+                  fsStream.on('end', () => {
+                    if (!closed) {
+                      closed = true;
+                      try { controller.close(); } catch { /* already closed */ }
+                    }
+                  });
+                  fsStream.on('error', (err) => {
+                    if (!closed) {
+                      closed = true;
+                      try { controller.error(err); } catch { /* already closed */ }
+                    }
+                  });
+                },
+                cancel() {
+                  closed = true;
+                  fsStream.destroy();
+                },
+              });
+
+              return new Response(readable as unknown as BodyInit, {
+                status: 206,
+                headers: {
+                  'Content-Type': mimeType,
+                  'Content-Length': String(chunkSize),
+                  'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                  'Accept-Ranges': 'bytes',
+                  'Access-Control-Allow-Origin': '*',
+                },
+              });
+            }
+          }
+
+          // No Range header: serve full file
+          const buffer = readFileSync(filePath);
+          return new Response(buffer, {
+            headers: {
+              'Content-Type': mimeType,
+              'Content-Length': String(fileSize),
+              'Accept-Ranges': 'bytes',
+              'Access-Control-Allow-Origin': '*',
+            },
+          });
+        } catch (e) {
+          console.error(`[local-image] Video serve error for ${filePath}:`, e);
+          return new Response('Not Found', { status: 404 });
+        }
+      }
+
+      // Image files: use readFileSync (simpler, avoids net.fetch quirks with images)
+      try {
+        const buffer = readFileSync(filePath);
+        
+        const mimeTypes: Record<string, string> = {
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+          '.bmp': 'image/bmp',
+          '.svg': 'image/svg+xml',
+        };
+        
+        return new Response(buffer, {
+          headers: {
+            'Content-Type': mimeTypes[ext] || 'application/octet-stream',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      } catch (e) {
+        console.error(`[local-image] Read error for ${filePath}:`, e);
+        return new Response('Not Found', { status: 404 });
+      }
+    } catch (error) {
+      console.error('[local-image] Error handling request:', request.url, error);
       return new Response('Bad Request', { status: 400 });
     }
   });

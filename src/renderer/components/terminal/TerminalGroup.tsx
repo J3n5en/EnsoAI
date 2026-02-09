@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/i18n';
 import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
 import type { TerminalGroup as TerminalGroupType, TerminalTab } from './types';
 import { getNextTabName } from './types';
 
@@ -33,6 +34,7 @@ export function TerminalGroup({
   onTabMoveToGroup,
 }: TerminalGroupProps) {
   const { t } = useI18n();
+  const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
   const inputRef = useRef<HTMLInputElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -268,7 +270,7 @@ export function TerminalGroup({
         <div
           className={cn(
             'flex h-9 items-center border-b border-border',
-            isGroupActive ? 'bg-background' : 'bg-muted',
+            !bgImageEnabled && (isGroupActive ? 'bg-background' : 'bg-muted'),
             isDropZoneActive && 'ring-2 ring-primary ring-inset'
           )}
           onDragOver={handleTabBarDragOver}
@@ -303,8 +305,8 @@ export function TerminalGroup({
                   className={cn(
                     'group relative flex h-9 min-w-[120px] max-w-[180px] items-center gap-2 border-r border-border px-3 text-sm transition-colors cursor-grab',
                     isTabActive
-                      ? 'bg-background text-foreground'
-                      : 'bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground',
+                      ? cn(!bgImageEnabled && 'bg-background', 'text-foreground')
+                      : cn(!bgImageEnabled && 'bg-muted hover:bg-muted/80', 'text-muted-foreground hover:text-foreground'),
                     isDragging && 'opacity-50',
                     isDropTarget && 'ring-2 ring-primary ring-inset'
                   )}
@@ -371,7 +373,7 @@ export function TerminalGroup({
 
       {/* Empty state - shown when no tabs */}
       {hasNoTabs && (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-muted-foreground bg-background">
+        <div className={cn("flex h-full w-full flex-col items-center justify-center gap-4 text-muted-foreground", !bgImageEnabled && "bg-background")}>
           <Terminal className="h-12 w-12 opacity-50" />
           <p className="text-sm">{t('No terminals open')}</p>
           <Button variant="outline" size="sm" onClick={handleNewTab}>
