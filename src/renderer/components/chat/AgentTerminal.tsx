@@ -11,6 +11,11 @@ import { useI18n } from '@/i18n';
 import { type OutputState, useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
+import {
+  registerSessionWorktree,
+  unregisterSessionWorktree,
+  useWorktreeActivityStore,
+} from '@/stores/worktreeActivity';
 
 interface AgentTerminalProps {
   id?: string; // Terminal session ID (UI key)
@@ -103,6 +108,7 @@ export function AgentTerminal({
   const pendingIdleMonitorRef = useRef(false); // Pending idle monitor; enabled after Enter.
   const dataSinceEnterRef = useRef(0); // Track output volume since last Enter.
   const currentTitleRef = useRef<string>(''); // Terminal title from OSC escape sequence.
+  const tmuxSessionNameRef = useRef<string | null>(null); // Tmux session name for cleanup.
 
   // Output state tracking for global store
   const outputStateRef = useRef<OutputState>('idle');
@@ -144,6 +150,23 @@ export function AgentTerminal({
     }
   }, [isActive, terminalSessionId, markSessionActive]);
 
+  // Register session worktree mapping for activity state tracking.
+  // The cleanup function uses the closure value of terminalSessionId (not a ref) because:
+  // 1. React guarantees cleanup runs with the values from the effect that created it
+  // 2. This ensures we unregister the exact sessionId that was registered
+  // 3. Using a ref would risk unregistering a different sessionId if it changed between registration and cleanup
+  useEffect(() => {
+    if (terminalSessionId && cwd) {
+      registerSessionWorktree(terminalSessionId, cwd);
+      return () => {
+        unregisterSessionWorktree(terminalSessionId);
+      };
+    }
+  }, [terminalSessionId, cwd]);
+
+  // Activity state setter - used by startActivityPolling and handleData/handleCustomKey
+  const setActivityState = useWorktreeActivityStore((s) => s.setActivityState);
+
   // Start polling for process activity
   const startActivityPolling = useCallback(() => {
     // Clear any existing interval
@@ -173,6 +196,10 @@ export function AgentTerminal({
           // If we have enough output, show the indicator
           if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
             updateOutputState('outputting');
+            // Also update worktree activity state to 'running'
+            if (cwd) {
+              setActivityState(cwd, 'running');
+            }
           }
         } else {
           // Process is idle AND no recent output
@@ -192,7 +219,7 @@ export function AgentTerminal({
         // Error checking activity, ignore
       }
     }, ACTIVITY_POLL_INTERVAL_MS);
-  }, [updateOutputState]);
+  }, [updateOutputState, cwd, setActivityState]);
 
   // Stop polling for process activity
   const stopActivityPolling = useCallback(() => {
@@ -211,6 +238,15 @@ export function AgentTerminal({
       stopActivityPolling();
     };
   }, [terminalSessionId, clearRuntimeState, stopActivityPolling]);
+
+  // Cleanup tmux session on unmount
+  useEffect(() => {
+    return () => {
+      if (tmuxSessionNameRef.current) {
+        window.electronAPI.tmux.killSession(tmuxSessionNameRef.current);
+      }
+    };
+  }, []);
 
   // Build command with session args
   const { command, env } = useMemo(() => {
@@ -294,11 +330,29 @@ export function AgentTerminal({
     const fullCommand = `${effectiveCommand} ${agentArgs.join(' ')}`.trim();
     const shellName = resolvedShell.shell.toLowerCase();
 
+    // Determine if tmux wrapping should be applied
+    const isClaude = agentCommand?.startsWith('claude') ?? false;
+    const shouldUseTmux = claudeCodeIntegration.tmuxEnabled && isClaude && !isWindows;
+
+    // Build tmux session name from terminal session ID
+    const tmuxSessionName =
+      shouldUseTmux && terminalSessionId
+        ? `enso-${terminalSessionId}`.replace(/[^a-zA-Z0-9_-]/g, '_')
+        : null;
+    tmuxSessionNameRef.current = tmuxSessionName;
+
+    // Wrap command in tmux if enabled
+    let finalCommand = fullCommand;
+    if (tmuxSessionName) {
+      const escaped = fullCommand.replace(/'/g, "'\\''");
+      finalCommand = `env -u TMUX tmux -L enso -f /dev/null new-session -A -s ${tmuxSessionName} '${escaped}'`;
+    }
+
     // WSL: detect from shell name (wsl.exe)
     if (shellName.includes('wsl') && isWindows) {
       // Use -e to run command directly, sh -lc loads login profile
       // exec $SHELL replaces with user's shell (zsh/bash/etc.)
-      const escapedCommand = fullCommand.replace(/"/g, '\\"');
+      const escapedCommand = finalCommand.replace(/"/g, '\\"');
       return {
         command: {
           shell: 'wsl.exe',
@@ -314,7 +368,7 @@ export function AgentTerminal({
       return {
         command: {
           shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, `& { ${fullCommand} }`],
+          args: [...resolvedShell.execArgs, `& { ${finalCommand} }`],
         },
         env: envVars,
       };
@@ -324,7 +378,7 @@ export function AgentTerminal({
     return {
       command: {
         shell: resolvedShell.shell,
-        args: [...resolvedShell.execArgs, fullCommand],
+        args: [...resolvedShell.execArgs, finalCommand],
       },
       env: envVars,
     };
@@ -338,6 +392,8 @@ export function AgentTerminal({
     hapiSettings.cliApiToken,
     hapiGlobalInstalled,
     resolvedShell,
+    claudeCodeIntegration.tmuxEnabled,
+    terminalSessionId,
   ]);
 
   // Handle exit with auto-close logic
@@ -385,6 +441,8 @@ export function AgentTerminal({
         // Update to 'outputting' once we have substantial output after Enter
         if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
           updateOutputState('outputting');
+          // Note: Activity state 'running' is set by handleCustomKey (on Enter) and
+          // startActivityPolling (during polling), so no need to set it here
         }
         // Note: The transition to 'idle' is handled by process activity polling
         // (startActivityPolling), not by a simple timeout
@@ -483,6 +541,11 @@ export function AgentTerminal({
         // Reset output counter.
         dataSinceEnterRef.current = 0;
 
+        // Set activity state to 'running' immediately when user presses Enter
+        if (cwd) {
+          setActivityState(cwd, 'running');
+        }
+
         if (terminalSessionId && glowEffectEnabled) {
           isMonitoringOutputRef.current = true;
           outputSinceEnterRef.current = 0;
@@ -537,6 +600,8 @@ export function AgentTerminal({
       startActivityPolling,
       terminalSessionId,
       glowEffectEnabled,
+      cwd,
+      setActivityState,
     ]
   );
 

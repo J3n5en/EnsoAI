@@ -93,6 +93,8 @@ export function GeneralSettings() {
     setQuickTerminalEnabled,
     hideGroups,
     setHideGroups,
+    copyOnSelection,
+    setCopyOnSelection,
     temporaryWorkspaceEnabled,
     setTemporaryWorkspaceEnabled,
     defaultTemporaryPath,
@@ -243,7 +245,7 @@ export function GeneralSettings() {
   const isCustomShell = shellConfig.shellType === 'custom';
 
   const [customArgsText, setCustomArgsText] = React.useState(() =>
-    stringifyShellArgs(shellConfig.customShellArgs || []),
+    stringifyShellArgs(shellConfig.customShellArgs || [])
   );
 
   React.useEffect(() => {
@@ -259,7 +261,9 @@ export function GeneralSettings() {
 
   const isWindows = window.electronAPI?.env.platform === 'win32';
   const shellPathPlaceholder = isWindows ? 'cmd.exe' : '/bin/bash';
-  const shellArgsPlaceholder = isWindows ? '/k "C:\\Program Files\\init.bat"' : "-l -c '/usr/local/bin/app'";
+  const shellArgsPlaceholder = isWindows
+    ? '/k "C:\\Program Files\\init.bat"'
+    : "-l -c '/usr/local/bin/app'";
 
   return (
     <div className="space-y-6">
@@ -474,7 +478,7 @@ export function GeneralSettings() {
             >
               <SelectTrigger className="w-64">
                 <SelectValue>
-                  {isCustomShell ? t('Custom') : (currentShell?.name || shellConfig.shellType)}
+                  {isCustomShell ? t('Custom') : currentShell?.name || shellConfig.shellType}
                 </SelectValue>
               </SelectTrigger>
               <SelectPopup>
@@ -576,6 +580,17 @@ export function GeneralSettings() {
             {t('History lines in the terminal. Higher values use more memory.')}
           </p>
           <p className="text-xs text-muted-foreground">{t('Apply on new terminals only')}</p>
+        </div>
+      </div>
+
+      {/* Copy on Selection */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Copy on Selection')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Automatically copy selected text in the terminal to the clipboard')}
+          </p>
+          <Switch checked={copyOnSelection} onCheckedChange={setCopyOnSelection} />
         </div>
       </div>
 
@@ -804,12 +819,10 @@ export function GeneralSettings() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose asChild>
-              <Button variant="outline">{t('Cancel')}</Button>
-            </AlertDialogClose>
-            <AlertDialogClose asChild>
-              <Button onClick={handleSelectTempPath}>{t('Choose directory')}</Button>
-            </AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+            <AlertDialogClose
+              render={<Button onClick={handleSelectTempPath}>{t('Choose directory')}</Button>}
+            />
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>

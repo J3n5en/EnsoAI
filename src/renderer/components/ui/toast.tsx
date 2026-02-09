@@ -110,6 +110,8 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
       >
         {toasts.map((toast) => {
           const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
+          const toastData = (toast.data as ToastData | undefined) ?? {};
+          const actions = toastData.actions ?? [];
 
           return (
             <Toast.Root
@@ -196,15 +198,13 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                 </div>
 
                 {/* Bottom actions */}
-                {((toast.actions?.length ?? 0) > 0 ||
-                  toast.actionProps ||
-                  toast.type === 'error') && (
+                {(actions.length > 0 || toast.actionProps || toast.type === 'error') && (
                   <div
                     className="mt-2 flex items-center justify-end gap-1"
                     data-slot="toast-actions"
                   >
-                    {(toast.actions?.length ?? 0) > 0 &&
-                      toast.actions?.map((action) => (
+                    {actions.length > 0 &&
+                      actions.map((action) => (
                         <Toast.Action
                           key={action.label?.toString() ?? Math.random()}
                           className={buttonVariants({
@@ -212,9 +212,9 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                             variant: action.variant ?? 'default',
                           })}
                           data-slot="toast-action"
-                          onClick={(event) => {
+                          onClick={() => {
                             action.onClick?.();
-                            toast.onClose?.(event);
+                            toastManager.close(toast.id);
                           }}
                         >
                           {action.label}
@@ -266,6 +266,8 @@ function AnchoredToasts() {
       <Toast.Viewport className="outline-none" data-slot="toast-viewport-anchored">
         {toasts.map((toast) => {
           const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
+          const toastData = (toast.data as ToastData | undefined) ?? {};
+          const actions = toastData.actions ?? [];
           const tooltipStyle = (toast.data as { tooltipStyle?: boolean })?.tooltipStyle ?? false;
           const positionerProps = toast.positionerProps;
 
@@ -315,9 +317,9 @@ function AnchoredToasts() {
                         />
                       </div>
                     </div>
-                    {(toast.actions?.length ?? 0) > 0 && (
+                    {actions.length > 0 && (
                       <div className="flex items-center gap-1" data-slot="toast-actions">
-                        {toast.actions?.map((action) => (
+                        {actions.map((action) => (
                           <Toast.Action
                             key={action.label?.toString() ?? Math.random()}
                             className={buttonVariants({
@@ -325,9 +327,9 @@ function AnchoredToasts() {
                               variant: action.variant ?? 'default',
                             })}
                             data-slot="toast-action"
-                            onClick={(event) => {
+                            onClick={() => {
                               action.onClick?.();
-                              toast.onClose?.(event);
+                              toastManager.close(toast.id);
                             }}
                           >
                             {action.label}
@@ -363,6 +365,10 @@ type ToastAction = {
   variant?: 'default' | 'outline' | 'ghost';
 };
 
+type ToastData = {
+  actions?: ToastAction[];
+};
+
 interface ToastOptions {
   type?: ToastType;
   title: string;
@@ -389,8 +395,11 @@ function addToast(options: ToastOptions) {
 
   const timeout = options.timeout ?? (options.type ? defaultTimeouts[options.type] : 5000);
 
+  const { actions, ...rest } = options;
+
   return toastManager.add({
-    ...options,
+    ...rest,
+    data: actions?.length ? { actions } : undefined,
     timeout,
   });
 }

@@ -229,7 +229,7 @@ export function AddRepositoryDialog({
   const formatPathDisplay = React.useCallback((fullPath: string) => {
     const home = window.electronAPI.env.HOME;
     if (home && fullPath.startsWith(home)) {
-      return '~' + fullPath.slice(home.length);
+      return `~${fullPath.slice(home.length)}`;
     }
     return fullPath;
   }, []);

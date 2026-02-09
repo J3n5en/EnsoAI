@@ -25,6 +25,8 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
   const providerRef = React.useRef<HTMLDivElement>(null);
   const { claudeCodeIntegration, setClaudeCodeIntegration } = useSettingsStore();
   const [bridgePort, setBridgePort] = React.useState<number | null>(null);
+  const [tmuxError, setTmuxError] = React.useState<string | null>(null);
+  const isWindows = window.electronAPI?.env?.platform === 'win32';
 
   const debounceOptions = React.useMemo(
     () =>
@@ -355,6 +357,36 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
                   {t('Version')}
                 </label>
               </div>
+            </div>
+          )}
+
+          {/* Tmux Session (non-Windows only) */}
+          {!isWindows && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-medium">{t('Tmux Session')}</span>
+                  <p className="text-xs text-muted-foreground">
+                    {t('Wrap Claude agent in tmux for session persistence and recovery')}
+                  </p>
+                </div>
+                <Switch
+                  checked={claudeCodeIntegration.tmuxEnabled}
+                  onCheckedChange={async (checked) => {
+                    if (checked) {
+                      setTmuxError(null);
+                      const result = await window.electronAPI.tmux.check(true);
+                      if (!result.installed) {
+                        setTmuxError(t('tmux is not installed. Please install tmux first.'));
+                        return;
+                      }
+                    }
+                    setTmuxError(null);
+                    setClaudeCodeIntegration({ tmuxEnabled: checked });
+                  }}
+                />
+              </div>
+              {tmuxError && <p className="text-xs text-destructive">{tmuxError}</p>}
             </div>
           )}
         </div>

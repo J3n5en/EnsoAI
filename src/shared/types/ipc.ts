@@ -146,6 +146,10 @@ export const IPC_CHANNELS = {
   CLI_DETECT: 'cli:detect',
   CLI_DETECT_ONE: 'cli:detectOne',
 
+  // Tmux
+  TMUX_CHECK: 'tmux:check',
+  TMUX_KILL_SESSION: 'tmux:killSession',
+
   // CLI Installer
   CLI_INSTALL_STATUS: 'cli:install:status',
   CLI_INSTALL: 'cli:install',

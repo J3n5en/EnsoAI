@@ -29,12 +29,17 @@ export function useGitSync({ workdir, enabled = true }: UseGitSyncOptions) {
   // access the latest values. The ref is updated on every render (line below),
   // so there's no stale closure issue.
   // Note: mutateAsync from React Query is a stable reference.
-  const syncStateRef = useRef({ ahead, behind, currentBranch, isSyncing });
-  syncStateRef.current = { ahead, behind, currentBranch, isSyncing };
+  const syncStateRef = useRef({ ahead, behind, currentBranch, isSyncing, tracking });
+  syncStateRef.current = { ahead, behind, currentBranch, isSyncing, tracking };
 
   // Sync handler: pull first (if behind), then push (if ahead)
   const handleSync = useCallback(async () => {
-    const { ahead: aheadVal, behind: behindVal, isSyncing: isSyncingVal } = syncStateRef.current;
+    const {
+      ahead: aheadVal,
+      behind: behindVal,
+      currentBranch: branch,
+      isSyncing: isSyncingVal,
+    } = syncStateRef.current;
     if (isSyncingVal) return;
 
     try {
@@ -53,11 +58,34 @@ export function useGitSync({ workdir, enabled = true }: UseGitSyncOptions) {
       }
       refetchStatus();
 
-      if (pulled || pushed) {
-        const actions = [pulled && t('Pulled'), pushed && t('Pushed')].filter(Boolean).join(' & ');
+      if (pulled && pushed) {
         toastManager.add({
           title: t('Sync completed'),
-          description: actions,
+          description: t('Pulled {{pulled}} commit(s), pushed {{pushed}} commit(s) on {{branch}}', {
+            pulled: behindVal,
+            pushed: aheadVal,
+            branch: branch ?? '',
+          }),
+          type: 'success',
+          timeout: 3000,
+        });
+      } else if (pulled) {
+        toastManager.add({
+          title: t('Sync completed'),
+          description: t('Pulled {{count}} commit(s) on {{branch}}', {
+            count: behindVal,
+            branch: branch ?? '',
+          }),
+          type: 'success',
+          timeout: 3000,
+        });
+      } else if (pushed) {
+        toastManager.add({
+          title: t('Sync completed'),
+          description: t('Pushed {{count}} commit(s) on {{branch}}', {
+            count: aheadVal,
+            branch: branch ?? '',
+          }),
           type: 'success',
           timeout: 3000,
         });

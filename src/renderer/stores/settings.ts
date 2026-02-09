@@ -254,6 +254,7 @@ export interface ClaudeCodeIntegrationSettings {
   permissionRequestHookEnabled: boolean; // Enable PermissionRequest hook for AskUserQuestion notifications
   statusLineEnabled: boolean; // Enable Status Line hook for displaying agent status
   statusLineFields: StatusLineFieldSettings; // Which fields to display in status line
+  tmuxEnabled: boolean; // Enable tmux session wrapping for persistent terminal sessions
   showProviderSwitcher: boolean; // Show provider switcher in SessionBar
   enableProviderDisableFeature: boolean; // Enable/disable the provider temporary disable feature
   providers: import('@shared/types').ClaudeProvider[];
@@ -267,6 +268,7 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   permissionRequestHookEnabled: true, // Enable PermissionRequest hook for AskUserQuestion notifications
   statusLineEnabled: false, // Disable Status Line hook by default
   statusLineFields: defaultStatusLineFieldSettings,
+  tmuxEnabled: false, // Disable tmux wrapping by default
   showProviderSwitcher: true,
   enableProviderDisableFeature: false,
   providers: [],
@@ -595,6 +597,8 @@ interface SettingsState {
   webInspectorEnabled: boolean;
   // Hide Groups setting
   hideGroups: boolean;
+  // Copy on Selection
+  copyOnSelection: boolean;
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -682,6 +686,8 @@ interface SettingsState {
   setWebInspectorEnabled: (enabled: boolean) => void;
   // Hide Groups method
   setHideGroups: (hide: boolean) => void;
+  // Copy on Selection
+  setCopyOnSelection: (enabled: boolean) => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -765,6 +771,8 @@ export const useSettingsStore = create<SettingsState>()(
       webInspectorEnabled: false,
       // Hide Groups default
       hideGroups: false,
+      // Copy on Selection default
+      copyOnSelection: false,
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -1097,6 +1105,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       // Hide Groups method
       setHideGroups: (hideGroups) => set({ hideGroups }),
+      // Copy on Selection
+      setCopyOnSelection: (copyOnSelection) => set({ copyOnSelection }),
     }),
     {
       name: 'enso-settings',
