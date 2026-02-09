@@ -13,6 +13,7 @@ import {
 import { useI18n } from '@/i18n';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
+import { cn } from '@/lib/utils';
 import { useInitScriptStore } from '@/stores/initScript';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalStore } from '@/stores/terminal';
@@ -64,9 +65,12 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
     (state) => state.autoCreateSessionOnTempActivate
   );
   const terminalTheme = useSettingsStore((state) => state.terminalTheme);
+  const bgImageEnabled = useSettingsStore((state) => state.backgroundImageEnabled);
   const terminalBgColor = useMemo(() => {
+    // When background image is enabled, make terminal panel transparent
+    if (bgImageEnabled) return 'transparent';
     return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
-  }, [terminalTheme]);
+  }, [terminalTheme, bgImageEnabled]);
   const { setTerminalCount, registerTerminalCloseHandler } = useWorktreeActivityStore();
   const syncTerminalSessions = useTerminalStore((s) => s.syncSessions);
   const { pendingScript, clearPendingScript } = useInitScriptStore();
@@ -763,7 +767,7 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
 
   if (!cwd) {
     return (
-      <div className="h-full bg-background flex items-center justify-center">
+      <div className={cn("h-full flex items-center justify-center", !bgImageEnabled && "bg-background")}>
         <Empty className="border-0">
           <EmptyMedia variant="icon">
             <Terminal className="h-4.5 w-4.5" />
@@ -815,7 +819,7 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
       {/* Empty state overlay - shown when current worktree has no terminals */}
       {/* IMPORTANT: Don't use early return here - terminals must stay mounted to prevent PTY destruction */}
       {showEmptyState && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+        <div className={cn("absolute inset-0 z-20 flex items-center justify-center", !bgImageEnabled && "bg-background")}>
           <Empty className="border-0">
             <EmptyMedia variant="icon">
               <Terminal className="h-4.5 w-4.5" />
@@ -846,7 +850,7 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
             }
           >
             {/* Tab bars row - flex layout */}
-            <div className="flex h-9 w-full bg-background">
+            <div className={cn("flex h-9 w-full", !bgImageEnabled && "bg-background")}>
               {state.groups.map((group, index) => (
                 <div
                   key={group.id}
