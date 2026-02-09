@@ -11,11 +11,7 @@ import { useI18n } from '@/i18n';
 import { type OutputState, useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
-import {
-  registerSessionWorktree,
-  unregisterSessionWorktree,
-  useWorktreeActivityStore,
-} from '@/stores/worktreeActivity';
+import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 
 interface AgentTerminalProps {
   id?: string; // Terminal session ID (UI key)
@@ -150,22 +146,9 @@ export function AgentTerminal({
     }
   }, [isActive, terminalSessionId, markSessionActive]);
 
-  // Register session worktree mapping for activity state tracking.
-  // The cleanup function uses the closure value of terminalSessionId (not a ref) because:
-  // 1. React guarantees cleanup runs with the values from the effect that created it
-  // 2. This ensures we unregister the exact sessionId that was registered
-  // 3. Using a ref would risk unregistering a different sessionId if it changed between registration and cleanup
-  useEffect(() => {
-    if (terminalSessionId && cwd) {
-      registerSessionWorktree(terminalSessionId, cwd);
-      return () => {
-        unregisterSessionWorktree(terminalSessionId);
-      };
-    }
-  }, [terminalSessionId, cwd]);
-
   // Activity state setter - used by startActivityPolling and handleData/handleCustomKey
   const setActivityState = useWorktreeActivityStore((s) => s.setActivityState);
+  const getActivityState = useWorktreeActivityStore((s) => s.getActivityState);
 
   // Start polling for process activity
   const startActivityPolling = useCallback(() => {
@@ -196,9 +179,14 @@ export function AgentTerminal({
           // If we have enough output, show the indicator
           if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
             updateOutputState('outputting');
-            // Also update worktree activity state to 'running'
+            // Also update worktree activity state to 'running'.
+            // Do not override hook-driven states ('waiting_input'/'completed');
+            // these should only transition back to running on next user Enter.
             if (cwd) {
-              setActivityState(cwd, 'running');
+              const currentState = getActivityState(cwd);
+              if (currentState === 'idle' || currentState === 'running') {
+                setActivityState(cwd, 'running');
+              }
             }
           }
         } else {
@@ -219,7 +207,7 @@ export function AgentTerminal({
         // Error checking activity, ignore
       }
     }, ACTIVITY_POLL_INTERVAL_MS);
-  }, [updateOutputState, cwd, setActivityState]);
+  }, [updateOutputState, cwd, setActivityState, getActivityState]);
 
   // Stop polling for process activity
   const stopActivityPolling = useCallback(() => {

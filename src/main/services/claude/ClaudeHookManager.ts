@@ -93,6 +93,75 @@ const http = require('http');
 
 const IDE_DIR = '${ideDirJs}';
 
+function normalizePathForMatch(p) {
+  if (typeof p !== 'string' || p.length === 0) return '';
+  let normalized = p.replace(/\\\\/g, '/').replace(/\\/+$/, '');
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    normalized = normalized.toLowerCase();
+  }
+  return normalized;
+}
+
+function getPayloadCwd(data) {
+  if (typeof data?.cwd === 'string') return data.cwd;
+  if (typeof data?.workspace?.current_dir === 'string') return data.workspace.current_dir;
+  if (typeof data?.workspace?.project_dir === 'string') return data.workspace.project_dir;
+  if (typeof data?.project_dir === 'string') return data.project_dir;
+  return undefined;
+}
+
+function getWorkspaceMatchScore(payloadCwd, workspaceFolders) {
+  const normalizedCwd = normalizePathForMatch(payloadCwd);
+  if (!normalizedCwd || !Array.isArray(workspaceFolders) || workspaceFolders.length === 0) {
+    return -1;
+  }
+
+  let bestScore = -1;
+  for (const folder of workspaceFolders) {
+    const normalizedFolder = normalizePathForMatch(folder);
+    if (!normalizedFolder) continue;
+
+    // Match when cwd is inside workspace or workspace is inside cwd.
+    if (
+      normalizedCwd === normalizedFolder ||
+      normalizedCwd.startsWith(normalizedFolder + '/') ||
+      normalizedFolder.startsWith(normalizedCwd + '/')
+    ) {
+      bestScore = Math.max(bestScore, normalizedFolder.length);
+    }
+  }
+  return bestScore;
+}
+
+function postAgentHook(port, postData) {
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: '/agent-hook',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+        timeout: 2000,
+      },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode >= 200 && res.statusCode < 300);
+      }
+    );
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.write(postData);
+    req.end();
+  });
+}
+
 async function main() {
   // Read JSON from stdin
   let input = '';
@@ -113,37 +182,45 @@ async function main() {
     process.exit(0);
   }
 
-  // Find EnsoAI lockfiles and send notification to ALL instances
+  // Find EnsoAI lockfiles and send notification to the best matching workspace instance.
+  // Fallback to other EnsoAI instances when matched lockfiles are stale.
   if (!fs.existsSync(IDE_DIR)) {
     process.exit(0);
   }
 
+  const payloadCwd = getPayloadCwd(data);
   const lockfiles = fs.readdirSync(IDE_DIR).filter(f => f.endsWith('.lock'));
+  const candidates = [];
+
   for (const lockfile of lockfiles) {
     try {
       const content = JSON.parse(fs.readFileSync(path.join(IDE_DIR, lockfile), 'utf-8'));
       if (content.ideName === 'EnsoAI') {
-        const port = path.basename(lockfile, '.lock');
-        // Send POST request with full data
-        const postData = JSON.stringify(data);
-        const req = http.request({
-          hostname: '127.0.0.1',
-          port: parseInt(port),
-          path: '/agent-hook',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(postData),
-          },
-          timeout: 2000,
-        });
-        req.on('error', () => {});
-        req.write(postData);
-        req.end();
-        break;
+        const port = parseInt(path.basename(lockfile, '.lock'), 10);
+        if (Number.isNaN(port)) continue;
+        const score = getWorkspaceMatchScore(payloadCwd, content.workspaceFolders);
+        candidates.push({ port, score });
       }
     } catch {
       // Ignore errors, try next lockfile
+    }
+  }
+
+  if (candidates.length === 0) {
+    process.exit(0);
+  }
+
+  // Prefer lockfiles whose workspaceFolders match payload cwd.
+  // If no payload cwd or no match, keep previous resilience by trying all.
+  const matched = candidates.filter(c => c.score >= 0).sort((a, b) => b.score - a.score);
+  const fallback = candidates.filter(c => c.score < 0);
+  const targets = matched.length > 0 ? [...matched, ...fallback] : fallback;
+
+  const postData = JSON.stringify(data);
+  for (const target of targets) {
+    const ok = await postAgentHook(target.port, postData);
+    if (ok) {
+      break;
     }
   }
 }
