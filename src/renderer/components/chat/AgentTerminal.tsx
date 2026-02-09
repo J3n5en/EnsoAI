@@ -570,7 +570,7 @@ export function AgentTerminal({
       if (event.type !== 'keydown') return true;
 
       // Handle Ctrl+G to toggle enhanced input (only for Claude)
-      if (event.ctrlKey && event.key === 'g' && agentId === 'claude') {
+      if (event.ctrlKey && event.code === 'KeyG' && agentId === 'claude') {
         if (claudeCodeIntegration.enhancedInputEnabled) {
           setEnhancedInputOpen(!enhancedInputOpen);
           return false; // Block the key event only when enhanced input is enabled
@@ -742,7 +742,7 @@ export function AgentTerminal({
   // Handle Cmd+F / Ctrl+F
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyF') {
         e.preventDefault();
         if (isSearchOpen) {
           searchBarRef.current?.focus();

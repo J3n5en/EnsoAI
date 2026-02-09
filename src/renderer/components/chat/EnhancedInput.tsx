@@ -35,7 +35,7 @@ interface EnhancedInputProps {
 
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-const DEFAULT_MIN_H = 60;
+const DEFAULT_MIN_H = 32;
 
 export function EnhancedInput({
   open,
@@ -544,14 +544,14 @@ export function EnhancedInput({
 
           {/* Resize handle */}
           <div
-            className="h-3 cursor-ns-resize group flex items-center justify-center"
+            className="h-2 cursor-ns-resize group flex items-center justify-center"
             onMouseDown={handleResizeStart}
           >
             <div className="w-8 h-0.5 rounded-full bg-border group-hover:bg-muted-foreground transition-colors" />
           </div>
 
           {/* Textarea */}
-          <div onDrop={handleDrop} onDragOver={handleDragOver}>
+          <div onDrop={handleDrop} onDragOver={handleDragOver} className="flex">
             <textarea
               ref={textareaRef}
               value={content}
@@ -566,7 +566,7 @@ export function EnhancedInput({
               onPaste={handlePaste}
               onBlur={handleBlur}
               placeholder={t('Type your message... (Shift+Enter for newline)')}
-              className="w-full min-h-[60px] px-3 resize-none bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/60"
+              className="w-full min-h-[32px] px-3 resize-none bg-transparent text-sm leading-normal focus:outline-none placeholder:text-muted-foreground/60"
               rows={1}
             />
           </div>
