@@ -39,6 +39,7 @@ import {
 } from './App/storage';
 import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
 import { usePanelResize } from './App/usePanelResize';
+import { DevToolsOverlay } from './components/DevToolsOverlay';
 import { UnsavedPromptHost } from './components/files/UnsavedPromptHost';
 import { AddRepositoryDialog } from './components/git';
 import { CloneProgressFloat } from './components/git/CloneProgressFloat';
@@ -1582,6 +1583,9 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden">
       {/* Custom Title Bar for Windows/Linux */}
       <WindowTitleBar onOpenSettings={openSettings} />
+
+      {/* DevTools Overlay for macOS traffic lights protection */}
+      <DevToolsOverlay />
 
       {/* Main Layout */}
       <div className={`flex flex-1 overflow-hidden ${resizing ? 'select-none' : ''}`}>
