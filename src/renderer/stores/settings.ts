@@ -581,6 +581,12 @@ interface SettingsState {
   temporaryWorkspaceEnabled: boolean; // Enable Temp Session (Beta)
   defaultTemporaryPath: string; // Default path for temp sessions
   autoCreateSessionOnTempActivate: boolean; // Auto-create agent/terminal session when temp session becomes active
+  // Background image (Beta)
+  backgroundImageEnabled: boolean;
+  backgroundImagePath: string; // Local path or URL
+  backgroundOpacity: number; // 0-1, background image opacity
+  backgroundBlur: number; // 0-20, blur px
+  backgroundSizeMode: 'cover' | 'contain' | 'repeat' | 'center';
   // MCP, Prompts management
   mcpServers: McpServer[];
   promptPresets: PromptPreset[];
@@ -657,6 +663,12 @@ interface SettingsState {
   setTemporaryWorkspaceEnabled: (enabled: boolean) => void;
   setDefaultTemporaryPath: (path: string) => void;
   setAutoCreateSessionOnTempActivate: (enabled: boolean) => void;
+  // Background image methods
+  setBackgroundImageEnabled: (enabled: boolean) => void;
+  setBackgroundImagePath: (path: string) => void;
+  setBackgroundOpacity: (opacity: number) => void;
+  setBackgroundBlur: (blur: number) => void;
+  setBackgroundSizeMode: (mode: 'cover' | 'contain' | 'repeat' | 'center') => void;
   // MCP management
   addMcpServer: (server: McpServer) => void;
   updateMcpServer: (id: string, updates: Partial<McpServer>) => void;
@@ -750,6 +762,12 @@ export const useSettingsStore = create<SettingsState>()(
       temporaryWorkspaceEnabled: false,
       defaultTemporaryPath: '', // Empty means use default ~/ensoai/temporary
       autoCreateSessionOnTempActivate: false,
+      // Background image defaults
+      backgroundImageEnabled: false,
+      backgroundImagePath: '',
+      backgroundOpacity: 0.85,
+      backgroundBlur: 0,
+      backgroundSizeMode: 'cover',
       // MCP, Prompts defaults
       mcpServers: [],
       promptPresets: [],
@@ -997,6 +1015,24 @@ export const useSettingsStore = create<SettingsState>()(
       setDefaultTemporaryPath: (defaultTemporaryPath) => set({ defaultTemporaryPath }),
       setAutoCreateSessionOnTempActivate: (autoCreateSessionOnTempActivate) =>
         set({ autoCreateSessionOnTempActivate }),
+      // Background image methods
+      setBackgroundImageEnabled: (backgroundImageEnabled) => set({ backgroundImageEnabled }),
+      setBackgroundImagePath: (backgroundImagePath) => set({ backgroundImagePath }),
+      setBackgroundOpacity: (backgroundOpacity) => {
+        const safeValue = Number.isFinite(backgroundOpacity)
+          ? backgroundOpacity
+          : get().backgroundOpacity;
+        const clamped = Math.min(1, Math.max(0, safeValue));
+        set({ backgroundOpacity: clamped });
+      },
+      setBackgroundBlur: (backgroundBlur) => {
+        const safeValue = Number.isFinite(backgroundBlur)
+          ? backgroundBlur
+          : get().backgroundBlur;
+        const clamped = Math.min(20, Math.max(0, safeValue));
+        set({ backgroundBlur: clamped });
+      },
+      setBackgroundSizeMode: (backgroundSizeMode) => set({ backgroundSizeMode }),
       // MCP management
       addMcpServer: (server) =>
         set((state) => ({
@@ -1115,6 +1151,59 @@ export const useSettingsStore = create<SettingsState>()(
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<SettingsState>;
 
+        const clampNumber = (value: unknown, min: number, max: number, fallback: number) => {
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return Math.min(max, Math.max(min, value));
+          }
+          if (typeof value === 'string') {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) {
+              return Math.min(max, Math.max(min, parsed));
+            }
+          }
+          return fallback;
+        };
+
+        const sanitizeBoolean = (value: unknown, fallback: boolean) =>
+          typeof value === 'boolean' ? value : fallback;
+
+        const sanitizeString = (value: unknown, fallback: string) =>
+          (typeof value === 'string' ? value : fallback);
+
+        const sizeModes: SettingsState['backgroundSizeMode'][] = ['cover', 'contain', 'repeat', 'center'];
+        const sanitizeSizeMode = (
+          value: unknown,
+          fallback: SettingsState['backgroundSizeMode']
+        ): SettingsState['backgroundSizeMode'] =>
+          sizeModes.includes(value as SettingsState['backgroundSizeMode'])
+            ? (value as SettingsState['backgroundSizeMode'])
+            : fallback;
+
+        const sanitizedBackgroundOpacity = clampNumber(
+          persisted.backgroundOpacity,
+          0,
+          1,
+          currentState.backgroundOpacity
+        );
+        const sanitizedBackgroundBlur = clampNumber(
+          persisted.backgroundBlur,
+          0,
+          20,
+          currentState.backgroundBlur
+        );
+        const sanitizedBackgroundImageEnabled = sanitizeBoolean(
+          persisted.backgroundImageEnabled,
+          currentState.backgroundImageEnabled
+        );
+        const sanitizedBackgroundImagePath = sanitizeString(
+          persisted.backgroundImagePath,
+          currentState.backgroundImagePath
+        );
+        const sanitizedBackgroundSizeMode = sanitizeSizeMode(
+          persisted.backgroundSizeMode,
+          currentState.backgroundSizeMode
+        );
+
         // Migrate legacy 'canvas' renderer to 'webgl' (canvas support was removed)
         // Cast to string for comparison since persisted data may contain old values
         const terminalRenderer =
@@ -1205,6 +1294,11 @@ export const useSettingsStore = create<SettingsState>()(
             ...currentState.workspaceKeybindings,
             ...persisted.workspaceKeybindings,
           },
+          backgroundImageEnabled: sanitizedBackgroundImageEnabled,
+          backgroundImagePath: sanitizedBackgroundImagePath,
+          backgroundOpacity: sanitizedBackgroundOpacity,
+          backgroundBlur: sanitizedBackgroundBlur,
+          backgroundSizeMode: sanitizedBackgroundSizeMode,
           editorSettings: {
             ...currentState.editorSettings,
             ...persisted.editorSettings,

@@ -1,10 +1,24 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
 import { IPC_CHANNELS } from '@shared/types';
 import { app, BrowserWindow, ipcMain, Menu, net, protocol } from 'electron';
+
+// Register custom protocol privileges
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-image',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 // Fix environment for packaged app (macOS GUI apps don't inherit shell env)
 if (process.platform === 'darwin') {
@@ -223,6 +237,75 @@ app.whenReady().then(async () => {
 
       return net.fetch(fileUrl.toString());
     } catch {
+      return new Response('Bad Request', { status: 400 });
+    }
+  });
+
+  // Register protocol to handle local background images (no root check, but extension check)
+  protocol.handle('local-image', (request) => {
+    try {
+      // Manual path parsing to handle Windows drive letters robustly
+      // Standard fileURLToPath can be flaky with custom protocols if hostname is interpreted as drive letter
+      const urlObj = new URL(request.url);
+      let filePath = '';
+
+      if (urlObj.hostname && /^[a-zA-Z]$/.test(urlObj.hostname) && process.platform === 'win32') {
+        // Case: local-image://c/Users/... (hostname='c')
+        filePath = `${urlObj.hostname}:${decodeURIComponent(urlObj.pathname)}`;
+      } else {
+        // Case: local-image:///C:/Users/... (pathname='/C:/Users/...')
+        let pathname = decodeURIComponent(urlObj.pathname);
+        if (process.platform === 'win32' && /^\/[a-zA-Z]:/.test(pathname)) {
+          pathname = pathname.slice(1);
+        }
+        filePath = pathname;
+      }
+      
+      // Normalize slashes for Windows
+      if (process.platform === 'win32') {
+        filePath = filePath.replace(/\//g, '\\');
+      }
+
+      console.log(`[local-image] Request URL: ${request.url}`);
+      console.log(`[local-image] Parsed Path: ${filePath}`);
+
+      // Security check: only allow image extensions
+      const ext = extname(filePath).toLowerCase();
+      // Allow empty extension for now just in case, but strictly should be image
+      const allowedExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', ''];
+      
+      if (!allowedExts.includes(ext) && ext !== '') {
+        console.warn(`[local-image] Blocked extension: ${ext} for path: ${filePath}`);
+        return new Response('Forbidden', { status: 403 });
+      }
+
+      // Use fs.readFileSync to bypass net.fetch quirks with local files
+      try {
+        const buffer = readFileSync(filePath);
+        
+        // Determine mime type
+        const mimeTypes: Record<string, string> = {
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+          '.bmp': 'image/bmp',
+          '.svg': 'image/svg+xml',
+        };
+        
+        return new Response(buffer, {
+          headers: {
+            'Content-Type': mimeTypes[ext] || 'application/octet-stream',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      } catch (e) {
+        console.error(`[local-image] Read error for ${filePath}:`, e);
+        return new Response('Not Found', { status: 404 });
+      }
+    } catch (error) {
+      console.error('[local-image] Error handling request:', request.url, error);
       return new Response('Bad Request', { status: 400 });
     }
   });
