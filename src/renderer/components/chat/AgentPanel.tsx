@@ -16,6 +16,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
+import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { initAgentStatusListener } from '@/stores/agentStatus';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
@@ -162,9 +163,11 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     setQuickTerminalOpen,
   ]);
 
+  const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
   const terminalBgColor = useMemo(() => {
+    if (bgImageEnabled) return 'transparent';
     return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
-  }, [terminalTheme]);
+  }, [terminalTheme, bgImageEnabled]);
   const statusLineEnabled = claudeCodeIntegration.statusLineEnabled;
   const defaultAgentId = useMemo(() => getDefaultAgentId(agentSettings), [agentSettings]);
   const { setAgentCount, registerAgentCloseHandler } = useWorktreeActivityStore();
@@ -1183,7 +1186,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       {/* Empty state overlay - shown when current worktree has no sessions */}
       {/* IMPORTANT: Don't use early return here - terminals must stay mounted to prevent PTY destruction */}
       {showEmptyState && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+        <div className={cn("absolute inset-0 z-20 flex items-center justify-center", !bgImageEnabled && "bg-background")}>
           <Empty className="border-0">
             <EmptyMedia variant="icon">
               <Sparkles className="h-4.5 w-4.5" />
