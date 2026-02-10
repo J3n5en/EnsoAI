@@ -453,7 +453,10 @@ export class GitService {
   }
 
   async checkout(branch: string): Promise<void> {
-    await this.git.checkout(branch);
+    // Remote branch names are in the format "remotes/origin/branch-name"
+    // git checkout requires "origin/branch-name" format to properly track remote branches
+    const normalizedBranch = branch.startsWith('remotes/') ? branch.slice(8) : branch;
+    await this.git.checkout(normalizedBranch);
   }
 
   async createBranch(name: string, startPoint?: string): Promise<void> {
