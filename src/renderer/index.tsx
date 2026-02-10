@@ -11,19 +11,6 @@ import './styles/globals.css';
 log.transports.ipc.level = 'error';
 Object.assign(console, log.functions);
 
-/**
- * Update renderer logging configuration
- * Called by settings store after rehydration to sync with user preferences
- */
-export function updateRendererLogging(
-  enabled: boolean,
-  level: 'error' | 'warn' | 'info' | 'debug'
-) {
-  // Control IPC transport level to reduce unnecessary IPC messages
-  // When disabled, only send errors; when enabled, use configured level
-  log.transports.ipc.level = enabled ? level : 'error';
-}
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

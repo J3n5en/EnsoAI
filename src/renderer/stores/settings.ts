@@ -17,6 +17,7 @@ import {
   clearTerminalThemeFromApp,
   isTerminalThemeDark,
 } from '@/lib/ghosttyTheme';
+import { updateRendererLogging } from '@/utils/logging';
 
 // Custom storage using Electron IPC to persist settings to JSON file
 const electronStorage = {
@@ -1210,18 +1211,14 @@ export const useSettingsStore = create<SettingsState>()(
         set({ loggingEnabled });
         // Update both main process and renderer IPC transport level
         window.electronAPI.log.updateConfig({ enabled: loggingEnabled, level: logLevel });
-        import('../index').then(({ updateRendererLogging }) => {
-          updateRendererLogging(loggingEnabled, logLevel);
-        });
+        updateRendererLogging(loggingEnabled, logLevel);
       },
       setLogLevel: (logLevel) => {
         const { loggingEnabled } = get();
         set({ logLevel });
         // Update both main process and renderer IPC transport level
         window.electronAPI.log.updateConfig({ enabled: loggingEnabled, level: logLevel });
-        import('../index').then(({ updateRendererLogging }) => {
-          updateRendererLogging(loggingEnabled, logLevel);
-        });
+        updateRendererLogging(loggingEnabled, logLevel);
       },
     }),
     {
@@ -1501,9 +1498,7 @@ export const useSettingsStore = create<SettingsState>()(
         applyInitialSettings(effectiveState);
 
         // Sync renderer logging configuration after settings are loaded
-        import('../index').then(({ updateRendererLogging }) => {
-          updateRendererLogging(effectiveState.loggingEnabled, effectiveState.logLevel);
-        });
+        updateRendererLogging(effectiveState.loggingEnabled, effectiveState.logLevel);
 
         // 监听系统主题变化，当用户选择"跟随系统"时自动切换
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

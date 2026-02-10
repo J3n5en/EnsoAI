@@ -16,11 +16,20 @@ export function registerLogHandlers(): void {
   // Open log folder
   ipcMain.handle(IPC_CHANNELS.LOG_OPEN_FOLDER, async () => {
     const logDir = app.getPath('logs');
-    await shell.openPath(logDir);
+    const error = await shell.openPath(logDir);
+    if (error) {
+      log.error(`Failed to open log folder: ${error}`);
+      throw new Error(`Failed to open log folder: ${error}`);
+    }
   });
 
-  // Get log file path
+  // Get log file path (current day's log file)
   ipcMain.handle(IPC_CHANNELS.LOG_GET_PATH, async () => {
-    return path.join(app.getPath('logs'), 'ensoai.log');
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const fileName = `ensoai-${year}-${month}-${day}.log`;
+    return path.join(app.getPath('logs'), fileName);
   });
 }
