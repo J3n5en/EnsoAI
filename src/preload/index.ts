@@ -778,6 +778,7 @@ const electronAPI = {
       telegramBotToken: string;
       webappUrl: string;
       allowedChatIds: string;
+      runnerEnabled?: boolean;
     }): Promise<{
       running: boolean;
       ready?: boolean;
@@ -793,6 +794,7 @@ const electronAPI = {
       telegramBotToken: string;
       webappUrl: string;
       allowedChatIds: string;
+      runnerEnabled?: boolean;
     }): Promise<{
       running: boolean;
       ready?: boolean;
@@ -822,6 +824,35 @@ const electronAPI = {
       ) => callback(status);
       ipcRenderer.on(IPC_CHANNELS.HAPI_STATUS_CHANGED, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.HAPI_STATUS_CHANGED, handler);
+    },
+  },
+
+  // Hapi Runner
+  hapiRunner: {
+    start: (): Promise<{
+      running: boolean;
+      pid?: number;
+      error?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.HAPI_RUNNER_START),
+    stop: (): Promise<{
+      running: boolean;
+      pid?: number;
+      error?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.HAPI_RUNNER_STOP),
+    getStatus: (): Promise<{
+      running: boolean;
+      pid?: number;
+      error?: string;
+    }> => ipcRenderer.invoke(IPC_CHANNELS.HAPI_RUNNER_GET_STATUS),
+    onStatusChanged: (
+      callback: (status: { running: boolean; pid?: number; error?: string }) => void
+    ): (() => void) => {
+      const handler = (
+        _: unknown,
+        status: { running: boolean; pid?: number; error?: string }
+      ) => callback(status);
+      ipcRenderer.on(IPC_CHANNELS.HAPI_RUNNER_STATUS_CHANGED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.HAPI_RUNNER_STATUS_CHANGED, handler);
     },
   },
 

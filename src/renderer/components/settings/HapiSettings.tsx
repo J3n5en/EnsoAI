@@ -135,7 +135,10 @@ export function HapiSettings() {
     try {
       if (enabled) {
         const config = getConfig();
-        await window.electronAPI.hapi.start(config);
+        await window.electronAPI.hapi.start({
+          ...config,
+          runnerEnabled: hapiSettings.runnerEnabled,
+        });
       } else {
         await window.electronAPI.hapi.stop();
         // Also stop cloudflared when disabling hapi
@@ -169,10 +172,17 @@ export function HapiSettings() {
     saveSettings();
     try {
       const config = getConfig();
-      await window.electronAPI.hapi.restart(config);
+      await window.electronAPI.hapi.restart({
+        ...config,
+        runnerEnabled: hapiSettings.runnerEnabled,
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRunnerEnabledChange = (checked: boolean) => {
+    setHapiSettings({ runnerEnabled: checked });
   };
 
   const handleGenerateToken = () => {
@@ -291,6 +301,25 @@ export function HapiSettings() {
               </Button>
             </div>
           )}
+
+          {/* Runner Section */}
+          <div className="space-y-4 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">{t('Enable Remote Spawn (Runner)')}</span>
+                <p className="text-xs text-muted-foreground">
+                  {t('Automatically start Hapi Runner with Hapi service for remote session spawning')}
+                  {' '}
+                  {t('(Changes apply after service restart)')}
+                </p>
+              </div>
+              <Switch
+                checked={hapiSettings.runnerEnabled}
+                onCheckedChange={handleRunnerEnabledChange}
+                disabled={loading}
+              />
+            </div>
+          </div>
 
           {/* Cloudflared Section */}
           <div className="space-y-4 border-t pt-4">

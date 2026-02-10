@@ -388,6 +388,8 @@ export interface HapiSettings {
   tunnelMode: TunnelMode;
   tunnelToken: string;
   useHttp2: boolean;
+  // Hapi runner settings
+  runnerEnabled: boolean;
   // Happy settings
   happyEnabled: boolean;
 }
@@ -404,6 +406,8 @@ export const defaultHapiSettings: HapiSettings = {
   tunnelMode: 'quick',
   tunnelToken: '',
   useHttp2: true,
+  // Hapi runner defaults
+  runnerEnabled: false,
   // Happy defaults
   happyEnabled: false,
 };

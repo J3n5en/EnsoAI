@@ -230,6 +230,12 @@ export const IPC_CHANNELS = {
   HAPI_GET_STATUS: 'hapi:getStatus',
   HAPI_STATUS_CHANGED: 'hapi:statusChanged',
 
+  // Hapi Runner
+  HAPI_RUNNER_START: 'hapiRunner:start',
+  HAPI_RUNNER_STOP: 'hapiRunner:stop',
+  HAPI_RUNNER_GET_STATUS: 'hapiRunner:getStatus',
+  HAPI_RUNNER_STATUS_CHANGED: 'hapiRunner:statusChanged',
+
   // Cloudflared Tunnel
   CLOUDFLARED_CHECK: 'cloudflared:check',
   CLOUDFLARED_INSTALL: 'cloudflared:install',

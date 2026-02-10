@@ -1003,6 +1003,10 @@ export const zhTranslations: Record<string, string> = {
   'Starting...': '启动中...',
   'Use HTTP/2 Protocol': '使用 HTTP/2 协议',
   'More compatible than QUIC when behind firewalls': '在防火墙后比 QUIC 更兼容',
+  'Enable Remote Spawn (Runner)': '启用远程创建会话 (Runner)',
+  'Automatically start Hapi Runner with Hapi service for remote session spawning':
+    '随 Hapi 服务自动启动 Hapi Runner，以支持远程创建新会话',
+  '(Changes apply after service restart)': '（重启服务生效）',
   // Happy
   'Happy Agents': 'Happy Agent',
   'Agents running through Happy': '通过 Happy 运行的 Agent',
