@@ -1222,6 +1222,22 @@ export const zhTranslations: Record<string, string> = {
   'Copy on Selection': '选中即复制',
   'Automatically copy selected text in the terminal to the clipboard':
     '自动将终端中选中的文本复制到剪贴板',
+  // Logging
+  Logging: '日志记录',
+  'Enable Logging': '启用日志',
+  'Enable logging to help diagnose issues. Logs are stored locally and never uploaded.':
+    '启用日志记录以帮助诊断问题。日志存储在本地，不会上传。',
+  'Log Level': '日志级别',
+  Error: '错误',
+  Warning: '警告',
+  Info: '信息',
+  Debug: '调试',
+  'Only critical errors': '仅关键错误',
+  'Errors and warnings': '错误和警告',
+  'General information': '常规信息',
+  'Detailed diagnostic information': '详细诊断信息',
+  'Log Files': '日志文件',
+  'Open Log Folder': '打开日志文件夹',
 };
 
 export function normalizeLocale(input?: string): Locale {

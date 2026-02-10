@@ -48,6 +48,7 @@
     "class-variance-authority": "^0.7.1",
     "cloudflared": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-log": "^5.4.3",
     "electron-updater": "^6.6.2",
     "emoji-picker-react": "^4.16.1",
     "framer-motion": "^12.23.26",
@@ -81,6 +82,7 @@
     "@types/pidusage": "^2.0.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/sqlite3": "^3.1.11",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.23",
@@ -92,8 +94,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vite": "^7.3.0",
-    "@types/sqlite3": "^3.1.11"
+    "vite": "^7.3.0"
   },
   "engines": {
     "node": ">=20"

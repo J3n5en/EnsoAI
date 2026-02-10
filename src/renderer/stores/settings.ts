@@ -617,6 +617,9 @@ interface SettingsState {
   hideGroups: boolean;
   // Copy on Selection
   copyOnSelection: boolean;
+  // Logging
+  loggingEnabled: boolean;
+  logLevel: 'error' | 'warn' | 'info' | 'debug';
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
@@ -720,6 +723,9 @@ interface SettingsState {
   setHideGroups: (hide: boolean) => void;
   // Copy on Selection
   setCopyOnSelection: (enabled: boolean) => void;
+  // Logging
+  setLoggingEnabled: (enabled: boolean) => void;
+  setLogLevel: (level: 'error' | 'warn' | 'info' | 'debug') => void;
 }
 
 const defaultAgentSettings: AgentSettings = {
@@ -819,6 +825,9 @@ export const useSettingsStore = create<SettingsState>()(
       hideGroups: false,
       // Copy on Selection default
       copyOnSelection: false,
+      // Logging defaults
+      loggingEnabled: false,
+      logLevel: 'info',
 
       setTheme: (theme) => {
         const terminalTheme = get().terminalTheme;
@@ -1195,6 +1204,15 @@ export const useSettingsStore = create<SettingsState>()(
       setHideGroups: (hideGroups) => set({ hideGroups }),
       // Copy on Selection
       setCopyOnSelection: (copyOnSelection) => set({ copyOnSelection }),
+      // Logging
+      setLoggingEnabled: (loggingEnabled) => {
+        set({ loggingEnabled });
+        window.electronAPI.log.setLoggingEnabled(loggingEnabled);
+      },
+      setLogLevel: (logLevel) => {
+        set({ logLevel });
+        window.electronAPI.log.setLogLevel(logLevel);
+      },
     }),
     {
       name: 'enso-settings',

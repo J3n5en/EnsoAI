@@ -237,6 +237,12 @@ export const IPC_CHANNELS = {
   CLOUDFLARED_STOP: 'cloudflared:stop',
   CLOUDFLARED_GET_STATUS: 'cloudflared:getStatus',
   CLOUDFLARED_STATUS_CHANGED: 'cloudflared:statusChanged',
+
+  // Logging
+  LOG_SET_ENABLED: 'log:set-enabled',
+  LOG_SET_LEVEL: 'log:set-level',
+  LOG_OPEN_FOLDER: 'log:open-folder',
+  LOG_GET_PATH: 'log:get-path',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

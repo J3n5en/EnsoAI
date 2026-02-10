@@ -9,17 +9,18 @@ import { registerClaudeProviderHandlers } from './claudeProvider';
 import { registerCliHandlers } from './cli';
 import { registerDialogHandlers } from './dialog';
 import {
+  cleanupTempFiles,
+  cleanupTempFilesSync,
   registerFileHandlers,
   stopAllFileWatchers,
   stopAllFileWatchersSync,
-  cleanupTempFiles,
-  cleanupTempFilesSync,
 } from './files';
 import { clearAllGitServices, registerGitHandlers } from './git';
 import { autoStartHapi, cleanupHapi, registerHapiHandlers } from './hapi';
 
 export { autoStartHapi };
 
+import { registerLogHandlers } from './log';
 import { registerNotificationHandlers } from './notification';
 import { registerSearchHandlers } from './search';
 import { registerSettingsHandlers } from './settings';
@@ -46,6 +47,7 @@ export function registerIpcHandlers(): void {
   registerCliHandlers();
   registerShellHandlers();
   registerSettingsHandlers();
+  registerLogHandlers();
   registerNotificationHandlers();
   registerUpdaterHandlers();
   registerSearchHandlers();

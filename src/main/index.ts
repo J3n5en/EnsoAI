@@ -38,6 +38,7 @@ import {
 } from './ipc';
 import { initClaudeProviderWatcher } from './ipc/claudeProvider';
 import { cleanupTempFiles } from './ipc/files';
+import { readSettings } from './ipc/settings';
 import { registerWindowHandlers } from './ipc/window';
 import { registerClaudeBridgeIpcHandlers } from './services/claude/ClaudeIdeBridge';
 import { unwatchClaudeSettings } from './services/claude/ClaudeProviderManager';
@@ -50,6 +51,7 @@ import { gitAutoFetchService } from './services/git/GitAutoFetchService';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
 import { webInspectorServer } from './services/webInspector';
+import log, { initLogger } from './utils/logger';
 import { createMainWindow } from './windows/MainWindow';
 
 let mainWindow: BrowserWindow | null = null;
@@ -212,6 +214,13 @@ async function initAutoUpdater(window: BrowserWindow): Promise<void> {
 }
 
 async function init(): Promise<void> {
+  // Initialize logger from settings
+  const settings = readSettings();
+  const loggingEnabled = (settings?.loggingEnabled as boolean) ?? false;
+  const logLevel = (settings?.logLevel as 'error' | 'warn' | 'info' | 'debug') ?? 'info';
+  initLogger(loggingEnabled, logLevel);
+  log.info('EnsoAI started');
+
   // Check Git installation
   const gitInstalled = await checkGitInstalled();
   if (!gitInstalled) {

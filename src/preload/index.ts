@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import 'electron-log/preload.js';
 import type { Locale } from '@shared/i18n';
 import type {
   AgentCliInfo,
@@ -901,6 +902,16 @@ const electronAPI = {
       ipcRenderer.on('web-inspector:data', handler);
       return () => ipcRenderer.off('web-inspector:data', handler);
     },
+  },
+
+  // Logging
+  log: {
+    setLoggingEnabled: (enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOG_SET_ENABLED, enabled),
+    setLogLevel: (level: 'error' | 'warn' | 'info' | 'debug'): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOG_SET_LEVEL, level),
+    openFolder: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.LOG_OPEN_FOLDER),
+    getPath: (): Promise<string> => ipcRenderer.invoke(IPC_CHANNELS.LOG_GET_PATH),
   },
 
   // Utilities
