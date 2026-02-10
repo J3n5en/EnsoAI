@@ -9,11 +9,11 @@ import { registerClaudeProviderHandlers } from './claudeProvider';
 import { registerCliHandlers } from './cli';
 import { registerDialogHandlers } from './dialog';
 import {
+  cleanupTempFiles,
+  cleanupTempFilesSync,
   registerFileHandlers,
   stopAllFileWatchers,
   stopAllFileWatchersSync,
-  cleanupTempFiles,
-  cleanupTempFilesSync,
 } from './files';
 import { clearAllGitServices, registerGitHandlers } from './git';
 import { autoStartHapi, cleanupHapi, registerHapiHandlers } from './hapi';

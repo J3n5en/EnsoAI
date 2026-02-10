@@ -133,6 +133,7 @@ export async function startCodeReview(
     model: string;
     reasoningEffort?: string;
     language: string;
+    prompt?: string;
   }
 ): Promise<void> {
   const store = useCodeReviewContinueStore.getState();
@@ -201,6 +202,7 @@ export async function startCodeReview(
       language: settings.language ?? '中文',
       reviewId,
       sessionId, // Pass sessionId for Claude session persistence
+      prompt: settings.prompt, // Pass custom prompt template
     });
 
     if (!result.success) {

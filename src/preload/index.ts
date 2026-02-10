@@ -148,6 +148,7 @@ const electronAPI = {
         reviewId: string;
         language?: string;
         sessionId?: string; // Restore this parameter for "Continue Conversation"
+        prompt?: string; // Custom prompt template
       }
     ): Promise<{ success: boolean; error?: string; sessionId?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CODE_REVIEW_START, workdir, options),

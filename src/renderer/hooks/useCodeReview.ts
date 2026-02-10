@@ -32,6 +32,7 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
       model: codeReviewSettings.model,
       reasoningEffort: codeReviewSettings.reasoningEffort,
       language: codeReviewSettings.language ?? '中文',
+      prompt: codeReviewSettings.prompt,
     });
   }, [
     repoPath,
@@ -39,6 +40,7 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
     codeReviewSettings.model,
     codeReviewSettings.reasoningEffort,
     codeReviewSettings.language,
+    codeReviewSettings.prompt,
   ]);
 
   return {

@@ -11,6 +11,7 @@ export interface CodeReviewOptions {
   language: string;
   reviewId: string;
   sessionId?: string; // Support session preservation for "Continue Conversation"
+  prompt?: string; // Custom prompt template
   onChunk: (chunk: string) => void;
   onComplete: () => void;
   onError: (error: string) => void;
@@ -47,7 +48,42 @@ function getDefaultBranch(workdir: string): string {
   return 'main';
 }
 
-function buildPrompt(gitDiff: string, gitLog: string, language: string): string {
+function buildPrompt(
+  gitDiff: string,
+  gitLog: string,
+  language: string,
+  customPrompt?: string
+): string {
+  // If custom prompt is provided, use it with variable substitution
+  if (customPrompt) {
+    // Localized placeholders for missing data
+    const noDiffPlaceholder = language === '中文' ? '(无可用差异)' : '(No diff available)';
+    const noLogPlaceholder = language === '中文' ? '(无提交历史)' : '(No commit history available)';
+
+    // Sequential replacement strategy to prevent double substitution:
+    // 1. Replace {language} first - least likely to appear in git content
+    // 2. Then replace {git_diff} and {git_log} - these contain user content
+    //
+    // This order prevents scenarios where git diff/log content contains "{language}"
+    // (e.g., reviewing changes to this file itself) from being incorrectly substituted.
+    //
+    // Since git command output rarely contains {git_diff} or {git_log} literals,
+    // replacing them last is safe.
+    let result = customPrompt;
+
+    // Step 1: Replace {language} - safe to do first
+    result = result.replace(/\{language\}/g, language);
+
+    // Step 2: Replace {git_diff} - now safe as {language} is already replaced
+    result = result.replace(/\{git_diff\}/g, gitDiff || noDiffPlaceholder);
+
+    // Step 3: Replace {git_log} - now safe as previous variables are replaced
+    result = result.replace(/\{git_log\}/g, gitLog || noLogPlaceholder);
+
+    return result;
+  }
+
+  // Default prompt
   return `Always reply in ${language}. You are performing a code review on the changes in the current branch.
 
 
@@ -252,6 +288,7 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     reasoningEffort,
     language,
     reviewId,
+    prompt: customPrompt,
     onChunk,
     onComplete,
     onError,
@@ -269,7 +306,7 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     return;
   }
 
-  const prompt = buildPrompt(gitDiff, gitLog, language);
+  const prompt = buildPrompt(gitDiff, gitLog, language, customPrompt);
 
   // Use stream-json for Claude, Cursor, and Gemini; json for Codex (doesn't support streaming well)
   const outputFormat = provider === 'codex-cli' ? 'json' : 'stream-json';

@@ -248,6 +248,7 @@ export function registerGitHandlers(): void {
         language?: string;
         reviewId: string;
         sessionId?: string; // Support sessionId for "Continue Conversation"
+        prompt?: string; // Custom prompt template
       }
     ): Promise<{ success: boolean; error?: string; sessionId?: string }> => {
       const resolved = validateWorkdir(workdir);
@@ -261,6 +262,7 @@ export function registerGitHandlers(): void {
         language: options.language ?? '中文',
         reviewId: options.reviewId,
         sessionId: options.sessionId, // Pass sessionId for session preservation
+        prompt: options.prompt, // Pass custom prompt template
         onChunk: (chunk) => {
           if (!sender.isDestroyed()) {
             sender.send(IPC_CHANNELS.GIT_CODE_REVIEW_DATA, {

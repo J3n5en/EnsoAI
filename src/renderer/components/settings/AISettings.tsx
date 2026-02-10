@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -11,10 +12,13 @@ import { useI18n } from '@/i18n';
 import {
   type AIProvider,
   defaultBranchNameGeneratorSettings,
+  defaultCodeReviewPromptEn,
+  defaultCodeReviewPromptZh,
   defaultCommitPromptEn,
   defaultCommitPromptZh,
   type ReasoningEffort,
   useSettingsStore,
+  validateCodeReviewPrompt,
 } from '@/stores/settings';
 
 // Provider options
@@ -75,6 +79,27 @@ export function AISettings() {
     branchNameGenerator,
     setBranchNameGenerator,
   } = useSettingsStore();
+
+  // Validation state for code review prompt
+  const [promptValidation, setPromptValidation] = useState<{
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+  } | null>(null);
+
+  // Validate code review prompt when it changes (with debounce)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (codeReview.prompt) {
+        const result = validateCodeReviewPrompt(codeReview.prompt);
+        setPromptValidation(result);
+      } else {
+        setPromptValidation(null);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [codeReview.prompt]);
 
   // Handle provider change with model reset
   const handleCommitProviderChange = (provider: AIProvider) => {
@@ -435,6 +460,68 @@ export function AISettings() {
                 <p className="text-xs text-muted-foreground">
                   {t('Language for code review output')}
                 </p>
+              </div>
+            </div>
+
+            {/* Code Review Prompt */}
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium">{t('Code Review Prompt')}</span>
+              <div className="space-y-1.5">
+                <textarea
+                  value={codeReview.prompt ?? ''}
+                  onChange={(e) => setCodeReview({ prompt: e.target.value })}
+                  maxLength={8000}
+                  className="w-full h-40 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder={t(
+                    'Enter a prompt template for code review.\nAvailable variables:\n• {language} - Review output language\n• {git_diff} - Git diff of changes\n• {git_log} - Commit history'
+                  )}
+                />
+
+                {/* Character counter */}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {codeReview.prompt.length ?? ''}/8000 {t('characters')}
+                  </span>
+                </div>
+
+                {/* Validation messages */}
+                {promptValidation && !promptValidation.valid && (
+                  <div className="text-xs text-destructive space-y-0.5">
+                    {promptValidation.errors.map((error) => (
+                      <div key={error}>⚠️ {error}</div>
+                    ))}
+                  </div>
+                )}
+                {promptValidation && promptValidation.warnings.length > 0 && (
+                  <div className="text-xs text-amber-500 space-y-0.5">
+                    {promptValidation.warnings.map((warning) => (
+                      <div key={warning}>⚠️ {warning}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {t('Customize the AI prompt for code review')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const confirmMessage = t(
+                        'This will restore the default AI prompt for code review. Your custom prompt will be lost.'
+                      );
+                      if (window.confirm(confirmMessage)) {
+                        setCodeReview({
+                          prompt:
+                            locale === 'zh' ? defaultCodeReviewPromptZh : defaultCodeReviewPromptEn,
+                        });
+                      }
+                    }}
+                    className="text-xs text-muted-foreground hover:text-primary underline"
+                  >
+                    {t('Restore default prompt')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
