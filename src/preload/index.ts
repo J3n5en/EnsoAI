@@ -576,18 +576,26 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_CLICK, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.NOTIFICATION_CLICK, handler);
     },
-    onAgentStop: (callback: (data: { sessionId: string }) => void): (() => void) => {
-      const handler = (_: unknown, data: { sessionId: string }) => callback(data);
+    onAgentStop: (callback: (data: { sessionId: string; cwd?: string }) => void): (() => void) => {
+      const handler = (_: unknown, data: { sessionId: string; cwd?: string }) => callback(data);
       ipcRenderer.on(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, handler);
     },
     onAskUserQuestion: (
-      callback: (data: { sessionId: string; toolInput: unknown }) => void
+      callback: (data: { sessionId: string; toolInput: unknown; cwd?: string }) => void
     ): (() => void) => {
-      const handler = (_: unknown, data: { sessionId: string; toolInput: unknown }) =>
+      const handler = (_: unknown, data: { sessionId: string; toolInput: unknown; cwd?: string }) =>
         callback(data);
       ipcRenderer.on(IPC_CHANNELS.AGENT_ASK_USER_QUESTION_NOTIFICATION, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.AGENT_ASK_USER_QUESTION_NOTIFICATION, handler);
+    },
+    onPreToolUse: (
+      callback: (data: { sessionId: string; toolName: string; cwd?: string }) => void
+    ): (() => void) => {
+      const handler = (_: unknown, data: { sessionId: string; toolName: string; cwd?: string }) =>
+        callback(data);
+      ipcRenderer.on(IPC_CHANNELS.AGENT_PRE_TOOL_USE_NOTIFICATION, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_PRE_TOOL_USE_NOTIFICATION, handler);
     },
     onAgentStatusUpdate: (
       callback: (data: {

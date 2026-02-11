@@ -10,6 +10,7 @@ import {
   ensurePermissionRequestHook,
   ensureStatusLineHook,
   ensureStopHook,
+  ensureUserPromptSubmitHook,
   isClaudeInstalled,
   isPermissionRequestHookInstalled,
   isStatusLineHookInstalled,
@@ -223,30 +224,140 @@ export async function startClaudeIdeBridge(
         try {
           const data = JSON.parse(body);
           const sessionId = data.session_id;
+
+          // Debug: Log all hook events to understand Claude's workflow
+          console.log('[ClaudeIdeBridge] Hook received:', {
+            event: data.hook_event_name,
+            tool: data.tool_name,
+            sessionId: sessionId?.slice(0, 8),
+            cwd: data.cwd?.split('/').slice(-2).join('/'),
+          });
+
+          // Log hook data with smart filtering
+          // Only log significant events to reduce noise while maintaining debuggability
+          const shouldLogDetailed =
+            data.hook_event_name === 'PermissionRequest' ||
+            data.hook_event_name === 'Stop' ||
+            data.tool_name === 'AskUserQuestion' ||
+            !sessionId; // Always log if sessionId missing
+
+          // Common read-only tools that don't need detailed logging
+          const quietTools = ['Read', 'Glob', 'Grep', 'Task', 'TaskList', 'TaskOutput'];
+          const isQuietTool = quietTools.includes(data.tool_name);
+
+          if (shouldLogDetailed) {
+            console.log('[ClaudeIdeBridge] Hook:', {
+              event: data.hook_event_name,
+              tool: data.tool_name,
+              sessionId: `${sessionId?.slice(0, 8)}...`,
+              cwd: data.cwd?.split('/').slice(-2).join('/'), // Show last 2 path segments
+            });
+          } else if (!isQuietTool && data.hook_event_name === 'PreToolUse') {
+            // Log write operations (Write, Edit, Bash, etc.) in compact form
+            console.log(
+              `[ClaudeIdeBridge] PreToolUse: ${data.tool_name} (${sessionId?.slice(0, 8)})`
+            );
+          }
+
+          // Tools that don't require user approval (auto-approved)
+          // These tools run automatically without user intervention
+          const _autoApprovedTools = [
+            'Task', // Subagents
+            'Read', // File reading
+            'Glob', // File pattern matching
+            'Grep', // Content search
+            'TodoWrite', // Todo list management
+            'TaskUpdate', // Task updates
+            'TaskList', // Task listing
+            'TaskOutput', // Getting task output
+            'Write', // File writing
+            'Edit', // File editing
+            'Bash', // Shell commands (when auto-approved)
+          ];
+
           if (sessionId) {
-            // Check if this is an AskUserQuestion event (from PermissionRequest hook)
-            if (data.tool_name === 'AskUserQuestion' && data.tool_input) {
-              // Broadcast AskUserQuestion notification
+            // Handle different hook types
+            if (data.hook_event_name === 'UserPromptSubmit' && data.cwd) {
+              // UserPromptSubmit event - User submitted a message, Claude starts working
+              console.log(
+                `[ClaudeIdeBridge] → running (UserPromptSubmit) at ${data.cwd?.split('/').slice(-2).join('/')}`
+              );
+              for (const window of BrowserWindow.getAllWindows()) {
+                if (!window.isDestroyed()) {
+                  window.webContents.send(IPC_CHANNELS.AGENT_PRE_TOOL_USE_NOTIFICATION, {
+                    sessionId,
+                    toolName: 'UserPromptSubmit',
+                    cwd: data.cwd,
+                  });
+                }
+              }
+            } else if (data.tool_name === 'AskUserQuestion' && data.tool_input) {
+              // AskUserQuestion tool - Claude asking user for input/choices
+              // This tool triggers waiting_input in PreToolUse phase (not PermissionRequest)
+              // Include cwd if available for session creation fallback
+              console.log(
+                `[ClaudeIdeBridge] → waiting_input (AskUserQuestion) at ${data.cwd?.split('/').slice(-2).join('/')}`
+              );
               for (const window of BrowserWindow.getAllWindows()) {
                 if (!window.isDestroyed()) {
                   window.webContents.send(IPC_CHANNELS.AGENT_ASK_USER_QUESTION_NOTIFICATION, {
                     sessionId,
                     toolInput: data.tool_input,
+                    cwd: data.cwd, // Pass cwd for fallback session creation
                   });
                 }
               }
-            } else {
-              // Broadcast agent stop notification
+            } else if (data.hook_event_name === 'PermissionRequest') {
+              // PermissionRequest event - Claude Code asking for permission approval
+              // Note: AskUserQuestion is already handled above, so exclude it here to avoid duplicate notifications
+              // Filter out read-only tools that rarely trigger actual permission dialogs
+              const readOnlyTools = ['Task', 'Read', 'Glob', 'Grep', 'TaskList', 'TaskOutput'];
+              const shouldTriggerWaitingInput =
+                data.tool_name !== 'AskUserQuestion' && !readOnlyTools.includes(data.tool_name);
+
+              if (shouldTriggerWaitingInput) {
+                console.log(
+                  `[ClaudeIdeBridge] → waiting_input (${data.tool_name} permission) at ${data.cwd?.split('/').slice(-2).join('/')}`
+                );
+                for (const window of BrowserWindow.getAllWindows()) {
+                  if (!window.isDestroyed()) {
+                    window.webContents.send(IPC_CHANNELS.AGENT_ASK_USER_QUESTION_NOTIFICATION, {
+                      sessionId,
+                      toolInput: data.tool_input,
+                      cwd: data.cwd,
+                    });
+                  }
+                }
+              }
+              // Don't log skipped PermissionRequest for read-only tools - too noisy
+            } else if (data.hook_event_name === 'Stop') {
+              // Stop event - agent has finished or been stopped
+              console.log(`[ClaudeIdeBridge] → completed (Stop) ${sessionId?.slice(0, 8)}`);
               for (const window of BrowserWindow.getAllWindows()) {
                 if (!window.isDestroyed()) {
-                  window.webContents.send(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, { sessionId });
+                  window.webContents.send(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, {
+                    sessionId,
+                    cwd: data.cwd,
+                  });
                 }
               }
             }
+            // Note: PreToolUse and Notification hooks are intentionally not logged here
+            // They don't require state changes and logging them creates noise
+          } else {
+            console.warn('[ClaudeIdeBridge] Hook received without sessionId:', {
+              hook_event_name: data.hook_event_name,
+              tool_name: data.tool_name,
+              has_cwd: !!data.cwd,
+            });
           }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
-        } catch {
+        } catch (error) {
+          console.error(
+            '[ClaudeIdeBridge] Failed to parse agent-hook data:',
+            error instanceof Error ? error.message : error
+          );
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON' }));
         }
@@ -265,6 +376,11 @@ export async function startClaudeIdeBridge(
           const data = JSON.parse(body);
 
           const sessionId = data.session_id;
+          const workspaceInfo = data.workspace?.current_dir?.split('/').slice(-2).join('/');
+          console.log(
+            `[ClaudeIdeBridge] STATUS_UPDATE ${sessionId?.slice(0, 8)} (${data.model || 'unknown'}) at ${workspaceInfo || 'unknown'}`
+          );
+
           if (sessionId) {
             // Broadcast status update to all windows
             for (const window of BrowserWindow.getAllWindows()) {
@@ -278,10 +394,16 @@ export async function startClaudeIdeBridge(
                 });
               }
             }
+          } else {
+            console.warn('[ClaudeIdeBridge] STATUS_UPDATE without sessionId');
           }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
-        } catch {
+        } catch (error) {
+          console.error(
+            '[ClaudeIdeBridge] Failed to parse status-line data:',
+            error instanceof Error ? error.message : error
+          );
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON' }));
         }
@@ -554,6 +676,10 @@ export async function setClaudeBridgeEnabled(
         ...bridgeOptions,
         workspaceFolders: workspaceFolders ?? [],
       });
+
+      // Install PreToolUse hook automatically when bridge starts
+      // This enables activity state tracking (running/waiting_input/completed)
+      ensureUserPromptSubmitHook();
     } else if (workspaceFolders) {
       bridgeInstance.updateWorkspaceFolders(workspaceFolders);
     }
@@ -608,6 +734,18 @@ export function setPermissionRequestHookEnabled(enabled: boolean): boolean {
     return ensurePermissionRequestHook();
   } else {
     return removePermissionRequestHook();
+  }
+}
+
+/**
+ * Enable or disable the UserPromptSubmit hook for agent activity notifications
+ */
+export function setUserPromptSubmitHookEnabled(enabled: boolean): boolean {
+  if (enabled) {
+    return ensureUserPromptSubmitHook();
+  } else {
+    // UserPromptSubmit hook doesn't have a remove function yet, just return true
+    return true;
   }
 }
 

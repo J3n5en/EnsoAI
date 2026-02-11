@@ -104,6 +104,7 @@ export const IPC_CHANNELS = {
   AGENT_LIST: 'agent:list',
   AGENT_STOP_NOTIFICATION: 'agent:stop:notification',
   AGENT_ASK_USER_QUESTION_NOTIFICATION: 'agent:askUserQuestion:notification',
+  AGENT_PRE_TOOL_USE_NOTIFICATION: 'agent:preToolUse:notification',
   AGENT_STATUS_UPDATE: 'agent:status:update',
 
   // App

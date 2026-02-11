@@ -13,14 +13,23 @@ interface WorktreeState {
   setError: (error: string | null) => void;
 }
 
-export const useWorktreeStore = create<WorktreeState>((set) => ({
+export const useWorktreeStore = create<WorktreeState>((set, get) => ({
   worktrees: [],
   currentWorktree: null,
   isLoading: false,
   error: null,
 
   setWorktrees: (worktrees) => set({ worktrees }),
-  setCurrentWorktree: (worktree) => set({ currentWorktree: worktree }),
+  setCurrentWorktree: (worktree) => {
+    const currentPath = get().currentWorktree?.path;
+    const newPath = worktree?.path;
+    console.log('[Worktree] Switching worktree:', {
+      from: currentPath,
+      to: newPath,
+      timestamp: new Date().toISOString(),
+    });
+    set({ currentWorktree: worktree });
+  },
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 }));

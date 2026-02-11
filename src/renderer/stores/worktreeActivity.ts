@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { SESSIONS_STORAGE_KEY, useAgentSessionsStore } from './agentSessions';
 
 // Agent activity state for tree sidebar display
 export type AgentActivityState = 'idle' | 'running' | 'waiting_input' | 'completed';
@@ -181,6 +180,8 @@ export const useWorktreeActivityStore = create<WorktreeActivityState>()(
       set((prev) => {
         // Skip update if state hasn't changed to avoid unnecessary re-renders
         if (prev.activityStates[worktreePath] === state) return prev;
+        const pathShort = worktreePath.split('/').slice(-2).join('/');
+        console.log(`[WorktreeActivity] ${pathShort} → ${state}`);
         return { activityStates: { ...prev.activityStates, [worktreePath]: state } };
       }),
 
@@ -260,86 +261,56 @@ useWorktreeActivityStore.subscribe(
   }
 );
 
-let cachedPersistedRaw: string | null = null;
-let cachedPersistedSessions: Array<{ id: string; sessionId?: string; cwd?: string }> | null = null;
-
-function getPersistedSessions(): Array<{ id: string; sessionId?: string; cwd?: string }> {
-  const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
-  if (!raw) {
-    cachedPersistedRaw = null;
-    cachedPersistedSessions = null;
-    return [];
-  }
-  if (raw === cachedPersistedRaw && cachedPersistedSessions) {
-    return cachedPersistedSessions;
-  }
-  const parsed = JSON.parse(raw) as {
-    sessions?: Array<{ id: string; sessionId?: string; cwd?: string }>;
-  };
-  const sessions = parsed.sessions ?? [];
-  cachedPersistedRaw = raw;
-  cachedPersistedSessions = sessions;
-  return sessions;
-}
-
-/**
- * Find worktree path (cwd) for a given session ID from agentSessions store
- * Uses getState() to ensure fresh data during HMR
- */
-function findWorktreePath(sessionId: string): string | undefined {
-  const sessions = useAgentSessionsStore.getState().sessions;
-  const session = sessions.find((s) => s.id === sessionId || s.sessionId === sessionId);
-  if (session?.cwd) {
-    return session.cwd;
-  }
-
-  // HMR safety fallback:
-  // if callbacks hold stale store references after hot reload,
-  // resolve session -> cwd from persisted sessions snapshot.
-  if (sessions.length > 0) {
-    return undefined;
-  }
-
-  try {
-    const persistedSession = getPersistedSessions().find(
-      (s) => s.id === sessionId || s.sessionId === sessionId
-    );
-    return persistedSession?.cwd;
-  } catch {
-    // Ignore parse/storage errors; diagnostics below will show unresolved mapping.
-    cachedPersistedRaw = null;
-    cachedPersistedSessions = null;
-    return undefined;
-  }
-}
-
 /**
  * Initialize agent activity state listener
- * Listens for agent stop and ask user question notifications
+ * Listens for agent stop, ask user question, and user prompt submit notifications
  * Call this once on app startup
  */
 export function initAgentActivityListener(): () => void {
-  // Listen for agent stop notification -> set 'completed'
-  const unsubStop = window.electronAPI.notification.onAgentStop((data: { sessionId: string }) => {
-    const worktreePath = findWorktreePath(data.sessionId);
-    if (worktreePath) {
-      // Get store method inside callback to ensure fresh reference after HMR
-      useWorktreeActivityStore.getState().setActivityState(worktreePath, 'completed');
+  // Listen for user prompt submit notification -> set 'running'
+  const unsubPreToolUse = window.electronAPI.notification.onPreToolUse(
+    (data: { sessionId: string; toolName: string; cwd?: string }) => {
+      if (!data.cwd) {
+        console.warn(
+          `[WorktreeActivity] UserPromptSubmit hook missing cwd: session ${data.sessionId.slice(0, 8)}`
+        );
+        return;
+      }
+
+      useWorktreeActivityStore.getState().setActivityState(data.cwd, 'running');
     }
-  });
+  );
+
+  // Listen for agent stop notification -> set 'completed'
+  const unsubStop = window.electronAPI.notification.onAgentStop(
+    (data: { sessionId: string; cwd?: string }) => {
+      if (!data.cwd) {
+        console.warn(
+          `[WorktreeActivity] Stop hook missing cwd: session ${data.sessionId.slice(0, 8)}`
+        );
+        return;
+      }
+
+      useWorktreeActivityStore.getState().setActivityState(data.cwd, 'completed');
+    }
+  );
 
   // Listen for ask user question notification -> set 'waiting_input'
   const unsubAsk = window.electronAPI.notification.onAskUserQuestion(
-    (data: { sessionId: string }) => {
-      const worktreePath = findWorktreePath(data.sessionId);
-      if (worktreePath) {
-        // Get store method inside callback to ensure fresh reference after HMR
-        useWorktreeActivityStore.getState().setActivityState(worktreePath, 'waiting_input');
+    (data: { sessionId: string; cwd?: string }) => {
+      if (!data.cwd) {
+        console.warn(
+          `[WorktreeActivity] AskUserQuestion hook missing cwd: session ${data.sessionId.slice(0, 8)}`
+        );
+        return;
       }
+
+      useWorktreeActivityStore.getState().setActivityState(data.cwd, 'waiting_input');
     }
   );
 
   return () => {
+    unsubPreToolUse();
     unsubStop();
     unsubAsk();
   };

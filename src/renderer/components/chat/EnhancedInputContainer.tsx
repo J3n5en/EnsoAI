@@ -51,6 +51,7 @@ export const EnhancedInputContainer = memo(function EnhancedInputContainer({
         }
       }}
       onSend={(sendContent, sendImagePaths) => {
+        console.log('[EnhancedInput] Sending message');
         onSend(sendContent, sendImagePaths);
         clearEnhancedInput(sessionId, keepOpenAfterSend);
       }}

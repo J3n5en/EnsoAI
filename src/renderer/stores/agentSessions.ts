@@ -177,6 +177,8 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
 
     addSession: (session) =>
       set((state) => {
+        console.log('[AgentSessions] Creating session:', session.sessionId, 'at', session.cwd);
+
         // Calculate displayOrder: max order in same worktree + 1
         const worktreeSessions = state.sessions.filter(
           (s) => s.repoPath === session.repoPath && pathsEqual(s.cwd, session.cwd)
@@ -199,6 +201,9 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
 
     removeSession: (id) =>
       set((state) => {
+        const removedSession = state.sessions.find((s) => s.id === id);
+        console.log('[AgentSessions] Removing session:', removedSession?.sessionId);
+
         const newSessions = state.sessions.filter((s) => s.id !== id);
         // Clean up runtime states
         const newRuntimeStates = { ...state.runtimeStates };

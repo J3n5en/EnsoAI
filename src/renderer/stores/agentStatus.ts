@@ -77,6 +77,7 @@ export function initAgentStatusListener(): () => void {
   return window.electronAPI.notification.onAgentStatusUpdate((data) => {
     const { sessionId, model, contextWindow, cost, workspace, version } = data;
 
+    // Update status data - stored by sessionId, no need for session to exist
     const statusData: Partial<StatusData> = {};
 
     if (model) {

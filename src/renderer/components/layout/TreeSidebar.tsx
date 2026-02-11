@@ -644,7 +644,7 @@ export function TreeSidebar({
           />
         )}
         {/* Repository row */}
-        <RepoItemWithGlow repoPath={repo.path}>
+        <div>
           {/* Drop indicator - top */}
           {dropRepoTargetIndex === originalIndex &&
             draggedRepoIndexRef.current !== null &&
@@ -767,7 +767,7 @@ export function TreeSidebar({
             draggedRepoIndexRef.current < originalIndex && (
               <div className="absolute -bottom-0.5 left-2 right-2 h-0.5 bg-primary rounded-full" />
             )}
-        </RepoItemWithGlow>
+        </div>
 
         {/* Worktrees under this repo */}
         <AnimatePresence initial={false}>
@@ -1751,11 +1751,11 @@ function WorktreeTreeItem({
         </span>
         {/* Button with optional glow border */}
         {glowEnabled ? (
-          <GlowBorder state={outputState as GlowState} className="rounded-xl flex-1 min-w-0">
+          <GlowBorder state={activityState as GlowState} className="rounded-lg flex-1 min-w-0">
             {buttonContent}
           </GlowBorder>
         ) : (
-          <div className="relative rounded-xl flex-1 min-w-0">{buttonContent}</div>
+          <div className="relative rounded-lg flex-1 min-w-0">{buttonContent}</div>
         )}
       </div>
 
