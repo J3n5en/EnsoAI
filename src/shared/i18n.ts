@@ -963,6 +963,7 @@ export const zhTranslations: Record<string, string> = {
   'No matches found': '未找到匹配',
   'Type to search in files': '输入以搜索文件内容',
   'No preview available': '无法预览',
+  'This file type is not supported for preview': '此文件类型暂不支持预览',
   'Select a result to preview': '选择结果以预览',
   'Unable to load file': '无法加载文件',
   'Use .gitignore': '使用 .gitignore',

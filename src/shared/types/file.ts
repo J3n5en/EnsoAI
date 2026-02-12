@@ -17,4 +17,5 @@ export interface FileReadResult {
   encoding: string;
   detectedEncoding: string;
   confidence: number;
+  isBinary?: boolean;
 }

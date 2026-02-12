@@ -1,5 +1,5 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { ChevronRight, Eye, EyeOff, FileCode, Maximize2, MessageSquare } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, FileCode, FileX, Maximize2, MessageSquare } from 'lucide-react';
 import type * as monaco from 'monaco-editor';
 import {
   forwardRef,
@@ -942,7 +942,19 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                       : 0,
               }}
             >
-              {isImage ? (
+              {activeTab.isUnsupported ? (
+                <Empty className="flex-1">
+                  <EmptyMedia variant="icon">
+                    <FileX className="h-4.5 w-4.5" />
+                  </EmptyMedia>
+                  <EmptyHeader>
+                    <EmptyTitle>{t('No preview available')}</EmptyTitle>
+                    <EmptyDescription>
+                      {t('This file type is not supported for preview')}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : isImage ? (
                 <ImagePreview path={activeTab.path} />
               ) : isPdf ? (
                 <PdfPreview path={activeTab.path} />

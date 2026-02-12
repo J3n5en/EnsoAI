@@ -25,9 +25,9 @@ export function useEditor() {
 
   const loadFile = useMutation({
     mutationFn: async (path: string) => {
-      const { content, encoding } = await window.electronAPI.file.read(path);
-      openFile({ path, content, encoding, isDirty: false });
-      return { content, encoding };
+      const { content, encoding, isBinary } = await window.electronAPI.file.read(path);
+      openFile({ path, content, encoding, isDirty: false, isUnsupported: isBinary });
+      return { content, encoding, isBinary };
     },
   });
 
@@ -60,8 +60,8 @@ export function useEditor() {
         setActiveFile(path);
       } else {
         try {
-          const { content, encoding } = await window.electronAPI.file.read(path);
-          openFile({ path, content, encoding, isDirty: false });
+          const { content, encoding, isBinary } = await window.electronAPI.file.read(path);
+          openFile({ path, content, encoding, isDirty: false, isUnsupported: isBinary });
         } catch {
           return;
         }

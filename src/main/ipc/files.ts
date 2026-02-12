@@ -62,6 +62,40 @@ function detectEncoding(buffer: Buffer): { encoding: string; confidence: number 
   return { encoding: 'utf-8', confidence: 0 };
 }
 
+/**
+ * Detect if a buffer contains binary content
+ * Binary files typically contain null bytes or have a high ratio of non-printable characters
+ */
+function isBinaryBuffer(buffer: Buffer, sampleSize = 8192): boolean {
+  // Check a sample of the file (first 8KB by default)
+  const checkLength = Math.min(buffer.length, sampleSize);
+
+  let nullCount = 0;
+  let controlCount = 0;
+
+  for (let i = 0; i < checkLength; i++) {
+    const byte = buffer[i];
+
+    // Null byte is a strong indicator of binary content
+    if (byte === 0) {
+      nullCount++;
+      // If we find more than a few null bytes, it's likely binary
+      if (nullCount > 2) {
+        return true;
+      }
+    }
+
+    // Count control characters (excluding common whitespace: tab, newline, carriage return)
+    if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
+      controlCount++;
+    }
+  }
+
+  // If more than 10% of the sample is control characters, consider it binary
+  const controlRatio = controlCount / checkLength;
+  return controlRatio > 0.1;
+}
+
 const watchers = new Map<string, FileWatcher>();
 const watcherCleanups = new Map<string, () => void>();
 
@@ -128,6 +162,19 @@ export function registerFileHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_, filePath: string): Promise<FileReadResult> => {
     const buffer = await readFile(filePath);
+
+    // Check if file is binary before attempting to decode
+    const isBinary = isBinaryBuffer(buffer);
+    if (isBinary) {
+      return {
+        content: '',
+        encoding: 'binary',
+        detectedEncoding: 'binary',
+        confidence: 1,
+        isBinary: true,
+      };
+    }
+
     const { encoding: detectedEncoding, confidence } = detectEncoding(buffer);
 
     let content: string;

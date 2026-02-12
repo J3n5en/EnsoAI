@@ -7,6 +7,7 @@ export interface EditorTab {
   isDirty: boolean;
   encoding?: string;
   viewState?: unknown;
+  isUnsupported?: boolean;
 }
 
 export interface PendingCursor {
