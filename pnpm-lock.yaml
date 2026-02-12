@@ -86,8 +86,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.2
       isbinaryfile:
-        specifier: ^6.0.0
-        version: 6.0.0
+        specifier: ^5.0.7
+        version: 5.0.7
       jschardet:
         specifier: ^3.1.4
         version: 3.1.4
@@ -2284,10 +2284,6 @@ packages:
   isbinaryfile@5.0.7:
     resolution: {integrity: sha512-gnWD14Jh3FzS3CPhF0AxNOJ8CxqeblPTADzI38r0wt8ZyQl5edpy75myt08EG2oKvpyiqSqsx+Wkz9vtkbTqYQ==}
     engines: {node: '>= 18.0.0'}
-
-  isbinaryfile@6.0.0:
-    resolution: {integrity: sha512-2FN2B8MAqKv6d5TaKsLvMrwMcghxwHTpcKy0L5mhNbRqjNqo2++SpCqN6eG1lCC1GmTQgvrYJYXv2+Chvyevag==}
-    engines: {node: '>= 24.0.0'}
 
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
@@ -5751,8 +5747,6 @@ snapshots:
   isbinaryfile@4.0.10: {}
 
   isbinaryfile@5.0.7: {}
-
-  isbinaryfile@6.0.0: {}
 
   isexe@2.0.0: {}
 

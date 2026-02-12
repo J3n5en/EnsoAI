@@ -53,7 +53,7 @@
     "emoji-picker-react": "^4.16.1",
     "framer-motion": "^12.23.26",
     "iconv-lite": "^0.7.1",
-    "isbinaryfile": "^6.0.0",
+    "isbinaryfile": "^5.0.7",
     "jschardet": "^3.1.4",
     "lucide-react": "^0.562.0",
     "match-sorter": "^8.2.0",

@@ -129,7 +129,13 @@ export function registerFileHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_, filePath: string): Promise<FileReadResult> => {
     // First check if file is binary (only reads first 512 bytes)
-    const isBinary = await isBinaryFile(filePath);
+    let isBinary = false;
+    try {
+      isBinary = await isBinaryFile(filePath);
+    } catch {
+      // If binary detection fails, assume it's a text file and continue
+    }
+
     if (isBinary) {
       return {
         content: '',
