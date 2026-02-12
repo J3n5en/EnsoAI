@@ -18,6 +18,23 @@ export interface CommitMessageResult {
   error?: string;
 }
 
+/** Strip markdown code fence (e.g. ``` or ```text) from start/end when CLI returns wrapped message */
+function stripCodeFence(text: string): string {
+  const trimmed = text.trim();
+
+  // Match a fenced block anywhere in the text (handles leading explanation text)
+  const fenceMatch = trimmed.match(/```\w*\s*[\r\n]+([\s\S]*?)[\r\n]+\s*```\s*$/);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+
+  // Fallback: strip leading/trailing fences when only one side is present
+  return trimmed
+    .replace(/^```\w*\s*[\r\n]*/, '')
+    .replace(/[\r\n]*\s*```\s*$/, '')
+    .trim();
+}
+
 function runGit(cmd: string, cwd: string): string {
   try {
     return execSync(cmd, { cwd, encoding: 'utf-8', timeout: 5000 }).trim();
@@ -113,7 +130,7 @@ ${truncatedDiff}`;
       console.log(`[commit-msg] Parse result:`, result);
 
       if (result.success && result.text) {
-        resolve({ success: true, message: result.text.trim() });
+        resolve({ success: true, message: stripCodeFence(result.text) });
       } else {
         resolve({ success: false, error: result.error || 'Unknown error' });
       }
