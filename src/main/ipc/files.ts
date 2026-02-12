@@ -128,7 +128,17 @@ export function registerFileHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_, filePath: string): Promise<FileReadResult> => {
-    // First check if file is binary (only reads first 512 bytes)
+    // Design Decision: Binary File Detection
+    // ----------------------------------------
+    // We detect binary files BEFORE reading the full content to avoid:
+    // 1. Loading large binary files (videos, executables) into memory
+    // 2. Performance issues from decoding binary content as text
+    // 3. Monaco editor freezing when rendering binary garbage
+    //
+    // The isbinaryfile library only reads the first 512 bytes for detection.
+    // If detection fails, we fall back to treating it as a text file.
+    // The renderer decides whether to show "unsupported" message based on
+    // file extension (images/PDFs have dedicated preview components).
     let isBinary = false;
     try {
       isBinary = await isBinaryFile(filePath);

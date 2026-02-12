@@ -145,3 +145,15 @@ export function isPdfFile(path: string | null | undefined): boolean {
   const ext = path.split('.').pop()?.toLowerCase() || '';
   return ext === 'pdf';
 }
+
+/**
+ * Check if a binary file is unsupported for preview.
+ * Images and PDFs are binary but have dedicated preview components.
+ */
+export function isUnsupportedBinaryFile(
+  path: string | null | undefined,
+  isBinary: boolean | undefined
+): boolean {
+  if (!isBinary) return false;
+  return !isImageFile(path) && !isPdfFile(path);
+}
