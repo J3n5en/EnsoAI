@@ -259,7 +259,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       if (!changedTab) return;
 
       try {
-        const { content: latestContent } = await window.electronAPI.file.read(event.path);
+        const { content: latestContent, isBinary } = await window.electronAPI.file.read(event.path);
+        // Skip content update for binary files (they have no text content)
+        if (isBinary) return;
+
         onContentChange(event.path, latestContent, changedTab.isDirty);
 
         if (event.path === activeTabPath && editorRef.current) {

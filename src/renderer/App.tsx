@@ -1144,8 +1144,11 @@ export default function App() {
             }
           } else {
             try {
-              const { content } = await window.electronAPI.file.read(tab.path);
-              useEditorStore.getState().updateFileContent(tab.path, content, false);
+              const { content, isBinary } = await window.electronAPI.file.read(tab.path);
+              // Skip content update for binary files (they have no text content)
+              if (!isBinary) {
+                useEditorStore.getState().updateFileContent(tab.path, content, false);
+              }
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               toastManager.add({
