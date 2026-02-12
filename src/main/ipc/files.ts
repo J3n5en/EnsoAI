@@ -4,6 +4,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { type FileEntry, type FileReadResult, IPC_CHANNELS } from '@shared/types';
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import iconv from 'iconv-lite';
+import { isBinaryFile } from 'isbinaryfile';
 import jschardet from 'jschardet';
 import simpleGit from 'simple-git';
 import { FileWatcher } from '../services/files/FileWatcher';
@@ -60,44 +61,6 @@ function detectEncoding(buffer: Buffer): { encoding: string; confidence: number 
 
   // Default to utf-8 if detection fails
   return { encoding: 'utf-8', confidence: 0 };
-}
-
-/**
- * Detect if a buffer contains binary content
- * Binary files typically contain null bytes or have a high ratio of non-printable characters
- */
-function isBinaryBuffer(buffer: Buffer, sampleSize = 8192): boolean {
-  // Check a sample of the file (first 8KB by default)
-  const checkLength = Math.min(buffer.length, sampleSize);
-
-  let nullCount = 0;
-  let controlCount = 0;
-
-  for (let i = 0; i < checkLength; i++) {
-    const byte = buffer[i];
-
-    // Null byte is a strong indicator of binary content
-    if (byte === 0) {
-      nullCount++;
-      // If we find more than a few null bytes, it's likely binary
-      if (nullCount > 5) {
-        return true;
-      }
-    }
-
-    // Count control characters (excluding common whitespace: tab, newline, carriage return)
-    if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
-      controlCount++;
-      // Early return if control character ratio exceeds threshold
-      if (i >= 100 && controlCount / (i + 1) > 0.1) {
-        return true;
-      }
-    }
-  }
-
-  // If more than 10% of the sample is control characters, consider it binary
-  const controlRatio = controlCount / checkLength;
-  return controlRatio > 0.1;
 }
 
 const watchers = new Map<string, FileWatcher>();
@@ -165,10 +128,8 @@ export function registerFileHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_, filePath: string): Promise<FileReadResult> => {
-    const buffer = await readFile(filePath);
-
-    // Check if file is binary before attempting to decode
-    const isBinary = isBinaryBuffer(buffer);
+    // First check if file is binary (only reads first 512 bytes)
+    const isBinary = await isBinaryFile(filePath);
     if (isBinary) {
       return {
         content: '',
@@ -179,6 +140,8 @@ export function registerFileHandlers(): void {
       };
     }
 
+    // Only read full file content for non-binary files
+    const buffer = await readFile(filePath);
     const { encoding: detectedEncoding, confidence } = detectEncoding(buffer);
 
     let content: string;
