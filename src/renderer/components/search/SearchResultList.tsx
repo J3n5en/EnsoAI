@@ -130,10 +130,10 @@ export function SearchResultList({
               onDoubleClick={() => handleItemDoubleClick(result)}
             >
               {getFileIcon(result.path)}
-              <span className="min-w-0 flex-1 truncate">
+              <span className="min-w-0 flex-1 truncate" title={result.relativePath}>
                 <HighlightText text={result.name} query={query} />
               </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 text-xs text-muted-foreground" title={result.relativePath}>
                 {result.relativePath.replace(result.name, '').replace(/\/$/, '')}
               </span>
             </div>
@@ -178,7 +178,10 @@ export function SearchResultList({
             >
               <HighlightText text={match.content.trim()} query={query} />
             </span>
-            <span className="shrink-0 truncate text-xs text-muted-foreground max-w-[200px]">
+            <span
+              className="shrink-0 truncate text-xs text-muted-foreground max-w-[200px]"
+              title={match.relativePath}
+            >
               {match.relativePath.split('/').pop()}
             </span>
             <span className="shrink-0 text-xs text-muted-foreground">{match.line}</span>
