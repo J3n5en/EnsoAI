@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
-import { execSync } from 'node:child_process';
 import type { AIProvider, ModelId, ReasoningEffort } from '@shared/types';
+import { spawnGit } from '../git/runtime';
 import { spawnCLI, stripAnsi } from './providers';
 
 export interface CodeReviewOptions {
@@ -24,21 +24,40 @@ interface ActiveReview {
 
 const activeReviews = new Map<string, ActiveReview>();
 
-function runGit(cmd: string, cwd: string): string {
-  try {
-    return execSync(cmd, {
-      cwd,
-      encoding: 'utf-8',
-      timeout: 10000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-  } catch {
-    return '';
-  }
+async function runGit(args: string[], cwd: string): Promise<string> {
+  return await new Promise((resolve) => {
+    let stdout = '';
+    const proc = spawnGit(cwd, args, { cwd });
+
+    const timeout = setTimeout(() => {
+      if (!proc.killed) {
+        proc.kill('SIGKILL');
+      }
+      resolve('');
+    }, 10000);
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString('utf-8');
+    });
+
+    proc.on('error', () => {
+      clearTimeout(timeout);
+      resolve('');
+    });
+
+    proc.on('close', (code) => {
+      clearTimeout(timeout);
+      if (code !== 0) {
+        resolve('');
+        return;
+      }
+      resolve(stdout.trim());
+    });
+  });
 }
 
-function getDefaultBranch(workdir: string): string {
-  const ref = runGit('git symbolic-ref refs/remotes/origin/HEAD', workdir);
+async function getDefaultBranch(workdir: string): Promise<string> {
+  const ref = await runGit(['symbolic-ref', 'refs/remotes/origin/HEAD'], workdir);
   if (ref) {
     const match = ref.match(/refs\/remotes\/origin\/(.+)$/);
     if (match) {
@@ -294,11 +313,14 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     onError,
   } = options;
 
-  const gitDiff = runGit('git --no-pager diff HEAD --submodule=diff', workdir);
-  const defaultBranch = getDefaultBranch(workdir);
-  let gitLog = runGit(`git --no-pager log origin/${defaultBranch}..HEAD --oneline`, workdir);
+  const gitDiff = await runGit(['--no-pager', 'diff', 'HEAD', '--submodule=diff'], workdir);
+  const defaultBranch = await getDefaultBranch(workdir);
+  let gitLog = await runGit(
+    ['--no-pager', 'log', `origin/${defaultBranch}..HEAD`, '--oneline'],
+    workdir
+  );
   if (!gitLog) {
-    gitLog = runGit('git --no-pager log -10 --oneline', workdir);
+    gitLog = await runGit(['--no-pager', 'log', '-10', '--oneline'], workdir);
   }
 
   if (!gitDiff && !gitLog) {

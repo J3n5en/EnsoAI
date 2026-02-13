@@ -1,9 +1,6 @@
-import { spawn } from 'node:child_process';
 import iconv from 'iconv-lite';
 import jschardet from 'jschardet';
-import { getProxyEnvVars } from '../proxy/ProxyConfig';
-import { getEnhancedPath } from '../terminal/PtyManager';
-import { withSafeDirectoryEnv } from './safeDirectory';
+import { spawnGit } from './runtime';
 
 export function decodeBuffer(buffer: Buffer): string {
   if (buffer.length === 0) return '';
@@ -16,17 +13,9 @@ export function gitShowBuffer(workdir: string, ref: string): Promise<Buffer> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
 
-    const proc = spawn('git', ['show', ref], {
+    const proc = spawnGit(workdir, ['show', ref], {
       cwd: workdir,
       windowsHide: true,
-      env: withSafeDirectoryEnv(
-        {
-          ...process.env,
-          ...getProxyEnvVars(),
-          PATH: getEnhancedPath(),
-        },
-        workdir
-      ),
     });
 
     proc.stdout.on('data', (chunk: Buffer) => {
