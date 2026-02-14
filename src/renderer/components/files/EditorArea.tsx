@@ -44,6 +44,12 @@ import './monacoSetup';
 
 type Monaco = typeof monaco;
 
+let latestSelectionText = '';
+
+export function getEditorSelectionText(): string {
+  return latestSelectionText;
+}
+
 type MarkdownPreviewMode = 'off' | 'split' | 'fullscreen';
 
 export interface EditorAreaRef {
@@ -577,6 +583,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       if (!model) return;
 
       const selectedText = model.getValueInRange(selection);
+      latestSelectionText = selectedText;
 
       // Hide comment widget if selection changes
       if (commentWidgetInstance) {

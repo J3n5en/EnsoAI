@@ -18,9 +18,11 @@ export const STORAGE_KEYS = {
   TAB_ORDER: 'enso-tab-order', // panel tab order
   REPOSITORY_WIDTH: 'enso-repository-width',
   WORKTREE_WIDTH: 'enso-worktree-width',
+  FILE_SIDEBAR_WIDTH: 'enso-file-sidebar-width',
   TREE_SIDEBAR_WIDTH: 'enso-tree-sidebar-width',
   REPOSITORY_COLLAPSED: 'enso-repository-collapsed',
   WORKTREE_COLLAPSED: 'enso-worktree-collapsed',
+  FILE_SIDEBAR_COLLAPSED: 'enso-file-sidebar-collapsed',
   REPOSITORY_SETTINGS: 'enso-repository-settings', // per-repo settings (init script, etc.)
   REPOSITORY_GROUPS: 'enso-repository-groups',
   ACTIVE_GROUP: 'enso-active-group',
