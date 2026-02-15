@@ -146,14 +146,14 @@ export function GeneralSettings() {
     {
       value: 'legacy',
       icon: FileText,
-      label: t('Original'),
-      description: t('Integrated tree + editor (original)'),
+      label: t('Integrated tree'),
+      description: t('Tree + editor in one panel'),
     },
     {
       value: 'current',
       icon: FolderOpen,
-      label: t('Current'),
-      description: t('Split sidebar + editor (current)'),
+      label: t('Split sidebar'),
+      description: t('Dedicated file sidebar + editor'),
     },
   ];
 
@@ -360,41 +360,38 @@ export function GeneralSettings() {
         ))}
       </div>
 
-      <div className="grid grid-cols-[100px_1fr] items-start gap-4">
-        <span className="text-sm font-medium mt-2">{t('File Tree Display')}</span>
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">{t('Choose file tree display mode')}</p>
-          <div className="grid grid-cols-2 gap-3">
-            {fileTreeDisplayModeOptions.map((option) => (
-              <button
-                type="button"
-                key={option.value}
-                onClick={() => setFileTreeDisplayMode(option.value)}
-                className={cn(
-                  'flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-colors',
-                  fileTreeDisplayMode === option.value
-                    ? 'border-primary bg-accent text-accent-foreground'
-                    : 'border-transparent bg-muted/50 hover:bg-muted'
-                )}
-              >
-                <div
-                  className={cn(
-                    'flex h-10 w-10 items-center justify-center rounded-full',
-                    fileTreeDisplayMode === option.value
-                      ? 'bg-accent-foreground/20 text-accent-foreground'
-                      : 'bg-muted'
-                  )}
-                >
-                  <option.icon className="h-5 w-5" />
-                </div>
-                <span className="text-sm font-medium">{option.label}</span>
-                <span className="text-xs text-muted-foreground text-center">
-                  {option.description}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="border-t pt-4">
+        <h3 className="text-lg font-medium">{t('File Tree Display')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Choose file tree display mode')}</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {fileTreeDisplayModeOptions.map((option) => (
+          <button
+            type="button"
+            key={option.value}
+            onClick={() => setFileTreeDisplayMode(option.value)}
+            className={cn(
+              'flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-colors',
+              fileTreeDisplayMode === option.value
+                ? 'border-primary bg-accent text-accent-foreground'
+                : 'border-transparent bg-muted/50 hover:bg-muted'
+            )}
+          >
+            <div
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-full',
+                fileTreeDisplayMode === option.value
+                  ? 'bg-accent-foreground/20 text-accent-foreground'
+                  : 'bg-muted'
+              )}
+            >
+              <option.icon className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-medium">{option.label}</span>
+            <span className="text-xs text-muted-foreground text-center">{option.description}</span>
+          </button>
+        ))}
       </div>
 
       {/* Auto-create session */}
