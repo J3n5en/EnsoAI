@@ -40,6 +40,7 @@ import {
 import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
 import { usePanelResize } from './App/usePanelResize';
 import { DevToolsOverlay } from './components/DevToolsOverlay';
+import { FileSidebar } from './components/files';
 import { UnsavedPromptHost } from './components/files/UnsavedPromptHost';
 import { AddRepositoryDialog } from './components/git';
 import { CloneProgressFloat } from './components/git/CloneProgressFloat';
@@ -129,6 +130,9 @@ export default function App() {
   );
   const [worktreeCollapsed, setWorktreeCollapsed] = useState(() =>
     getStoredBoolean(STORAGE_KEYS.WORKTREE_COLLAPSED, false)
+  );
+  const [fileSidebarCollapsed, setFileSidebarCollapsed] = useState(() =>
+    getStoredBoolean(STORAGE_KEYS.FILE_SIDEBAR_COLLAPSED, false)
   );
 
   // Ref to toggle selected repo expanded in tree layout
@@ -275,6 +279,7 @@ export default function App() {
   const backgroundImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
   const backgroundOpacity = useSettingsStore((s) => s.backgroundOpacity);
   const temporaryWorkspaceEnabled = useSettingsStore((s) => s.temporaryWorkspaceEnabled);
+  const fileTreeDisplayMode = useSettingsStore((s) => s.fileTreeDisplayMode);
   const defaultTemporaryPath = useSettingsStore((s) => s.defaultTemporaryPath);
   const isWindows = window.electronAPI?.env.platform === 'win32';
   const pathSep = isWindows ? '\\' : '/';
@@ -296,8 +301,14 @@ export default function App() {
   }, [effectiveTempBasePath]);
 
   // Panel resize hook
-  const { repositoryWidth, worktreeWidth, treeSidebarWidth, resizing, handleResizeStart } =
-    usePanelResize(layoutMode);
+  const {
+    repositoryWidth,
+    worktreeWidth,
+    treeSidebarWidth,
+    fileSidebarWidth,
+    resizing,
+    handleResizeStart,
+  } = usePanelResize(layoutMode);
 
   const worktreeError = useWorktreeStore((s) => s.error);
   const switchEditorWorktree = useEditorStore((s) => s.switchWorktree);
@@ -646,6 +657,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.WORKTREE_COLLAPSED, String(worktreeCollapsed));
   }, [worktreeCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.FILE_SIDEBAR_COLLAPSED, String(fileSidebarCollapsed));
+  }, [fileSidebarCollapsed]);
 
   useEffect(() => {
     if (!temporaryWorkspaceEnabled && selectedRepo === TEMP_REPO_ID) {
@@ -1899,6 +1914,18 @@ export default function App() {
         )}
 
         {/* Main Content */}
+        {fileTreeDisplayMode === 'current' && (
+          <FileSidebar
+            rootPath={activeWorktree?.path}
+            isActive={activeTab === 'file'}
+            width={fileSidebarWidth}
+            collapsed={fileSidebarCollapsed}
+            onCollapse={() => setFileSidebarCollapsed(true)}
+            onResizeStart={handleResizeStart('fileSidebar')}
+            onSwitchTab={() => handleTabChange('file')}
+          />
+        )}
+
         <MainContent
           activeTab={activeTab}
           onTabChange={handleTabChange}
@@ -1908,12 +1935,16 @@ export default function App() {
           worktreePath={activeWorktree?.path}
           repositoryCollapsed={repositoryCollapsed}
           worktreeCollapsed={layoutMode === 'tree' ? repositoryCollapsed : worktreeCollapsed}
+          fileSidebarCollapsed={fileTreeDisplayMode === 'current' ? fileSidebarCollapsed : false}
           layoutMode={layoutMode}
           onExpandRepository={() => setRepositoryCollapsed(false)}
           onExpandWorktree={
             layoutMode === 'tree'
               ? () => setRepositoryCollapsed(false)
               : () => setWorktreeCollapsed(false)
+          }
+          onExpandFileSidebar={
+            fileTreeDisplayMode === 'current' ? () => setFileSidebarCollapsed(false) : undefined
           }
           onSwitchWorktree={handleSwitchWorktreePath}
           onSwitchTab={handleTabChange}

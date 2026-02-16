@@ -4,6 +4,7 @@ import {
   FolderOpen,
   GitBranch,
   MessageSquare,
+  PanelLeft,
   RectangleEllipsis,
   Settings,
   Sparkles,
@@ -14,7 +15,7 @@ import { DEFAULT_TAB_ORDER, type TabId } from '@/App/constants';
 import { normalizePath } from '@/App/storage';
 import { OpenInMenu } from '@/components/app/OpenInMenu';
 import { AgentPanel } from '@/components/chat/AgentPanel';
-import { FilePanel } from '@/components/files';
+import { CurrentFilePanel, FilePanel } from '@/components/files';
 import { RunningProjectsPopover } from '@/components/layout/RunningProjectsPopover';
 import { SettingsContent } from '@/components/settings';
 import type { SettingsCategory } from '@/components/settings/constants';
@@ -47,9 +48,11 @@ interface MainContentProps {
   worktreePath?: string;
   repositoryCollapsed?: boolean;
   worktreeCollapsed?: boolean;
+  fileSidebarCollapsed?: boolean;
   layoutMode?: LayoutMode;
   onExpandRepository?: () => void;
   onExpandWorktree?: () => void;
+  onExpandFileSidebar?: () => void;
   onSwitchWorktree?: (worktreePath: string) => void;
   onSwitchTab?: (tab: TabId) => void;
   isSettingsActive?: boolean;
@@ -68,9 +71,11 @@ export function MainContent({
   worktreePath,
   repositoryCollapsed = false,
   worktreeCollapsed = false,
+  fileSidebarCollapsed = false,
   layoutMode = 'columns',
   onExpandRepository,
   onExpandWorktree,
+  onExpandFileSidebar,
   onSwitchWorktree,
   onSwitchTab,
   isSettingsActive = false,
@@ -82,6 +87,7 @@ export function MainContent({
   const { t } = useI18n();
   const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const setSettingsDisplayMode = useSettingsStore((s) => s.setSettingsDisplayMode);
+  const fileTreeDisplayMode = useSettingsStore((s) => s.fileTreeDisplayMode);
 
   // Diff Review Modal state
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -250,7 +256,7 @@ export function MainContent({
         <div className="flex items-center gap-1 no-drag">
           {/* Expand buttons when panels are collapsed */}
           <AnimatePresence mode="popLayout">
-            {worktreeCollapsed && (
+            {(worktreeCollapsed || fileSidebarCollapsed) && (
               <motion.div
                 key="expand-buttons"
                 initial={{ width: 0, opacity: 0 }}
@@ -302,6 +308,16 @@ export function MainContent({
                     )}
                   </>
                 )}
+                {fileSidebarCollapsed && onExpandFileSidebar && (
+                  <button
+                    type="button"
+                    onClick={onExpandFileSidebar}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                    title={t('Expand File Sidebar')}
+                  >
+                    <PanelLeft className="h-4 w-4" />
+                  </button>
+                )}
                 <div className="mx-1 h-4 w-px bg-border" />
               </motion.div>
             )}
@@ -337,7 +353,12 @@ export function MainContent({
                 )}
                 <button
                   type="button"
-                  onClick={() => onTabChange(tab.id)}
+                  onClick={() => {
+                    if (tab.id === 'file' && fileSidebarCollapsed) {
+                      onExpandFileSidebar?.();
+                    }
+                    onTabChange(tab.id);
+                  }}
                   className={cn(
                     'relative flex h-8 items-center gap-1.5 rounded-md px-3 text-sm transition-colors',
                     isActive
@@ -480,11 +501,19 @@ export function MainContent({
             activeTab === 'file' ? 'z-10' : 'invisible pointer-events-none z-0'
           )}
         >
-          <FilePanel
-            rootPath={worktreePath}
-            isActive={activeTab === 'file'}
-            sessionId={activeSessionId}
-          />
+          {fileTreeDisplayMode === 'current' ? (
+            <CurrentFilePanel
+              rootPath={worktreePath}
+              isActive={activeTab === 'file'}
+              sessionId={activeSessionId}
+            />
+          ) : (
+            <FilePanel
+              rootPath={worktreePath}
+              isActive={activeTab === 'file'}
+              sessionId={activeSessionId}
+            />
+          )}
         </div>
         {/* Source Control tab - keep mounted to preserve selection state */}
         <div

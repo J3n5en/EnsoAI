@@ -81,6 +81,7 @@ function applyInitialSettings(state: {
 export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
 
 export type LayoutMode = 'columns' | 'tree';
+export type FileTreeDisplayMode = 'legacy' | 'current';
 
 export type SettingsDisplayMode = 'tab' | 'draggable-modal';
 
@@ -684,6 +685,7 @@ export const defaultWorkspaceKeybindings: WorkspaceKeybindings = {
 interface SettingsState {
   theme: Theme;
   layoutMode: LayoutMode;
+  fileTreeDisplayMode: FileTreeDisplayMode;
   language: Locale;
   fontSize: number;
   fontFamily: string;
@@ -761,6 +763,7 @@ interface SettingsState {
 
   setTheme: (theme: Theme) => void;
   setLayoutMode: (mode: LayoutMode) => void;
+  setFileTreeDisplayMode: (mode: FileTreeDisplayMode) => void;
   setLanguage: (language: Locale) => void;
   setFontSize: (size: number) => void;
   setFontFamily: (family: string) => void;
@@ -885,6 +888,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       theme: 'system',
       layoutMode: 'tree',
+      fileTreeDisplayMode: 'legacy',
       language: getDefaultLocale(),
       fontSize: 14,
       fontFamily: 'Inter',
@@ -980,6 +984,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({ theme });
       },
       setLayoutMode: (layoutMode) => set({ layoutMode }),
+      setFileTreeDisplayMode: (fileTreeDisplayMode) => set({ fileTreeDisplayMode }),
       setLanguage: (language) => {
         document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
         window.electronAPI.app.setLanguage(language);
