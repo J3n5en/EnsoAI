@@ -1,41 +1,44 @@
 import type {
   GitWorktree,
   WorktreeCreateOptions,
-  WorktreeMergeCleanupOptions,
   WorktreeMergeOptions,
   WorktreeMergeResult,
 } from '@shared/types';
-import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { consumeClaudeProviderSwitch, isClaudeProviderMatch } from '@/lib/claudeProvider';
-import { normalizeHexColor } from '@/lib/colors';
+import { useCallback, useEffect, useMemo } from 'react';
 import {
   ALL_GROUP_ID,
-  DEFAULT_GROUP_COLOR,
-  generateGroupId,
   panelTransition,
   type Repository,
-  type RepositoryGroup,
   type TabId,
   TEMP_REPO_ID,
 } from './App/constants';
 import {
-  getActiveGroupId,
+  useAppLifecycle,
+  useBackgroundImage,
+  useClaudeIntegration,
+  useClaudeProviderListener,
+  useCodeReviewContinue,
+  useFileDragDrop,
+  useGroupSync,
+  useMenuActions,
+  useMergeState,
+  useOpenPathListener,
+  usePanelState,
+  useRepositoryState,
+  useSettingsEvents,
+  useSettingsState,
+  useTempWorkspaceSync,
+  useTerminalNavigation,
+  useWorktreeSelection,
+  useWorktreeState,
+  useWorktreeSync,
+} from './App/hooks';
+import {
   getRepositorySettings,
-  getStoredBoolean,
-  getStoredGroups,
-  getStoredTabMap,
-  getStoredTabOrder,
   getStoredWorktreeMap,
-  getStoredWorktreeOrderMap,
-  migrateRepositoryGroups,
-  pathsEqual,
   STORAGE_KEYS,
   saveActiveGroupId,
-  saveGroups,
-  saveTabOrder,
-  saveWorktreeOrderMap,
 } from './App/storage';
 import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
 import { usePanelResize } from './App/usePanelResize';
@@ -51,7 +54,6 @@ import { TemporaryWorkspacePanel } from './components/layout/TemporaryWorkspaceP
 import { TreeSidebar } from './components/layout/TreeSidebar';
 import { WindowTitleBar } from './components/layout/WindowTitleBar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
-import type { SettingsCategory } from './components/settings/constants';
 import { DraggableSettingsWindow } from './components/settings/DraggableSettingsWindow';
 import { TempWorkspaceDialogs } from './components/temp-workspace/TempWorkspaceDialogs';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -66,7 +68,6 @@ import {
 } from './components/ui/dialog';
 import { addToast, toastManager } from './components/ui/toast';
 import { MergeEditor, MergeWorktreeDialog } from './components/worktree';
-import { useEditor } from './hooks/useEditor';
 import { useAutoFetchListener, useGitBranches, useGitInit } from './hooks/useGit';
 import { useWebInspector } from './hooks/useWebInspector';
 import {
@@ -80,13 +81,10 @@ import {
 } from './hooks/useWorktree';
 import { useI18n } from './i18n';
 import { initCloneProgressListener } from './stores/cloneTasks';
-import { useCodeReviewContinueStore } from './stores/codeReviewContinue';
 import { useEditorStore } from './stores/editor';
 import { useInitScriptStore } from './stores/initScript';
-import { useNavigationStore } from './stores/navigation';
 import { useSettingsStore } from './stores/settings';
 import { useTempWorkspaceStore } from './stores/tempWorkspace';
-import { requestUnsavedChoice } from './stores/unsavedPrompt';
 import { useWorktreeStore } from './stores/worktree';
 import { initAgentActivityListener, useWorktreeActivityStore } from './stores/worktreeActivity';
 
@@ -95,7 +93,6 @@ initCloneProgressListener();
 
 export default function App() {
   const { t } = useI18n();
-  const queryClient = useQueryClient();
 
   // Initialize agent activity listener for tree sidebar status display
   useEffect(() => {
@@ -105,175 +102,115 @@ export default function App() {
   // Listen for auto-fetch completion events to refresh git status
   useAutoFetchListener();
 
-  // Per-worktree tab state: { [worktreePath]: TabId }
-  const [worktreeTabMap, setWorktreeTabMap] = useState<Record<string, TabId>>(getStoredTabMap);
-  // Per-repo worktree state: { [repoPath]: worktreePath }
-  const [repoWorktreeMap, setRepoWorktreeMap] =
-    useState<Record<string, string>>(getStoredWorktreeMap);
-  // Per-repo worktree display order: { [repoPath]: { [worktreePath]: displayOrder } }
-  const [worktreeOrderMap, setWorktreeOrderMap] =
-    useState<Record<string, Record<string, number>>>(getStoredWorktreeOrderMap);
-  // Panel tab order: custom order of tabs
-  const [tabOrder, setTabOrder] = useState<TabId[]>(getStoredTabOrder);
-  const [activeTab, setActiveTab] = useState<TabId>('chat');
-  const [previousTab, setPreviousTab] = useState<TabId | null>(null);
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
-  const [activeWorktree, setActiveWorktree] = useState<GitWorktree | null>(null);
-  const [groups, setGroups] = useState<RepositoryGroup[]>([]);
-  const [activeGroupId, setActiveGroupId] = useState<string>(ALL_GROUP_ID);
-
-  // Panel collapsed states - initialize from localStorage
-  const [repositoryCollapsed, setRepositoryCollapsed] = useState(() =>
-    getStoredBoolean(STORAGE_KEYS.REPOSITORY_COLLAPSED, false)
+  const repoState = useRepositoryState();
+  const wtState = useWorktreeState();
+  const settingsState = useSettingsState(
+    wtState.activeTab,
+    wtState.previousTab,
+    wtState.setActiveTab,
+    wtState.setPreviousTab
   );
-  const [worktreeCollapsed, setWorktreeCollapsed] = useState(() =>
-    getStoredBoolean(STORAGE_KEYS.WORKTREE_COLLAPSED, false)
+  const panelState = usePanelState();
+
+  const {
+    repositories,
+    selectedRepo,
+    groups,
+    activeGroupId,
+    setSelectedRepo,
+    setActiveGroupId,
+    saveRepositories,
+    handleCreateGroup,
+    handleUpdateGroup,
+    handleDeleteGroup,
+    handleSwitchGroup,
+    handleMoveToGroup,
+    handleReorderRepositories,
+  } = repoState;
+
+  const {
+    worktreeTabMap,
+    repoWorktreeMap,
+    tabOrder,
+    activeTab,
+    activeWorktree,
+    currentWorktreePathRef,
+    setWorktreeTabMap,
+    setRepoWorktreeMap,
+    setActiveTab,
+    setPreviousTab,
+    setActiveWorktree,
+    handleReorderWorktrees: reorderWorktreesInState,
+    handleReorderTabs,
+    getSortedWorktrees,
+    saveActiveWorktreeToMap,
+  } = wtState;
+
+  const {
+    settingsCategory,
+    scrollToProvider,
+    pendingProviderAction,
+    settingsDialogOpen,
+    settingsDisplayMode,
+    setSettingsCategory,
+    setScrollToProvider,
+    setPendingProviderAction,
+    setSettingsDialogOpen,
+    openSettings,
+    toggleSettings,
+    handleSettingsCategoryChange,
+  } = settingsState;
+
+  const {
+    repositoryCollapsed,
+    worktreeCollapsed,
+    addRepoDialogOpen,
+    initialLocalPath,
+    actionPanelOpen,
+    closeDialogOpen,
+    toggleSelectedRepoExpandedRef,
+    switchWorktreePathRef,
+    setRepositoryCollapsed,
+    setWorktreeCollapsed,
+    setAddRepoDialogOpen,
+    setInitialLocalPath,
+    setActionPanelOpen,
+    setCloseDialogOpen,
+    handleAddRepository,
+  } = panelState;
+
+  const { isFileDragOver, repositorySidebarRef } = useFileDragDrop(
+    setInitialLocalPath,
+    setAddRepoDialogOpen
   );
 
-  // Ref to toggle selected repo expanded in tree layout
-  const toggleSelectedRepoExpandedRef = useRef<(() => void) | null>(null);
-
-  // Ref for cross-repo worktree switching (defined later)
-  const switchWorktreePathRef = useRef<((path: string) => void) | null>(null);
-
-  // Ref to track current worktree path for fetch race condition prevention
-  const currentWorktreePathRef = useRef<string | null>(null);
-
-  // Settings page state (used in MainContent)
-  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>(() => {
-    try {
-      const saved = localStorage.getItem('enso-settings-active-category');
-      const validCategories: SettingsCategory[] = [
-        'general',
-        'appearance',
-        'editor',
-        'keybindings',
-        'agent',
-        'ai',
-        'integration',
-        'hapi',
-      ];
-      return saved && validCategories.includes(saved as SettingsCategory)
-        ? (saved as SettingsCategory)
-        : 'general';
-    } catch {
-      return 'general';
-    }
-  });
-  const [scrollToProvider, setScrollToProvider] = useState(false);
-  const [pendingProviderAction, setPendingProviderAction] = useState<'preview' | 'save' | null>(
-    null
+  const { refreshGitData, handleSelectWorktree } = useWorktreeSelection(
+    activeWorktree,
+    setActiveWorktree,
+    currentWorktreePathRef,
+    worktreeTabMap,
+    setWorktreeTabMap,
+    activeTab,
+    setActiveTab,
+    selectedRepo,
+    setSelectedRepo
   );
 
-  // 持久化状态变更
-  useEffect(() => {
-    try {
-      localStorage.setItem('enso-settings-active-category', settingsCategory);
-    } catch (error) {
-      console.warn('Failed to save settings category:', error);
-    }
-  }, [settingsCategory]);
-
-  // Global drag-and-drop for repository sidebar
-  const [isFileDragOver, setIsFileDragOver] = useState(false);
-  const repositorySidebarRef = useRef<HTMLDivElement>(null);
-  const isFileDragOverRef = useRef(false);
-
-  // Keep ref in sync with state for use in event handlers
-  useEffect(() => {
-    isFileDragOverRef.current = isFileDragOver;
-  }, [isFileDragOver]);
-
-  useEffect(() => {
-    const handleDragOver = (e: DragEvent) => {
-      if (!e.dataTransfer?.types.includes('Files')) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-
-      // Check if over sidebar
-      const el = repositorySidebarRef.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        const over =
-          e.clientX >= rect.left &&
-          e.clientX <= rect.right &&
-          e.clientY >= rect.top &&
-          e.clientY <= rect.bottom;
-        setIsFileDragOver(over);
-      }
-    };
-
-    const handleDragLeave = (e: DragEvent) => {
-      if (e.clientX <= 0 || e.clientY <= 0) {
-        setIsFileDragOver(false);
-      }
-    };
-
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
-      const wasOver = isFileDragOverRef.current;
-      setIsFileDragOver(false);
-
-      if (wasOver && e.dataTransfer?.files.length) {
-        const file = e.dataTransfer.files[0];
-        const path = window.electronAPI.utils.getPathForFile(file);
-        if (path) {
-          setInitialLocalPath(path);
-          setAddRepoDialogOpen(true);
-        }
-      }
-    };
-
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('dragleave', handleDragLeave);
-    document.addEventListener('drop', handleDrop);
-    return () => {
-      document.removeEventListener('dragover', handleDragOver);
-      document.removeEventListener('dragleave', handleDragLeave);
-      document.removeEventListener('drop', handleDrop);
-    };
-  }, []);
-
-  // 创建回调函数
-  const handleSettingsCategoryChange = useCallback((category: SettingsCategory) => {
-    setSettingsCategory(category);
-  }, []);
-
-  // Add Repository dialog state
-  const [addRepoDialogOpen, setAddRepoDialogOpen] = useState(false);
-  const [initialLocalPath, setInitialLocalPath] = useState<string | null>(null);
-
-  // Action panel state
-  const [actionPanelOpen, setActionPanelOpen] = useState(false);
-
-  // Settings dialog state (for draggable-modal mode)
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-
-  // Track previous settingsDisplayMode to detect actual changes (not just initialization)
-  const prevSettingsDisplayModeRef = useRef<typeof settingsDisplayMode | null>(null);
-
-  // Close confirmation dialog state (legacy)
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-
-  // Merge dialog state
-  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
-  const [mergeWorktree, setMergeWorktree] = useState<GitWorktree | null>(null);
-  const [mergeConflicts, setMergeConflicts] = useState<WorktreeMergeResult | null>(null);
-  const [pendingMergeOptions, setPendingMergeOptions] = useState<
-    | (Required<Pick<WorktreeMergeCleanupOptions, 'worktreePath' | 'sourceBranch'>> &
-        Pick<WorktreeMergeCleanupOptions, 'deleteWorktreeAfterMerge' | 'deleteBranchAfterMerge'>)
-    | null
-  >(null);
+  const {
+    mergeDialogOpen,
+    mergeWorktree,
+    mergeConflicts,
+    pendingMergeOptions,
+    setMergeDialogOpen,
+    setMergeConflicts,
+    setPendingMergeOptions,
+    handleOpenMergeDialog,
+  } = useMergeState();
 
   // Layout mode from settings
   const layoutMode = useSettingsStore((s) => s.layoutMode);
   const autoUpdateEnabled = useSettingsStore((s) => s.autoUpdateEnabled);
-  const editorSettings = useSettingsStore((s) => s.editorSettings);
-  const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const hideGroups = useSettingsStore((s) => s.hideGroups);
-  const backgroundImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
-  const backgroundOpacity = useSettingsStore((s) => s.backgroundOpacity);
   const temporaryWorkspaceEnabled = useSettingsStore((s) => s.temporaryWorkspaceEnabled);
   const defaultTemporaryPath = useSettingsStore((s) => s.defaultTemporaryPath);
   const isWindows = window.electronAPI?.env.platform === 'win32';
@@ -300,7 +237,6 @@ export default function App() {
     usePanelResize(layoutMode);
 
   const worktreeError = useWorktreeStore((s) => s.error);
-  const switchEditorWorktree = useEditorStore((s) => s.switchWorktree);
   const clearEditorWorktreeState = useEditorStore((s) => s.clearWorktreeState);
   const tempWorkspaces = useTempWorkspaceStore((s) => s.items);
   const addTempWorkspace = useTempWorkspaceStore((s) => s.addItem);
@@ -309,38 +245,6 @@ export default function App() {
   const rehydrateTempWorkspaces = useTempWorkspaceStore((s) => s.rehydrate);
   const openTempRename = useTempWorkspaceStore((s) => s.openRename);
   const openTempDelete = useTempWorkspaceStore((s) => s.openDelete);
-
-  // Navigation store for terminal -> editor file navigation
-  const { pendingNavigation, clearNavigation } = useNavigationStore();
-  const { navigateToFile } = useEditor();
-
-  const openSettings = useCallback(() => {
-    if (settingsDisplayMode === 'tab') {
-      if (activeTab !== 'settings') {
-        setPreviousTab(activeTab);
-        setActiveTab('settings');
-      }
-    } else {
-      setSettingsDialogOpen(true);
-    }
-  }, [settingsDisplayMode, activeTab]);
-
-  // Toggle settings page
-  const toggleSettings = useCallback(() => {
-    if (settingsDisplayMode === 'tab') {
-      // Tab mode: toggle between settings and previous tab
-      if (activeTab === 'settings') {
-        setActiveTab(previousTab || 'chat');
-        setPreviousTab(null);
-      } else {
-        setPreviousTab(activeTab);
-        setActiveTab('settings');
-      }
-    } else {
-      // Draggable-modal mode: toggle dialog
-      setSettingsDialogOpen((prev) => !prev);
-    }
-  }, [settingsDisplayMode, activeTab, previousTab]);
 
   // Handle tab change and persist to worktree tab map
   const handleTabChange = useCallback(
@@ -358,71 +262,10 @@ export default function App() {
         }));
       }
     },
-    [activeTab, activeWorktree]
+    [activeTab, activeWorktree, setActiveTab, setPreviousTab, setWorktreeTabMap]
   );
 
-  // Clean up settings state when display mode changes and open settings in new mode
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Only trigger on display mode change, not on activeTab/previousTab change
-  useEffect(() => {
-    // Only trigger when settingsDisplayMode actually changes (not on initial mount or rehydration)
-    const prevMode = prevSettingsDisplayModeRef.current;
-    prevSettingsDisplayModeRef.current = settingsDisplayMode;
-
-    // Skip if this is the first run (prevMode is null) - no mode switch happened
-    if (prevMode === null) {
-      return;
-    }
-
-    // Skip if the mode hasn't actually changed
-    if (prevMode === settingsDisplayMode) {
-      return;
-    }
-
-    if (settingsDisplayMode === 'tab') {
-      // Switching to tab mode: close dialog and open settings tab
-      setSettingsDialogOpen(false);
-      // Open settings tab if not already active
-      if (activeTab !== 'settings') {
-        setPreviousTab(activeTab);
-        setActiveTab('settings');
-      }
-    } else {
-      // Switching to draggable-modal mode: exit settings tab and open modal
-      if (activeTab === 'settings') {
-        setActiveTab(previousTab || 'chat');
-        setPreviousTab(null);
-      }
-      // Open modal
-      setSettingsDialogOpen(true);
-    }
-  }, [settingsDisplayMode]);
-
-  // Listen for 'open-settings-provider' event from SessionBar
-  useEffect(() => {
-    const handleOpenSettingsProvider = () => {
-      setSettingsCategory('integration');
-      setScrollToProvider(true);
-      openSettings();
-    };
-
-    window.addEventListener('open-settings-provider', handleOpenSettingsProvider);
-    return () => {
-      window.removeEventListener('open-settings-provider', handleOpenSettingsProvider);
-    };
-  }, [openSettings]);
-
-  // Listen for 'open-settings-agent' event from SessionBar/AgentPanel
-  useEffect(() => {
-    const handleOpenSettingsAgent = () => {
-      setSettingsCategory('agent');
-      openSettings();
-    };
-
-    window.addEventListener('open-settings-agent', handleOpenSettingsAgent);
-    return () => {
-      window.removeEventListener('open-settings-agent', handleOpenSettingsAgent);
-    };
-  }, [openSettings]);
+  useSettingsEvents(openSettings, setSettingsCategory, setScrollToProvider);
 
   // Keyboard shortcuts
   useAppKeyboardShortcuts({
@@ -468,208 +311,25 @@ export default function App() {
   // Web Inspector: listen for element inspection data and write to active agent terminal
   useWebInspector(activeWorktree?.path, selectedRepo ?? undefined);
 
-  // Handle terminal file link navigation
-  useEffect(() => {
-    if (!pendingNavigation) return;
+  useTerminalNavigation(activeWorktree?.path ?? null, setActiveTab, setWorktreeTabMap);
+  useMenuActions(openSettings, setActionPanelOpen);
+  useAppLifecycle();
+  useClaudeProviderListener(
+    setSettingsCategory,
+    setScrollToProvider,
+    openSettings,
+    setPendingProviderAction
+  );
 
-    const { path, line, column, previewMode } = pendingNavigation;
-
-    // Open the file and set cursor position, passing previewMode for markdown files
-    navigateToFile(path, line, column, undefined, previewMode);
-
-    // Switch to file tab and update worktree tab map
-    setActiveTab('file');
-    if (activeWorktree?.path) {
-      setWorktreeTabMap((prev) => ({
-        ...prev,
-        [activeWorktree.path]: 'file',
-      }));
-    }
-
-    // Clear the navigation request
-    clearNavigation();
-  }, [pendingNavigation, navigateToFile, clearNavigation, activeWorktree]);
-
-  // Listen for menu actions from main process
-  useEffect(() => {
-    const cleanup = window.electronAPI.menu.onAction((action) => {
-      switch (action) {
-        case 'open-settings':
-          openSettings();
-          break;
-        case 'open-action-panel':
-          setActionPanelOpen(true);
-          break;
-      }
-    });
-    return cleanup;
-  }, [openSettings]);
-
-  // Listen for close request from main process (native dialogs are shown in main)
-  useEffect(() => {
-    const cleanup = window.electronAPI.app.onCloseRequest((requestId) => {
-      const state = useEditorStore.getState();
-      const editorSettings = useSettingsStore.getState().editorSettings;
-
-      const allTabs = [
-        ...state.tabs,
-        ...Object.values(state.worktreeStates).flatMap((s) => s.tabs),
-      ];
-
-      const dirtyPaths =
-        editorSettings.autoSave === 'off'
-          ? Array.from(new Set(allTabs.filter((t) => t.isDirty).map((t) => t.path)))
-          : [];
-
-      window.electronAPI.app.respondCloseRequest(requestId, { dirtyPaths });
-    });
-    return cleanup;
-  }, []);
-
-  // Main process asks renderer to save a specific dirty file before closing.
-  useEffect(() => {
-    const cleanup = window.electronAPI.app.onCloseSaveRequest(async (requestId, path) => {
-      try {
-        const state = useEditorStore.getState();
-        const allTabs = [
-          ...state.tabs,
-          ...Object.values(state.worktreeStates).flatMap((s) => s.tabs),
-        ];
-        const tab = allTabs.find((t) => t.path === path);
-        if (!tab) {
-          window.electronAPI.app.respondCloseSaveRequest(requestId, {
-            ok: false,
-            error: 'File not found in editor tabs',
-          });
-          return;
-        }
-
-        await window.electronAPI.file.write(path, tab.content, tab.encoding);
-        useEditorStore.getState().markFileSaved(path);
-
-        window.electronAPI.app.respondCloseSaveRequest(requestId, {
-          ok: true,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        window.electronAPI.app.respondCloseSaveRequest(requestId, {
-          ok: false,
-          error: message,
-        });
-      }
-    });
-    return cleanup;
-  }, []);
-
-  // Listen for Claude Provider settings change (from cc-switch or other tools)
-  const claudeProviders = useSettingsStore((s) => s.claudeCodeIntegration.providers);
-  const providerToastRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
-  useEffect(() => {
-    const cleanup = window.electronAPI.claudeProvider.onSettingsChanged((data) => {
-      const { extracted } = data;
-      if (!extracted?.baseUrl) return;
-
-      if (consumeClaudeProviderSwitch(extracted)) {
-        return;
-      }
-
-      // Close previous provider toast if exists
-      if (providerToastRef.current) {
-        toastManager.close(providerToastRef.current);
-      }
-
-      // Check if the new config matches any saved provider
-      const matched = claudeProviders.find((p) => isClaudeProviderMatch(p, extracted));
-
-      if (matched) {
-        // Switched to a known provider
-        providerToastRef.current = toastManager.add({
-          type: 'info',
-          title: t('Provider switched'),
-          description: matched.name,
-        });
-      } else {
-        // New unsaved config detected
-        providerToastRef.current = addToast({
-          type: 'info',
-          title: t('New provider detected'),
-          description: t('Click to save this config'),
-          actions: [
-            {
-              label: t('Preview'),
-              onClick: () => {
-                setSettingsCategory('integration');
-                setScrollToProvider(true);
-                openSettings();
-                setPendingProviderAction('preview');
-              },
-              variant: 'ghost',
-            },
-            {
-              label: t('Save'),
-              onClick: () => {
-                setSettingsCategory('integration');
-                setScrollToProvider(true);
-                openSettings();
-                setPendingProviderAction('save');
-              },
-              variant: 'outline',
-            },
-            {
-              label: t('Open Settings'),
-              onClick: () => {
-                setSettingsCategory('integration');
-                setScrollToProvider(true);
-                openSettings();
-              },
-            },
-          ],
-        });
-      }
-    });
-
-    // Cleanup: close toast and unsubscribe on unmount
-    return () => {
-      if (providerToastRef.current) {
-        toastManager.close(providerToastRef.current);
-        providerToastRef.current = null;
-      }
-      cleanup();
-    };
-  }, [claudeProviders, t, openSettings]);
-
-  // Save collapsed states to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REPOSITORY_COLLAPSED, String(repositoryCollapsed));
-  }, [repositoryCollapsed]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WORKTREE_COLLAPSED, String(worktreeCollapsed));
-  }, [worktreeCollapsed]);
-
-  useEffect(() => {
-    if (!temporaryWorkspaceEnabled && selectedRepo === TEMP_REPO_ID) {
-      setSelectedRepo(repositories[0]?.path ?? null);
-    }
-  }, [temporaryWorkspaceEnabled, selectedRepo, repositories]);
-
-  useEffect(() => {
-    if (selectedRepo !== TEMP_REPO_ID || !activeWorktree?.path) return;
-    const exists = tempWorkspaces.some((item) => item.path === activeWorktree.path);
-    if (!exists) {
-      setActiveWorktree(null);
-    }
-  }, [selectedRepo, activeWorktree?.path, tempWorkspaces]);
-
-  // Persist worktree tab map to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.WORKTREE_TABS, JSON.stringify(worktreeTabMap));
-  }, [worktreeTabMap]);
-
-  // Persist panel tab order to localStorage
-  useEffect(() => {
-    saveTabOrder(tabOrder);
-  }, [tabOrder]);
+  useTempWorkspaceSync(
+    temporaryWorkspaceEnabled,
+    selectedRepo,
+    activeWorktree,
+    tempWorkspaces,
+    repositories,
+    setSelectedRepo,
+    setActiveWorktree
+  );
 
   const isTempRepo = selectedRepo === TEMP_REPO_ID;
   const worktreeRepoPath = isTempRepo ? null : selectedRepo;
@@ -697,245 +357,53 @@ export default function App() {
   const continueMergeMutation = useWorktreeMergeContinue();
 
   useEffect(() => {
-    migrateRepositoryGroups();
     rehydrateTempWorkspaces();
+  }, [rehydrateTempWorkspaces]);
 
-    const savedGroups = getStoredGroups();
-    setGroups(savedGroups);
-    setActiveGroupId(getActiveGroupId());
+  useEffect(() => {
+    if (!selectedRepo) return;
 
-    const validGroupIds = new Set(savedGroups.map((g) => g.id));
-
-    const savedRepos = localStorage.getItem(STORAGE_KEYS.REPOSITORIES);
-    if (savedRepos) {
-      try {
-        let parsed = JSON.parse(savedRepos) as Repository[];
-        let needsMigration = false;
-        parsed = parsed.map((repo) => {
-          if (repo.name.includes('/') || repo.name.includes('\\')) {
-            needsMigration = true;
-            const fixedName = repo.path.split(/[\\/]/).pop() || repo.path;
-            return { ...repo, name: fixedName };
-          }
-          if (repo.groupId && !validGroupIds.has(repo.groupId)) {
-            needsMigration = true;
-            return { ...repo, groupId: undefined };
-          }
-          return repo;
-        });
-        if (needsMigration) {
-          localStorage.setItem(STORAGE_KEYS.REPOSITORIES, JSON.stringify(parsed));
-        }
-        setRepositories(parsed);
-      } catch {
-        // ignore
-      }
-    }
-
-    const savedSelectedRepo = localStorage.getItem(STORAGE_KEYS.SELECTED_REPO);
-    if (savedSelectedRepo) {
-      setSelectedRepo(savedSelectedRepo);
-    }
-
-    // Migration: convert old single worktree to per-repo map
     const oldWorktreePath = localStorage.getItem(STORAGE_KEYS.ACTIVE_WORKTREE);
     const savedWorktreeMap = getStoredWorktreeMap();
-    if (oldWorktreePath && savedSelectedRepo && !savedWorktreeMap[savedSelectedRepo]) {
-      // Migrate old data to new format
+    const needsMigration = oldWorktreePath && !savedWorktreeMap[selectedRepo];
+
+    if (needsMigration && oldWorktreePath) {
       const migrated = {
         ...savedWorktreeMap,
-        [savedSelectedRepo]: oldWorktreePath,
+        [selectedRepo]: oldWorktreePath,
       };
       localStorage.setItem(STORAGE_KEYS.ACTIVE_WORKTREES, JSON.stringify(migrated));
       setRepoWorktreeMap(migrated);
       localStorage.removeItem(STORAGE_KEYS.ACTIVE_WORKTREE);
     }
 
-    // Restore worktree for selected repo
-    const worktreeMap = getStoredWorktreeMap();
-    const savedWorktreePath = savedSelectedRepo ? worktreeMap[savedSelectedRepo] : null;
-    if (savedWorktreePath) {
-      // Wait for worktrees to load before setting active worktree.
-      setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
-    }
-  }, [rehydrateTempWorkspaces]);
-
-  const saveRepositories = useCallback((repos: Repository[]) => {
-    localStorage.setItem(STORAGE_KEYS.REPOSITORIES, JSON.stringify(repos));
-    setRepositories(repos);
-  }, []);
-
-  const sortedGroups = useMemo(() => {
-    return [...groups].sort((a, b) => a.order - b.order);
-  }, [groups]);
-
-  const handleCreateGroup = useCallback(
-    (name: string, emoji: string, color: string) => {
-      const normalizedColor = normalizeHexColor(color, DEFAULT_GROUP_COLOR);
-      const newGroup: RepositoryGroup = {
-        id: generateGroupId(),
-        name: name.trim(),
-        emoji,
-        color: normalizedColor,
-        order: groups.length,
-      };
-      const updated = [...groups, newGroup];
-      setGroups(updated);
-      saveGroups(updated);
-      return newGroup;
-    },
-    [groups]
-  );
-
-  const handleUpdateGroup = useCallback(
-    (groupId: string, name: string, emoji: string, color: string) => {
-      const normalizedColor = normalizeHexColor(color, DEFAULT_GROUP_COLOR);
-      const updated = groups.map((g) =>
-        g.id === groupId ? { ...g, name: name.trim(), emoji, color: normalizedColor } : g
-      );
-      setGroups(updated);
-      saveGroups(updated);
-    },
-    [groups]
-  );
-
-  const handleDeleteGroup = useCallback(
-    (groupId: string) => {
-      const updatedGroups = groups
-        .filter((g) => g.id !== groupId)
-        .map((g, i) => ({ ...g, order: i }));
-      setGroups(updatedGroups);
-      saveGroups(updatedGroups);
-
-      const updatedRepos = repositories.map((r) =>
-        r.groupId === groupId ? { ...r, groupId: undefined } : r
-      );
-      saveRepositories(updatedRepos);
-
-      if (activeGroupId === groupId) {
-        setActiveGroupId(ALL_GROUP_ID);
-        saveActiveGroupId(ALL_GROUP_ID);
+    if (!activeWorktree) {
+      const worktreeMap = getStoredWorktreeMap();
+      const savedWorktreePath = worktreeMap[selectedRepo];
+      if (savedWorktreePath) {
+        setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
       }
-    },
-    [groups, repositories, saveRepositories, activeGroupId]
-  );
-
-  const handleSwitchGroup = useCallback((groupId: string) => {
-    setActiveGroupId(groupId);
-    saveActiveGroupId(groupId);
-  }, []);
-
-  // Auto-switch to ALL when hideGroups is enabled
-  useEffect(() => {
-    if (hideGroups && activeGroupId !== ALL_GROUP_ID) {
-      setActiveGroupId(ALL_GROUP_ID);
-      saveActiveGroupId(ALL_GROUP_ID);
     }
-  }, [hideGroups, activeGroupId]);
+  }, [selectedRepo, activeWorktree, setRepoWorktreeMap, setActiveWorktree]);
 
-  const handleMoveToGroup = useCallback(
-    (repoPath: string, targetGroupId: string | null) => {
-      const updated = repositories.map((r) =>
-        r.path === repoPath ? { ...r, groupId: targetGroupId || undefined } : r
-      );
-      saveRepositories(updated);
-    },
-    [repositories, saveRepositories]
+  const sortedGroups = useMemo(() => [...groups].sort((a, b) => a.order - b.order), [groups]);
+  const sortedWorktrees = useMemo(
+    () => getSortedWorktrees(selectedRepo, worktrees),
+    [getSortedWorktrees, selectedRepo, worktrees]
   );
 
-  // Reorder repositories
-  const handleReorderRepositories = useCallback(
-    (fromIndex: number, toIndex: number) => {
-      const reordered = [...repositories];
-      const [moved] = reordered.splice(fromIndex, 1);
-      reordered.splice(toIndex, 0, moved);
-      saveRepositories(reordered);
-    },
-    [repositories, saveRepositories]
-  );
+  useGroupSync(hideGroups, activeGroupId, setActiveGroupId, saveActiveGroupId);
+  useOpenPathListener(repositories, saveRepositories, setSelectedRepo);
+  useClaudeIntegration(activeWorktree?.path ?? null);
+  useCodeReviewContinue(activeWorktree, handleTabChange);
+  useWorktreeSync(worktrees, activeWorktree, worktreesFetching, setActiveWorktree);
 
-  // Reorder worktrees (update display order)
   const handleReorderWorktrees = useCallback(
     (fromIndex: number, toIndex: number) => {
-      if (!selectedRepo) return;
-
-      // Get current order for this repo
-      const currentRepoOrder = worktreeOrderMap[selectedRepo] || {};
-
-      // Sort worktrees by current display order to get the visual order
-      const sortedWorktrees = [...worktrees].sort((a, b) => {
-        const orderA = currentRepoOrder[a.path] ?? Number.MAX_SAFE_INTEGER;
-        const orderB = currentRepoOrder[b.path] ?? Number.MAX_SAFE_INTEGER;
-        return orderA - orderB;
-      });
-
-      // Build new order
-      const orderedPaths = sortedWorktrees.map((wt) => wt.path);
-      const [movedPath] = orderedPaths.splice(fromIndex, 1);
-      orderedPaths.splice(toIndex, 0, movedPath);
-
-      // Create new order map for this repo
-      const newRepoOrder: Record<string, number> = {};
-      for (let i = 0; i < orderedPaths.length; i++) {
-        newRepoOrder[orderedPaths[i]] = i;
-      }
-
-      const newOrderMap = { ...worktreeOrderMap, [selectedRepo]: newRepoOrder };
-      setWorktreeOrderMap(newOrderMap);
-      saveWorktreeOrderMap(newOrderMap);
+      reorderWorktreesInState(selectedRepo, worktrees, fromIndex, toIndex);
     },
-    [selectedRepo, worktrees, worktreeOrderMap]
+    [selectedRepo, worktrees, reorderWorktreesInState]
   );
-
-  // Reorder panel tabs
-  const handleReorderTabs = useCallback((fromIndex: number, toIndex: number) => {
-    setTabOrder((prev) => {
-      if (
-        fromIndex === toIndex ||
-        fromIndex < 0 ||
-        toIndex < 0 ||
-        fromIndex >= prev.length ||
-        toIndex >= prev.length
-      ) {
-        return prev;
-      }
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
-  }, []);
-
-  // Sort worktrees by display order for the current repo
-  const sortedWorktrees = selectedRepo
-    ? [...worktrees].sort((a, b) => {
-        const repoOrder = worktreeOrderMap[selectedRepo] || {};
-        const orderA = repoOrder[a.path] ?? Number.MAX_SAFE_INTEGER;
-        const orderB = repoOrder[b.path] ?? Number.MAX_SAFE_INTEGER;
-        return orderA - orderB;
-      })
-    : worktrees;
-
-  // Listen for open path event from CLI (enso command)
-  useEffect(() => {
-    const cleanup = window.electronAPI.app.onOpenPath((rawPath) => {
-      // Normalize the path: remove trailing slashes and any stray quotes (Windows CMD issue)
-      const path = rawPath.replace(/[\\/]+$/, '').replace(/^["']|["']$/g, '');
-      // Check if repo already exists (using path comparison that handles Windows case-insensitivity)
-      const existingRepo = repositories.find((r) => pathsEqual(r.path, path));
-      if (existingRepo) {
-        setSelectedRepo(existingRepo.path);
-      } else {
-        // Handle both forward and back slashes for name extraction
-        const name = path.split(/[\\/]/).pop() || path;
-        const newRepo: Repository = { name, path };
-        const updated = [...repositories, newRepo];
-        saveRepositories(updated);
-        setSelectedRepo(path);
-      }
-    });
-    return cleanup;
-  }, [repositories, saveRepositories]);
 
   // Remove repository from workspace
   const handleRemoveRepository = useCallback(
@@ -951,101 +419,9 @@ export default function App() {
     [repositories, saveRepositories, selectedRepo]
   );
 
-  // Save selected repo to localStorage
   useEffect(() => {
-    if (selectedRepo) {
-      localStorage.setItem(STORAGE_KEYS.SELECTED_REPO, selectedRepo);
-    } else {
-      localStorage.removeItem(STORAGE_KEYS.SELECTED_REPO);
-    }
-  }, [selectedRepo]);
-
-  // Save active worktree to per-repo map
-  useEffect(() => {
-    if (selectedRepo && activeWorktree) {
-      setRepoWorktreeMap((prev) => {
-        const updated = { ...prev, [selectedRepo]: activeWorktree.path };
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_WORKTREES, JSON.stringify(updated));
-        return updated;
-      });
-    } else if (selectedRepo && !activeWorktree) {
-      setRepoWorktreeMap((prev) => {
-        const updated = { ...prev };
-        delete updated[selectedRepo];
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_WORKTREES, JSON.stringify(updated));
-        return updated;
-      });
-    }
-  }, [selectedRepo, activeWorktree]);
-
-  // Sync editor state with active worktree
-  const currentEditorWorktree = useEditorStore((s) => s.currentWorktreePath);
-  useEffect(() => {
-    const targetPath = activeWorktree?.path ?? null;
-    if (targetPath !== currentEditorWorktree) {
-      switchEditorWorktree(targetPath);
-    }
-  }, [activeWorktree, currentEditorWorktree, switchEditorWorktree]);
-
-  // Sync Claude IDE Bridge with active worktree
-  const claudeCodeIntegration = useSettingsStore((s) => s.claudeCodeIntegration);
-  useEffect(() => {
-    if (claudeCodeIntegration.enabled) {
-      const folders = activeWorktree ? [activeWorktree.path] : [];
-      window.electronAPI.mcp.setEnabled(true, folders);
-    } else {
-      window.electronAPI.mcp.setEnabled(false);
-    }
-  }, [claudeCodeIntegration.enabled, activeWorktree]);
-
-  // Sync Stop hook setting with Claude Code
-  useEffect(() => {
-    window.electronAPI.mcp.setStopHookEnabled(claudeCodeIntegration.stopHookEnabled);
-  }, [claudeCodeIntegration.stopHookEnabled]);
-
-  // Sync Status Line hook setting with Claude Code
-  useEffect(() => {
-    window.electronAPI.mcp.setStatusLineHookEnabled(claudeCodeIntegration.statusLineEnabled);
-  }, [claudeCodeIntegration.statusLineEnabled]);
-
-  // Sync PermissionRequest hook setting with Claude Code (for AskUserQuestion notifications)
-  useEffect(() => {
-    const setHook = window.electronAPI?.mcp?.setPermissionRequestHookEnabled;
-    if (typeof setHook === 'function') {
-      setHook(claudeCodeIntegration.permissionRequestHookEnabled);
-      return;
-    }
-
-    // In dev, preload changes may require an Electron restart. Avoid crashing the renderer
-    // if the currently loaded preload bundle is missing this API.
-    console.warn(
-      '[mcp] setPermissionRequestHookEnabled is not available. Please restart Electron dev process to update preload.'
-    );
-  }, [claudeCodeIntegration.permissionRequestHookEnabled]);
-
-  // Listen for code review continue conversation request
-  const shouldSwitchToChatTab = useCodeReviewContinueStore(
-    (s) => s.continueConversation.shouldSwitchToChatTab
-  );
-  const clearChatTabSwitch = useCodeReviewContinueStore((s) => s.clearChatTabSwitch);
-  useEffect(() => {
-    if (shouldSwitchToChatTab && activeWorktree) {
-      handleTabChange('chat');
-      clearChatTabSwitch();
-    }
-  }, [shouldSwitchToChatTab, activeWorktree, clearChatTabSwitch, handleTabChange]);
-
-  // Sync activeWorktree with loaded worktrees data
-  useEffect(() => {
-    if (worktrees.length > 0 && activeWorktree) {
-      const found = worktrees.find((wt) => wt.path === activeWorktree.path);
-      if (found && found !== activeWorktree) {
-        setActiveWorktree(found);
-      } else if (!found && !worktreesFetching) {
-        setActiveWorktree(null);
-      }
-    }
-  }, [worktrees, activeWorktree, worktreesFetching]);
+    saveActiveWorktreeToMap(selectedRepo, activeWorktree);
+  }, [selectedRepo, activeWorktree, saveActiveWorktreeToMap]);
 
   const handleSelectRepo = (repoPath: string) => {
     // Save current worktree's tab state before switching
@@ -1071,129 +447,6 @@ export default function App() {
     }
     // Editor state will be synced by useEffect
   };
-
-  // Helper function to refresh git data for a worktree
-  const refreshGitData = useCallback(
-    (worktreePath: string) => {
-      // Update ref to track current worktree for race condition prevention
-      currentWorktreePathRef.current = worktreePath;
-
-      // Immediately refresh local git data
-      const localKeys = [
-        'status',
-        'file-changes',
-        'file-diff',
-        'log',
-        'log-infinite',
-        'submodules',
-      ];
-      for (const key of localKeys) {
-        queryClient.invalidateQueries({ queryKey: ['git', key, worktreePath] });
-      }
-      queryClient.invalidateQueries({
-        queryKey: ['git', 'submodule', 'changes', worktreePath],
-      });
-
-      // Fetch remote then refresh branch data (with race condition check)
-      window.electronAPI.git
-        .fetch(worktreePath)
-        .then(() => {
-          // Only refresh if this is still the current worktree
-          if (currentWorktreePathRef.current === worktreePath) {
-            queryClient.invalidateQueries({
-              queryKey: ['git', 'branches', worktreePath],
-            });
-            queryClient.invalidateQueries({
-              queryKey: ['git', 'status', worktreePath],
-            });
-          }
-        })
-        .catch(() => {
-          // Silent fail - fetch errors are not critical
-        });
-    },
-    [queryClient]
-  );
-
-  const handleSelectWorktree = useCallback(
-    async (worktree: GitWorktree, nextRepoPath?: string) => {
-      if (editorSettings.autoSave === 'off') {
-        const editorState = useEditorStore.getState();
-        const dirtyTabs = editorState.tabs.filter((tab) => tab.isDirty);
-
-        for (const tab of dirtyTabs) {
-          const fileName = tab.path.split(/[/\\\\]/).pop() ?? tab.path;
-          const choice = await requestUnsavedChoice(fileName);
-
-          if (choice === 'cancel') {
-            return;
-          }
-
-          if (choice === 'save') {
-            try {
-              await window.electronAPI.file.write(tab.path, tab.content, tab.encoding);
-              useEditorStore.getState().markFileSaved(tab.path);
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              toastManager.add({
-                type: 'error',
-                title: t('Save failed'),
-                description: message,
-              });
-              return;
-            }
-          } else {
-            try {
-              const { content, isBinary } = await window.electronAPI.file.read(tab.path);
-              // Skip content update for binary files (they have no text content)
-              if (!isBinary) {
-                useEditorStore.getState().updateFileContent(tab.path, content, false);
-              }
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              toastManager.add({
-                type: 'error',
-                title: t('File read failed'),
-                description: message,
-              });
-              return;
-            }
-          }
-        }
-      }
-
-      if (nextRepoPath && nextRepoPath !== selectedRepo) {
-        setSelectedRepo(nextRepoPath);
-      }
-
-      // Save current worktree's tab state before switching
-      if (activeWorktree?.path) {
-        setWorktreeTabMap((prev) => ({
-          ...prev,
-          [activeWorktree.path]: activeTab,
-        }));
-      }
-
-      // Switch to new worktree (editor state will be synced by useEffect)
-      setActiveWorktree(worktree);
-
-      // Restore the new worktree's tab state (default to 'chat')
-      const savedTab = worktreeTabMap[worktree.path] || 'chat';
-      setActiveTab(savedTab);
-
-      // Refresh git data for the new worktree
-      refreshGitData(worktree.path);
-    },
-    [
-      activeWorktree,
-      activeTab,
-      worktreeTabMap,
-      editorSettings.autoSave,
-      t,
-      refreshGitData,
-      selectedRepo,
-    ]
-  );
 
   const handleSelectTempWorkspace = useCallback(
     async (path: string) => {
@@ -1334,11 +587,6 @@ export default function App() {
 
   // Assign to ref for use in keyboard shortcut callback
   switchWorktreePathRef.current = handleSwitchWorktreePath;
-
-  // Open add repository dialog
-  const handleAddRepository = () => {
-    setAddRepoDialogOpen(true);
-  };
 
   // Handle adding a local repository
   const handleAddLocalRepository = useCallback(
@@ -1500,12 +748,6 @@ export default function App() {
     }
   };
 
-  // Merge handlers
-  const handleOpenMergeDialog = (worktree: GitWorktree) => {
-    setMergeWorktree(worktree);
-    setMergeDialogOpen(true);
-  };
-
   const handleMerge = async (options: WorktreeMergeOptions): Promise<WorktreeMergeResult> => {
     if (!selectedRepo) {
       return { success: false, merged: false, error: 'No repository selected' };
@@ -1607,109 +849,7 @@ export default function App() {
     setPendingProviderAction(null);
   }, [settingsDisplayMode, settingsDialogOpen, activeTab, pendingProviderAction]);
 
-  // Manage background image: toggle body class, force body transparent,
-  // and directly override theme CSS variables on body via inline style
-  // (CSS class-based overrides in @layer base may be overridden by Tailwind's cascade)
-  //
-  // Opacity semantics (user-facing slider):
-  //   0%   = pure theme background (white/black), no image visible
-  //   100% = full image visible, panels fully transparent
-  // Internally: backgroundOpacity = image visibility (0..1)
-  //             panelOpacity = 1 - backgroundOpacity (overlay opacity)
-  useEffect(() => {
-    const body = document.body;
-    const html = document.documentElement;
-
-    if (backgroundImageEnabled) {
-      body.classList.add('bg-image-enabled');
-      // Force body transparent via inline style to override Tailwind's bg-background utility
-      body.style.backgroundColor = 'transparent';
-
-      // Determine current theme mode
-      const isDark = html.classList.contains('dark');
-      // Panel overlay opacity is INVERTED: higher image opacity = more transparent panels
-      const panelOpacity = 1 - backgroundOpacity;
-
-      // Directly set BOTH base CSS variables AND Tailwind color tokens on body
-      // (Tailwind's bg-background uses var(--color-background), which may not cascade via var(--background))
-      if (isDark) {
-        const bg = `oklch(0.145 0.014 285.82 / ${panelOpacity})`;
-        const muted = `oklch(0.269 0.014 285.82 / ${panelOpacity})`;
-        // Base variables
-        body.style.setProperty('--background', bg);
-        body.style.setProperty('--card', bg);
-        body.style.setProperty('--popover', bg);
-        body.style.setProperty('--muted', muted);
-        body.style.setProperty('--accent', muted);
-        body.style.setProperty('--border', muted);
-        body.style.setProperty('--input', muted);
-        // Tailwind color tokens (used by bg-background utility)
-        body.style.setProperty('--color-background', bg);
-        body.style.setProperty('--color-card', bg);
-        body.style.setProperty('--color-popover', bg);
-        body.style.setProperty('--color-muted', muted);
-        body.style.setProperty('--color-accent', muted);
-        body.style.setProperty('--color-border', muted);
-        body.style.setProperty('--color-input', muted);
-      } else {
-        const bg = `oklch(1 0 0 / ${panelOpacity})`;
-        const muted = `oklch(0.965 0.003 285.82 / ${panelOpacity})`;
-        body.style.setProperty('--background', bg);
-        body.style.setProperty('--card', bg);
-        body.style.setProperty('--popover', bg);
-        body.style.setProperty('--muted', muted);
-        body.style.setProperty('--accent', muted);
-        body.style.setProperty('--color-background', bg);
-        body.style.setProperty('--color-card', bg);
-        body.style.setProperty('--color-popover', bg);
-        body.style.setProperty('--color-muted', muted);
-        body.style.setProperty('--color-accent', muted);
-      }
-    } else {
-      body.classList.remove('bg-image-enabled');
-      body.style.backgroundColor = '';
-      // Remove all inline overrides to restore CSS-defined values
-      const varsToRemove = [
-        '--background',
-        '--card',
-        '--popover',
-        '--muted',
-        '--accent',
-        '--border',
-        '--input',
-        '--color-background',
-        '--color-card',
-        '--color-popover',
-        '--color-muted',
-        '--color-accent',
-        '--color-border',
-        '--color-input',
-      ];
-      for (const v of varsToRemove) body.style.removeProperty(v);
-    }
-
-    return () => {
-      body.classList.remove('bg-image-enabled');
-      body.style.backgroundColor = '';
-      const varsToRemove = [
-        '--background',
-        '--card',
-        '--popover',
-        '--muted',
-        '--accent',
-        '--border',
-        '--input',
-        '--color-background',
-        '--color-card',
-        '--color-popover',
-        '--color-muted',
-        '--color-accent',
-        '--color-border',
-        '--color-input',
-      ];
-      for (const v of varsToRemove) body.style.removeProperty(v);
-    };
-  }, [backgroundImageEnabled, backgroundOpacity]);
+  useBackgroundImage();
 
   return (
     <div className="relative z-0 flex h-screen flex-col overflow-hidden">
