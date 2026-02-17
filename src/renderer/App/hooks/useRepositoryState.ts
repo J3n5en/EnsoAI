@@ -169,17 +169,6 @@ export function useRepositoryState() {
     [repositories, saveRepositories]
   );
 
-  const handleRemoveRepository = useCallback(
-    (repoPath: string) => {
-      const updated = repositories.filter((r) => r.path !== repoPath);
-      saveRepositories(updated);
-      if (selectedRepo === repoPath) {
-        setSelectedRepo(null);
-      }
-    },
-    [repositories, saveRepositories, selectedRepo]
-  );
-
   const handleReorderRepositories = useCallback(
     (fromIndex: number, toIndex: number) => {
       const reordered = [...repositories];
@@ -204,7 +193,6 @@ export function useRepositoryState() {
     handleSwitchGroup,
     handleMoveToGroup,
     handleAddRepository,
-    handleRemoveRepository,
     handleReorderRepositories,
   };
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useSettingsStore } from '@/stores/settings';
 
 export function useClaudeIntegration(activeWorktreePath: string | null) {
