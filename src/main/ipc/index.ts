@@ -37,6 +37,7 @@ import {
   registerTerminalHandlers,
 } from './terminal';
 import { cleanupTmux, cleanupTmuxSync, registerTmuxHandlers } from './tmux';
+import { cleanupTodo, registerTodoHandlers } from './todo';
 import { registerUpdaterHandlers } from './updater';
 import { registerWebInspectorHandlers } from './webInspector';
 import { clearAllWorktreeServices, registerWorktreeHandlers } from './worktree';
@@ -62,6 +63,7 @@ export function registerIpcHandlers(): void {
   registerWebInspectorHandlers();
   registerTempWorkspaceHandlers();
   registerTmuxHandlers();
+  registerTodoHandlers();
 }
 
 export async function cleanupAllResources(): Promise<void> {
@@ -115,6 +117,9 @@ export async function cleanupAllResources(): Promise<void> {
   // Dispose Claude IDE Bridge
   disposeClaudeIdeBridge();
 
+  // Close Todo database
+  cleanupTodo();
+
   // Clean up temp files
   await cleanupTempFiles();
 }
@@ -153,6 +158,9 @@ export function cleanupAllResourcesSync(): void {
 
   // Dispose Claude IDE Bridge (sync)
   disposeClaudeIdeBridge();
+
+  // Close Todo database (sync)
+  cleanupTodo();
 
   // Clean up temp files (sync)
   cleanupTempFilesSync();

@@ -1414,7 +1414,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                     <div className="flex items-center justify-between px-2 py-1">
                       <span className="text-xs text-muted-foreground">{t('Select Agent')}</span>
                       <Tooltip>
-                        <TooltipTrigger>
+                        <TooltipTrigger render={<span />}>
                           <button
                             type="button"
                             onClick={(e) => {

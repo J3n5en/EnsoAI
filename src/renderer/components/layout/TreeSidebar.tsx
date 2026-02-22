@@ -1657,8 +1657,9 @@ function WorktreeTreeItem({
       {showDropIndicator && dropDirection === 'top' && (
         <div className="absolute -top-0.5 left-0 right-0 h-0.5 bg-primary rounded-full" />
       )}
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         draggable={draggable}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
@@ -1666,9 +1667,15 @@ function WorktreeTreeItem({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick?.();
+          }
+        }}
         onContextMenu={handleContextMenu}
         className={cn(
-          'relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors text-sm',
+          'relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors text-sm cursor-pointer',
           isPrunable && 'opacity-50',
           isActive
             ? 'border border-primary bg-primary/10'
@@ -1734,7 +1741,7 @@ function WorktreeTreeItem({
             </span>
           )}
         </div>
-      </button>
+      </div>
       {/* Drop indicator - bottom */}
       {showDropIndicator && dropDirection === 'bottom' && (
         <div className="absolute -bottom-0.5 left-0 right-0 h-0.5 bg-primary rounded-full" />

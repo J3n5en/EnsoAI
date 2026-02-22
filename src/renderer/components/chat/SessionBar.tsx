@@ -193,7 +193,7 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
       {/* 禁用/启用按钮 */}
       {enableProviderDisableFeature && (
         <Tooltip>
-          <TooltipTrigger>
+          <TooltipTrigger render={<span />}>
             <button
               type="button"
               onClick={handleToggleEnabled}
@@ -210,6 +210,24 @@ const ProviderMenuItem = React.memo(function ProviderMenuItem({
     </div>
   );
 });
+
+/** Pick the best display name for a session tab */
+function getSessionDisplayName(session: { terminalTitle?: string; name: string }): string {
+  const title = session.terminalTitle;
+  if (!title) return session.name;
+  // Skip raw process paths (e.g. "Administrator: C:\...\pwsh.exe")
+  if (/[/\\](pwsh|powershell|cmd|bash|zsh|sh|fish|nu)(\.exe)?["']?\s*$/i.test(title)) {
+    return session.name;
+  }
+  if (/^(Administrator|root)\s*:/i.test(title)) {
+    return session.name;
+  }
+  // Skip command-line titles (e.g. "npm view ...", "node scripts/...")
+  if (/^(npm|npx|node|python|py|pnpm|yarn|bun|deno|cargo|go|java|ruby)\s/i.test(title)) {
+    return session.name;
+  }
+  return title;
+}
 
 function SessionTab({
   session,
@@ -284,7 +302,7 @@ function SessionTab({
               className="w-20 bg-transparent outline-none border-b border-current"
             />
           ) : (
-            <span>{session.terminalTitle || session.name}</span>
+            <span>{getSessionDisplayName(session)}</span>
           )}
           <button
             type="button"
@@ -358,7 +376,7 @@ function SessionTab({
             className="relative z-10 w-20 bg-transparent outline-none border-b border-current"
           />
         ) : (
-          <span className="relative z-10">{session.terminalTitle || session.name}</span>
+          <span className="relative z-10">{getSessionDisplayName(session)}</span>
         )}
         <button
           type="button"
@@ -684,7 +702,7 @@ export function SessionBar({
 
   const handleStartEdit = useCallback((session: Session) => {
     setEditingId(session.id);
-    setEditingName(session.terminalTitle || session.name);
+    setEditingName(getSessionDisplayName(session));
     setTimeout(() => inputRef.current?.select(), 0);
   }, []);
 
@@ -841,7 +859,7 @@ export function SessionBar({
                     <div className="flex items-center justify-between px-2 py-1">
                       <span className="text-xs text-muted-foreground">{t('Select Agent')}</span>
                       <Tooltip>
-                        <TooltipTrigger>
+                        <TooltipTrigger render={<span />}>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -951,7 +969,7 @@ export function SessionBar({
                             {t('Select Provider')}
                           </span>
                           <Tooltip>
-                            <TooltipTrigger>
+                            <TooltipTrigger render={<span />}>
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -1000,7 +1018,7 @@ export function SessionBar({
               <>
                 <div className="mx-1 h-4 w-px bg-border" />
                 <Tooltip>
-                  <TooltipTrigger>
+                  <TooltipTrigger render={<span />}>
                     <button
                       type="button"
                       onClick={onToggleQuickTerminal}

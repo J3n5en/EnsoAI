@@ -3,6 +3,7 @@ import {
   FileCode,
   FolderOpen,
   GitBranch,
+  KanbanSquare,
   MessageSquare,
   RectangleEllipsis,
   Settings,
@@ -19,6 +20,7 @@ import { RunningProjectsPopover } from '@/components/layout/RunningProjectsPopov
 import { SettingsContent } from '@/components/settings';
 import type { SettingsCategory } from '@/components/settings/constants';
 import { SourceControlPanel } from '@/components/source-control';
+import { TodoPanel } from '@/components/todo';
 import { DiffReviewModal } from '@/components/source-control/DiffReviewModal';
 import { Button } from '@/components/ui/button';
 import {
@@ -116,6 +118,7 @@ export function MainContent({
     file: { icon: FileCode, label: t('File') },
     terminal: { icon: Terminal, label: t('Terminal') },
     'source-control': { icon: GitBranch, label: t('Version Control') },
+    todo: { icon: KanbanSquare, label: t('Todo') },
   };
 
   // Generate tabs array based on tabOrder (filter out 'settings' tab)
@@ -500,6 +503,21 @@ export function MainContent({
             onExpandWorktree={onExpandWorktree}
             worktreeCollapsed={worktreeCollapsed}
             sessionId={activeSessionId}
+          />
+        </div>
+        {/* Todo tab */}
+        <div
+          className={cn(
+            'absolute inset-0',
+            innerBg,
+            activeTab === 'todo' ? 'z-10' : 'invisible pointer-events-none z-0'
+          )}
+        >
+          <TodoPanel
+            repoPath={repoPath}
+            worktreePath={worktreePath}
+            isActive={activeTab === 'todo'}
+            onSwitchToAgent={() => onTabChange('chat')}
           />
         </div>
         {/* Settings tab */}

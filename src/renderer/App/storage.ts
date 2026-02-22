@@ -25,6 +25,7 @@ export const STORAGE_KEYS = {
   REPOSITORY_GROUPS: 'enso-repository-groups',
   ACTIVE_GROUP: 'enso-active-group',
   GROUP_COLLAPSED_STATE: 'enso-group-collapsed-state',
+  TODO_BOARDS: 'enso-todo-boards',
 } as const;
 
 // Helper to get initial value from localStorage
