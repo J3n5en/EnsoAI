@@ -1110,7 +1110,7 @@ export function FileTree({
         onContextMenu={handleRootContextMenu}
       >
         {/* Toolbar */}
-        <div className="flex h-12 items-center justify-between gap-1 border-b px-3">
+        <div className="sticky top-0 z-10 flex h-12 items-center justify-between gap-1 border-b bg-background px-3">
           {onToggleCollapse && (
             <button
               type="button"
