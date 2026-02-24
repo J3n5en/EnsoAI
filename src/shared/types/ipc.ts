@@ -245,6 +245,15 @@ export const IPC_CHANNELS = {
   CLOUDFLARED_GET_STATUS: 'cloudflared:getStatus',
   CLOUDFLARED_STATUS_CHANGED: 'cloudflared:statusChanged',
 
+  // Todo
+  TODO_GET_TASKS: 'todo:getTasks',
+  TODO_ADD_TASK: 'todo:addTask',
+  TODO_UPDATE_TASK: 'todo:updateTask',
+  TODO_DELETE_TASK: 'todo:deleteTask',
+  TODO_MOVE_TASK: 'todo:moveTask',
+  TODO_REORDER_TASKS: 'todo:reorderTasks',
+  TODO_MIGRATE: 'todo:migrate',
+
   // Logging
   LOG_UPDATE_CONFIG: 'log:update-config',
   LOG_OPEN_FOLDER: 'log:open-folder',

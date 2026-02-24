@@ -511,6 +511,44 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_WRITE, data),
   },
 
+  // Todo
+  todo: {
+    getTasks: (repoPath: string): Promise<unknown[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TODO_GET_TASKS, repoPath),
+    addTask: (
+      repoPath: string,
+      task: {
+        id: string;
+        title: string;
+        description: string;
+        priority: string;
+        status: string;
+        order: number;
+        createdAt: number;
+        updatedAt: number;
+      }
+    ): Promise<unknown> => ipcRenderer.invoke(IPC_CHANNELS.TODO_ADD_TASK, repoPath, task),
+    updateTask: (
+      repoPath: string,
+      taskId: string,
+      updates: { title?: string; description?: string; priority?: string; status?: string }
+    ): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TODO_UPDATE_TASK, repoPath, taskId, updates),
+    deleteTask: (repoPath: string, taskId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TODO_DELETE_TASK, repoPath, taskId),
+    moveTask: (
+      repoPath: string,
+      taskId: string,
+      newStatus: string,
+      newOrder: number
+    ): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TODO_MOVE_TASK, repoPath, taskId, newStatus, newOrder),
+    reorderTasks: (repoPath: string, status: string, orderedIds: string[]): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TODO_REORDER_TASKS, repoPath, status, orderedIds),
+    migrate: (boardsJson: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TODO_MIGRATE, boardsJson),
+  },
+
   // Environment
   env: {
     HOME: process.env.HOME || process.env.USERPROFILE || '',

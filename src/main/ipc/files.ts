@@ -6,12 +6,9 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import iconv from 'iconv-lite';
 import { isBinaryFile } from 'isbinaryfile';
 import jschardet from 'jschardet';
-import simpleGit from 'simple-git';
 import { FileWatcher } from '../services/files/FileWatcher';
 import { registerAllowedLocalFileRoot } from '../services/files/LocalFileAccess';
-import { withSafeDirectoryEnv } from '../services/git/safeDirectory';
-import { getProxyEnvVars } from '../services/proxy/ProxyConfig';
-import { getEnhancedPath } from '../services/terminal/PtyManager';
+import { createSimpleGit, normalizeGitRelativePath } from '../services/git/runtime';
 
 /**
  * Normalize encoding name to a consistent format
@@ -253,21 +250,14 @@ export function registerFileHandlers(): void {
       // 检查 gitignore
       if (gitRoot) {
         try {
-          const git = simpleGit(gitRoot).env(
-            withSafeDirectoryEnv(
-              {
-                ...process.env,
-                ...getProxyEnvVars(),
-                PATH: getEnhancedPath(),
-              },
-              gitRoot
-            )
+          const git = createSimpleGit(gitRoot);
+          const relativePaths = result.map((f) =>
+            normalizeGitRelativePath(relative(gitRoot, f.path))
           );
-          const relativePaths = result.map((f) => relative(gitRoot, f.path));
           const ignoredResult = await git.checkIgnore(relativePaths);
-          const ignoredSet = new Set(ignoredResult);
+          const ignoredSet = new Set(ignoredResult.map((p) => normalizeGitRelativePath(p)));
           for (const file of result) {
-            const relPath = relative(gitRoot, file.path);
+            const relPath = normalizeGitRelativePath(relative(gitRoot, file.path));
             file.ignored = ignoredSet.has(relPath);
           }
         } catch {

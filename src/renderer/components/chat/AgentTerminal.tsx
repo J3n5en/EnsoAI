@@ -34,6 +34,8 @@ interface AgentTerminalProps {
   onEnhancedInputOpenChange?: (open: boolean) => void;
   onInitialized?: () => void;
   onActivated?: () => void;
+  /** Called when session is activated with the current line content (for session name fallback). */
+  onActivatedWithFirstLine?: (line: string) => void;
   onExit?: () => void;
   onTerminalTitleChange?: (title: string) => void;
   onSplit?: () => void;
@@ -70,6 +72,7 @@ export function AgentTerminal({
   onEnhancedInputOpenChange,
   onInitialized,
   onActivated,
+  onActivatedWithFirstLine,
   onExit,
   onTerminalTitleChange,
   onSplit,
@@ -542,7 +545,7 @@ export function AgentTerminal({
   // Also detect Enter key press to mark session as activated
   // biome-ignore lint/correctness/useExhaustiveDependencies: terminal is accessed via try-catch for safety and defined after this callback
   const handleCustomKey = useCallback(
-    (event: KeyboardEvent, ptyId: string) => {
+    (event: KeyboardEvent, ptyId: string, getCurrentLine?: () => string | null) => {
       // Handle Shift+Enter for newline - must be before keydown check to block both keydown and keypress
       if (event.key === 'Enter' && event.shiftKey) {
         if (event.type === 'keydown') {
@@ -572,10 +575,14 @@ export function AgentTerminal({
         !event.altKey &&
         !event.isComposing
       ) {
-        // First Enter activates the session.
+        // First Enter activates the session; optionally pass current line for session name.
         if (!hasActivatedRef.current && !activated) {
           hasActivatedRef.current = true;
           onActivated?.();
+          if (getCurrentLine && onActivatedWithFirstLine) {
+            const line = getCurrentLine();
+            if (line) onActivatedWithFirstLine(line);
+          }
         }
         // Reset output counter.
         dataSinceEnterRef.current = 0;
@@ -654,6 +661,7 @@ export function AgentTerminal({
     [
       activated,
       onActivated,
+      onActivatedWithFirstLine,
       agentNotificationEnterDelay,
       startActivityPolling,
       terminalSessionId,

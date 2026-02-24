@@ -21,6 +21,9 @@ const FILE_PATH_REGEX =
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
 const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;?]*[a-zA-Z]/g;
 
+// Maximum length for session name derived from terminal current line
+const SESSION_NAME_MAX_LENGTH = 36;
+
 function hasVisibleContent(data: string): boolean {
   // Remove all ANSI escape sequences
   const stripped = data.replace(ANSI_ESCAPE_REGEX, '');
@@ -39,7 +42,11 @@ export interface UseXtermOptions {
   initialCommand?: string;
   onExit?: () => void;
   onData?: (data: string) => void;
-  onCustomKey?: (event: KeyboardEvent, ptyId: string) => boolean;
+  onCustomKey?: (
+    event: KeyboardEvent,
+    ptyId: string,
+    getCurrentLine?: () => string | null
+  ) => boolean;
   onTitleChange?: (title: string) => void;
   onInit?: (ptyId: string) => void;
   onSplit?: () => void;
@@ -525,7 +532,23 @@ export function useXterm({
       }
 
       if (ptyIdRef.current && onCustomKeyRef.current) {
-        return onCustomKeyRef.current(event, ptyIdRef.current);
+        const getCurrentLine = (): string | null => {
+          const term = terminalRef.current;
+          if (!term) return null;
+          const buf = term.buffer.active;
+          // Use absolute row (baseY + cursorY) to handle scrolled-back buffers
+          const y = buf.baseY + buf.cursorY;
+          const line = buf.getLine(y);
+          if (!line) return null;
+          const raw = line.translateToString();
+          const stripped = raw.replace(ANSI_ESCAPE_REGEX, '');
+          const trimmed = stripped.trim();
+          if (!trimmed) return null;
+          return trimmed.length > SESSION_NAME_MAX_LENGTH
+            ? `${trimmed.slice(0, SESSION_NAME_MAX_LENGTH)}…`
+            : trimmed;
+        };
+        return onCustomKeyRef.current(event, ptyIdRef.current, getCurrentLine);
       }
       return true;
     });

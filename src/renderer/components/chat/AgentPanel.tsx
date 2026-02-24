@@ -50,6 +50,38 @@ const AGENT_INFO: Record<string, { name: string; command: string }> = {
   opencode: { name: 'OpenCode', command: 'opencode' },
 };
 
+/**
+ * Whether the session uses Cursor CLI. Session name from terminal title / first line
+ * is only applied for Cursor to avoid affecting other agents (Claude Code, etc.).
+ */
+function isCursorAgent(agentId: string): boolean {
+  const baseId = agentId.replace(/-(hapi|happy)$/, '');
+  return baseId === 'cursor';
+}
+
+/**
+ * Default display name for a session (before any title from CLI or first input).
+ *
+ * Session name priority (highest → lowest):
+ *   1. User manual rename (via context menu) — sets `name`, clears `terminalTitle`
+ *   2. Terminal title from OSC escape sequence (`terminalTitle`) — updates `name` when still default (Cursor only)
+ *   3. First user input line (`onActivatedWithFirstLine`) — sets `name` only when still default & no terminalTitle (Cursor only)
+ *   4. Default agent display name (this function) — e.g. "Claude", "Claude (Hapi)"
+ *
+ * Display in SessionBar: `session.terminalTitle || session.name`
+ */
+function getDefaultSessionName(agentId: string): string {
+  const isHapi = agentId.endsWith('-hapi');
+  const isHappy = agentId.endsWith('-happy');
+  const baseId = isHapi
+    ? agentId.slice(0, -'-hapi'.length)
+    : isHappy
+      ? agentId.slice(0, -'-happy'.length)
+      : agentId;
+  const baseName = AGENT_INFO[baseId]?.name ?? 'Agent';
+  return isHapi ? `${baseName} (Hapi)` : isHappy ? `${baseName} (Happy)` : baseName;
+}
+
 function getDefaultAgentId(
   agentSettings: Record<string, { enabled: boolean; isDefault: boolean }>
 ): string {
@@ -826,9 +858,20 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [updateSession]
   );
 
+  const handleActivatedWithFirstLine = useCallback(
+    (id: string, line: string) => {
+      const session = allSessions.find((s) => s.id === id);
+      if (!session || !line.trim() || !isCursorAgent(session.agentId)) return;
+      const defaultName = getDefaultSessionName(session.agentId);
+      if (session.name !== defaultName || session.terminalTitle) return;
+      updateSession(id, { name: line.trim() });
+    },
+    [allSessions, updateSession]
+  );
+
   const handleRenameSession = useCallback(
     (id: string, name: string) => {
-      updateSession(id, { name });
+      updateSession(id, { name, terminalTitle: undefined });
     },
     [updateSession]
   );
@@ -1371,7 +1414,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                     <div className="flex items-center justify-between px-2 py-1">
                       <span className="text-xs text-muted-foreground">{t('Select Agent')}</span>
                       <Tooltip>
-                        <TooltipTrigger>
+                        <TooltipTrigger render={<span />}>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1528,10 +1571,18 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 isActive={isTerminalActive}
                 onInitialized={() => handleInitialized(sessionId)}
                 onActivated={() => handleActivated(sessionId)}
+                onActivatedWithFirstLine={(line) => handleActivatedWithFirstLine(sessionId, line)}
                 onExit={() => handleCloseSession(sessionId, groupId || undefined)}
-                onTerminalTitleChange={(title) =>
-                  updateSession(sessionId, { terminalTitle: title })
-                }
+                onTerminalTitleChange={(title) => {
+                  const syncName =
+                    title &&
+                    isCursorAgent(session.agentId) &&
+                    session.name === getDefaultSessionName(session.agentId);
+                  updateSession(sessionId, {
+                    terminalTitle: title,
+                    ...(syncName ? { name: title } : {}),
+                  });
+                }}
                 onSplit={() => groupId && handleSplit(groupId)}
                 canMerge={info ? info.groupIndex > 0 : false}
                 onMerge={() => groupId && handleMerge(groupId)}

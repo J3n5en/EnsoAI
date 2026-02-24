@@ -18,11 +18,13 @@ import type {
 } from '@shared/types';
 import iconv from 'iconv-lite';
 import jschardet from 'jschardet';
-import simpleGit, { type SimpleGit } from 'simple-git';
-import { getProxyEnvVars } from '../proxy/ProxyConfig';
-import { getEnhancedPath } from '../terminal/PtyManager';
+import type { SimpleGit } from 'simple-git';
 import { gitShow } from './encoding';
-import { withSafeDirectoryEnv } from './safeDirectory';
+import {
+  createSimpleGit,
+  fromGitPath as fromRuntimeGitPath,
+  toGitPath as toRuntimeGitPath,
+} from './runtime';
 
 const execAsync = promisify(exec);
 
@@ -30,16 +32,7 @@ const execAsync = promisify(exec);
  * Create a simpleGit instance with enhanced PATH for git-lfs and other tools
  */
 function createGit(workdir: string): SimpleGit {
-  return simpleGit(workdir).env(
-    withSafeDirectoryEnv(
-      {
-        ...process.env,
-        ...getProxyEnvVars(),
-        PATH: getEnhancedPath(),
-      },
-      workdir
-    )
-  );
+  return createSimpleGit(workdir);
 }
 
 /**
@@ -67,9 +60,19 @@ async function killProcessesInDirectory(dirPath: string): Promise<void> {
 
 export class WorktreeService {
   private git: SimpleGit;
+  private workdir: string;
 
   constructor(workdir: string) {
     this.git = createGit(workdir);
+    this.workdir = workdir;
+  }
+
+  private toGitPath(inputPath: string): string {
+    return toRuntimeGitPath(this.workdir, inputPath);
+  }
+
+  private fromGitPath(inputPath: string): string {
+    return fromRuntimeGitPath(this.workdir, inputPath);
   }
 
   /**
@@ -97,7 +100,7 @@ export class WorktreeService {
 
     try {
       await git.raw(['worktree', 'prune']);
-      await git.raw(['worktree', 'remove', '--force', worktreePath]);
+      await git.raw(['worktree', 'remove', '--force', this.toGitPath(worktreePath)]);
 
       // Delete branch if requested
       if (options?.deleteBranch && options.branchName) {
@@ -133,7 +136,7 @@ export class WorktreeService {
           worktrees.push(current as GitWorktree);
         }
         current = {
-          path: line.substring(9),
+          path: this.fromGitPath(line.substring(9)),
           isMainWorktree: false,
           isLocked: false,
           prunable: false,
@@ -179,7 +182,7 @@ export class WorktreeService {
       args.push('-b', options.newBranch);
     }
 
-    args.push(options.path);
+    args.push(this.toGitPath(options.path));
 
     if (options.branch) {
       args.push(options.branch);
@@ -196,7 +199,7 @@ export class WorktreeService {
     if (options.force) {
       args.push('--force');
     }
-    args.push(options.path);
+    args.push(this.toGitPath(options.path));
 
     try {
       await this.git.raw(args);

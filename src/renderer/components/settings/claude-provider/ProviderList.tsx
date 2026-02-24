@@ -132,7 +132,7 @@ function ProviderItem({
       <div className="flex items-center gap-1">
         {enableProviderDisableFeature && (
           <Tooltip>
-            <TooltipTrigger>
+            <TooltipTrigger render={<span />}>
               <Button variant="ghost" size="icon-xs" onClick={(e) => onToggleEnabled(provider, e)}>
                 {isDisabled ? (
                   <Check className="h-3.5 w-3.5 text-muted-foreground" />

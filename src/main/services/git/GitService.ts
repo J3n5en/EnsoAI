@@ -1,4 +1,4 @@
-import { exec, spawn } from 'node:child_process';
+import { exec } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -17,11 +17,9 @@ import type {
   PullRequest,
   SubmoduleStatus,
 } from '@shared/types';
-import simpleGit, { type SimpleGit, type StatusResult } from 'simple-git';
-import { getProxyEnvVars } from '../proxy/ProxyConfig';
-import { getEnhancedPath } from '../terminal/PtyManager';
+import type { SimpleGit, StatusResult } from 'simple-git';
 import { decodeBuffer, gitShow } from './encoding';
-import { withSafeDirectoryEnv } from './safeDirectory';
+import { createGitEnv, createSimpleGit, spawnGit, toGitPath } from './runtime';
 
 const execAsync = promisify(exec);
 
@@ -50,27 +48,12 @@ export class GitService {
   private workdir: string;
 
   constructor(workdir: string) {
-    const gitEnv = withSafeDirectoryEnv(
-      {
-        ...process.env,
-        ...getProxyEnvVars(),
-        PATH: getEnhancedPath(),
-      },
-      workdir
-    );
-    this.git = simpleGit(workdir).env(gitEnv);
+    this.git = createSimpleGit(workdir);
     this.workdir = workdir;
   }
 
   private getGitEnv(workdir = this.workdir): NodeJS.ProcessEnv {
-    return withSafeDirectoryEnv(
-      {
-        ...process.env,
-        ...getProxyEnvVars(),
-        PATH: getEnhancedPath(),
-      },
-      workdir
-    );
+    return createGitEnv(workdir);
   }
 
   private async readPorcelainV2Limited(maxEntries: number): Promise<LimitedGitStatus> {
@@ -93,12 +76,12 @@ export class GitService {
     let stderr = '';
     let pendingRename: { xy: string } | null = null;
 
-    const killIfTruncated = (proc: ReturnType<typeof spawn>) => {
+    const killIfTruncated = (proc: ReturnType<typeof spawnGit>) => {
       if (!truncated) return;
       if (!proc.killed) proc.kill('SIGTERM');
     };
 
-    const processRecord = (recordRaw: string, proc: ReturnType<typeof spawn>) => {
+    const processRecord = (recordRaw: string, proc: ReturnType<typeof spawnGit>) => {
       const record = recordRaw.trim();
       if (!record) return;
 
@@ -210,8 +193,8 @@ export class GitService {
     };
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(
-        'git',
+      const proc = spawnGit(
+        this.workdir,
         ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
         { cwd: this.workdir, env: this.getGitEnv() }
       );
@@ -529,7 +512,7 @@ export class GitService {
       changes.push({ path: filePath, status, staged: false });
     };
 
-    const processRecord = (recordRaw: string, proc: ReturnType<typeof spawn>) => {
+    const processRecord = (recordRaw: string, proc: ReturnType<typeof spawnGit>) => {
       const record = recordRaw.trim();
       if (!record) return;
       if (record.startsWith('# ') || record.startsWith('! ')) return;
@@ -601,8 +584,8 @@ export class GitService {
     };
 
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn(
-        'git',
+      const proc = spawnGit(
+        this.workdir,
         ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
         { cwd: this.workdir, env }
       );
@@ -1018,7 +1001,7 @@ export class GitService {
         if (submodule.initialized) {
           try {
             const submoduleWorkdir = path.join(this.workdir, submodule.path);
-            const subGit = simpleGit(submoduleWorkdir).env(this.getGitEnv(submoduleWorkdir));
+            const subGit = createSimpleGit(submoduleWorkdir);
             const subStatus = await subGit.status();
             submodule.branch = subStatus.current || undefined;
             submodule.tracking = subStatus.tracking || undefined;
@@ -1088,7 +1071,7 @@ export class GitService {
       throw new Error('Invalid submodule path: path traversal detected');
     }
 
-    return simpleGit(absolutePath).env(this.getGitEnv(absolutePath));
+    return createSimpleGit(absolutePath);
   }
 
   /**
@@ -1411,25 +1394,19 @@ export class GitService {
       throw new Error('Target directory already exists');
     }
 
+    const cloneBaseDir = path.dirname(targetPath);
+    const cloneTarget = toGitPath(cloneBaseDir, targetPath);
+
     // Create simple-git instance with progress callback
-    const git = simpleGit({
+    const git = createSimpleGit(cloneBaseDir, {
       progress: ({ method, stage, progress }) => {
         if (method === 'clone' && onProgress) {
           onProgress({ stage, progress });
         }
       },
-    }).env(
-      withSafeDirectoryEnv(
-        {
-          ...process.env,
-          ...getProxyEnvVars(),
-          PATH: getEnhancedPath(),
-        },
-        targetPath
-      )
-    );
+    });
 
     // Execute clone with progress flag
-    await git.clone(remoteUrl, targetPath, ['--progress']);
+    await git.clone(remoteUrl, cloneTarget, ['--progress']);
   }
 }

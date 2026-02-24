@@ -28,7 +28,7 @@ function AppIcon({
   return <Fallback className="size-5" />;
 }
 
-type TabId = 'chat' | 'file' | 'terminal' | 'source-control' | 'settings';
+import type { TabId } from '@/App/constants';
 
 interface OpenInMenuProps {
   path?: string;

@@ -353,12 +353,9 @@ export function RunningProjectsPopover({
                         >
                           <Bot className="h-3.5 w-3.5 shrink-0" />
                           <span className="min-w-0 flex-1 truncate text-left">
-                            {item.session.name || item.session.agentId}
-                            {item.session.terminalTitle && (
-                              <span className="ml-1 text-muted-foreground/70">
-                                ({item.session.terminalTitle})
-                              </span>
-                            )}
+                            {item.session.terminalTitle ||
+                              item.session.name ||
+                              item.session.agentId}
                           </span>
                         </button>
                       );
