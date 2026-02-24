@@ -777,7 +777,7 @@ export function TreeSidebar({
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
+              className="ml-2 mr-2 mt-1 flex flex-col gap-y-0.5 overflow-hidden"
             >
               {repoError ? (
                 <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
@@ -990,7 +990,7 @@ export function TreeSidebar({
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2, ease: 'easeInOut' }}
-                  className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
+                  className="ml-2 mr-2 mt-1 flex flex-col gap-y-0.5 overflow-hidden"
                 >
                   {sortedTempWorkspaces.length === 0 ? (
                     <div className="py-2 px-2 text-xs text-muted-foreground">
