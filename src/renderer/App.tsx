@@ -218,6 +218,7 @@ export default function App() {
   const hideGroups = useSettingsStore((s) => s.hideGroups);
   const temporaryWorkspaceEnabled = useSettingsStore((s) => s.temporaryWorkspaceEnabled);
   const fileTreeDisplayMode = useSettingsStore((s) => s.fileTreeDisplayMode);
+  const hasActiveWorktree = Boolean(activeWorktree?.path);
   const defaultTemporaryPath = useSettingsStore((s) => s.defaultTemporaryPath);
   const isWindows = window.electronAPI?.env.platform === 'win32';
   const pathSep = isWindows ? '\\' : '/';
@@ -1055,7 +1056,7 @@ export default function App() {
         )}
 
         {/* Main Content */}
-        {fileTreeDisplayMode === 'current' && (
+        {fileTreeDisplayMode === 'current' && hasActiveWorktree && (
           <FileSidebar
             rootPath={activeWorktree?.path}
             isActive={activeTab === 'file'}
@@ -1076,7 +1077,9 @@ export default function App() {
           worktreePath={activeWorktree?.path}
           repositoryCollapsed={repositoryCollapsed}
           worktreeCollapsed={layoutMode === 'tree' ? repositoryCollapsed : worktreeCollapsed}
-          fileSidebarCollapsed={fileTreeDisplayMode === 'current' ? fileSidebarCollapsed : false}
+          fileSidebarCollapsed={
+            fileTreeDisplayMode === 'current' && hasActiveWorktree ? fileSidebarCollapsed : false
+          }
           layoutMode={layoutMode}
           onExpandRepository={() => setRepositoryCollapsed(false)}
           onExpandWorktree={
@@ -1085,7 +1088,9 @@ export default function App() {
               : () => setWorktreeCollapsed(false)
           }
           onExpandFileSidebar={
-            fileTreeDisplayMode === 'current' ? () => setFileSidebarCollapsed(false) : undefined
+            fileTreeDisplayMode === 'current' && hasActiveWorktree
+              ? () => setFileSidebarCollapsed(false)
+              : undefined
           }
           onSwitchWorktree={handleSwitchWorktreePath}
           onSwitchTab={handleTabChange}
