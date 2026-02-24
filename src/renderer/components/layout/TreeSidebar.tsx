@@ -233,6 +233,7 @@ export function TreeSidebar({
   const [repoMenuPosition, setRepoMenuPosition] = useState({ x: 0, y: 0 });
   const [repoMenuTarget, setRepoMenuTarget] = useState<Repository | null>(null);
   const [repoToRemove, setRepoToRemove] = useState<Repository | null>(null);
+  const repoMenuRef = useRef<HTMLDivElement>(null);
 
   // Repository settings dialog
   const [repoSettingsOpen, setRepoSettingsOpen] = useState(false);
@@ -514,6 +515,30 @@ export function TreeSidebar({
     setRepoMenuTarget(repo);
     setRepoMenuOpen(true);
   };
+
+  // Adjust repo menu position if it overflows viewport
+  useEffect(() => {
+    if (repoMenuOpen && repoMenuRef.current) {
+      const menu = repoMenuRef.current;
+      const rect = menu.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+
+      let { x, y } = repoMenuPosition;
+
+      if (y + rect.height > viewportHeight - 8) {
+        y = Math.max(8, viewportHeight - rect.height - 8);
+      }
+
+      if (x + rect.width > viewportWidth - 8) {
+        x = Math.max(8, viewportWidth - rect.width - 8);
+      }
+
+      if (x !== repoMenuPosition.x || y !== repoMenuPosition.y) {
+        setRepoMenuPosition({ x, y });
+      }
+    }
+  }, [repoMenuOpen, repoMenuPosition]);
 
   const handleRemoveRepoClick = () => {
     if (repoMenuTarget) {
@@ -1148,6 +1173,7 @@ export function TreeSidebar({
             role="presentation"
           />
           <div
+            ref={repoMenuRef}
             className="fixed z-50 min-w-32 rounded-lg border bg-popover p-1 shadow-lg"
             style={{ left: repoMenuPosition.x, top: repoMenuPosition.y }}
           >
