@@ -379,6 +379,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedRepo) return;
+    if (selectedRepo === TEMP_REPO_ID) return;
 
     const oldWorktreePath = localStorage.getItem(STORAGE_KEYS.ACTIVE_WORKTREE);
     const savedWorktreeMap = getStoredWorktreeMap();
@@ -395,13 +396,34 @@ export default function App() {
     }
 
     if (!activeWorktree) {
-      const worktreeMap = getStoredWorktreeMap();
-      const savedWorktreePath = worktreeMap[selectedRepo];
-      if (savedWorktreePath) {
-        setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
+      const savedWorktreePath = repoWorktreeMap[selectedRepo];
+      if (!savedWorktreePath) return;
+      if (worktreesFetching) return;
+
+      const matchedWorktree = worktrees.find((wt) => wt.path === savedWorktreePath);
+      if (matchedWorktree) {
+        setActiveWorktree(matchedWorktree);
+        return;
       }
+
+      // Remove stale saved mapping to avoid restore<->sync loops.
+      setRepoWorktreeMap((prev) => {
+        if (!prev[selectedRepo]) return prev;
+        const updated = { ...prev };
+        delete updated[selectedRepo];
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_WORKTREES, JSON.stringify(updated));
+        return updated;
+      });
     }
-  }, [selectedRepo, activeWorktree, setRepoWorktreeMap, setActiveWorktree]);
+  }, [
+    selectedRepo,
+    activeWorktree,
+    repoWorktreeMap,
+    worktrees,
+    worktreesFetching,
+    setRepoWorktreeMap,
+    setActiveWorktree,
+  ]);
 
   const sortedGroups = useMemo(() => [...groups].sort((a, b) => a.order - b.order), [groups]);
   const sortedWorktrees = useMemo(
@@ -437,8 +459,19 @@ export default function App() {
   );
 
   useEffect(() => {
-    saveActiveWorktreeToMap(selectedRepo, activeWorktree);
-  }, [selectedRepo, activeWorktree, saveActiveWorktreeToMap]);
+    if (!selectedRepo || selectedRepo === TEMP_REPO_ID) return;
+    if (worktreesFetching) return;
+
+    if (!activeWorktree) {
+      saveActiveWorktreeToMap(selectedRepo, null);
+      return;
+    }
+
+    const isWorktreeInSelectedRepo = worktrees.some((wt) => wt.path === activeWorktree.path);
+    if (isWorktreeInSelectedRepo) {
+      saveActiveWorktreeToMap(selectedRepo, activeWorktree);
+    }
+  }, [selectedRepo, activeWorktree, worktrees, worktreesFetching, saveActiveWorktreeToMap]);
 
   const handleSelectRepo = (repoPath: string) => {
     // Save current worktree's tab state before switching
@@ -627,8 +660,10 @@ export default function App() {
 
       // Auto-select the new repo
       setSelectedRepo(selectedPath);
+      setActiveWorktree(null);
+      setActiveTab('chat');
     },
-    [repositories, saveRepositories]
+    [repositories, saveRepositories, setActiveWorktree, setActiveTab]
   );
 
   // Handle cloning a remote repository
@@ -654,8 +689,10 @@ export default function App() {
 
       // Auto-select the new repo
       setSelectedRepo(clonedPath);
+      setActiveWorktree(null);
+      setActiveTab('chat');
     },
-    [repositories, saveRepositories]
+    [repositories, saveRepositories, setActiveWorktree, setActiveTab]
   );
 
   const setPendingScript = useInitScriptStore((s) => s.setPendingScript);
