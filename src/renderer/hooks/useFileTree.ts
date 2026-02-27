@@ -1,6 +1,7 @@
 import type { FileEntry } from '@shared/types';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadFileTreeExpandedPaths, saveFileTreeExpandedPaths } from '@/App/storage';
 
 interface UseFileTreeOptions {
   rootPath: string | undefined;
@@ -13,33 +14,10 @@ interface FileTreeNode extends FileEntry {
   isLoading?: boolean;
 }
 
-// Storage key for per-worktree expanded paths
-const getExpandedKey = (rootPath: string) => `enso-file-tree-expanded:${rootPath}`;
-
-// Read expanded paths from localStorage
-const loadExpandedPaths = (rootPath: string): Set<string> => {
-  try {
-    const raw = localStorage.getItem(getExpandedKey(rootPath));
-    if (!raw) return new Set();
-    return new Set(JSON.parse(raw) as string[]);
-  } catch {
-    return new Set();
-  }
-};
-
-// Save expanded paths to localStorage
-const saveExpandedPaths = (rootPath: string, paths: Set<string>): void => {
-  try {
-    localStorage.setItem(getExpandedKey(rootPath), JSON.stringify([...paths]));
-  } catch {
-    // ignore storage errors
-  }
-};
-
 export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFileTreeOptions) {
   const queryClient = useQueryClient();
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() =>
-    rootPath ? loadExpandedPaths(rootPath) : new Set()
+    rootPath ? loadFileTreeExpandedPaths(rootPath) : new Set()
   );
 
   // Fetch root directory
@@ -72,7 +50,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     if (!rootPath) return;
 
     childrenRestoredRef.current = false;
-    setExpandedPaths(loadExpandedPaths(rootPath));
+    setExpandedPaths(loadFileTreeExpandedPaths(rootPath));
     setTree([]);
 
     // Invalidate root query so rootFiles effect always re-fires even on cache hit
@@ -134,16 +112,20 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     if (childrenRestoredRef.current) return;
     childrenRestoredRef.current = true;
 
-    const restored = loadExpandedPaths(rootPath);
+    const restored = loadFileTreeExpandedPaths(rootPath);
     if (restored.size === 0) return;
 
     // Sort shallow-first so parent nodes are populated before their children
     const sortedPaths = [...restored].sort((a, b) => a.split('/').length - b.split('/').length);
 
+    let cancelled = false;
+
     const restoreChildren = async () => {
       for (const expandedPath of sortedPaths) {
+        if (cancelled) return;
         try {
           const children = await loadChildren(expandedPath);
+          if (cancelled) return;
           const childNodes = children.map((c) => ({ ...c })) as FileTreeNode[];
           setTree((current) => {
             const updated = updateTreeWithChain(current, expandedPath, childNodes);
@@ -157,6 +139,9 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     };
 
     restoreChildren();
+    return () => {
+      cancelled = true;
+    };
   }, [rootFiles, rootPath, loadChildren, updateTreeWithChain]);
 
   // Toggle directory expansion
@@ -165,7 +150,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
       // Special case: collapse all
       if (path === '__COLLAPSE_ALL__') {
         setExpandedPaths(new Set());
-        if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, new Set());
+        if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, new Set());
         return;
       }
 
@@ -205,7 +190,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
           newExpanded.delete(p);
         }
         setExpandedPaths(newExpanded);
-        if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, newExpanded);
+        if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, newExpanded);
       } else {
         // 展开时，自动加载单子目录链
         const markLoading = (nodes: FileTreeNode[]): FileTreeNode[] => {
@@ -244,7 +229,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         newExpanded.add(path);
         setExpandedPaths(newExpanded);
         expandedPathsRef.current = newExpanded; // Sync ref immediately
-        if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, newExpanded);
+        if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, newExpanded);
 
         if (needsLoad(treeRef.current)) {
           setTree((current) => markLoading(current));
@@ -281,7 +266,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             for (const p of allPaths) nextExpanded.add(p);
             expandedPathsRef.current = nextExpanded; // Sync ref immediately
             setExpandedPaths(nextExpanded);
-            if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, nextExpanded);
+            if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, nextExpanded);
 
             // 更新树
             const newTree = updateTreeWithChain(treeRef.current, path, finalChildren);
@@ -292,7 +277,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             setExpandedPaths((prev) => {
               const next = new Set(prev);
               next.delete(path);
-              if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, next);
+              if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, next);
               return next;
             });
             setTree((current) => clearLoading(current));
@@ -345,6 +330,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
                 next.delete(p);
               }
             }
+            if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, next);
             return next;
           });
         }
