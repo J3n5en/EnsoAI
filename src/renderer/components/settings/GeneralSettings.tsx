@@ -23,7 +23,12 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { type LayoutMode, type TerminalRenderer, useSettingsStore } from '@/stores/settings';
+import {
+  type FileTreeDisplayMode,
+  type LayoutMode,
+  type TerminalRenderer,
+  useSettingsStore,
+} from '@/stores/settings';
 
 // Parse shell arguments string, supporting single/double quotes for paths with spaces
 function parseShellArgs(input: string): string[] {
@@ -69,6 +74,8 @@ export function GeneralSettings() {
     setLanguage,
     layoutMode,
     setLayoutMode,
+    fileTreeDisplayMode,
+    setFileTreeDisplayMode,
     terminalRenderer,
     setTerminalRenderer,
     terminalScrollback,
@@ -127,6 +134,26 @@ export function GeneralSettings() {
       icon: TreePine,
       label: t('Tree'),
       description: t('Two-column layout: tree sidebar, workspace'),
+    },
+  ];
+
+  const fileTreeDisplayModeOptions: {
+    value: FileTreeDisplayMode;
+    icon: React.ElementType;
+    label: string;
+    description: string;
+  }[] = [
+    {
+      value: 'legacy',
+      icon: FileText,
+      label: t('Integrated tree'),
+      description: t('Tree + editor in one panel'),
+    },
+    {
+      value: 'current',
+      icon: FolderOpen,
+      label: t('Split sidebar'),
+      description: t('Dedicated file sidebar + editor'),
     },
   ];
 
@@ -321,6 +348,40 @@ export function GeneralSettings() {
               className={cn(
                 'flex h-10 w-10 items-center justify-center rounded-full',
                 layoutMode === option.value
+                  ? 'bg-accent-foreground/20 text-accent-foreground'
+                  : 'bg-muted'
+              )}
+            >
+              <option.icon className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-medium">{option.label}</span>
+            <span className="text-xs text-muted-foreground text-center">{option.description}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="border-t pt-4">
+        <h3 className="text-lg font-medium">{t('File Tree Display')}</h3>
+        <p className="text-sm text-muted-foreground">{t('Choose file tree display mode')}</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {fileTreeDisplayModeOptions.map((option) => (
+          <button
+            type="button"
+            key={option.value}
+            onClick={() => setFileTreeDisplayMode(option.value)}
+            className={cn(
+              'flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-colors',
+              fileTreeDisplayMode === option.value
+                ? 'border-primary bg-accent text-accent-foreground'
+                : 'border-transparent bg-muted/50 hover:bg-muted'
+            )}
+          >
+            <div
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-full',
+                fileTreeDisplayMode === option.value
                   ? 'bg-accent-foreground/20 text-accent-foreground'
                   : 'bg-muted'
               )}

@@ -1,6 +1,8 @@
 import { Check, ChevronRight, FolderSymlink } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
 import type { RepositoryGroup } from '@/App/constants';
 import { useI18n } from '@/i18n';
+import { cn } from '@/lib/utils';
 
 interface MoveToGroupSubmenuProps {
   groups: RepositoryGroup[];
@@ -16,11 +18,21 @@ export function MoveToGroupSubmenu({
   onClose,
 }: MoveToGroupSubmenuProps) {
   const { t } = useI18n();
+  const submenuRef = useRef<HTMLDivElement>(null);
+  const [alignBottom, setAlignBottom] = useState(false);
+
+  const handleMouseEnter = useCallback(() => {
+    if (submenuRef.current) {
+      const rect = submenuRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      setAlignBottom(rect.bottom > viewportHeight - 8);
+    }
+  }, []);
 
   if (groups.length === 0) return null;
 
   return (
-    <div className="relative group/submenu">
+    <div className="relative group/submenu" onMouseEnter={handleMouseEnter}>
       <button
         type="button"
         className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
@@ -29,7 +41,13 @@ export function MoveToGroupSubmenu({
         {t('Move to Group')}
         <ChevronRight className="ml-auto h-3.5 w-3.5" />
       </button>
-      <div className="absolute left-full top-0 z-50 min-w-36 rounded-lg border bg-popover p-1 shadow-lg opacity-0 invisible group-hover/submenu:opacity-100 group-hover/submenu:visible transition-all">
+      <div
+        ref={submenuRef}
+        className={cn(
+          'absolute left-full z-50 min-w-36 rounded-lg border bg-popover p-1 shadow-lg opacity-0 invisible group-hover/submenu:opacity-100 group-hover/submenu:visible transition-all',
+          alignBottom ? 'bottom-0' : 'top-0'
+        )}
+      >
         <button
           type="button"
           className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"

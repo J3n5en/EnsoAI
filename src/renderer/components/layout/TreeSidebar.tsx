@@ -233,6 +233,7 @@ export function TreeSidebar({
   const [repoMenuPosition, setRepoMenuPosition] = useState({ x: 0, y: 0 });
   const [repoMenuTarget, setRepoMenuTarget] = useState<Repository | null>(null);
   const [repoToRemove, setRepoToRemove] = useState<Repository | null>(null);
+  const repoMenuRef = useRef<HTMLDivElement>(null);
 
   // Repository settings dialog
   const [repoSettingsOpen, setRepoSettingsOpen] = useState(false);
@@ -515,6 +516,30 @@ export function TreeSidebar({
     setRepoMenuOpen(true);
   };
 
+  // Adjust repo menu position if it overflows viewport
+  useEffect(() => {
+    if (repoMenuOpen && repoMenuRef.current) {
+      const menu = repoMenuRef.current;
+      const rect = menu.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+
+      let { x, y } = repoMenuPosition;
+
+      if (y + rect.height > viewportHeight - 8) {
+        y = Math.max(8, viewportHeight - rect.height - 8);
+      }
+
+      if (x + rect.width > viewportWidth - 8) {
+        x = Math.max(8, viewportWidth - rect.width - 8);
+      }
+
+      if (x !== repoMenuPosition.x || y !== repoMenuPosition.y) {
+        setRepoMenuPosition({ x, y });
+      }
+    }
+  }, [repoMenuOpen, repoMenuPosition]);
+
   const handleRemoveRepoClick = () => {
     if (repoMenuTarget) {
       setRepoToRemove(repoMenuTarget);
@@ -777,7 +802,7 @@ export function TreeSidebar({
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
+              className="ml-2 mr-2 mt-1 flex flex-col gap-y-0.5 overflow-hidden"
             >
               {repoError ? (
                 <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
@@ -990,7 +1015,7 @@ export function TreeSidebar({
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2, ease: 'easeInOut' }}
-                  className="ml-2 mr-2 mt-1 space-y-0.5 overflow-hidden"
+                  className="ml-2 mr-2 mt-1 flex flex-col gap-y-0.5 overflow-hidden"
                 >
                   {sortedTempWorkspaces.length === 0 ? (
                     <div className="py-2 px-2 text-xs text-muted-foreground">
@@ -1148,6 +1173,7 @@ export function TreeSidebar({
             role="presentation"
           />
           <div
+            ref={repoMenuRef}
             className="fixed z-50 min-w-32 rounded-lg border bg-popover p-1 shadow-lg"
             style={{ left: repoMenuPosition.x, top: repoMenuPosition.y }}
           >

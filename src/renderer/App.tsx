@@ -5,7 +5,7 @@ import type {
   WorktreeMergeResult,
 } from '@shared/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ALL_GROUP_ID,
   panelTransition,
@@ -35,6 +35,7 @@ import {
   useWorktreeSync,
 } from './App/hooks';
 import {
+  getStoredBoolean,
   getRepositorySettings,
   getStoredWorktreeMap,
   STORAGE_KEYS,
@@ -43,6 +44,7 @@ import {
 import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
 import { usePanelResize } from './App/usePanelResize';
 import { DevToolsOverlay } from './components/DevToolsOverlay';
+import { FileSidebar } from './components/files';
 import { UnsavedPromptHost } from './components/files/UnsavedPromptHost';
 import { AddRepositoryDialog } from './components/git';
 import { CloneProgressFloat } from './components/git/CloneProgressFloat';
@@ -183,6 +185,9 @@ export default function App() {
     setInitialLocalPath,
     setAddRepoDialogOpen
   );
+  const [fileSidebarCollapsed, setFileSidebarCollapsed] = useState(() =>
+    getStoredBoolean(STORAGE_KEYS.FILE_SIDEBAR_COLLAPSED, false)
+  );
 
   const { refreshGitData, handleSelectWorktree } = useWorktreeSelection(
     activeWorktree,
@@ -212,6 +217,8 @@ export default function App() {
   const autoUpdateEnabled = useSettingsStore((s) => s.autoUpdateEnabled);
   const hideGroups = useSettingsStore((s) => s.hideGroups);
   const temporaryWorkspaceEnabled = useSettingsStore((s) => s.temporaryWorkspaceEnabled);
+  const fileTreeDisplayMode = useSettingsStore((s) => s.fileTreeDisplayMode);
+  const hasActiveWorktree = Boolean(activeWorktree?.path);
   const defaultTemporaryPath = useSettingsStore((s) => s.defaultTemporaryPath);
   const isWindows = window.electronAPI?.env.platform === 'win32';
   const pathSep = isWindows ? '\\' : '/';
@@ -233,8 +240,14 @@ export default function App() {
   }, [effectiveTempBasePath]);
 
   // Panel resize hook
-  const { repositoryWidth, worktreeWidth, treeSidebarWidth, resizing, handleResizeStart } =
-    usePanelResize(layoutMode);
+  const {
+    repositoryWidth,
+    worktreeWidth,
+    treeSidebarWidth,
+    fileSidebarWidth,
+    resizing,
+    handleResizeStart,
+  } = usePanelResize(layoutMode);
 
   const worktreeError = useWorktreeStore((s) => s.error);
   const clearEditorWorktreeState = useEditorStore((s) => s.clearWorktreeState);
@@ -321,6 +334,10 @@ export default function App() {
     setPendingProviderAction
   );
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.FILE_SIDEBAR_COLLAPSED, String(fileSidebarCollapsed));
+  }, [fileSidebarCollapsed]);
+
   useTempWorkspaceSync(
     temporaryWorkspaceEnabled,
     selectedRepo,
@@ -362,6 +379,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedRepo) return;
+    if (selectedRepo === TEMP_REPO_ID) return;
 
     const oldWorktreePath = localStorage.getItem(STORAGE_KEYS.ACTIVE_WORKTREE);
     const savedWorktreeMap = getStoredWorktreeMap();
@@ -378,13 +396,34 @@ export default function App() {
     }
 
     if (!activeWorktree) {
-      const worktreeMap = getStoredWorktreeMap();
-      const savedWorktreePath = worktreeMap[selectedRepo];
-      if (savedWorktreePath) {
-        setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
+      const savedWorktreePath = repoWorktreeMap[selectedRepo];
+      if (!savedWorktreePath) return;
+      if (worktreesFetching) return;
+
+      const matchedWorktree = worktrees.find((wt) => wt.path === savedWorktreePath);
+      if (matchedWorktree) {
+        setActiveWorktree(matchedWorktree);
+        return;
       }
+
+      // Remove stale saved mapping to avoid restore<->sync loops.
+      setRepoWorktreeMap((prev) => {
+        if (!prev[selectedRepo]) return prev;
+        const updated = { ...prev };
+        delete updated[selectedRepo];
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_WORKTREES, JSON.stringify(updated));
+        return updated;
+      });
     }
-  }, [selectedRepo, activeWorktree, setRepoWorktreeMap, setActiveWorktree]);
+  }, [
+    selectedRepo,
+    activeWorktree,
+    repoWorktreeMap,
+    worktrees,
+    worktreesFetching,
+    setRepoWorktreeMap,
+    setActiveWorktree,
+  ]);
 
   const sortedGroups = useMemo(() => [...groups].sort((a, b) => a.order - b.order), [groups]);
   const sortedWorktrees = useMemo(
@@ -420,8 +459,19 @@ export default function App() {
   );
 
   useEffect(() => {
-    saveActiveWorktreeToMap(selectedRepo, activeWorktree);
-  }, [selectedRepo, activeWorktree, saveActiveWorktreeToMap]);
+    if (!selectedRepo || selectedRepo === TEMP_REPO_ID) return;
+    if (worktreesFetching) return;
+
+    if (!activeWorktree) {
+      saveActiveWorktreeToMap(selectedRepo, null);
+      return;
+    }
+
+    const isWorktreeInSelectedRepo = worktrees.some((wt) => wt.path === activeWorktree.path);
+    if (isWorktreeInSelectedRepo) {
+      saveActiveWorktreeToMap(selectedRepo, activeWorktree);
+    }
+  }, [selectedRepo, activeWorktree, worktrees, worktreesFetching, saveActiveWorktreeToMap]);
 
   const handleSelectRepo = (repoPath: string) => {
     // Save current worktree's tab state before switching
@@ -610,8 +660,10 @@ export default function App() {
 
       // Auto-select the new repo
       setSelectedRepo(selectedPath);
+      setActiveWorktree(null);
+      setActiveTab('chat');
     },
-    [repositories, saveRepositories]
+    [repositories, saveRepositories, setActiveWorktree, setActiveTab]
   );
 
   // Handle cloning a remote repository
@@ -637,8 +689,10 @@ export default function App() {
 
       // Auto-select the new repo
       setSelectedRepo(clonedPath);
+      setActiveWorktree(null);
+      setActiveTab('chat');
     },
-    [repositories, saveRepositories]
+    [repositories, saveRepositories, setActiveWorktree, setActiveTab]
   );
 
   const setPendingScript = useInitScriptStore((s) => s.setPendingScript);
@@ -1039,6 +1093,18 @@ export default function App() {
         )}
 
         {/* Main Content */}
+        {fileTreeDisplayMode === 'current' && hasActiveWorktree && (
+          <FileSidebar
+            rootPath={activeWorktree?.path}
+            isActive={activeTab === 'file'}
+            width={fileSidebarWidth}
+            collapsed={fileSidebarCollapsed}
+            onCollapse={() => setFileSidebarCollapsed(true)}
+            onResizeStart={handleResizeStart('fileSidebar')}
+            onSwitchTab={() => handleTabChange('file')}
+          />
+        )}
+
         <MainContent
           activeTab={activeTab}
           onTabChange={handleTabChange}
@@ -1048,12 +1114,20 @@ export default function App() {
           worktreePath={activeWorktree?.path}
           repositoryCollapsed={repositoryCollapsed}
           worktreeCollapsed={layoutMode === 'tree' ? repositoryCollapsed : worktreeCollapsed}
+          fileSidebarCollapsed={
+            fileTreeDisplayMode === 'current' && hasActiveWorktree ? fileSidebarCollapsed : false
+          }
           layoutMode={layoutMode}
           onExpandRepository={() => setRepositoryCollapsed(false)}
           onExpandWorktree={
             layoutMode === 'tree'
               ? () => setRepositoryCollapsed(false)
               : () => setWorktreeCollapsed(false)
+          }
+          onExpandFileSidebar={
+            fileTreeDisplayMode === 'current' && hasActiveWorktree
+              ? () => setFileSidebarCollapsed(false)
+              : undefined
           }
           onSwitchWorktree={handleSwitchWorktreePath}
           onSwitchTab={handleTabChange}

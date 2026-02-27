@@ -1099,7 +1099,7 @@ export function FileTree({
         ref={fileTreeContainerRef}
         tabIndex={-1}
         className={cn(
-          'py-1 pb-20 outline-none',
+          'pb-20 outline-none',
           // Highlight root folder when dragging over
           draggingOverFolderPath === rootPath && 'bg-primary/10'
         )}
@@ -1110,7 +1110,7 @@ export function FileTree({
         onContextMenu={handleRootContextMenu}
       >
         {/* Toolbar */}
-        <div className="flex items-center justify-between gap-1 pl-2 pr-3 pb-1">
+        <div className="sticky top-0 z-10 flex h-12 items-center justify-between gap-1 border-b bg-background px-3">
           {onToggleCollapse && (
             <button
               type="button"
@@ -1453,15 +1453,6 @@ function FileTreeNodeComponent({
   const { displayName, actualNode, compactedChain } = getCompactedNode(node, expandedPaths);
   const isExpanded = expandedPaths.has(actualNode.path);
   const isSelected = selectedPath === actualNode.path;
-
-  // Debug: log when a node is selected
-  if (isSelected) {
-    console.log('[FileTreeNode] Node is selected:', {
-      nodePath: actualNode.path,
-      selectedPath,
-      match: selectedPath === actualNode.path,
-    });
-  }
 
   // 检查压缩链中是否有正在编辑的节点
   const editingNode = compactedChain.find((n) => n.path === editingPath);
