@@ -5,6 +5,7 @@ import { appDetector } from '../services/app/AppDetector';
 import { validateLocalPath } from '../services/app/PathValidator';
 import { getRecentProjects } from '../services/app/RecentProjectsService';
 import { applyProxy, testProxy } from '../services/proxy/ProxyConfig';
+import { autoUpdaterService } from '../services/updater/AutoUpdater';
 
 export function registerAppHandlers() {
   ipcMain.handle(IPC_CHANNELS.APP_DETECT, async () => {
@@ -32,7 +33,11 @@ export function registerAppHandlers() {
     return await appDetector.getAppIcon(bundleId);
   });
 
-  ipcMain.handle(IPC_CHANNELS.APP_SET_PROXY, (_, settings: ProxySettings) => applyProxy(settings));
+  ipcMain.handle(IPC_CHANNELS.APP_SET_PROXY, async (_, settings: ProxySettings) => {
+    await applyProxy(settings);
+    // Sync proxy config to electron-updater's dedicated session after applying session proxy
+    await autoUpdaterService.applyCurrentProxySettings();
+  });
 
   ipcMain.handle(IPC_CHANNELS.APP_TEST_PROXY, (_, proxyUrl: string) => testProxy(proxyUrl));
 

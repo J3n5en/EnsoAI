@@ -435,6 +435,8 @@ export const zhTranslations: Record<string, string> = {
   Failed: '失败',
   'Bypass list': '绕过列表',
   'Comma-separated list of hosts that bypass the proxy': '不走代理的主机列表，用逗号分隔',
+  'Use proxy for updates': '使用代理更新',
+  'Route update checks and downloads through proxy server': '通过代理服务器检查和下载更新',
   'View diff': '查看差异',
   'View more': '查看更多',
   'Waiting {{seconds}} seconds': '{{seconds}} 秒',

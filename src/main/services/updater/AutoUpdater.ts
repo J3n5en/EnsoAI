@@ -1,6 +1,8 @@
 import { is } from '@electron-toolkit/utils';
+import type { ProxySettings } from '@shared/types';
 import type { BrowserWindow } from 'electron';
 import electronUpdater, { type UpdateInfo } from 'electron-updater';
+import { getUpdaterProxyConfig } from '../proxy/ProxyConfig';
 
 const { autoUpdater } = electronUpdater;
 
@@ -168,6 +170,28 @@ class AutoUpdaterService {
         clearInterval(this.checkIntervalId);
         this.checkIntervalId = null;
       }
+    }
+  }
+
+  /**
+   * Apply proxy settings directly to electron-updater's dedicated session.
+   * electron-updater uses session.fromPartition("electron-updater") with
+   * electron.net.request(), which respects session-level proxy config.
+   * builder-util-runtime does not read process.env for proxy settings.
+   *
+   * @param settings - Optional settings to use directly (e.g. read from disk at
+   *   startup). When omitted, falls back to the current module-level proxy state.
+   */
+  async applyCurrentProxySettings(settings?: ProxySettings): Promise<void> {
+    const config = settings != null ? getUpdaterProxyConfig(settings) : getUpdaterProxyConfig();
+    await this.applyUpdaterProxyConfig(config);
+  }
+
+  private async applyUpdaterProxyConfig(config: Electron.ProxyConfig | null): Promise<void> {
+    if (config) {
+      await autoUpdater.netSession.setProxy(config);
+    } else {
+      await autoUpdater.netSession.setProxy({ mode: 'direct' });
     }
   }
 }

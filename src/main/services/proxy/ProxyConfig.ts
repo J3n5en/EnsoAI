@@ -39,6 +39,22 @@ export function getProxyEnvVars(): Record<string, string> {
   };
 }
 
+/**
+ * Returns proxy config for the electron-updater session, or null if proxy
+ * is disabled or useProxyForUpdates is not enabled.
+ */
+export function getUpdaterProxyConfig(
+  settings: ProxySettings | null = currentProxySettings
+): Electron.ProxyConfig | null {
+  if (!settings?.enabled || !settings.server || !settings.useProxyForUpdates) {
+    return null;
+  }
+  return {
+    proxyRules: normalizeProxyUrl(settings.server),
+    proxyBypassRules: normalizeBypassList(settings.bypassList || 'localhost,127.0.0.1'),
+  };
+}
+
 export async function applyProxy(settings: ProxySettings): Promise<void> {
   currentProxySettings = settings;
 

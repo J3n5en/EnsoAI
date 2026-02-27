@@ -832,6 +832,21 @@ export function GeneralSettings() {
         </div>
       </div>
 
+      {/* Proxy for Updates */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Use proxy for updates')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Route update checks and downloads through proxy server')}
+          </p>
+          <Switch
+            checked={proxySettings.useProxyForUpdates ?? false}
+            onCheckedChange={(useProxyForUpdates) => setProxySettings({ useProxyForUpdates })}
+            disabled={!proxySettings.enabled}
+          />
+        </div>
+      </div>
+
       {/* Logging Section */}
       <div className="pt-4 border-t">
         <h3 className="text-lg font-medium">{t('Logging')}</h3>
