@@ -26,6 +26,7 @@ export const STORAGE_KEYS = {
   ACTIVE_GROUP: 'enso-active-group',
   GROUP_COLLAPSED_STATE: 'enso-group-collapsed-state',
   TODO_BOARDS: 'enso-todo-boards',
+  FILE_TREE_EXPANDED_PREFIX: 'enso-file-tree-expanded',
 } as const;
 
 // Helper to get initial value from localStorage
@@ -270,4 +271,26 @@ export const getStoredGroupCollapsedState = (): Record<string, boolean> => {
 
 export const saveGroupCollapsedState = (state: Record<string, boolean>): void => {
   localStorage.setItem(STORAGE_KEYS.GROUP_COLLAPSED_STATE, JSON.stringify(state));
+};
+
+// File tree expanded paths helpers (per-worktree, keyed by rootPath)
+const getFileTreeExpandedKey = (rootPath: string): string =>
+  `${STORAGE_KEYS.FILE_TREE_EXPANDED_PREFIX}:${rootPath}`;
+
+export const loadFileTreeExpandedPaths = (rootPath: string): Set<string> => {
+  try {
+    const raw = localStorage.getItem(getFileTreeExpandedKey(rootPath));
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+};
+
+export const saveFileTreeExpandedPaths = (rootPath: string, paths: Set<string>): void => {
+  try {
+    localStorage.setItem(getFileTreeExpandedKey(rootPath), JSON.stringify([...paths]));
+  } catch {
+    // Silently ignore storage errors (e.g. private mode / quota exceeded)
+  }
 };
