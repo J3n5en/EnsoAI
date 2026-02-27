@@ -1,3 +1,4 @@
+import { normalizeLocale } from '@shared/i18n';
 import type { ProxySettings } from '@shared/types';
 import type {
   AgentDetectionStatus,
@@ -375,7 +376,6 @@ export function validateCodeReviewPrompt(template: string): {
  */
 export function getDefaultLocale(): import('@shared/i18n').Locale {
   if (typeof navigator !== 'undefined') {
-    const { normalizeLocale } = require('@shared/i18n');
     return normalizeLocale(navigator.language);
   }
   return 'en';
