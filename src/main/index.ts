@@ -202,7 +202,6 @@ async function initAutoUpdater(window: BrowserWindow): Promise<void> {
     return;
   }
 
-  const { readSettings } = await import('./ipc/settings');
   const settings = readSettings();
   const ensoSettings = settings?.['enso-settings'] as
     | {
@@ -216,13 +215,9 @@ async function initAutoUpdater(window: BrowserWindow): Promise<void> {
   const proxySettings = ensoSettings?.state?.proxySettings;
 
   const { autoUpdaterService } = await import('./services/updater/AutoUpdater');
-  autoUpdaterService.init(window, autoUpdateEnabled);
-
-  // Apply persisted proxy settings directly from disk so the updater session is
-  // correctly configured even if the renderer's rehydration IPC never arrives.
-  if (proxySettings) {
-    await autoUpdaterService.applyCurrentProxySettings(proxySettings);
-  }
+  // Pass proxySettings into init() so the proxy is applied before the first
+  // update check timer (3s) fires, eliminating the race condition.
+  await autoUpdaterService.init(window, autoUpdateEnabled, proxySettings);
 }
 
 async function init(): Promise<void> {

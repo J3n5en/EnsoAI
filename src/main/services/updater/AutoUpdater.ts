@@ -31,7 +31,11 @@ class AutoUpdaterService {
   private lastCheckTime = 0;
   private onFocusHandler: (() => void) | null = null;
 
-  init(window: BrowserWindow, autoUpdateEnabled = true): void {
+  async init(
+    window: BrowserWindow,
+    autoUpdateEnabled = true,
+    proxySettings?: ProxySettings
+  ): Promise<void> {
     this.mainWindow = window;
 
     // Enable logging in dev mode
@@ -91,7 +95,13 @@ class AutoUpdaterService {
     };
     window.on('focus', this.onFocusHandler);
 
-    // Apply initial auto-update setting
+    // Apply proxy settings before starting the update check timer so the first
+    // check (3s after init) is guaranteed to go through the proxy.
+    if (proxySettings) {
+      await this.applyCurrentProxySettings(proxySettings);
+    }
+
+    // Apply initial auto-update setting (starts the 3s timer and interval)
     this.setAutoUpdateEnabled(autoUpdateEnabled);
   }
 
