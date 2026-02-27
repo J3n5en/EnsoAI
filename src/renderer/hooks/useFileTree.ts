@@ -112,7 +112,8 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     if (childrenRestoredRef.current) return;
     childrenRestoredRef.current = true;
 
-    const restored = loadFileTreeExpandedPaths(rootPath);
+    // Use the already-loaded ref instead of re-reading localStorage
+    const restored = expandedPathsRef.current;
     if (restored.size === 0) return;
 
     // Sort shallow-first so parent nodes are populated before their children
@@ -273,13 +274,11 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             treeRef.current = newTree; // Sync ref immediately
             setTree(newTree);
           } catch (error) {
-            // 加载失败时回滚状态
-            setExpandedPaths((prev) => {
-              const next = new Set(prev);
-              next.delete(path);
-              if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, next);
-              return next;
-            });
+            // Roll back expanded state on load failure
+            const rolled = new Set(expandedPathsRef.current);
+            rolled.delete(path);
+            setExpandedPaths(rolled);
+            if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, rolled);
             setTree((current) => clearLoading(current));
             console.error('Failed to load directory children:', error);
           }
@@ -322,17 +321,15 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         // Directory was deleted - remove from expanded paths and tree
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
           queryClient.removeQueries({ queryKey: ['file', 'list', targetPath] });
-          setExpandedPaths((prev) => {
-            const next = new Set(prev);
-            // Remove this path and all children paths
-            for (const p of prev) {
-              if (p === targetPath || p.startsWith(`${targetPath}/`)) {
-                next.delete(p);
-              }
+          // Compute next set outside updater to avoid side effects inside pure function
+          const next = new Set(expandedPathsRef.current);
+          for (const p of expandedPathsRef.current) {
+            if (p === targetPath || p.startsWith(`${targetPath}/`)) {
+              next.delete(p);
             }
-            if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, next);
-            return next;
-          });
+          }
+          setExpandedPaths(next);
+          if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, next);
         }
       }
     },
