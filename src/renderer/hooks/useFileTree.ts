@@ -45,6 +45,12 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
   // Track whether children have been restored for the current rootPath
   const childrenRestoredRef = useRef(false);
 
+  // Helper: update expanded state and persist to localStorage atomically
+  const setAndPersistExpandedPaths = useCallback((paths: Set<string>) => {
+    setExpandedPaths(paths);
+    if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, paths);
+  }, []);
+
   // When rootPath changes: restore saved expanded state and trigger a fresh tree fetch
   useEffect(() => {
     if (!rootPath) return;
@@ -128,11 +134,9 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
           const children = await loadChildren(expandedPath);
           if (cancelled) return;
           const childNodes = children.map((c) => ({ ...c })) as FileTreeNode[];
-          setTree((current) => {
-            const updated = updateTreeWithChain(current, expandedPath, childNodes);
-            treeRef.current = updated;
-            return updated;
-          });
+          const updated = updateTreeWithChain(treeRef.current, expandedPath, childNodes);
+          treeRef.current = updated;
+          setTree(updated);
         } catch {
           // Silently skip paths that fail to load (e.g. deleted directories)
         }
@@ -150,8 +154,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     async (path: string) => {
       // Special case: collapse all
       if (path === '__COLLAPSE_ALL__') {
-        setExpandedPaths(new Set());
-        if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, new Set());
+        setAndPersistExpandedPaths(new Set());
         return;
       }
 
@@ -190,8 +193,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         for (const p of pathsToCollapse) {
           newExpanded.delete(p);
         }
-        setExpandedPaths(newExpanded);
-        if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, newExpanded);
+        setAndPersistExpandedPaths(newExpanded);
       } else {
         // 展开时，自动加载单子目录链
         const markLoading = (nodes: FileTreeNode[]): FileTreeNode[] => {
@@ -228,9 +230,8 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         };
 
         newExpanded.add(path);
-        setExpandedPaths(newExpanded);
         expandedPathsRef.current = newExpanded; // Sync ref immediately
-        if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, newExpanded);
+        setAndPersistExpandedPaths(newExpanded);
 
         if (needsLoad(treeRef.current)) {
           setTree((current) => markLoading(current));
@@ -266,8 +267,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             const nextExpanded = new Set(expandedPathsRef.current);
             for (const p of allPaths) nextExpanded.add(p);
             expandedPathsRef.current = nextExpanded; // Sync ref immediately
-            setExpandedPaths(nextExpanded);
-            if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, nextExpanded);
+            setAndPersistExpandedPaths(nextExpanded);
 
             // 更新树
             const newTree = updateTreeWithChain(treeRef.current, path, finalChildren);
@@ -277,15 +277,14 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             // Roll back expanded state on load failure
             const rolled = new Set(expandedPathsRef.current);
             rolled.delete(path);
-            setExpandedPaths(rolled);
-            if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, rolled);
+            setAndPersistExpandedPaths(rolled);
             setTree((current) => clearLoading(current));
             console.error('Failed to load directory children:', error);
           }
         }
       }
     },
-    [loadChildren, updateTreeWithChain]
+    [loadChildren, updateTreeWithChain, setAndPersistExpandedPaths]
   );
 
   // 递归更新树中某个目录的 children
@@ -328,12 +327,11 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
               next.delete(p);
             }
           }
-          setExpandedPaths(next);
-          if (rootPathRef.current) saveFileTreeExpandedPaths(rootPathRef.current, next);
+          setAndPersistExpandedPaths(next);
         }
       }
     },
-    [queryClient, rootPath]
+    [queryClient, rootPath, setAndPersistExpandedPaths]
   );
 
   // Track if we need to refresh when becoming active
