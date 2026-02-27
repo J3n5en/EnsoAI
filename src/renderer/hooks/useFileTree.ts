@@ -13,9 +13,34 @@ interface FileTreeNode extends FileEntry {
   isLoading?: boolean;
 }
 
+// Storage key for per-worktree expanded paths
+const getExpandedKey = (rootPath: string) => `enso-file-tree-expanded:${rootPath}`;
+
+// Read expanded paths from localStorage
+const loadExpandedPaths = (rootPath: string): Set<string> => {
+  try {
+    const raw = localStorage.getItem(getExpandedKey(rootPath));
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+};
+
+// Save expanded paths to localStorage
+const saveExpandedPaths = (rootPath: string, paths: Set<string>): void => {
+  try {
+    localStorage.setItem(getExpandedKey(rootPath), JSON.stringify([...paths]));
+  } catch {
+    // ignore storage errors
+  }
+};
+
 export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFileTreeOptions) {
   const queryClient = useQueryClient();
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() =>
+    rootPath ? loadExpandedPaths(rootPath) : new Set()
+  );
 
   // Fetch root directory
   const { data: rootFiles, isLoading: isRootLoading } = useQuery({
@@ -36,25 +61,23 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
   const expandedPathsRef = useRef(expandedPaths);
   expandedPathsRef.current = expandedPaths;
 
-  // Update tree when root files change - merge to preserve loaded children
+  // Track the current rootPath in a ref for use inside callbacks
+  const rootPathRef = useRef(rootPath);
+  rootPathRef.current = rootPath;
+  // Track whether children have been restored for the current rootPath
+  const childrenRestoredRef = useRef(false);
+
+  // When rootPath changes: restore saved expanded state and trigger a fresh tree fetch
   useEffect(() => {
-    if (rootFiles) {
-      setTree((currentTree) => {
-        // 合并新数据，保留已加载的 children
-        const mergeNodes = (newNodes: FileEntry[], oldNodes: FileTreeNode[]): FileTreeNode[] => {
-          return newNodes.map((newNode) => {
-            const oldNode = oldNodes.find((o) => o.path === newNode.path);
-            if (oldNode?.children) {
-              // 保留已加载的 children
-              return { ...newNode, children: oldNode.children };
-            }
-            return { ...newNode };
-          });
-        };
-        return mergeNodes(rootFiles, currentTree);
-      });
-    }
-  }, [rootFiles]);
+    if (!rootPath) return;
+
+    childrenRestoredRef.current = false;
+    setExpandedPaths(loadExpandedPaths(rootPath));
+    setTree([]);
+
+    // Invalidate root query so rootFiles effect always re-fires even on cache hit
+    queryClient.invalidateQueries({ queryKey: ['file', 'list', rootPath] });
+  }, [rootPath, queryClient]);
 
   // Load children for a directory
   const loadChildren = useCallback(
@@ -88,12 +111,61 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     []
   );
 
+  // Update tree when root files change, then restore children for all expanded paths
+  useEffect(() => {
+    if (!rootFiles || !rootPath) return;
+
+    // Merge root-level nodes, preserving already-loaded children
+    const mergeNodes = (newNodes: FileEntry[], oldNodes: FileTreeNode[]): FileTreeNode[] => {
+      return newNodes.map((newNode) => {
+        const oldNode = oldNodes.find((o) => o.path === newNode.path);
+        if (oldNode?.children) {
+          return { ...newNode, children: oldNode.children };
+        }
+        return { ...newNode };
+      });
+    };
+
+    const merged = mergeNodes(rootFiles, treeRef.current);
+    setTree(merged);
+    treeRef.current = merged;
+
+    // Only restore once per rootPath switch (childrenRestoredRef resets on rootPath change)
+    if (childrenRestoredRef.current) return;
+    childrenRestoredRef.current = true;
+
+    const restored = loadExpandedPaths(rootPath);
+    if (restored.size === 0) return;
+
+    // Sort shallow-first so parent nodes are populated before their children
+    const sortedPaths = [...restored].sort((a, b) => a.split('/').length - b.split('/').length);
+
+    const restoreChildren = async () => {
+      for (const expandedPath of sortedPaths) {
+        try {
+          const children = await loadChildren(expandedPath);
+          const childNodes = children.map((c) => ({ ...c })) as FileTreeNode[];
+          setTree((current) => {
+            const updated = updateTreeWithChain(current, expandedPath, childNodes);
+            treeRef.current = updated;
+            return updated;
+          });
+        } catch {
+          // Silently skip paths that fail to load (e.g. deleted directories)
+        }
+      }
+    };
+
+    restoreChildren();
+  }, [rootFiles, rootPath, loadChildren, updateTreeWithChain]);
+
   // Toggle directory expansion
   const toggleExpand = useCallback(
     async (path: string) => {
       // Special case: collapse all
       if (path === '__COLLAPSE_ALL__') {
         setExpandedPaths(new Set());
+        if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, new Set());
         return;
       }
 
@@ -133,6 +205,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
           newExpanded.delete(p);
         }
         setExpandedPaths(newExpanded);
+        if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, newExpanded);
       } else {
         // 展开时，自动加载单子目录链
         const markLoading = (nodes: FileTreeNode[]): FileTreeNode[] => {
@@ -171,6 +244,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         newExpanded.add(path);
         setExpandedPaths(newExpanded);
         expandedPathsRef.current = newExpanded; // Sync ref immediately
+        if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, newExpanded);
 
         if (needsLoad(treeRef.current)) {
           setTree((current) => markLoading(current));
@@ -207,6 +281,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             for (const p of allPaths) nextExpanded.add(p);
             expandedPathsRef.current = nextExpanded; // Sync ref immediately
             setExpandedPaths(nextExpanded);
+            if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, nextExpanded);
 
             // 更新树
             const newTree = updateTreeWithChain(treeRef.current, path, finalChildren);
@@ -217,6 +292,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
             setExpandedPaths((prev) => {
               const next = new Set(prev);
               next.delete(path);
+              if (rootPathRef.current) saveExpandedPaths(rootPathRef.current, next);
               return next;
             });
             setTree((current) => clearLoading(current));
