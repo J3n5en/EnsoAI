@@ -275,7 +275,7 @@ export const saveGroupCollapsedState = (state: Record<string, boolean>): void =>
 
 // File tree expanded paths helpers (per-worktree, keyed by rootPath)
 const getFileTreeExpandedKey = (rootPath: string): string =>
-  `${STORAGE_KEYS.FILE_TREE_EXPANDED_PREFIX}:${rootPath}`;
+  `${STORAGE_KEYS.FILE_TREE_EXPANDED_PREFIX}:${normalizePath(rootPath)}`;
 
 export const loadFileTreeExpandedPaths = (rootPath: string): Set<string> => {
   try {
