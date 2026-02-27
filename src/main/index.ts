@@ -3,7 +3,7 @@ import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
-import { IPC_CHANNELS } from '@shared/types';
+import { IPC_CHANNELS, type ProxySettings } from '@shared/types';
 import { app, BrowserWindow, ipcMain, Menu, net, protocol } from 'electron';
 
 // Register custom protocol privileges
@@ -205,12 +205,13 @@ async function initAutoUpdater(window: BrowserWindow): Promise<void> {
   const { readSettings } = await import('./ipc/settings');
   const settings = readSettings();
   const ensoSettings = settings?.['enso-settings'] as
-    | { state?: { autoUpdateEnabled?: boolean } }
+    | { state?: { autoUpdateEnabled?: boolean; proxySettings?: ProxySettings } }
     | undefined;
   const autoUpdateEnabled = ensoSettings?.state?.autoUpdateEnabled ?? true;
+  const proxySettings = ensoSettings?.state?.proxySettings ?? null;
 
   const { autoUpdaterService } = await import('./services/updater/AutoUpdater');
-  autoUpdaterService.init(window, autoUpdateEnabled);
+  autoUpdaterService.init(window, autoUpdateEnabled, proxySettings);
 }
 
 async function init(): Promise<void> {

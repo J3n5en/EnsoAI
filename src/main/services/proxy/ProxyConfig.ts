@@ -1,7 +1,9 @@
 import type { ProxySettings } from '@shared/types';
+import type { Session } from 'electron';
 import { session } from 'electron';
 
 let currentProxySettings: ProxySettings | null = null;
+let updaterSession: Session | null = null;
 
 function normalizeProxyUrl(url: string): string {
   if (/^(https?|socks5?h?|socks4a?):\/\//.test(url)) {
@@ -17,6 +19,10 @@ function normalizeBypassList(bypassList: string): string {
     .map((s) => s.replace(/^\*\./, '.')) // *.domain → .domain (Chromium format)
     .filter(Boolean)
     .join(',');
+}
+
+export function registerUpdaterSession(s: Session): void {
+  updaterSession = s;
 }
 
 export function getProxyEnvVars(): Record<string, string> {
@@ -42,13 +48,19 @@ export function getProxyEnvVars(): Record<string, string> {
 export async function applyProxy(settings: ProxySettings): Promise<void> {
   currentProxySettings = settings;
 
-  if (settings.enabled && settings.server) {
-    await session.defaultSession.setProxy({
-      proxyRules: normalizeProxyUrl(settings.server),
-      proxyBypassRules: normalizeBypassList(settings.bypassList || 'localhost,127.0.0.1'),
-    });
-  } else {
-    await session.defaultSession.setProxy({ mode: 'direct' });
+  const proxyConfig =
+    settings.enabled && settings.server
+      ? {
+          proxyRules: normalizeProxyUrl(settings.server),
+          proxyBypassRules: normalizeBypassList(settings.bypassList || 'localhost,127.0.0.1'),
+        }
+      : { mode: 'direct' as const };
+
+  await session.defaultSession.setProxy(proxyConfig);
+
+  if (updaterSession) {
+    const useProxy = settings.enabled && settings.useProxyForUpdates && settings.server;
+    await updaterSession.setProxy(useProxy ? proxyConfig : { mode: 'system' });
   }
 }
 

@@ -243,6 +243,16 @@ export function GeneralSettings() {
     [setProxySettings]
   );
 
+  const handleProxyServerBlur = React.useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      const trimmed = e.target.value.trim();
+      if (trimmed !== e.target.value) {
+        setProxySettings({ server: trimmed });
+      }
+    },
+    [setProxySettings]
+  );
+
   const handleOpenLogFolder = React.useCallback(async () => {
     await window.electronAPI.log.openFolder();
   }, []);
@@ -769,6 +779,7 @@ export function GeneralSettings() {
             <Input
               value={proxySettings.server}
               onChange={handleProxyServerChange}
+              onBlur={handleProxyServerBlur}
               placeholder="http://127.0.0.1:7897"
               disabled={!proxySettings.enabled}
               className="w-64"
@@ -829,6 +840,24 @@ export function GeneralSettings() {
           <p className="text-xs text-muted-foreground">
             {t('Comma-separated list of hosts that bypass the proxy')}
           </p>
+        </div>
+      </div>
+
+      {/* Use proxy for updates */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Update via proxy')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Route update requests through proxy')}
+            {!proxySettings.enabled && proxySettings.useProxyForUpdates && (
+              <span className="text-xs ml-1">({t('Requires proxy to be enabled')})</span>
+            )}
+          </p>
+          <Switch
+            checked={proxySettings.useProxyForUpdates}
+            onCheckedChange={(useProxyForUpdates) => setProxySettings({ useProxyForUpdates })}
+            disabled={!proxySettings.enabled}
+          />
         </div>
       </div>
 

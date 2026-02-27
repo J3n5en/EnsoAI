@@ -212,6 +212,7 @@ export const defaultProxySettings: ProxySettings = {
   enabled: false,
   server: '',
   bypassList: 'localhost,127.0.0.1',
+  useProxyForUpdates: false,
 };
 
 // Default editor settings

@@ -190,6 +190,10 @@ export function migrateSettings(
       ...currentState.hapiSettings,
       ...persisted.hapiSettings,
     },
+    proxySettings: {
+      ...currentState.proxySettings,
+      ...persisted.proxySettings,
+    },
     agentDetectionStatus: migratedAgentDetectionStatus,
     mcpServers: persisted.mcpServers ?? currentState.mcpServers,
     promptPresets: persisted.promptPresets ?? currentState.promptPresets,

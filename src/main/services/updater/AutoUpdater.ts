@@ -1,6 +1,9 @@
 import { is } from '@electron-toolkit/utils';
+import type { ProxySettings } from '@shared/types';
 import type { BrowserWindow } from 'electron';
 import electronUpdater, { type UpdateInfo } from 'electron-updater';
+
+import { applyProxy, registerUpdaterSession } from '../proxy/ProxyConfig';
 
 const { autoUpdater } = electronUpdater;
 
@@ -29,8 +32,22 @@ class AutoUpdaterService {
   private lastCheckTime = 0;
   private onFocusHandler: (() => void) | null = null;
 
-  init(window: BrowserWindow, autoUpdateEnabled = true): void {
+  init(
+    window: BrowserWindow,
+    autoUpdateEnabled = true,
+    proxySettings?: ProxySettings | null
+  ): void {
     this.mainWindow = window;
+
+    // Register updater session so applyProxy() can configure it
+    registerUpdaterSession(autoUpdater.netSession);
+
+    // Seed proxy state before any update checks
+    if (proxySettings) {
+      applyProxy(proxySettings).catch((error) => {
+        console.error('Failed to seed proxy settings:', error);
+      });
+    }
 
     // Enable logging in dev mode
     if (is.dev) {
