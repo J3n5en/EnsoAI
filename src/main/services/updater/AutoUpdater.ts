@@ -188,10 +188,14 @@ class AutoUpdaterService {
   }
 
   private async applyUpdaterProxyConfig(config: Electron.ProxyConfig | null): Promise<void> {
-    if (config) {
-      await autoUpdater.netSession.setProxy(config);
-    } else {
-      await autoUpdater.netSession.setProxy({ mode: 'direct' });
+    try {
+      if (config) {
+        await autoUpdater.netSession.setProxy(config);
+      } else {
+        await autoUpdater.netSession.setProxy({ mode: 'direct' });
+      }
+    } catch (error) {
+      console.error('Failed to set updater proxy:', error);
     }
   }
 }

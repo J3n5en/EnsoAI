@@ -36,7 +36,11 @@ export function registerAppHandlers() {
   ipcMain.handle(IPC_CHANNELS.APP_SET_PROXY, async (_, settings: ProxySettings) => {
     await applyProxy(settings);
     // Sync proxy config to electron-updater's dedicated session after applying session proxy
-    await autoUpdaterService.applyCurrentProxySettings();
+    try {
+      await autoUpdaterService.applyCurrentProxySettings();
+    } catch (error) {
+      console.error('Failed to apply proxy to updater session:', error);
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.APP_TEST_PROXY, (_, proxyUrl: string) => testProxy(proxyUrl));
