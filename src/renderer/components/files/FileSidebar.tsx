@@ -15,6 +15,7 @@ import { addToast, toastManager } from '@/components/ui/toast';
 import { useEditor } from '@/hooks/useEditor';
 import { useFileTree } from '@/hooks/useFileTree';
 import { useI18n } from '@/i18n';
+import { isFocusLocked, pauseFocusLock, restoreFocus } from '@/lib/focusLock';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { getEditorSelectionText } from './EditorArea';
 import {
@@ -79,6 +80,8 @@ export function FileSidebar({
     targetDir: string;
     operation: 'copy' | 'move';
   } | null>(null);
+  const newItemFocusReleaseRef = useRef<(() => void) | null>(null);
+  const newItemPausedSessionIdRef = useRef<string | null>(null);
 
   // Auto-sync file tree selection with active tab
   useEffect(() => {
@@ -113,30 +116,13 @@ export function FileSidebar({
     [tabs, setActiveFile, loadFile, onSwitchTab]
   );
 
-  const handleCreateFile = useCallback((parentPath: string) => {
-    setNewItemType('file');
-    setNewItemParentPath(parentPath);
-  }, []);
+  const getFocusedEnhancedInputSessionId = useCallback(() => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) return null;
 
-  const handleCreateDirectory = useCallback((parentPath: string) => {
-    setNewItemType('directory');
-    setNewItemParentPath(parentPath);
+    const owner = active.closest<HTMLElement>('[data-enhanced-input-session-id]');
+    return owner?.dataset.enhancedInputSessionId ?? null;
   }, []);
-
-  const handleNewItemConfirm = useCallback(
-    async (name: string) => {
-      const fullPath = `${newItemParentPath}/${name}`;
-      if (newItemType === 'file') {
-        await createFile(fullPath);
-        loadFile.mutate(fullPath);
-      } else if (newItemType === 'directory') {
-        await createDirectory(fullPath);
-      }
-      setNewItemType(null);
-      setNewItemParentPath('');
-    },
-    [newItemType, newItemParentPath, createFile, createDirectory, loadFile]
-  );
 
   const handleRename = useCallback(
     async (path: string, newName: string) => {
@@ -162,6 +148,87 @@ export function FileSidebar({
   const terminalFocus = useTerminalWriteStore((state) => state.focus);
   const activeSessionId = useTerminalWriteStore((state) => state.activeSessionId);
   const effectiveSessionId = sessionId ?? activeSessionId;
+
+  const startNewItemFocusPause = useCallback(() => {
+    if (newItemFocusReleaseRef.current) return;
+
+    const fallbackSessionId =
+      effectiveSessionId && isFocusLocked(effectiveSessionId) ? effectiveSessionId : null;
+    const targetSessionId = getFocusedEnhancedInputSessionId() ?? fallbackSessionId;
+    if (!targetSessionId) return;
+
+    newItemPausedSessionIdRef.current = targetSessionId;
+    newItemFocusReleaseRef.current = pauseFocusLock(targetSessionId);
+  }, [effectiveSessionId, getFocusedEnhancedInputSessionId]);
+
+  const endNewItemFocusPause = useCallback(() => {
+    if (!newItemFocusReleaseRef.current) return;
+
+    const pausedSessionId = newItemPausedSessionIdRef.current;
+    newItemFocusReleaseRef.current();
+    newItemFocusReleaseRef.current = null;
+    newItemPausedSessionIdRef.current = null;
+
+    const targetSessionId =
+      pausedSessionId ??
+      (effectiveSessionId && isFocusLocked(effectiveSessionId) ? effectiveSessionId : null);
+    if (!targetSessionId) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!restoreFocus(targetSessionId)) {
+          setTimeout(() => {
+            restoreFocus(targetSessionId);
+          }, 0);
+        }
+      });
+    });
+  }, [effectiveSessionId]);
+
+  useEffect(() => {
+    return () => {
+      newItemFocusReleaseRef.current?.();
+      newItemFocusReleaseRef.current = null;
+      newItemPausedSessionIdRef.current = null;
+    };
+  }, []);
+
+  const handleCreateFile = useCallback(
+    (parentPath: string) => {
+      startNewItemFocusPause();
+      setNewItemType('file');
+      setNewItemParentPath(parentPath);
+    },
+    [startNewItemFocusPause]
+  );
+
+  const handleCreateDirectory = useCallback(
+    (parentPath: string) => {
+      startNewItemFocusPause();
+      setNewItemType('directory');
+      setNewItemParentPath(parentPath);
+    },
+    [startNewItemFocusPause]
+  );
+
+  const handleNewItemConfirm = useCallback(
+    async (name: string) => {
+      try {
+        const fullPath = `${newItemParentPath}/${name}`;
+        if (newItemType === 'file') {
+          await createFile(fullPath);
+          loadFile.mutate(fullPath);
+        } else if (newItemType === 'directory') {
+          await createDirectory(fullPath);
+        }
+      } finally {
+        setNewItemType(null);
+        setNewItemParentPath('');
+        endNewItemFocusPause();
+      }
+    },
+    [newItemType, newItemParentPath, createFile, createDirectory, loadFile, endNewItemFocusPause]
+  );
 
   const handleSendToSession = useCallback(
     (path: string) => {
@@ -403,6 +470,7 @@ export function FileSidebar({
             onCancel={() => {
               setNewItemType(null);
               setNewItemParentPath('');
+              endNewItemFocusPause();
             }}
           />
           <FileConflictDialog

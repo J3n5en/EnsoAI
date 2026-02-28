@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/empty';
 import { addToast, toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
+import { pauseFocusLock, restoreFocus } from '@/lib/focusLock';
 import { requestUnsavedChoice } from '@/stores/unsavedPrompt';
 
 // Global ref for passing selected text to search dialog
@@ -106,10 +107,57 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   const editorAreaRef = useRef<EditorAreaRef>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const addOperationsRef = useRef<((operations: any[]) => void) | null>(null);
+  const newItemFocusReleaseRef = useRef<(() => void) | null>(null);
+  const newItemPausedSessionIdRef = useRef<string | null>(null);
+
+  const getFocusedEnhancedInputSessionId = useCallback(() => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) return null;
+
+    const owner = active.closest<HTMLElement>('[data-enhanced-input-session-id]');
+    return owner?.dataset.enhancedInputSessionId ?? null;
+  }, []);
+
+  const startNewItemFocusPause = useCallback(() => {
+    if (newItemFocusReleaseRef.current) return;
+
+    const targetSessionId = getFocusedEnhancedInputSessionId() ?? sessionId;
+    if (!targetSessionId) return;
+
+    newItemPausedSessionIdRef.current = targetSessionId;
+    newItemFocusReleaseRef.current = pauseFocusLock(targetSessionId);
+  }, [sessionId, getFocusedEnhancedInputSessionId]);
+
+  const endNewItemFocusPause = useCallback(() => {
+    if (!newItemFocusReleaseRef.current) return;
+
+    const pausedSessionId = newItemPausedSessionIdRef.current;
+    newItemFocusReleaseRef.current();
+    newItemFocusReleaseRef.current = null;
+    newItemPausedSessionIdRef.current = null;
+
+    if (!pausedSessionId) return;
+
+    // NewItemDialog 关闭后，先等对话框卸载和浏览器焦点结算完成，
+    // 再直接恢复到原增强输入；这里不再额外依赖“锁仍然存在”。
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreFocus(pausedSessionId);
+      });
+    });
+  }, []);
 
   // Receive addOperations function from FileTree
   const handleRecordOperations = useCallback((addFn: (operations: any[]) => void) => {
     addOperationsRef.current = addFn;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      newItemFocusReleaseRef.current?.();
+      newItemFocusReleaseRef.current = null;
+      newItemPausedSessionIdRef.current = null;
+    };
   }, []);
 
   // Auto-sync file tree selection with active tab (like VSCode's "Auto Reveal")
@@ -380,16 +428,24 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   );
 
   // Handle create file
-  const handleCreateFile = useCallback((parentPath: string) => {
-    setNewItemType('file');
-    setNewItemParentPath(parentPath);
-  }, []);
+  const handleCreateFile = useCallback(
+    (parentPath: string) => {
+      startNewItemFocusPause();
+      setNewItemType('file');
+      setNewItemParentPath(parentPath);
+    },
+    [startNewItemFocusPause]
+  );
 
   // Handle create directory
-  const handleCreateDirectory = useCallback((parentPath: string) => {
-    setNewItemType('directory');
-    setNewItemParentPath(parentPath);
-  }, []);
+  const handleCreateDirectory = useCallback(
+    (parentPath: string) => {
+      startNewItemFocusPause();
+      setNewItemType('directory');
+      setNewItemParentPath(parentPath);
+    },
+    [startNewItemFocusPause]
+  );
 
   // Handle new item confirm
   const handleNewItemConfirm = useCallback(
@@ -404,8 +460,9 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
       }
       setNewItemType(null);
       setNewItemParentPath('');
+      endNewItemFocusPause();
     },
-    [newItemType, newItemParentPath, createFile, createDirectory, loadFile]
+    [newItemType, newItemParentPath, createFile, createDirectory, loadFile, endNewItemFocusPause]
   );
 
   // Handle external file drop
@@ -769,6 +826,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
         onCancel={() => {
           setNewItemType(null);
           setNewItemParentPath('');
+          endNewItemFocusPause();
         }}
       />
 
