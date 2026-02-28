@@ -8,6 +8,9 @@ export interface EditorTab {
   encoding?: string;
   viewState?: unknown;
   isUnsupported?: boolean;
+  // External change conflict: set when file is modified externally while user has unsaved edits
+  hasExternalChange?: boolean;
+  externalContent?: string;
 }
 
 export interface PendingCursor {
@@ -43,6 +46,9 @@ interface EditorState {
   setActiveFile: (path: string | null) => void;
   updateFileContent: (path: string, content: string, isDirty?: boolean) => void;
   markFileSaved: (path: string) => void;
+  markExternalChange: (path: string, externalContent: string) => void;
+  applyExternalChange: (path: string) => void;
+  dismissExternalChange: (path: string) => void;
   setTabViewState: (path: string, viewState: unknown) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   setPendingCursor: (cursor: PendingCursor | null) => void;
@@ -68,7 +74,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (exists) {
         return {
           tabs: state.tabs.map((tab) =>
-            tab.path === file.path ? { ...tab, ...file, title: file.title ?? tab.title } : tab
+            tab.path === file.path
+              ? {
+                  ...tab,
+                  ...file,
+                  title: file.title ?? tab.title,
+                  // Clear external change state on explicit file open (fresh load)
+                  hasExternalChange: false,
+                  externalContent: undefined,
+                }
+              : tab
           ),
           activeTabPath: file.path,
         };
@@ -145,6 +160,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   markFileSaved: (path) =>
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.path === path ? { ...tab, isDirty: false } : tab)),
+    })),
+
+  markExternalChange: (path, externalContent) =>
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.path === path ? { ...tab, hasExternalChange: true, externalContent } : tab
+      ),
+    })),
+
+  applyExternalChange: (path) =>
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.path === path
+          ? {
+              ...tab,
+              content: tab.externalContent ?? tab.content,
+              isDirty: false,
+              hasExternalChange: false,
+              externalContent: undefined,
+            }
+          : tab
+      ),
+    })),
+
+  dismissExternalChange: (path) =>
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.path === path ? { ...tab, hasExternalChange: false, externalContent: undefined } : tab
+      ),
     })),
 
   setTabViewState: (path, viewState) =>
