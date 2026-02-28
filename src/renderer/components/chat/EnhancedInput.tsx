@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import { toastManager } from '@/components/ui/toast';
 import { useI18n } from '@/i18n';
+import { isFocusLocked, lockFocus, unlockFocus } from '@/lib/focusLock';
 import { toLocalFileUrl } from '@/lib/localFileUrl';
 import { cn } from '@/lib/utils';
 
@@ -41,7 +42,7 @@ export function EnhancedInput({
   open,
   onOpenChange,
   onSend,
-  sessionId: _sessionId,
+  sessionId,
   content,
   imagePaths,
   onContentChange,
@@ -189,33 +190,52 @@ export function EnhancedInput({
     ta.style.height = `${Math.max(scrollH, minH)}px`;
   }, [content, manualMinH]);
 
+  // 当前会话激活且增强输入已打开时，启用焦点锁。
+  useEffect(() => {
+    if (!sessionId || !open || !isActive) return;
+
+    lockFocus(sessionId);
+    return () => unlockFocus(sessionId);
+  }, [sessionId, open, isActive]);
+
   // Focus textarea when opened, session changes, or panel becomes active
   // biome-ignore lint/correctness/useExhaustiveDependencies: sessionId triggers focus on session switch
   useEffect(() => {
     if (open && isActive && textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [open, _sessionId, isActive]);
+  }, [open, sessionId, isActive]);
 
   // Focus trap: only refocus textarea when focus leaves this panel.
   // This avoids breaking keyboard navigation to Upload/Close/Send buttons.
   const handleBlur = useCallback(() => {
-    // Delay check because blur fires before the next focused element is set.
+    // 延后两帧，给 overlay 挂载和浏览器焦点结算留出时间，避免在弹窗打开过程中抢回焦点。
     requestAnimationFrame(() => {
-      if (!open) return;
+      requestAnimationFrame(() => {
+        if (!open || !sessionId || !isFocusLocked(sessionId)) return;
 
-      const container = containerRef.current;
-      const textarea = textareaRef.current;
-      if (!container || !textarea) return;
+        const container = containerRef.current;
+        const textarea = textareaRef.current;
+        if (!container || !textarea) return;
 
-      const active = document.activeElement;
-      if (active && container.contains(active)) {
-        return;
-      }
+        const active = document.activeElement;
+        if (active && container.contains(active)) {
+          return;
+        }
 
-      textarea.focus();
+        const hasBlockingOverlay = Boolean(
+          document.querySelector(
+            '[data-slot="dialog-popup"], [data-slot="alert-dialog-popup"], [data-quick-terminal="true"]'
+          )
+        );
+        if (hasBlockingOverlay) {
+          return;
+        }
+
+        textarea.focus();
+      });
     });
-  }, [open]);
+  }, [open, sessionId]);
 
   // Draft is now preserved in store - no reset on close
 
@@ -554,6 +574,7 @@ export function EnhancedInput({
           <div onDrop={handleDrop} onDragOver={handleDragOver} className="flex">
             <textarea
               ref={textareaRef}
+              data-enhanced-input-session-id={sessionId}
               value={content}
               onChange={(e) => handleContentChange(e.target.value)}
               onKeyDown={handleKeyDown}

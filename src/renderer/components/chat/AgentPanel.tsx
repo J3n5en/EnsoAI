@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/empty';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
+import { pauseFocusLock, restoreFocusIfLocked } from '@/lib/focusLock';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
@@ -251,10 +252,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const { setAgentCount, registerAgentCloseHandler } = useWorktreeActivityStore();
 
   const [hasRunningProcess, setHasRunningProcess] = useState(false);
-
-  const handleToggleQuickTerminal = useCallback(() => {
-    setQuickTerminalOpen(!quickTerminalOpen);
-  }, [quickTerminalOpen, setQuickTerminalOpen]);
+  const quickTerminalFocusLeaseRef = useRef<{
+    release: (() => void) | null;
+    sessionId: string | null;
+  }>({
+    release: null,
+    sessionId: null,
+  });
 
   const handleQuickTerminalSessionInit = useCallback(
     (sessionId: string) => {
@@ -263,16 +267,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     },
     [cwd, setQuickTerminalSession]
   );
-
-  const handleCloseQuickTerminal = useCallback(() => {
-    // 关闭 modal
-    setQuickTerminalOpen(false);
-
-    // 清除 session 记录（PTY 由 ShellTerminal 组件卸载时的 cleanup 销毁，这里不要重复调用 destroy）
-    if (currentQuickTerminalSession) {
-      removeQuickTerminalSession(cwd);
-    }
-  }, [currentQuickTerminalSession, cwd, setQuickTerminalOpen, removeQuickTerminalSession]);
 
   // 监听终端会话状态
   useEffect(() => {
@@ -321,6 +315,105 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   }, [cwd, worktreeGroupStates]);
 
   const { groups, activeGroupId } = currentGroupState;
+
+  const getCurrentActiveSessionId = useCallback(() => {
+    return groups.find((group) => group.id === activeGroupId)?.activeSessionId ?? null;
+  }, [groups, activeGroupId]);
+
+  const pauseQuickTerminalFocusLock = useCallback(() => {
+    if (quickTerminalFocusLeaseRef.current.release) return;
+
+    const currentActiveSessionId = getCurrentActiveSessionId();
+    if (!currentActiveSessionId) return;
+
+    quickTerminalFocusLeaseRef.current = {
+      sessionId: currentActiveSessionId,
+      release: pauseFocusLock(currentActiveSessionId),
+    };
+  }, [getCurrentActiveSessionId]);
+
+  const releaseQuickTerminalFocusLock = useCallback((shouldRestore: boolean) => {
+    const { release, sessionId: pausedSessionId } = quickTerminalFocusLeaseRef.current;
+
+    quickTerminalFocusLeaseRef.current = { release: null, sessionId: null };
+    release?.();
+
+    if (!shouldRestore || !pausedSessionId) return;
+
+    // 关闭覆盖层后，需要先等本轮状态提交和 overlay 卸载完成，
+    // 再等下一帧让浏览器完成焦点结算，否则 restore 时 isFocusLocked()
+    // 仍可能读取到旧的 pause 状态，导致恢复被短路。
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreFocusIfLocked(pausedSessionId);
+      });
+    });
+  }, []);
+
+  const handleToggleQuickTerminal = useCallback(() => {
+    const nextOpen = !quickTerminalOpen;
+    if (nextOpen) {
+      pauseQuickTerminalFocusLock();
+    }
+
+    setQuickTerminalOpen(nextOpen);
+    if (!nextOpen) {
+      releaseQuickTerminalFocusLock(true);
+    }
+  }, [
+    quickTerminalOpen,
+    setQuickTerminalOpen,
+    pauseQuickTerminalFocusLock,
+    releaseQuickTerminalFocusLock,
+  ]);
+
+  const handleQuickTerminalOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        pauseQuickTerminalFocusLock();
+      }
+
+      setQuickTerminalOpen(open);
+      if (!open) {
+        releaseQuickTerminalFocusLock(true);
+      }
+    },
+    [setQuickTerminalOpen, pauseQuickTerminalFocusLock, releaseQuickTerminalFocusLock]
+  );
+
+  const handleCloseQuickTerminal = useCallback(() => {
+    // 关闭 modal
+    setQuickTerminalOpen(false);
+
+    // 清除 session 记录（PTY 由 ShellTerminal 组件卸载时的 cleanup 销毁，这里不要重复调用 destroy）
+    if (currentQuickTerminalSession) {
+      removeQuickTerminalSession(cwd);
+    }
+    releaseQuickTerminalFocusLock(true);
+  }, [
+    currentQuickTerminalSession,
+    cwd,
+    setQuickTerminalOpen,
+    removeQuickTerminalSession,
+    releaseQuickTerminalFocusLock,
+  ]);
+
+  useEffect(() => {
+    if (quickTerminalOpen && isActive) {
+      pauseQuickTerminalFocusLock();
+      return;
+    }
+
+    if (!quickTerminalOpen && quickTerminalFocusLeaseRef.current.release) {
+      releaseQuickTerminalFocusLock(true);
+    }
+  }, [quickTerminalOpen, isActive, pauseQuickTerminalFocusLock, releaseQuickTerminalFocusLock]);
+
+  useEffect(() => {
+    return () => {
+      releaseQuickTerminalFocusLock(false);
+    };
+  }, [releaseQuickTerminalFocusLock]);
 
   // Update group state helper - uses store instead of local state
   const updateCurrentGroupState = useCallback(
@@ -1669,7 +1762,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         <QuickTerminalModal
           key={`quick-terminal-${quickTerminalMountKey}`}
           open={quickTerminalOpen && isActive}
-          onOpenChange={setQuickTerminalOpen}
+          onOpenChange={handleQuickTerminalOpenChange}
           onClose={handleCloseQuickTerminal}
           cwd={cwd}
           onSessionInit={handleQuickTerminalSessionInit}
