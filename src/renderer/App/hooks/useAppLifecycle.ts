@@ -1,28 +1,37 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useEditorStore } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
 
-export function useAppLifecycle() {
+export function useAppLifecycle(setCloseDialogOpen: (open: boolean) => void) {
+  const pendingRequestIdRef = useRef<string | null>(null);
+
+  // Called by the close confirmation dialog when user confirms
+  const confirmCloseAndRespond = useCallback(() => {
+    const requestId = pendingRequestIdRef.current;
+    if (!requestId) return;
+    pendingRequestIdRef.current = null;
+
+    const state = useEditorStore.getState();
+    const editorSettings = useSettingsStore.getState().editorSettings;
+
+    const allTabs = [...state.tabs, ...Object.values(state.worktreeStates).flatMap((s) => s.tabs)];
+
+    const dirtyPaths =
+      editorSettings.autoSave === 'off'
+        ? Array.from(new Set(allTabs.filter((t) => t.isDirty).map((t) => t.path)))
+        : [];
+
+    window.electronAPI.app.respondCloseRequest(requestId, { dirtyPaths });
+  }, []);
+
   // Listen for close request from main process
   useEffect(() => {
     const cleanup = window.electronAPI.app.onCloseRequest((requestId) => {
-      const state = useEditorStore.getState();
-      const editorSettings = useSettingsStore.getState().editorSettings;
-
-      const allTabs = [
-        ...state.tabs,
-        ...Object.values(state.worktreeStates).flatMap((s) => s.tabs),
-      ];
-
-      const dirtyPaths =
-        editorSettings.autoSave === 'off'
-          ? Array.from(new Set(allTabs.filter((t) => t.isDirty).map((t) => t.path)))
-          : [];
-
-      window.electronAPI.app.respondCloseRequest(requestId, { dirtyPaths });
+      pendingRequestIdRef.current = requestId;
+      setCloseDialogOpen(true);
     });
     return cleanup;
-  }, []);
+  }, [setCloseDialogOpen]);
 
   // Main process asks renderer to save a specific dirty file before closing
   useEffect(() => {
@@ -58,4 +67,6 @@ export function useAppLifecycle() {
     });
     return cleanup;
   }, []);
+
+  return { confirmCloseAndRespond };
 }

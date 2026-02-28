@@ -170,7 +170,7 @@ export function createMainWindow(): BrowserWindow {
         const timeout = setTimeout(() => {
           ipcMain.removeListener(channel, handler);
           resolve(null);
-        }, 2000);
+        }, 60_000);
 
         const handler = (event: Electron.IpcMainEvent, ...args: any[]) => {
           const match = predicate(event, ...args);
