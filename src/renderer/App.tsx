@@ -332,7 +332,9 @@ export default function App() {
 
   useTerminalNavigation(activeWorktree?.path ?? null, setActiveTab, setWorktreeTabMap);
   useMenuActions(openSettings, setActionPanelOpen);
-  const { confirmCloseAndRespond } = useAppLifecycle(panelState.setCloseDialogOpen);
+  const { confirmCloseAndRespond, cancelCloseAndRespond } = useAppLifecycle(
+    panelState.setCloseDialogOpen
+  );
   useClaudeProviderListener(
     setSettingsCategory,
     setScrollToProvider,
@@ -1223,6 +1225,9 @@ export default function App() {
           open={closeDialogOpen}
           onOpenChange={(open) => {
             setCloseDialogOpen(open);
+            if (!open) {
+              cancelCloseAndRespond();
+            }
           }}
         >
           <DialogPopup className="sm:max-w-sm" showCloseButton={false}>
@@ -1235,6 +1240,7 @@ export default function App() {
                 variant="outline"
                 onClick={() => {
                   setCloseDialogOpen(false);
+                  cancelCloseAndRespond();
                 }}
               >
                 {t('Cancel')}

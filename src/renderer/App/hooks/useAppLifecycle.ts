@@ -21,7 +21,16 @@ export function useAppLifecycle(setCloseDialogOpen: (open: boolean) => void) {
         ? Array.from(new Set(allTabs.filter((t) => t.isDirty).map((t) => t.path)))
         : [];
 
-    window.electronAPI.app.respondCloseRequest(requestId, { dirtyPaths });
+    window.electronAPI.app.respondCloseRequest(requestId, { confirmed: true, dirtyPaths });
+  }, []);
+
+  // Called by the close confirmation dialog when user cancels (or dismisses)
+  const cancelCloseAndRespond = useCallback(() => {
+    const requestId = pendingRequestIdRef.current;
+    if (!requestId) return;
+    pendingRequestIdRef.current = null;
+
+    window.electronAPI.app.respondCloseRequest(requestId, { confirmed: false, dirtyPaths: [] });
   }, []);
 
   // Listen for close request from main process
@@ -68,5 +77,5 @@ export function useAppLifecycle(setCloseDialogOpen: (open: boolean) => void) {
     return cleanup;
   }, []);
 
-  return { confirmCloseAndRespond };
+  return { confirmCloseAndRespond, cancelCloseAndRespond };
 }

@@ -406,7 +406,10 @@ const electronAPI = {
     confirmClose: (confirmed: boolean): void => {
       ipcRenderer.send(IPC_CHANNELS.APP_CLOSE_CONFIRM, confirmed);
     },
-    respondCloseRequest: (requestId: string, payload: { dirtyPaths: string[] }): void => {
+    respondCloseRequest: (
+      requestId: string,
+      payload: { confirmed: boolean; dirtyPaths: string[] }
+    ): void => {
       ipcRenderer.send(IPC_CHANNELS.APP_CLOSE_RESPONSE, requestId, payload);
     },
     onCloseSaveRequest: (
@@ -895,10 +898,8 @@ const electronAPI = {
     onStatusChanged: (
       callback: (status: { running: boolean; pid?: number; error?: string }) => void
     ): (() => void) => {
-      const handler = (
-        _: unknown,
-        status: { running: boolean; pid?: number; error?: string }
-      ) => callback(status);
+      const handler = (_: unknown, status: { running: boolean; pid?: number; error?: string }) =>
+        callback(status);
       ipcRenderer.on(IPC_CHANNELS.HAPI_RUNNER_STATUS_CHANGED, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.HAPI_RUNNER_STATUS_CHANGED, handler);
     },
