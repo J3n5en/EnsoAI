@@ -212,7 +212,7 @@ export function MarkdownPreview({ content, filePath, rootPath }: MarkdownPreview
   );
 
   return (
-    <div className="p-4 text-sm text-foreground">
+    <div className="p-4 text-sm text-foreground select-text">
       <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
         {content}
       </Markdown>
