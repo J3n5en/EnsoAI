@@ -615,6 +615,13 @@ app.on('will-quit', (event) => {
 
   const forceExitTimer = setTimeout(() => {
     console.error('[app] Cleanup timed out, forcing exit');
+    // Best-effort: kill native resources synchronously before forcing exit to
+    // avoid deadlocking during Node addon cleanup (e.g. node-pty on macOS).
+    try {
+      cleanupAllResourcesSync();
+    } catch (err) {
+      console.error('[app] Sync cleanup error:', err);
+    }
     app.exit(0);
   }, FORCE_EXIT_TIMEOUT_MS);
 

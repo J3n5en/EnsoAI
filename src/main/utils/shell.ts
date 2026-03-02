@@ -13,6 +13,95 @@ import { killProcessTree } from './processUtils';
 // Re-export for convenience
 export { killProcessTree } from './processUtils';
 
+type Disposable = { dispose(): void };
+
+interface LiveExecPty {
+  pty: pty.IPty;
+  exitPromise: Promise<void>;
+  exitDisposable: Disposable;
+}
+
+// Track execInPty PTY processes so we can reliably tear them down during app quit.
+// If any node-pty PTY is still alive when Node is cleaning up native addons, it can
+// deadlock (macOS "Application Not Responding" on quit).
+const liveExecPtys = new Set<LiveExecPty>();
+
+function trackExecInPty(ptyProcess: pty.IPty): LiveExecPty {
+  let resolveExit!: () => void;
+  const exitPromise = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
+
+  const record: LiveExecPty = {
+    pty: ptyProcess,
+    exitPromise,
+    exitDisposable: { dispose: () => {} },
+  };
+
+  record.exitDisposable = ptyProcess.onExit(() => {
+    liveExecPtys.delete(record);
+    try {
+      record.exitDisposable.dispose();
+    } catch {
+      // Ignore
+    }
+    resolveExit();
+  });
+
+  liveExecPtys.add(record);
+  return record;
+}
+
+export async function cleanupExecInPtys(timeout = 2000): Promise<void> {
+  const records = Array.from(liveExecPtys);
+  if (records.length === 0) return;
+
+  console.log(`[pty] Cleaning up ${records.length} execInPty sessions...`);
+  for (const rec of records) {
+    try {
+      killProcessTree(rec.pty);
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Wait for tracked PTYs to exit, but never hang shutdown.
+  await Promise.race([
+    Promise.all(records.map((r) => r.exitPromise)),
+    new Promise<void>((resolve) => setTimeout(resolve, timeout)),
+  ]);
+
+  // Avoid holding references if some sessions never reported exit.
+  for (const rec of records) {
+    try {
+      rec.exitDisposable.dispose();
+    } catch {
+      // Ignore
+    }
+    liveExecPtys.delete(rec);
+  }
+}
+
+export function cleanupExecInPtysSync(): void {
+  const records = Array.from(liveExecPtys);
+  if (records.length === 0) return;
+
+  console.log(`[pty] Sync cleaning up ${records.length} execInPty sessions...`);
+  for (const rec of records) {
+    try {
+      killProcessTree(rec.pty);
+    } catch {
+      // Ignore
+    }
+    try {
+      rec.exitDisposable.dispose();
+    } catch {
+      // Ignore
+    }
+    liveExecPtys.delete(rec);
+  }
+}
+
 /**
  * Strip ANSI escape codes from terminal output
  */
@@ -91,12 +180,24 @@ export async function execInPty(command: string, options: ExecInPtyOptions = {})
     let output = '';
     let hasExited = false;
     let ptyProcess: pty.IPty | null = null;
+    let dataDisposable: Disposable | null = null;
+    let exitDisposable: Disposable | null = null;
 
     const timeoutId = setTimeout(() => {
       if (!hasExited && ptyProcess) {
         hasExited = true;
         // Kill entire process tree to ensure child processes are also terminated
         killProcessTree(ptyProcess);
+        try {
+          dataDisposable?.dispose();
+        } catch {
+          // Ignore
+        }
+        try {
+          exitDisposable?.dispose();
+        } catch {
+          // Ignore
+        }
         const cleaned = stripAnsi(output).trim();
         if (killOnTimeout) {
           // When killOnTimeout is true, always resolve with collected output (even if empty)
@@ -121,14 +222,27 @@ export async function execInPty(command: string, options: ExecInPtyOptions = {})
         } as Record<string, string>,
       });
 
-      ptyProcess.onData((data) => {
+      trackExecInPty(ptyProcess);
+
+      dataDisposable = ptyProcess.onData((data) => {
         output += data;
       });
 
-      ptyProcess.onExit(({ exitCode }) => {
+      exitDisposable = ptyProcess.onExit(({ exitCode }) => {
         if (hasExited) return;
         hasExited = true;
         clearTimeout(timeoutId);
+
+        try {
+          dataDisposable?.dispose();
+        } catch {
+          // Ignore
+        }
+        try {
+          exitDisposable?.dispose();
+        } catch {
+          // Ignore
+        }
 
         const cleaned = stripAnsi(output).trim();
         if (exitCode === 0) {
@@ -140,6 +254,16 @@ export async function execInPty(command: string, options: ExecInPtyOptions = {})
     } catch (error) {
       hasExited = true;
       clearTimeout(timeoutId);
+      try {
+        dataDisposable?.dispose();
+      } catch {
+        // Ignore
+      }
+      try {
+        exitDisposable?.dispose();
+      } catch {
+        // Ignore
+      }
       reject(error);
     }
   });

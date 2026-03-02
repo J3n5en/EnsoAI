@@ -66,9 +66,21 @@ export function killProcessTree(
       } catch {
         // pgrep may not exist or fail, continue to kill main process
       }
-      // Kill the main process
+      // Kill the main process.
+      // Prefer target.kill() when available so libraries (e.g. node-pty) can run
+      // their own cleanup logic around termination.
       try {
-        process.kill(pid, signal);
+        if (typeof target !== 'number' && 'kill' in target) {
+          try {
+            target.kill(signal);
+          } catch {
+            // Fallback for ProcessLike implementations that don't support the signal
+            // or throw while process.kill would still work.
+            process.kill(pid, signal);
+          }
+        } else {
+          process.kill(pid, signal);
+        }
       } catch {
         // Ignore - process may have already exited
       }
@@ -128,9 +140,19 @@ export async function killProcessTreeAsync(
         }
       }
 
-      // Kill the main process
+      // Kill the main process.
+      // Prefer target.kill() when available so libraries (e.g. node-pty) can run
+      // their own cleanup logic around termination.
       try {
-        process.kill(pid, signal);
+        if (typeof target !== 'number' && 'kill' in target) {
+          try {
+            target.kill(signal);
+          } catch {
+            process.kill(pid, signal);
+          }
+        } else {
+          process.kill(pid, signal);
+        }
       } catch {
         // Ignore
       }

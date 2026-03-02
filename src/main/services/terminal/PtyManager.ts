@@ -166,6 +166,10 @@ interface PtySession {
   cwd: string;
   onData: (data: string) => void;
   onExit?: (exitCode: number, signal?: number) => void;
+  // node-pty returns disposables for event subscriptions; keep them so we can
+  // dispose during shutdown and avoid native threads hanging during Node cleanup.
+  dataDisposable: { dispose(): void };
+  exitDisposable?: { dispose(): void };
 }
 
 function findFallbackShell(): string {
@@ -407,21 +411,36 @@ export class PtyManager {
       }
     }
 
-    ptyProcess.onData((data) => {
+    const dataDisposable = ptyProcess.onData((data) => {
       onData(data);
     });
 
     // Store session first so onExit callback can access it
-    const session: PtySession = { pty: ptyProcess, cwd, onData, onExit };
+    const session: PtySession = { pty: ptyProcess, cwd, onData, onExit, dataDisposable };
     this.sessions.set(id, session);
 
-    ptyProcess.onExit(({ exitCode, signal }) => {
+    const exitDisposable = ptyProcess.onExit(({ exitCode, signal }) => {
       // Read onExit from session to allow it to be replaced during cleanup
       const currentSession = this.sessions.get(id);
       const exitHandler = currentSession?.onExit;
+
+      // Dispose subscriptions promptly to release native resources (node-pty TSFN)
+      try {
+        currentSession?.dataDisposable.dispose();
+      } catch {
+        // Ignore
+      }
+      try {
+        currentSession?.exitDisposable?.dispose();
+      } catch {
+        // Ignore
+      }
+
       this.sessions.delete(id);
+      this.activityCache.delete(id);
       exitHandler?.(exitCode, signal);
     });
+    session.exitDisposable = exitDisposable;
 
     return id;
   }
@@ -443,6 +462,17 @@ export class PtyManager {
   destroy(id: string): void {
     const session = this.sessions.get(id);
     if (session) {
+      // Stop delivering data/exit callbacks immediately.
+      try {
+        session.dataDisposable.dispose();
+      } catch {
+        // Ignore
+      }
+      try {
+        session.exitDisposable?.dispose();
+      } catch {
+        // Ignore
+      }
       killProcessTree(session.pty);
       this.sessions.delete(id);
       this.activityCache.delete(id);
@@ -461,14 +491,26 @@ export class PtyManager {
         return;
       }
 
-      const _pid = session.pty.pid;
       let resolved = false;
+
+      // Stop data callbacks during shutdown; we only care about exit.
+      try {
+        session.dataDisposable.dispose();
+      } catch {
+        // Ignore
+      }
 
       // Set up timeout
       const timer = setTimeout(() => {
         if (!resolved) {
           resolved = true;
+          try {
+            session.exitDisposable?.dispose();
+          } catch {
+            // Ignore
+          }
           this.sessions.delete(id);
+          this.activityCache.delete(id);
           resolve();
         }
       }, timeout);
@@ -478,7 +520,6 @@ export class PtyManager {
         if (!resolved) {
           resolved = true;
           clearTimeout(timer);
-          this.sessions.delete(id);
           // Don't call original onExit during cleanup to avoid issues
           resolve();
         }
