@@ -1,3 +1,4 @@
+import type { ClaudeSlashCompletionItem, ClaudeSlashCompletionsSnapshot } from '@shared/types';
 import type { FileSearchResult } from '@shared/types/search';
 import { Paperclip, Send, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -67,6 +68,40 @@ export function EnhancedInput({
   const [mentionIndex, setMentionIndex] = useState(0);
   const mentionListRef = useRef<HTMLDivElement>(null);
 
+  // Slash command completions (indexed in main process from ~/.claude/commands and ~/.claude/skills)
+  const [slashItems, setSlashItems] = useState<ClaudeSlashCompletionItem[]>([]);
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [slashResults, setSlashResults] = useState<ClaudeSlashCompletionItem[]>([]);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const slashListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const api = window.electronAPI?.claudeCompletions;
+    if (!api) return;
+
+    api
+      .get()
+      .then((data: ClaudeSlashCompletionsSnapshot) => {
+        if (!alive) return;
+        setSlashItems(data.items ?? []);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setSlashItems([]);
+      });
+
+    const cleanup = api.onUpdated((data: ClaudeSlashCompletionsSnapshot) => {
+      if (!alive) return;
+      setSlashItems(data.items ?? []);
+    });
+
+    return () => {
+      alive = false;
+      cleanup?.();
+    };
+  }, []);
+
   // Extract mention query from text before cursor
   const extractMentionQuery = useCallback((text: string, cursorPos: number): string | null => {
     for (let i = cursorPos - 1; i >= 0; i--) {
@@ -77,25 +112,49 @@ export function EnhancedInput({
     return null;
   }, []);
 
+  const findSlashTokenStart = useCallback((text: string, cursorPos: number): number | null => {
+    for (let i = cursorPos - 1; i >= 0; i--) {
+      const ch = text[i];
+      if (ch === '/') {
+        const prev = i > 0 ? text[i - 1] : ' ';
+        const isTokenStart = i === 0 || prev === ' ' || prev === '\n' || prev === '\r';
+        if (!isTokenStart) return null;
+        return i;
+      }
+      if (ch === ' ' || ch === '\n' || ch === '\r') return null;
+    }
+    return null;
+  }, []);
+
+  const extractSlashQuery = useCallback(
+    (text: string, cursorPos: number): string | null => {
+      const slashPos = findSlashTokenStart(text, cursorPos);
+      if (slashPos === null) return null;
+      return text.slice(slashPos + 1, cursorPos);
+    },
+    [findSlashTokenStart]
+  );
+
   // Detect @ mention on content change
   const handleContentChange = useCallback(
     (value: string) => {
       onContentChange(value);
-      // Skip mention detection during IME composition
-      if (composingRef.current || !cwd) {
-        if (!cwd) setMentionQuery(null);
-        return;
-      }
+      // Skip detection during IME composition
+      if (composingRef.current) return;
       const ta = textareaRef.current;
       if (!ta) return;
       // Use setTimeout to read selectionStart after React updates the value
       setTimeout(() => {
         const cursor = ta.selectionStart;
-        setMentionQuery(extractMentionQuery(value, cursor));
+        const nextMentionQuery = cwd ? extractMentionQuery(value, cursor) : null;
+        setMentionQuery(nextMentionQuery);
         setMentionIndex(0);
+        const nextSlashQuery = nextMentionQuery === null ? extractSlashQuery(value, cursor) : null;
+        setSlashQuery(nextSlashQuery);
+        setSlashIndex(0);
       }, 0);
     },
-    [cwd, onContentChange, extractMentionQuery]
+    [cwd, onContentChange, extractMentionQuery, extractSlashQuery]
   );
 
   // Debounced file search
@@ -112,6 +171,40 @@ export function EnhancedInput({
     }, 150);
     return () => clearTimeout(timer);
   }, [mentionQuery, cwd]);
+
+  useEffect(() => {
+    if (slashQuery === null) {
+      setSlashResults([]);
+      return;
+    }
+
+    const q = slashQuery.toLowerCase();
+    const results = slashItems
+      .filter(
+        (item) => item.label.toLowerCase().includes(`/${q}`) || item.label.toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        // Sort by kind first: commands before skills
+        const kindRank = (x: ClaudeSlashCompletionItem) => (x.kind === 'command' ? 0 : 1);
+        const diffKind = kindRank(a) - kindRank(b);
+        if (diffKind !== 0) return diffKind;
+
+        // Then prefer prefix matches
+        const aKey = a.label.startsWith('/')
+          ? a.label.slice(1).toLowerCase()
+          : a.label.toLowerCase();
+        const bKey = b.label.startsWith('/')
+          ? b.label.slice(1).toLowerCase()
+          : b.label.toLowerCase();
+        const aStarts = Number(aKey.startsWith(q));
+        const bStarts = Number(bKey.startsWith(q));
+        if (aStarts !== bStarts) return bStarts - aStarts;
+        return aKey.localeCompare(bKey);
+      })
+      .slice(0, 10);
+
+    setSlashResults(results);
+  }, [slashQuery, slashItems]);
 
   // Insert selected mention into textarea
   const insertMention = useCallback(
@@ -145,6 +238,38 @@ export function EnhancedInput({
     [content, onContentChange]
   );
 
+  const executeSlash = useCallback(
+    (item: ClaudeSlashCompletionItem) => {
+      const ta = textareaRef.current;
+      const cursor = ta ? ta.selectionStart : content.length;
+      const text = content;
+
+      const slashPos = findSlashTokenStart(text, cursor);
+      if (slashPos === null) return;
+      const replacement = item.label;
+      const newContent = (text.slice(0, slashPos) + replacement + text.slice(cursor)).trim();
+      if (!newContent) return;
+
+      // Close the popup first to avoid flicker while sending/closing.
+      setSlashQuery(null);
+      setSlashResults([]);
+
+      // Auto-learn: executing a slash item should be counted in the learned cache.
+      const token = newContent.match(/^\/\S+/)?.[0];
+      if (token && !token.slice(1).includes('/') && !token.includes('\\')) {
+        window.electronAPI?.claudeCompletions?.learn(token).catch(() => {
+          // Ignore learning failures; they should not block sending.
+        });
+      }
+
+      onSend(newContent, imagePaths);
+      if (!keepOpenAfterSend) {
+        onOpenChange(false);
+      }
+    },
+    [content, imagePaths, keepOpenAfterSend, onOpenChange, onSend, findSlashTokenStart]
+  );
+
   // Scroll highlighted mention into view
   useEffect(() => {
     const list = mentionListRef.current;
@@ -152,6 +277,13 @@ export function EnhancedInput({
     const item = list.children[mentionIndex] as HTMLElement | undefined;
     item?.scrollIntoView({ block: 'nearest' });
   }, [mentionIndex]);
+
+  useEffect(() => {
+    const list = slashListRef.current;
+    if (!list) return;
+    const item = list.children[slashIndex] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: 'nearest' });
+  }, [slashIndex]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -190,7 +322,7 @@ export function EnhancedInput({
     ta.style.height = `${Math.max(scrollH, minH)}px`;
   }, [content, manualMinH]);
 
-  // 当前会话激活且增强输入已打开时，启用焦点锁。
+  // When the session is active and the enhanced input is open, enable focus lock.
   useEffect(() => {
     if (!sessionId || !open || !isActive) return;
 
@@ -209,7 +341,7 @@ export function EnhancedInput({
   // Focus trap: only refocus textarea when focus leaves this panel.
   // This avoids breaking keyboard navigation to Upload/Close/Send buttons.
   const handleBlur = useCallback(() => {
-    // 延后两帧，给 overlay 挂载和浏览器焦点结算留出时间，避免在弹窗打开过程中抢回焦点。
+    // Wait two frames to allow overlays to mount and focus to settle, avoiding focus steal while opening popups.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!open || !sessionId || !isFocusLocked(sessionId)) return;
@@ -240,9 +372,21 @@ export function EnhancedInput({
   // Draft is now preserved in store - no reset on close
 
   const handleSend = useCallback(async () => {
-    if (!content.trim() && imagePaths.length === 0) return;
+    const trimmed = content.trim();
+    if (!trimmed && imagePaths.length === 0) return;
     try {
-      onSend(content.trim(), imagePaths);
+      // Auto-learn: if the message starts with `/xxx`, record it for future completion suggestions.
+      if (trimmed.startsWith('/')) {
+        const token = trimmed.match(/^\/\S+/)?.[0];
+        // Avoid learning path-like tokens such as `/usr/local/bin`.
+        if (token && !token.slice(1).includes('/') && !token.includes('\\')) {
+          window.electronAPI?.claudeCompletions?.learn(token).catch(() => {
+            // Ignore learning failures; they should not block sending.
+          });
+        }
+      }
+
+      onSend(trimmed, imagePaths);
       // Only close panel if not in 'always open' mode
       if (!keepOpenAfterSend) {
         onOpenChange(false);
@@ -287,14 +431,14 @@ export function EnhancedInput({
     (e: React.KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       // If mention popup is open, let handleKeyDown close it first
-      if (mentionQuery !== null) return;
+      if (mentionQuery !== null || slashQuery !== null) return;
 
       // Keep ESC behavior identical to clicking the close (X) button.
       e.preventDefault();
       e.stopPropagation();
       onOpenChange(false);
     },
-    [onOpenChange, mentionQuery]
+    [onOpenChange, mentionQuery, slashQuery]
   );
 
   const handleKeyDown = useCallback(
@@ -329,6 +473,29 @@ export function EnhancedInput({
           return;
         }
       }
+      // When slash popup is active, intercept navigation keys
+      if (slashQuery !== null && slashResults.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSlashIndex((prev) => (prev + 1) % slashResults.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSlashIndex((prev) => (prev - 1 + slashResults.length) % slashResults.length);
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          executeSlash(slashResults[slashIndex]);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setSlashQuery(null);
+          return;
+        }
+      }
       // Send with Enter (without Shift)
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -336,7 +503,17 @@ export function EnhancedInput({
       }
       // Esc close is handled at the panel level so it works for buttons too.
     },
-    [handleSend, mentionQuery, mentionResults, mentionIndex, insertMention]
+    [
+      handleSend,
+      mentionQuery,
+      mentionResults,
+      mentionIndex,
+      insertMention,
+      slashQuery,
+      slashResults,
+      slashIndex,
+      executeSlash,
+    ]
   );
 
   const saveImageToTemp = useCallback(
@@ -526,6 +703,63 @@ export function EnhancedInput({
                 Enter
               </kbd>
               Select
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] leading-none">
+                Esc
+              </kbd>
+              Close
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* / slash command popup — outside overflow-hidden container */}
+      {slashQuery !== null && slashResults.length > 0 && (
+        <div className="absolute bottom-full left-3 mb-1 w-80 rounded-lg border bg-popover shadow-lg z-10 overflow-hidden">
+          <div ref={slashListRef} className="max-h-[240px] overflow-y-auto py-1">
+            {slashResults.map((item, i) => (
+              <button
+                type="button"
+                key={`${item.kind}:${item.label}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  executeSlash(item);
+                }}
+                className={cn(
+                  'w-full text-left px-3 py-1.5 text-sm transition-colors',
+                  i === slashIndex
+                    ? 'bg-accent text-accent-foreground'
+                    : 'text-foreground hover:bg-accent/50'
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono">{item.label}</span>
+                  <span className="text-muted-foreground text-xs shrink-0">
+                    {item.kind === 'command' ? '命令' : '技能'}
+                  </span>
+                </div>
+                {item.description && (
+                  <div className="text-muted-foreground text-xs truncate mt-0.5">
+                    {item.description}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+          {/* Keyboard shortcut hints */}
+          <div className="flex items-center gap-3 border-t px-3 py-1.5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] leading-none">
+                ↑↓
+              </kbd>
+              Navigate
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] leading-none">
+                Enter
+              </kbd>
+              Execute
             </span>
             <span className="flex items-center gap-1">
               <kbd className="rounded border bg-muted px-1 py-0.5 font-mono text-[10px] leading-none">

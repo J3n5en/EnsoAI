@@ -207,6 +207,12 @@ export const IPC_CHANNELS = {
   CLAUDE_PROMPTS_WRITE: 'claude:prompts:write',
   CLAUDE_PROMPTS_BACKUP: 'claude:prompts:backup',
 
+  // Claude Slash Completions (/ commands + skills)
+  CLAUDE_COMPLETIONS_GET: 'claude:completions:get',
+  CLAUDE_COMPLETIONS_REFRESH: 'claude:completions:refresh',
+  CLAUDE_COMPLETIONS_LEARN: 'claude:completions:learn',
+  CLAUDE_COMPLETIONS_UPDATED: 'claude:completions:updated',
+
   // Claude Plugins Management
   CLAUDE_PLUGINS_LIST: 'claude:plugins:list',
   CLAUDE_PLUGINS_SET_ENABLED: 'claude:plugins:setEnabled',

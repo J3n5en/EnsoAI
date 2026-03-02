@@ -4,6 +4,10 @@ import { autoUpdaterService } from '../services/updater/AutoUpdater';
 import { webInspectorServer } from '../services/webInspector';
 import { registerAgentHandlers } from './agent';
 import { registerAppHandlers } from './app';
+import {
+  registerClaudeCompletionsHandlers,
+  stopClaudeCompletionsWatchers,
+} from './claudeCompletions';
 import { registerClaudeConfigHandlers } from './claudeConfig';
 import { registerClaudeProviderHandlers } from './claudeProvider';
 import { registerCliHandlers } from './cli';
@@ -16,12 +20,7 @@ import {
   stopAllFileWatchersSync,
 } from './files';
 import { clearAllGitServices, registerGitHandlers } from './git';
-import {
-  autoStartHapi,
-  cleanupHapi,
-  cleanupHapiSync,
-  registerHapiHandlers,
-} from './hapi';
+import { autoStartHapi, cleanupHapi, cleanupHapiSync, registerHapiHandlers } from './hapi';
 
 export { autoStartHapi };
 
@@ -60,6 +59,7 @@ export function registerIpcHandlers(): void {
   registerHapiHandlers();
   registerClaudeProviderHandlers();
   registerClaudeConfigHandlers();
+  registerClaudeCompletionsHandlers();
   registerWebInspectorHandlers();
   registerTempWorkspaceHandlers();
   registerTmuxHandlers();
@@ -106,6 +106,21 @@ export async function cleanupAllResources(): Promise<void> {
     ]);
   } catch (err) {
     console.warn('File watcher cleanup warning:', err);
+  }
+
+  // Stop Claude completions watcher (best-effort)
+  try {
+    await Promise.race([
+      stopClaudeCompletionsWatchers(),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Claude completions watcher cleanup timeout')),
+          CLEANUP_TIMEOUT
+        )
+      ),
+    ]);
+  } catch (err) {
+    console.warn('Claude completions watcher cleanup warning:', err);
   }
 
   // Clear service caches (sync, fast)

@@ -1,6 +1,6 @@
 /**
- * Claude Provider 配置
- * 用于管理多组 Claude API 配置
+ * Claude provider config
+ * Used to manage multiple Claude API configurations.
  */
 export interface ClaudeProvider {
   id: string;
@@ -12,12 +12,12 @@ export interface ClaudeProvider {
   defaultSonnetModel?: string;
   defaultOpusModel?: string;
   defaultHaikuModel?: string;
-  displayOrder?: number; // 显示顺序，用于拖拽排序
-  enabled?: boolean; // 是否启用，默认 true
+  displayOrder?: number; // Display order (used for drag sorting)
+  enabled?: boolean; // Whether enabled (default: true)
 }
 
 /**
- * Claude settings.json 中的 env 字段结构
+ * `env` field shape in Claude `settings.json`
  */
 export interface ClaudeSettingsEnv {
   ANTHROPIC_BASE_URL?: string;
@@ -30,7 +30,7 @@ export interface ClaudeSettingsEnv {
 }
 
 /**
- * Claude settings.json 结构（部分）
+ * Claude `settings.json` (partial)
  */
 export interface ClaudeSettings {
   env?: ClaudeSettingsEnv;
@@ -38,4 +38,29 @@ export interface ClaudeSettings {
   hooks?: Record<string, unknown>;
   permissions?: Record<string, unknown>;
   [key: string]: unknown;
+}
+
+/**
+ * Claude Code CLI `/` completion items
+ * - Supports built-in seeds and user-defined items (from `~/.claude/commands`, `~/.claude/skills`)
+ * - Only used for UI hints and insert text; it does not change CLI behavior
+ */
+export type ClaudeSlashCompletionKind = 'command' | 'skill';
+
+export interface ClaudeSlashCompletionItem {
+  kind: ClaudeSlashCompletionKind;
+  /** Display label (with `/` prefix), e.g. `/save-context` */
+  label: string;
+  /** Insert text, e.g. `/save-context ` */
+  insertText: string;
+  /** Optional description */
+  description?: string;
+  /** Data source */
+  source: 'builtin' | 'user' | 'learned';
+}
+
+export interface ClaudeSlashCompletionsSnapshot {
+  items: ClaudeSlashCompletionItem[];
+  /** Generated timestamp (ms) */
+  updatedAt: number;
 }
