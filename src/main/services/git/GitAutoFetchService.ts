@@ -1,11 +1,15 @@
+import { existsSync, type FSWatcher, watch } from 'node:fs';
+import { join } from 'node:path';
 import { IPC_CHANNELS } from '@shared/types';
 import type { BrowserWindow } from 'electron';
 import { GitService } from './GitService';
 
-// 默认间隔：3 分钟
+// Default interval: 3 minutes
 const FETCH_INTERVAL_MS = 3 * 60 * 1000;
-// 窗口焦点检查最小间隔：1 分钟
+// Minimum interval between focus-triggered fetches: 1 minute
 const MIN_FOCUS_INTERVAL_MS = 1 * 60 * 1000;
+// Debounce delay for HEAD file change notifications
+const HEAD_CHANGE_DEBOUNCE_MS = 300;
 
 class GitAutoFetchService {
   private mainWindow: BrowserWindow | null = null;
@@ -14,6 +18,8 @@ class GitAutoFetchService {
   private worktreePaths: Set<string> = new Set();
   private enabled = true;
   private onFocusHandler: (() => void) | null = null;
+  private headWatchers: Map<string, FSWatcher> = new Map();
+  private headDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
   init(window: BrowserWindow): void {
     // 防止重复初始化导致多个事件监听器
@@ -39,6 +45,9 @@ class GitAutoFetchService {
 
   cleanup(): void {
     this.stop();
+    for (const path of this.headWatchers.keys()) {
+      this.unwatchHead(path);
+    }
     if (this.mainWindow && this.onFocusHandler) {
       this.mainWindow.off('focus', this.onFocusHandler);
       this.onFocusHandler = null;
@@ -74,13 +83,18 @@ class GitAutoFetchService {
 
   registerWorktree(path: string): void {
     this.worktreePaths.add(path);
+    this.watchHead(path);
   }
 
   unregisterWorktree(path: string): void {
     this.worktreePaths.delete(path);
+    this.unwatchHead(path);
   }
 
   clearWorktrees(): void {
+    for (const path of this.worktreePaths) {
+      this.unwatchHead(path);
+    }
     this.worktreePaths.clear();
   }
 
@@ -123,6 +137,52 @@ class GitAutoFetchService {
       this.mainWindow.webContents.send(IPC_CHANNELS.GIT_AUTO_FETCH_COMPLETED, {
         timestamp: Date.now(),
       });
+    }
+  }
+
+  /**
+   * Watch the .git/HEAD file for a worktree so branch switches triggered
+   * externally (terminal, AI agents) are detected immediately.
+   */
+  private watchHead(worktreePath: string): void {
+    // Avoid duplicate watchers
+    if (this.headWatchers.has(worktreePath)) return;
+
+    const headPath = join(worktreePath, '.git', 'HEAD');
+    if (!existsSync(headPath)) return;
+
+    try {
+      const watcher = watch(headPath, () => {
+        // Debounce rapid successive events (e.g. git writes HEAD twice during checkout)
+        const existing = this.headDebounceTimers.get(worktreePath);
+        if (existing) clearTimeout(existing);
+
+        const timer = setTimeout(() => {
+          this.headDebounceTimers.delete(worktreePath);
+          this.notifyCompleted();
+        }, HEAD_CHANGE_DEBOUNCE_MS);
+
+        this.headDebounceTimers.set(worktreePath, timer);
+      });
+
+      watcher.on('error', () => this.unwatchHead(worktreePath));
+      this.headWatchers.set(worktreePath, watcher);
+    } catch {
+      // Silent fail — polling remains as fallback
+    }
+  }
+
+  private unwatchHead(worktreePath: string): void {
+    const timer = this.headDebounceTimers.get(worktreePath);
+    if (timer) {
+      clearTimeout(timer);
+      this.headDebounceTimers.delete(worktreePath);
+    }
+
+    const watcher = this.headWatchers.get(worktreePath);
+    if (watcher) {
+      watcher.close();
+      this.headWatchers.delete(worktreePath);
     }
   }
 }
