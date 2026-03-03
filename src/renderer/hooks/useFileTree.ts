@@ -163,37 +163,14 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
       const newExpanded = new Set(expandedPathsRef.current);
 
       if (newExpanded.has(path)) {
-        // 折叠时，同时折叠所有被压缩的子目录
-        const collectCompactedPaths = (nodes: FileTreeNode[], targetPath: string): string[] => {
-          for (const node of nodes) {
-            if (node.path === targetPath && node.isDirectory) {
-              // 始终包含目标路径，即使 children 不存在（加载失败的情况）
-              const paths = [targetPath];
-              if (node.children) {
-                let current = node;
-                while (
-                  current.children?.length === 1 &&
-                  current.children[0].isDirectory &&
-                  newExpanded.has(current.children[0].path)
-                ) {
-                  current = current.children[0];
-                  paths.push(current.path);
-                }
-              }
-              return paths;
-            }
-            if (node.children) {
-              const found = collectCompactedPaths(node.children, targetPath);
-              if (found.length > 0) return found;
-            }
+        // Collapse: remove this path and all its expanded descendants so that
+        // no orphaned child paths remain in localStorage. This prevents the
+        // inconsistency where a child appears "expanded" (arrow icon) but has
+        // no content after the parent is re-opened following a repo switch.
+        for (const p of [...newExpanded]) {
+          if (p === path || p.startsWith(`${path}/`)) {
+            newExpanded.delete(p);
           }
-          // 如果节点未在树中找到（边缘情况），仍删除目标路径
-          return [targetPath];
-        };
-
-        const pathsToCollapse = collectCompactedPaths(treeRef.current, path);
-        for (const p of pathsToCollapse) {
-          newExpanded.delete(p);
         }
         setAndPersistExpandedPaths(newExpanded);
       } else {
