@@ -45,7 +45,8 @@ class GitAutoFetchService {
 
   cleanup(): void {
     this.stop();
-    for (const path of this.headWatchers.keys()) {
+    // Collect keys first to avoid modifying Map during iteration
+    for (const path of [...this.headWatchers.keys()]) {
       this.unwatchHead(path);
     }
     if (this.mainWindow && this.onFocusHandler) {
