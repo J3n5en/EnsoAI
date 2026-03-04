@@ -427,9 +427,14 @@ export function SourceControlPanel({
           refetchStatus();
         }
 
+        // Normalize branch name for display (remotes/origin/dev → dev)
+        const displayBranch = branch.startsWith('remotes/')
+          ? branch.slice(branch.indexOf('/', 8) + 1)
+          : branch;
+
         toastManager.add({
           title: t('Branch switched'),
-          description: t('Branch switched to {{branch}}', { branch }),
+          description: t('Branch switched to {{branch}}', { branch: displayBranch }),
           type: 'success',
           timeout: 3000,
         });
