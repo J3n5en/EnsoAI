@@ -3,12 +3,11 @@ import {
   type SpawnOptionsWithoutStdio,
   spawn,
 } from 'node:child_process';
+import { WSL_UNC_PREFIXES } from '@shared/utils/path';
 import simpleGit, { type SimpleGit, type SimpleGitOptions } from 'simple-git';
 import { getProxyEnvVars } from '../proxy/ProxyConfig';
 import { getEnhancedPath } from '../terminal/PtyManager';
 import { withSafeDirectoryEnv } from './safeDirectory';
-
-const WSL_UNC_PREFIXES = ['//wsl.localhost/', '//wsl$/'];
 
 type WslPathInfo = {
   host: 'wsl.localhost' | 'wsl$';

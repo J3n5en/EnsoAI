@@ -4,6 +4,12 @@
  */
 
 /**
+ * WSL UNC path prefixes used across renderer/main.
+ * Keep this as the single source of truth for WSL UNC detection rules.
+ */
+export const WSL_UNC_PREFIXES = ['//wsl.localhost/', '//wsl$/'] as const;
+
+/**
  * Normalize path separators to forward slashes
  * @param p Original path
  * @returns Normalized path
@@ -44,7 +50,7 @@ export function trimTrailingPathSeparators(inputPath: string): string {
  */
 export function isWslUncPath(inputPath: string): boolean {
   const normalized = inputPath.replace(/\\/g, '/');
-  return /^\/\/(?:wsl\.localhost|wsl\$)\//i.test(normalized);
+  return WSL_UNC_PREFIXES.some((prefix) => normalized.toLowerCase().startsWith(prefix));
 }
 
 /**

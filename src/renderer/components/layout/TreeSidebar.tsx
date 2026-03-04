@@ -455,7 +455,7 @@ export function TreeSidebar({
       e.dataTransfer.setData('text/plain', `worktree:${index}`);
 
       const dragImage = document.createElement('div');
-      dragImage.textContent = worktree.branch || worktree.path.split(/[\\/]/).pop() || '';
+      dragImage.textContent = worktree.branch || getPathBasename(worktree.path);
       dragImage.style.cssText = `
         position: fixed;
         top: -9999px;

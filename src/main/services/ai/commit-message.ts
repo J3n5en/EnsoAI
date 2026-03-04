@@ -49,10 +49,13 @@ function runGit(args: string[], cwd: string): Promise<string> {
 
   return new Promise((resolve) => {
     let stdout = '';
+    let settled = false;
 
     const proc = spawnGit(cwd, args);
 
     const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       if (!proc.killed) {
         proc.kill('SIGKILL');
       }
@@ -68,16 +71,16 @@ function runGit(args: string[], cwd: string): Promise<string> {
 
     proc.on('error', () => {
       clearTimeout(timeout);
+      if (settled) return;
+      settled = true;
       resolve('');
     });
 
     proc.on('close', (code) => {
       clearTimeout(timeout);
-      if (code !== 0) {
-        resolve('');
-        return;
-      }
-      resolve(stdout.trim());
+      if (settled) return;
+      settled = true;
+      resolve(code === 0 ? stdout.trim() : '');
     });
   });
 }

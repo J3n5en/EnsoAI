@@ -1,5 +1,5 @@
 import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
-import { isWslUncPath } from '@shared/utils/path';
+import { getPathBasename, isWslUncPath } from '@shared/utils/path';
 import { LayoutGroup, motion } from 'framer-motion';
 import {
   Copy,
@@ -110,7 +110,7 @@ export function WorktreePanel({
 
       // Create styled drag image
       const dragImage = document.createElement('div');
-      dragImage.textContent = worktree.branch || worktree.path.split(/[\\/]/).pop() || '';
+      dragImage.textContent = worktree.branch || getPathBasename(worktree.path);
       dragImage.style.cssText = `
         position: fixed;
         top: -9999px;
