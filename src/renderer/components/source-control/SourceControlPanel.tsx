@@ -1,4 +1,4 @@
-import { joinPath } from '@shared/utils/path';
+import { getPathBasename, joinPath } from '@shared/utils/path';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, GitBranch, GripVertical, History, PanelLeft } from 'lucide-react';
@@ -145,7 +145,7 @@ export function SourceControlPanel({
     if (!rootPath) return null;
     return {
       type: 'main',
-      name: rootPath.split('/').pop() || t('Repository'),
+      name: getPathBasename(rootPath),
       path: rootPath,
       branch: currentBranch ?? null,
       tracking: tracking ?? null,
@@ -155,7 +155,7 @@ export function SourceControlPanel({
       branches,
       branchesLoading,
     };
-  }, [rootPath, currentBranch, tracking, ahead, behind, changes, branches, branchesLoading, t]);
+  }, [rootPath, currentBranch, tracking, ahead, behind, changes, branches, branchesLoading]);
 
   // Submodule repositories
   const submoduleRepos: Repository[] = useMemo(() => {

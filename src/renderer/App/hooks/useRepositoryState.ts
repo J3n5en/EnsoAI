@@ -1,3 +1,4 @@
+import { getPathBasename } from '@shared/utils/path';
 import { useCallback, useEffect, useState } from 'react';
 import { normalizeHexColor } from '@/lib/colors';
 import {
@@ -12,9 +13,9 @@ import {
   getStoredGroups,
   migrateRepositoryGroups,
   pathsEqual,
+  STORAGE_KEYS,
   saveActiveGroupId,
   saveGroups,
-  STORAGE_KEYS,
 } from '../storage';
 
 export function useRepositoryState() {
@@ -41,7 +42,7 @@ export function useRepositoryState() {
         parsed = parsed.map((repo) => {
           if (repo.name.includes('/') || repo.name.includes('\\')) {
             needsMigration = true;
-            const fixedName = repo.path.split(/[\\/]/).pop() || repo.path;
+            const fixedName = getPathBasename(repo.path);
             return { ...repo, name: fixedName };
           }
           if (repo.groupId && !validGroupIds.has(repo.groupId)) {
@@ -155,7 +156,7 @@ export function useRepositoryState() {
         return;
       }
 
-      const name = path.split(/[\\/]/).pop() || path;
+      const name = getPathBasename(path);
       const newRepo: Repository = {
         name,
         path,

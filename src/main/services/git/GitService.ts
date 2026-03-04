@@ -19,7 +19,14 @@ import type {
 } from '@shared/types';
 import type { SimpleGit, StatusResult } from 'simple-git';
 import { decodeBuffer, gitShow } from './encoding';
-import { createGitEnv, createSimpleGit, spawnGit, toGitPath } from './runtime';
+import {
+  createGitEnv,
+  createSimpleGit,
+  isWslGitRepository,
+  normalizeGitRelativePath,
+  spawnGit,
+  toGitPath,
+} from './runtime';
 
 const execAsync = promisify(exec);
 
@@ -54,6 +61,13 @@ export class GitService {
 
   private getGitEnv(workdir = this.workdir): NodeJS.ProcessEnv {
     return createGitEnv(workdir);
+  }
+
+  private normalizePathsForGit(paths: string[]): string[] {
+    if (!isWslGitRepository(this.workdir)) {
+      return paths;
+    }
+    return paths.map((filePath) => normalizeGitRelativePath(toGitPath(this.workdir, filePath)));
   }
 
   private async readPorcelainV2Limited(maxEntries: number): Promise<LimitedGitStatus> {
@@ -405,7 +419,8 @@ export class GitService {
 
   async commit(message: string, files?: string[]): Promise<string> {
     if (files && files.length > 0) {
-      await this.git.add(files);
+      const normalizedFiles = this.normalizePathsForGit(files);
+      await this.git.add(normalizedFiles);
     }
     const result = await this.git.commit(message);
     return result.commit;
@@ -674,11 +689,13 @@ export class GitService {
   }
 
   async stage(paths: string[]): Promise<void> {
-    await this.git.add(paths);
+    const normalizedPaths = this.normalizePathsForGit(paths);
+    await this.git.add(normalizedPaths);
   }
 
   async unstage(paths: string[]): Promise<void> {
-    await this.git.raw(['reset', 'HEAD', '--', ...paths]);
+    const normalizedPaths = this.normalizePathsForGit(paths);
+    await this.git.raw(['reset', 'HEAD', '--', ...normalizedPaths]);
   }
 
   async discard(filePaths: string | string[]): Promise<void> {

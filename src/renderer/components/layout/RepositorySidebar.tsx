@@ -1,3 +1,4 @@
+import { isWslUncPath, trimTrailingPathSeparators } from '@shared/utils/path';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
   ChevronRight,
@@ -309,6 +310,8 @@ export function RepositorySidebar({
 
   const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
     const isSelected = selectedRepo === repo.path;
+    const displayRepoPath = trimTrailingPathSeparators(repo.path);
+    const useLtrPathDisplay = isWslUncPath(repo.path);
     return (
       <RepoItemWithGlow key={repo.path} repoPath={repo.path}>
         {/* Drop indicator - top */}
@@ -376,12 +379,13 @@ export function RepositorySidebar({
           {/* Path */}
           <div
             className={cn(
-              'relative z-10 w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [direction:rtl] [text-align:left]',
-              isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
+              'relative z-10 w-full pl-6 text-xs overflow-hidden whitespace-nowrap text-ellipsis [text-align:left]',
+              isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground',
+              useLtrPathDisplay ? '[direction:ltr]' : '[direction:rtl]'
             )}
-            title={repo.path}
+            title={displayRepoPath}
           >
-            {repo.path}
+            {displayRepoPath}
           </div>
         </button>
         {/* Drop indicator - bottom */}

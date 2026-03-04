@@ -222,7 +222,7 @@ function getSessionDisplayName(session: {
   const title = session.terminalTitle;
   if (!title) return session.name;
   // Skip raw process paths (e.g. "Administrator: C:\...\pwsh.exe")
-  if (/[/\\](pwsh|powershell|cmd|bash|zsh|sh|fish|nu)(\.exe)?["']?\s*$/i.test(title)) {
+  if (/[/\\](pwsh|powershell|cmd|bash|zsh|sh|fish|nu|wsl)(\.exe)?["']?\s*$/i.test(title)) {
     return session.name;
   }
   if (/^(Administrator|root)\s*:/i.test(title)) {

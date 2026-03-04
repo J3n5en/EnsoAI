@@ -1,6 +1,7 @@
+import { getPathBasename } from '@shared/utils/path';
 import { useEffect } from 'react';
-import { pathsEqual } from '../storage';
 import type { Repository } from '../constants';
+import { pathsEqual } from '../storage';
 
 export function useOpenPathListener(
   repositories: Repository[],
@@ -14,7 +15,7 @@ export function useOpenPathListener(
       if (existingRepo) {
         setSelectedRepo(existingRepo.path);
       } else {
-        const name = path.split(/[\\/]/).pop() || path;
+        const name = getPathBasename(path);
         const newRepo: Repository = { name, path };
         const updated = [...repositories, newRepo];
         saveRepositories(updated);

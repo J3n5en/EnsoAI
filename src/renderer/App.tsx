@@ -4,6 +4,7 @@ import type {
   WorktreeMergeOptions,
   WorktreeMergeResult,
 } from '@shared/types';
+import { getPathBasename } from '@shared/utils/path';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -664,7 +665,7 @@ export default function App() {
       }
 
       // Extract repo name from path (handle both / and \ for Windows compatibility)
-      const name = selectedPath.split(/[\\/]/).pop() || selectedPath;
+      const name = getPathBasename(selectedPath);
 
       const newRepo: Repository = {
         name,
@@ -699,7 +700,7 @@ export default function App() {
       }
 
       // Extract repo name from path
-      const name = clonedPath.split(/[\\/]/).pop() || clonedPath;
+      const name = getPathBasename(clonedPath);
 
       const newRepo: Repository = {
         name,
@@ -1095,7 +1096,7 @@ export default function App() {
                       worktrees={sortedWorktrees}
                       activeWorktree={activeWorktree}
                       branches={branches}
-                      projectName={selectedRepo?.split(/[\\/]/).pop() || ''}
+                      projectName={selectedRepo ? getPathBasename(selectedRepo) : ''}
                       isLoading={worktreesLoading}
                       isCreating={createWorktreeMutation.isPending}
                       error={worktreeError}

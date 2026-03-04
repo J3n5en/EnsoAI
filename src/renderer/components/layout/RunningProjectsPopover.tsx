@@ -1,4 +1,5 @@
 import type { GitWorktree, TerminalSession } from '@shared/types';
+import { getPathBasename } from '@shared/utils/path';
 import {
   Activity,
   Bot,
@@ -123,8 +124,8 @@ export function RunningProjectsPopover({
       return {
         path,
         repoPath,
-        repoName: repoPath.split('/').pop() || repoPath,
-        branchName: worktree?.branch || path.split('/').pop() || path,
+        repoName: getPathBasename(repoPath),
+        branchName: worktree?.branch || getPathBasename(path),
         worktree,
         agents,
         terminals,

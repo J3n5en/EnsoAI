@@ -1,4 +1,5 @@
 import type { TempWorkspaceItem } from '@shared/types';
+import { isWslUncPath } from '@shared/utils/path';
 import { motion } from 'framer-motion';
 import {
   FolderGit2,
@@ -168,6 +169,7 @@ function TemporaryWorkspaceItemRow({
   const activities = useWorktreeActivityStore((s) => s.activities);
   const activity = activities[item.path] || { agentCount: 0, terminalCount: 0 };
   const hasActivity = activity.agentCount > 0 || activity.terminalCount > 0;
+  const useLtrPathDisplay = isWslUncPath(item.path);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -201,7 +203,10 @@ function TemporaryWorkspaceItemRow({
           </span>
         </div>
         <div
-          className="relative z-10 w-full overflow-hidden whitespace-nowrap text-ellipsis pl-6 text-xs text-muted-foreground [direction:rtl] [text-align:left] [unicode-bidi:plaintext]"
+          className={cn(
+            'relative z-10 w-full overflow-hidden whitespace-nowrap text-ellipsis pl-6 text-xs text-muted-foreground [text-align:left] [unicode-bidi:plaintext]',
+            useLtrPathDisplay ? '[direction:ltr]' : '[direction:rtl]'
+          )}
           title={item.path}
         >
           {item.path}

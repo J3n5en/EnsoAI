@@ -4,6 +4,7 @@ import type {
   TempWorkspaceItem,
   WorktreeCreateOptions,
 } from '@shared/types';
+import { getPathBasename, isWslUncPath, trimTrailingPathSeparators } from '@shared/utils/path';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
   ChevronRight,
@@ -657,6 +658,8 @@ export function TreeSidebar({
     const repoWts = worktreesMap[repo.path] || [];
     const repoMainWorktree = repoWts.find((wt) => wt.isMainWorktree);
     const workdir = repoMainWorktree?.path || repo.path;
+    const displayRepoPath = trimTrailingPathSeparators(repo.path);
+    const useLtrPathDisplay = isWslUncPath(repo.path);
 
     return (
       <div key={repo.path} className={cn('relative rounded-lg', isSelected && 'pb-2')}>
@@ -780,10 +783,13 @@ export function TreeSidebar({
 
             {/* Row 3: Path */}
             <span
-              className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left]"
-              title={repo.path}
+              className={cn(
+                'relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [text-align:left]',
+                useLtrPathDisplay ? '[direction:ltr]' : '[direction:rtl]'
+              )}
+              title={displayRepoPath}
             >
-              {repo.path}
+              {displayRepoPath}
             </span>
           </div>
           {/* Drop indicator - bottom */}
@@ -1002,7 +1008,12 @@ export function TreeSidebar({
                 )}
               </div>
               {tempBasePath && (
-                <span className="relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [direction:rtl] [text-align:left] [unicode-bidi:plaintext]">
+                <span
+                  className={cn(
+                    'relative z-10 pl-6 overflow-hidden whitespace-nowrap text-ellipsis text-xs text-muted-foreground [text-align:left] [unicode-bidi:plaintext]',
+                    isWslUncPath(tempBasePath) ? '[direction:ltr]' : '[direction:rtl]'
+                  )}
+                >
                   {tempBasePath}
                 </span>
               )}
@@ -1398,7 +1409,7 @@ export function TreeSidebar({
         open={createWorktreeDialogOpen}
         onOpenChange={setCreateWorktreeDialogOpen}
         branches={branches}
-        projectName={selectedRepo?.split('/').pop() || ''}
+        projectName={selectedRepo ? getPathBasename(selectedRepo) : ''}
         workdir={workdir}
         isLoading={isCreating}
         onSubmit={async (options) => {
