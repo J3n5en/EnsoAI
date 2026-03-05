@@ -438,45 +438,43 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       });
 
       // Add context menu action: Send to session
-      if (sessionId) {
-        editor.addAction({
-          id: 'send-to-session',
-          label: t('Send to session'),
-          contextMenuGroupId: 'navigation',
-          contextMenuOrder: 1.5,
-          precondition: 'editorHasSelection',
-          run: (ed) => {
-            const selection = ed.getSelection();
-            const currentPath = activeTabPathRef.current;
-            if (!selection || selection.isEmpty() || !currentPath) return;
+      editor.addAction({
+        id: 'send-to-session',
+        label: t('Send to session'),
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1.5,
+        precondition: 'editorHasSelection',
+        run: (ed) => {
+          const selection = ed.getSelection();
+          const currentPath = activeTabPathRef.current;
+          if (!selection || selection.isEmpty() || !currentPath) return;
 
-            const currentSessionId = sessionIdRef.current;
-            if (!currentSessionId) return;
+          const currentSessionId = sessionIdRef.current;
+          if (!currentSessionId) return;
 
-            // Convert to relative path
-            const displayPath = getRelativePath(currentPath);
+          // Convert to relative path
+          const displayPath = getRelativePath(currentPath);
 
-            // Format line reference
-            const lineRef = formatLineRef(selection);
+          // Format line reference
+          const lineRef = formatLineRef(selection);
 
-            // Send to terminal with @ prefix and line reference
-            const message = `@${displayPath}#${lineRef} `;
-            const terminalWrite = useTerminalWriteStore.getState().write;
-            const terminalFocus = useTerminalWriteStore.getState().focus;
+          // Send to terminal with @ prefix and line reference
+          const message = `@${displayPath}#${lineRef} `;
+          const terminalWrite = useTerminalWriteStore.getState().write;
+          const terminalFocus = useTerminalWriteStore.getState().focus;
 
-            terminalWrite(currentSessionId, message);
-            terminalFocus(currentSessionId);
+          terminalWrite(currentSessionId, message);
+          terminalFocus(currentSessionId);
 
-            // Show success toast
-            addToast({
-              type: 'success',
-              title: t('Sent to session'),
-              description: `@${displayPath}#${lineRef}`,
-              timeout: 2000,
-            });
-          },
-        });
-      }
+          // Show success toast
+          addToast({
+            type: 'success',
+            title: t('Sent to session'),
+            description: `@${displayPath}#${lineRef}`,
+            timeout: 2000,
+          });
+        },
+      });
 
       // Restore view state if available
       if (activeTab?.viewState) {
@@ -534,7 +532,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       onSave,
       onGlobalSearch,
       onClearPendingCursor,
-      sessionId,
       getRelativePath,
       formatLineRef,
       t,
