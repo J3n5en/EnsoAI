@@ -21,6 +21,9 @@ interface EditorTabsProps {
   onCloseLeft?: (path: string) => void | Promise<void>;
   onCloseRight?: (path: string) => void | Promise<void>;
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
+  onSendToSession?: (path: string) => void;
+  rootPath?: string;
+  sessionId?: string | null;
 }
 
 export function EditorTabs({
@@ -34,6 +37,9 @@ export function EditorTabs({
   onCloseLeft,
   onCloseRight,
   onTabReorder,
+  onSendToSession,
+  rootPath,
+  sessionId,
 }: EditorTabsProps) {
   const { t } = useI18n();
   const draggedIndexRef = useRef<number | null>(null);
@@ -234,6 +240,21 @@ export function EditorTabs({
           <MenuItem disabled={!menuTabPath} onClick={handleCopyPath}>
             {t('Copy Path')}
           </MenuItem>
+          {sessionId && onSendToSession && (
+            <>
+              <MenuSeparator />
+              <MenuItem
+                disabled={!menuTabPath}
+                onClick={() => {
+                  if (!menuTabPath) return;
+                  onSendToSession(menuTabPath);
+                  setMenuOpen(false);
+                }}
+              >
+                {t('Send to session')}
+              </MenuItem>
+            </>
+          )}
         </MenuPopup>
       </Menu>
     </div>

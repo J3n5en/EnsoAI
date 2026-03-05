@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { normalizePath } from '@/App/storage';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -26,6 +27,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { addToast } from '@/components/ui/toast';
 import { useDebouncedSave } from '@/hooks/useDebouncedSave';
 import { useI18n } from '@/i18n';
 import type { EditorTab, PendingCursor } from '@/stores/editor';
@@ -130,6 +132,28 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   } = useSettingsStore();
   const write = useTerminalWriteStore((state) => state.write);
   const focus = useTerminalWriteStore((state) => state.focus);
+
+  // Send file path to current session (for tab context menu)
+  const handleSendToSession = useCallback(
+    (path: string) => {
+      if (!sessionId) return;
+      // Convert to relative path if within rootPath, otherwise use full path
+      let displayPath = path;
+      const normalizedRoot = rootPath ? normalizePath(rootPath) : '';
+      if (normalizedRoot && path.startsWith(`${normalizedRoot}/`)) {
+        displayPath = path.slice(normalizedRoot.length + 1);
+      }
+      write(sessionId, `@${displayPath} `);
+      focus(sessionId);
+      addToast({
+        type: 'success',
+        title: t('Sent to session'),
+        description: `@${displayPath}`,
+        timeout: 2000,
+      });
+    },
+    [sessionId, rootPath, write, focus, t]
+  );
 
   // Markdown preview state
   const isMarkdown = isMarkdownFile(activeTabPath);
@@ -389,6 +413,49 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         onGlobalSearch?.(selectedText);
       });
 
+      // Add context menu action: Send to session
+      if (sessionId) {
+        editor.addAction({
+          id: 'send-to-session',
+          label: t('Send to session'),
+          contextMenuGroupId: 'navigation',
+          contextMenuOrder: 1.5,
+          precondition: 'editorHasSelection',
+          run: (ed) => {
+            const selection = ed.getSelection();
+            if (!selection || selection.isEmpty() || !activeTabPath) return;
+
+            // Convert to relative path
+            let displayPath = activeTabPath;
+            if (rootPath && activeTabPath.startsWith(rootPath)) {
+              displayPath = activeTabPath.slice(rootPath.length).replace(/^\//, '');
+            }
+
+            // Format line reference
+            const lineRef =
+              selection.startLineNumber === selection.endLineNumber
+                ? `L${selection.startLineNumber}`
+                : `L${selection.startLineNumber}-L${selection.endLineNumber}`;
+
+            // Send to terminal with @ prefix and line reference
+            const message = `@${displayPath}#${lineRef} `;
+            const terminalWrite = useTerminalWriteStore.getState().write;
+            const terminalFocus = useTerminalWriteStore.getState().focus;
+
+            terminalWrite(sessionId, message);
+            terminalFocus(sessionId);
+
+            // Show success toast
+            addToast({
+              type: 'success',
+              title: t('Sent to session'),
+              description: `@${displayPath}#${lineRef}`,
+              timeout: 2000,
+            });
+          },
+        });
+      }
+
       // Restore view state if available
       if (activeTab?.viewState) {
         editor.restoreViewState(activeTab.viewState as monaco.editor.ICodeEditorViewState);
@@ -439,7 +506,16 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         });
       });
     },
-    [activeTab?.viewState, activeTabPath, onSave, onGlobalSearch, onClearPendingCursor]
+    [
+      activeTab?.viewState,
+      activeTabPath,
+      onSave,
+      onGlobalSearch,
+      onClearPendingCursor,
+      sessionId,
+      rootPath,
+      t,
+    ]
   );
 
   // Selection comment widget and cursor tracking
@@ -913,6 +989,9 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             onCloseLeft={onCloseLeft}
             onCloseRight={onCloseRight}
             onTabReorder={onTabReorder}
+            onSendToSession={sessionId ? handleSendToSession : undefined}
+            rootPath={rootPath}
+            sessionId={sessionId}
           />
         </div>
         {/* Markdown Preview Toggle */}
