@@ -512,7 +512,43 @@ app.whenReady().then(async () => {
   // Default open or close DevTools by F12 in development
   // Also intercept Cmd+- for all windows to bypass Monaco Editor interception
   app.on('browser-window-created', (_, window) => {
+    // Snapshot listeners before the optimizer adds its own, only needed in production.
+    const listenersBefore = app.isPackaged
+      ? new Set(window.webContents.listeners('before-input-event'))
+      : undefined;
     optimizer.watchWindowShortcuts(window);
+
+    // In production, allow Ctrl+R to pass through to terminal for reverse
+    // history search. The optimizer blocks it by default via
+    // before-input-event preventDefault.
+    // Depends on @electron-toolkit/utils implementing shortcut blocking via
+    // before-input-event listeners (verified up to v4.x).
+    if (listenersBefore) {
+      const newListeners = window.webContents
+        .listeners('before-input-event')
+        .filter((l) => !listenersBefore.has(l));
+
+      if (newListeners.length === 0) {
+        console.warn(
+          '[ctrl-r-passthrough] watchWindowShortcuts did not add any before-input-event listener'
+        );
+      }
+
+      const isCtrlR = (input: Electron.Input): boolean =>
+        input.code === 'KeyR' && input.control && !input.shift && !input.meta && !input.alt;
+
+      // Remove and re-add each listener with a wrapper. This moves them to
+      // the end of the listener queue, which is acceptable since no other
+      // before-input-event listeners depend on their ordering.
+      for (const listener of newListeners) {
+        const handler = listener as (event: Electron.Event, input: Electron.Input) => void;
+        window.webContents.removeListener('before-input-event', handler);
+        window.webContents.on('before-input-event', (event, input) => {
+          if (isCtrlR(input)) return;
+          handler(event, input);
+        });
+      }
+    }
 
     // Intercept Cmd+- before renderer process to bypass Monaco Editor interception
     window.webContents.on('before-input-event', (event, input) => {

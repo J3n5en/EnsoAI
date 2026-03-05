@@ -92,8 +92,7 @@ export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {
           click: () => sendAction('open-action-panel'),
         },
         { type: 'separator' as const },
-        { role: 'reload' as const },
-        { role: 'forceReload' as const },
+        ...(app.isPackaged ? [] : [{ role: 'reload' as const }, { role: 'forceReload' as const }]),
         {
           label: t('Developer Tools'),
           accelerator: 'CommandOrControl+Option+I',
