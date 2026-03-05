@@ -990,7 +990,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             onCloseRight={onCloseRight}
             onTabReorder={onTabReorder}
             onSendToSession={sessionId ? handleSendToSession : undefined}
-            rootPath={rootPath}
             sessionId={sessionId}
           />
         </div>

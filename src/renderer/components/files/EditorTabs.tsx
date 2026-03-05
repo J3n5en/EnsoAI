@@ -22,7 +22,6 @@ interface EditorTabsProps {
   onCloseRight?: (path: string) => void | Promise<void>;
   onTabReorder?: (fromIndex: number, toIndex: number) => void;
   onSendToSession?: (path: string) => void;
-  rootPath?: string;
   sessionId?: string | null;
 }
 
@@ -38,7 +37,6 @@ export function EditorTabs({
   onCloseRight,
   onTabReorder,
   onSendToSession,
-  rootPath,
   sessionId,
 }: EditorTabsProps) {
   const { t } = useI18n();
