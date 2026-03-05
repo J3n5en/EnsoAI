@@ -204,6 +204,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const hasPendingAutoSaveRef = useRef(false);
   const blurDisposableRef = useRef<monaco.IDisposable | null>(null);
   const activeTabPathRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const pendingCursorRef = useRef<PendingCursor | null>(null);
   const editorForPathRef = useRef<string | null>(null);
   // Flag to suppress onChange events triggered by programmatic setValue calls (not user input)
@@ -258,6 +259,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   useEffect(() => {
     activeTabPathRef.current = activeTabPath;
   }, [activeTabPath]);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId ?? null;
+  }, [sessionId]);
 
   // Sync ref immediately during render (not in useEffect) to ensure
   // it's available when Monaco's onMount callback fires
@@ -444,6 +449,9 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             const selection = ed.getSelection();
             if (!selection || selection.isEmpty() || !activeTabPath) return;
 
+            const currentSessionId = sessionIdRef.current;
+            if (!currentSessionId) return;
+
             // Convert to relative path
             const displayPath = getRelativePath(activeTabPath);
 
@@ -455,8 +463,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             const terminalWrite = useTerminalWriteStore.getState().write;
             const terminalFocus = useTerminalWriteStore.getState().focus;
 
-            terminalWrite(sessionId, message);
-            terminalFocus(sessionId);
+            terminalWrite(currentSessionId, message);
+            terminalFocus(currentSessionId);
 
             // Show success toast
             addToast({
@@ -619,10 +627,13 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
           endLineNumber={selection.endLineNumber}
           filePath={displayPath}
           onSubmit={(text) => {
+            const currentSessionId = sessionIdRef.current;
+            if (!currentSessionId) return;
+
             // Verify terminal writer exists
-            const writer = useTerminalWriteStore.getState().writers.get(sessionId);
+            const writer = useTerminalWriteStore.getState().writers.get(currentSessionId);
             if (!writer) {
-              console.warn('Terminal writer not found for session:', sessionId);
+              console.warn('Terminal writer not found for session:', currentSessionId);
               return;
             }
 
@@ -631,7 +642,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             const message = text
               ? `${displayPath}#${lineRef}\nUser comment: "${text}"`
               : `${displayPath}#${lineRef}`;
-            write(sessionId, `${message}\r`);
+            write(currentSessionId, `${message}\r`);
 
             // Close comment widget
             if (commentWidgetInstance) {
@@ -641,7 +652,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
             // Focus terminal after short delay
             setTimeout(() => {
-              focus(sessionId);
+              focus(currentSessionId);
             }, 100);
           }}
           onCancel={() => {
