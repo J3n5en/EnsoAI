@@ -1810,7 +1810,7 @@ function FileTreeNodeComponent({
           {onSendToSession && (
             <MenuItem onClick={() => onSendToSession(actualNode.path)}>
               <MessageSquarePlus className="h-4 w-4" />
-              {t('Send to Session')}
+              {t('Send to session')}
             </MenuItem>
           )}
           <MenuSeparator />
