@@ -560,33 +560,25 @@ export class AppDetector {
   }
 
   private getEditorCliPath(bundleId: string, appPath: string): string | null {
-    // VSCode, Cursor, Codium
+    // VSCode, Cursor, Codium, Zed
     if (
       bundleId.includes('com.microsoft.VSCode') ||
       bundleId.includes('com.todesktop.230313mzl4w4u92') || // Cursor
-      bundleId.includes('com.visualstudio.code')
+      bundleId.includes('com.visualstudio.code') ||
+      bundleId.includes('dev.zed.Zed')
     ) {
-      // Try to find CLI in common locations
       const possiblePaths = [
         '/usr/local/bin/cursor',
         '/opt/homebrew/bin/cursor',
         '/usr/local/bin/code',
         '/opt/homebrew/bin/code',
+        '/usr/local/bin/zed',
+        '/opt/homebrew/bin/zed',
         `${appPath}/Contents/Resources/app/bin/cursor`,
         `${appPath}/Contents/Resources/app/bin/code`,
+        `${appPath}/Contents/Resources/zed`,
       ];
 
-      for (const path of possiblePaths) {
-        try {
-          execSync(`test -f "${path}"`);
-          return path;
-        } catch {}
-      }
-    }
-
-    // Zed
-    if (bundleId.includes('dev.zed.Zed')) {
-      const possiblePaths = ['/usr/local/bin/zed', '/opt/homebrew/bin/zed'];
       for (const path of possiblePaths) {
         try {
           execSync(`test -f "${path}"`);

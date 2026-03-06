@@ -12,7 +12,7 @@ import { useSettingsStore } from '@/stores/settings';
 import '@xterm/xterm/css/xterm.css';
 
 // Regex to match file paths with optional line:column
-// Matches: path/to/file.ts:42 or path/to/file.ts:42:10 or ./file.ts:10 or @src/file.ts:42
+// Matches: useXterm.ts:42 or path/to/file.ts:42 or ./file.ts:10 or @src/file.ts:42
 // Note: longer extensions must come before shorter ones (tsx before ts, jsx before js, json before js, etc.)
 const FILE_PATH_REGEX =
   /(?:^|[\s'"({[@])((?:\.{1,2}\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:tsx|ts|jsx|json|mjs|cjs|js|scss|css|less|html|vue|svelte|md|yaml|yml|toml|py|go|rs|java|cpp|hpp|c|h|rb|php|bash|zsh|sh))(?::(\d+))?(?::(\d+))?/g;
@@ -389,12 +389,30 @@ export function useXterm({
             activate: async () => {
               // Resolve relative path to absolute
               const basePath = cwdRef.current || '';
-              const absolutePath = filePath.startsWith('/')
+              let absolutePath = filePath.startsWith('/')
                 ? filePath
                 : `${basePath}/${filePath}`.replace(/\/\.\//g, '/');
 
-              // Check if file exists before navigating
-              const exists = await window.electronAPI.file.exists(absolutePath);
+              // Check if file exists
+              let exists = await window.electronAPI.file.exists(absolutePath);
+
+              // If not found and it's a bare filename, search in workspace
+              if (!exists && !filePath.includes('/')) {
+                try {
+                  const results = await window.electronAPI.search.files({
+                    query: filePath,
+                    rootPath: basePath,
+                    maxResults: 1,
+                  });
+                  if (results?.length > 0) {
+                    absolutePath = results[0].path;
+                    exists = true;
+                  }
+                } catch (error) {
+                  console.warn(`Failed to search for file: ${filePath}`, error);
+                }
+              }
+
               if (!exists) return;
 
               // Check if it's a Markdown file
