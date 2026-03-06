@@ -94,7 +94,5 @@ export function useCommitDiff(
       );
     },
     enabled: !!workdir && !!hash && !!filePath,
-    staleTime: 0, // Always consider data stale
-    refetchOnMount: 'always', // Always refetch when component mounts
   });
 }
