@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
@@ -81,22 +82,21 @@ export function BranchSwitcher({
     >
       <SelectTrigger
         className={cn(
-          'border border-transparent bg-transparent shadow-none ring-0 ring-transparent before:shadow-none before:!shadow-none transition-colors dark:bg-transparent shrink-0 rounded-md',
+          'min-w-0 border border-transparent bg-transparent shadow-none ring-0 ring-transparent before:shadow-none before:!shadow-none transition-colors dark:bg-transparent shrink-0 rounded-md',
           'focus-visible:ring-0 focus-visible:border-input hover:ring-0 hover:shadow-none hover:before:shadow-none hover:border-input',
           size === 'xs' &&
-            'h-auto min-h-0 min-w-0 w-auto max-w-20 gap-0 px-2 py-1 text-xs text-muted-foreground hover:text-foreground sm:!min-h-0 sm:!h-auto',
-          size === 'sm' && 'h-6 min-h-6 min-w-0 w-auto max-w-32 gap-1 px-2 text-xs',
-          size === 'md' && 'h-7 min-h-7 min-w-0 w-auto max-w-40 gap-1.5 px-2 text-sm'
+            'h-auto min-h-0 w-auto max-w-20 gap-0 px-2 py-1 text-xs text-muted-foreground hover:text-foreground sm:!min-h-0 sm:!h-auto',
+          size === 'sm' && 'h-6 min-h-6 w-auto max-w-32 gap-1 px-2 text-xs',
+          size === 'md' && 'h-7 min-h-7 w-auto max-w-40 gap-1.5 px-2 text-sm'
         )}
         disabled={isDisabled}
-        title={currentBranch || undefined}
       >
         {isCheckingOut ? (
           <Loader2 className="h-3 w-3 animate-spin shrink-0" />
         ) : size !== 'xs' ? (
           <GitBranchIcon className={cn('shrink-0', size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
         ) : null}
-        <SelectValue className={cn('min-w-0 truncate', size === 'xs' && 'text-xs')}>
+        <SelectValue className={cn(size === 'xs' && 'text-xs')}>
           {currentBranch || t('Select branch')}
         </SelectValue>
       </SelectTrigger>
@@ -104,13 +104,14 @@ export function BranchSwitcher({
       <SelectPopup className="w-56" alignItemWithTrigger={false}>
         {/* Search input */}
         <div className="p-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative flex items-center py-2">
+            <Search className="absolute left-2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
               placeholder={t('Search branches...')}
-              className="h-7 pl-7 text-xs"
+              className="pl-4 text-xs"
             />
           </div>
         </div>
@@ -127,14 +128,19 @@ export function BranchSwitcher({
           <SelectGroup>
             <SelectGroupLabel>{t('Local branches')}</SelectGroupLabel>
             {localBranches.map((branch) => (
-              <SelectItem key={branch.name} value={branch.name}>
-                <div className="flex items-center gap-2 min-w-0">
-                  {branch.current && (
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
-                  )}
-                  <span className="min-w-0 truncate">{branch.name}</span>
-                </div>
-              </SelectItem>
+              <Tooltip key={branch.name}>
+                <TooltipTrigger render={<span />}>
+                  <SelectItem value={branch.name}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {branch.current && (
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
+                      )}
+                      <span className="min-w-0 truncate">{branch.name}</span>
+                    </div>
+                  </SelectItem>
+                </TooltipTrigger>
+                <TooltipPopup side="right">{branch.name}</TooltipPopup>
+              </Tooltip>
             ))}
           </SelectGroup>
         )}
@@ -144,9 +150,16 @@ export function BranchSwitcher({
           <SelectGroup>
             <SelectGroupLabel>{t('Remote branches')}</SelectGroupLabel>
             {remoteBranches.map((branch) => (
-              <SelectItem key={branch.name} value={branch.name}>
-                <span className="min-w-0 truncate">{branch.name.replace('remotes/', '')}</span>
-              </SelectItem>
+              <Tooltip key={branch.name}>
+                <TooltipTrigger render={<span />}>
+                  <SelectItem value={branch.name}>
+                    <span className="block min-w-0 truncate">
+                      {branch.name.replace('remotes/', '')}
+                    </span>
+                  </SelectItem>
+                </TooltipTrigger>
+                <TooltipPopup side="right">{branch.name.replace('remotes/', '')}</TooltipPopup>
+              </Tooltip>
             ))}
           </SelectGroup>
         )}
