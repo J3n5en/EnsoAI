@@ -332,31 +332,40 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     const reloadTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     const scheduleReload = (tab: EditorTab) => {
-      const existing = reloadTimers.get(tab.path);
+      // Capture only the stable path to avoid stale closure over the full tab object.
+      const tabPath = tab.path;
+      const existing = reloadTimers.get(tabPath);
       if (existing) clearTimeout(existing);
       reloadTimers.set(
-        tab.path,
+        tabPath,
         setTimeout(async () => {
-          reloadTimers.delete(tab.path);
+          reloadTimers.delete(tabPath);
           try {
-            const { content: latestContent, isBinary } = await window.electronAPI.file.read(
-              tab.path
-            );
+            const { content: latestContent, isBinary } =
+              await window.electronAPI.file.read(tabPath);
             if (isBinary) return;
 
-            if (tab.isDirty) {
+            // Re-fetch latest tab state from store to avoid using stale closure values
+            // (e.g. isDirty or activeTabPath may have changed during the 100ms debounce window).
+            const { tabs: currentTabs, activeTabPath: currentActiveTabPath } =
+              useEditorStore.getState();
+            const currentTab = currentTabs.find((t) => t.path === tabPath);
+            // Tab was closed during the debounce window — nothing to do.
+            if (!currentTab) return;
+
+            if (currentTab.isDirty) {
               // User has unsaved edits: avoid overwriting — mark as conflict for user to decide.
               // Compare against externalContent (not user's content) so consecutive external
               // modifications always update externalContent to the latest value.
-              if (latestContent !== tab.externalContent) {
-                markExternalChange(tab.path, latestContent);
+              if (latestContent !== currentTab.externalContent) {
+                markExternalChange(tabPath, latestContent);
               }
             } else {
               // No unsaved edits: silent auto-reload
-              onContentChange(tab.path, latestContent, false);
+              onContentChange(tabPath, latestContent, false);
 
               // Sync Monaco editor content if this is the active tab
-              if (tab.path === activeTabPath && editorRef.current) {
+              if (tabPath === currentActiveTabPath && editorRef.current) {
                 const editor = editorRef.current;
                 if (editor.getValue() !== latestContent) {
                   setEditorValueProgrammatically(editor, latestContent);
@@ -364,7 +373,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
               }
             }
           } catch (error) {
-            console.warn(`Failed to reload file ${tab.path}:`, error);
+            console.warn(`Failed to reload file ${tabPath}:`, error);
           }
         }, 100)
       );
@@ -394,7 +403,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       for (const timer of reloadTimers.values()) clearTimeout(timer);
       reloadTimers.clear();
     };
-  }, [tabs, activeTabPath, onContentChange, markExternalChange, setEditorValueProgrammatically]);
+  }, [tabs, onContentChange, markExternalChange, setEditorValueProgrammatically]);
 
   // Define custom theme on mount and when terminal theme / background image settings change
   useEffect(() => {
