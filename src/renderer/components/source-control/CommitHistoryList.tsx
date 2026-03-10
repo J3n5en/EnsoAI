@@ -124,11 +124,12 @@ export function CommitHistoryList({
                     {commit.refs && (
                       <div
                         className="mt-1 flex gap-1 overflow-hidden"
+                        title={commit.refs}
                         style={{
                           maskImage:
-                            'linear-gradient(to right, black calc(100% - 16px), transparent)',
+                            'linear-gradient(to right, black calc(100% - 24px), transparent)',
                           WebkitMaskImage:
-                            'linear-gradient(to right, black calc(100% - 16px), transparent)',
+                            'linear-gradient(to right, black calc(100% - 24px), transparent)',
                         }}
                       >
                         {commit.refs.split(', ').map((ref) => (

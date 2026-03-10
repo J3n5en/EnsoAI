@@ -907,9 +907,9 @@ export function SourceControlPanel({
                 onCheckout={(branch) =>
                   selectedRepoPath && handleBranchCheckout(selectedRepoPath, branch)
                 }
-                onCreateBranch={(name) =>
-                  selectedRepoPath && handleCreateBranch(selectedRepoPath, name)
-                }
+                onCreateBranch={async (name) => {
+                  if (selectedRepoPath) await handleCreateBranch(selectedRepoPath, name);
+                }}
                 isLoading={currentBranchesLoading}
                 isCheckingOut={checkoutMutation.isPending || checkoutSubmoduleMutation.isPending}
                 size="xs"
@@ -919,7 +919,9 @@ export function SourceControlPanel({
             <div
               className={cn(
                 'overflow-hidden transition-opacity duration-150',
-                changesExpanded ? 'flex flex-col flex-1 min-h-0 opacity-100' : 'h-0 opacity-0'
+                changesExpanded
+                  ? 'flex flex-col flex-1 min-h-0 opacity-100'
+                  : 'h-0 opacity-0 pointer-events-none'
               )}
             >
               {/* Warning for skipped directories - only for main repo */}
@@ -1005,7 +1007,7 @@ export function SourceControlPanel({
             <div
               className={cn(
                 'relative overflow-hidden transition-opacity duration-150',
-                historyExpanded ? 'flex-1 min-h-0 opacity-100' : 'h-0 opacity-0'
+                historyExpanded ? 'flex-1 min-h-0 opacity-100' : 'h-0 opacity-0 pointer-events-none'
               )}
             >
               <div className="absolute inset-0">
