@@ -204,6 +204,9 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const hasPendingAutoSaveRef = useRef(false);
   const blurDisposableRef = useRef<monaco.IDisposable | null>(null);
   const activeTabPathRef = useRef<string | null>(null);
+  // Keep a ref to the latest tabs so the file-change listener never goes stale
+  // without needing to re-register on every tab state update.
+  const tabsRef = useRef<EditorTab[]>(tabs);
   const sessionIdRef = useRef<string | null>(null);
   const pendingCursorRef = useRef<PendingCursor | null>(null);
   const editorForPathRef = useRef<string | null>(null);
@@ -259,6 +262,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   useEffect(() => {
     activeTabPathRef.current = activeTabPath;
   }, [activeTabPath]);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
 
   useEffect(() => {
     sessionIdRef.current = sessionId ?? null;
@@ -387,12 +394,12 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
       // Bulk mode: agent modified too many files at once, reload all open tabs
       if (event.path.endsWith('/.enso-bulk')) {
-        for (const tab of tabs) scheduleReload(tab);
+        for (const tab of tabsRef.current) scheduleReload(tab);
         return;
       }
 
       // Check if the changed file is open in any tab
-      const changedTab = tabs.find((tab) => tab.path === event.path);
+      const changedTab = tabsRef.current.find((tab) => tab.path === event.path);
       if (!changedTab) return;
       scheduleReload(changedTab);
     });
@@ -403,7 +410,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       for (const timer of reloadTimers.values()) clearTimeout(timer);
       reloadTimers.clear();
     };
-  }, [tabs, onContentChange, markExternalChange, setEditorValueProgrammatically]);
+  }, [onContentChange, markExternalChange, setEditorValueProgrammatically]);
 
   // Define custom theme on mount and when terminal theme / background image settings change
   useEffect(() => {
