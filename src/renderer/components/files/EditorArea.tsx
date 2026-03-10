@@ -327,33 +327,47 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
   // Listen for external file changes and update open tabs
   useEffect(() => {
-    const reloadTab = async (tab: EditorTab) => {
-      try {
-        const { content: latestContent, isBinary } = await window.electronAPI.file.read(tab.path);
-        if (isBinary) return;
+    // Debounce timers keyed by file path to prevent concurrent reloads of the same file.
+    // Needed because Claude CLI atomic writes (tmp + rename) can fire multiple rapid events.
+    const reloadTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-        if (tab.isDirty) {
-          // User has unsaved edits: avoid overwriting — mark as conflict for user to decide.
-          // Compare against externalContent (not user's content) so consecutive external
-          // modifications always update externalContent to the latest value.
-          if (latestContent !== tab.externalContent) {
-            markExternalChange(tab.path, latestContent);
-          }
-        } else {
-          // No unsaved edits: silent auto-reload
-          onContentChange(tab.path, latestContent, false);
+    const scheduleReload = (tab: EditorTab) => {
+      const existing = reloadTimers.get(tab.path);
+      if (existing) clearTimeout(existing);
+      reloadTimers.set(
+        tab.path,
+        setTimeout(async () => {
+          reloadTimers.delete(tab.path);
+          try {
+            const { content: latestContent, isBinary } = await window.electronAPI.file.read(
+              tab.path
+            );
+            if (isBinary) return;
 
-          // Sync Monaco editor content if this is the active tab
-          if (tab.path === activeTabPath && editorRef.current) {
-            const editor = editorRef.current;
-            if (editor.getValue() !== latestContent) {
-              setEditorValueProgrammatically(editor, latestContent);
+            if (tab.isDirty) {
+              // User has unsaved edits: avoid overwriting — mark as conflict for user to decide.
+              // Compare against externalContent (not user's content) so consecutive external
+              // modifications always update externalContent to the latest value.
+              if (latestContent !== tab.externalContent) {
+                markExternalChange(tab.path, latestContent);
+              }
+            } else {
+              // No unsaved edits: silent auto-reload
+              onContentChange(tab.path, latestContent, false);
+
+              // Sync Monaco editor content if this is the active tab
+              if (tab.path === activeTabPath && editorRef.current) {
+                const editor = editorRef.current;
+                if (editor.getValue() !== latestContent) {
+                  setEditorValueProgrammatically(editor, latestContent);
+                }
+              }
             }
+          } catch (error) {
+            console.warn(`Failed to reload file ${tab.path}:`, error);
           }
-        }
-      } catch (error) {
-        console.warn(`Failed to reload file ${tab.path}:`, error);
-      }
+        }, 100)
+      );
     };
 
     const unsubscribe = window.electronAPI.file.onChange(async (event) => {
@@ -364,18 +378,21 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
       // Bulk mode: agent modified too many files at once, reload all open tabs
       if (event.path.endsWith('/.enso-bulk')) {
-        await Promise.all(tabs.map((tab) => reloadTab(tab)));
+        for (const tab of tabs) scheduleReload(tab);
         return;
       }
 
       // Check if the changed file is open in any tab
       const changedTab = tabs.find((tab) => tab.path === event.path);
       if (!changedTab) return;
-      await reloadTab(changedTab);
+      scheduleReload(changedTab);
     });
 
     return () => {
       unsubscribe();
+      // Clear any pending debounce timers on cleanup
+      for (const timer of reloadTimers.values()) clearTimeout(timer);
+      reloadTimers.clear();
     };
   }, [tabs, activeTabPath, onContentChange, markExternalChange, setEditorValueProgrammatically]);
 
