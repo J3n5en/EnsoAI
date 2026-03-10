@@ -369,6 +369,16 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     };
   }, [tabs, activeTabPath, onContentChange, markExternalChange, setEditorValueProgrammatically]);
 
+  // Sync Monaco editor when store content is updated by background refresh (tab switch reload)
+  useEffect(() => {
+    if (!activeTab || !editorRef.current || activeTab.isDirty) return;
+    const editor = editorRef.current;
+    const currentValue = editor.getValue();
+    if (currentValue !== activeTab.content) {
+      setEditorValueProgrammatically(editor, activeTab.content);
+    }
+  }, [activeTab, setEditorValueProgrammatically]);
+
   // Define custom theme on mount and when terminal theme / background image settings change
   useEffect(() => {
     defineMonacoTheme(terminalTheme, {

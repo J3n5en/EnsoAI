@@ -24,6 +24,7 @@ declare global {
 
 import { useEditor } from '@/hooks/useEditor';
 import { useFileTree } from '@/hooks/useFileTree';
+import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { EditorArea, type EditorAreaRef } from './EditorArea';
@@ -90,6 +91,7 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
     reorderTabs,
     setPendingCursor,
     navigateToFile,
+    refreshFileContent,
   } = useEditor();
 
   const [newItemType, setNewItemType] = useState<NewItemType>(null);
@@ -170,6 +172,17 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
     // Expand parent directories to reveal the file
     revealFile(activeTab.path);
   }, [activeTab?.path, rootPath, revealFile]);
+
+  // Refresh active tab content when window regains focus (like mini-program onShow)
+  const { isWindowFocused } = useWindowFocus();
+  const prevFocusedRef = useRef(isWindowFocused);
+  useEffect(() => {
+    const wasFocused = prevFocusedRef.current;
+    prevFocusedRef.current = isWindowFocused;
+    if (isWindowFocused && !wasFocused && activeTab?.path) {
+      refreshFileContent(activeTab.path);
+    }
+  }, [isWindowFocused, activeTab?.path, refreshFileContent]);
 
   // Handle file deleted (from undo operation)
   const handleFileDeleted = useCallback(
@@ -407,8 +420,10 @@ export function FilePanel({ rootPath, isActive = false, sessionId }: FilePanelPr
   const handleTabClick = useCallback(
     (path: string) => {
       setActiveFile(path);
+      // Background refresh to pick up external modifications
+      refreshFileContent(path);
     },
-    [setActiveFile]
+    [setActiveFile, refreshFileContent]
   );
 
   // Handle tab close

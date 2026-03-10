@@ -20,6 +20,7 @@ declare global {
 }
 
 import { useEditor } from '@/hooks/useEditor';
+import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
 import { EditorArea, type EditorAreaRef } from './EditorArea';
 import type { UnsavedChangesChoice } from './UnsavedChangesDialog';
@@ -54,9 +55,21 @@ export function CurrentFilePanel({ rootPath, isActive = false, sessionId }: Curr
     reorderTabs,
     setPendingCursor,
     navigateToFile,
+    refreshFileContent,
   } = useEditor();
 
   const editorAreaRef = useRef<EditorAreaRef>(null);
+
+  // Refresh active tab content when window regains focus (like mini-program onShow)
+  const { isWindowFocused } = useWindowFocus();
+  const prevFocusedRef = useRef(isWindowFocused);
+  useEffect(() => {
+    const wasFocused = prevFocusedRef.current;
+    prevFocusedRef.current = isWindowFocused;
+    if (isWindowFocused && !wasFocused && activeTab?.path) {
+      refreshFileContent(activeTab.path);
+    }
+  }, [isWindowFocused, activeTab?.path, refreshFileContent]);
 
   // Global search state
   const [searchOpen, setSearchOpen] = useState(false);
@@ -192,8 +205,10 @@ export function CurrentFilePanel({ rootPath, isActive = false, sessionId }: Curr
   const handleTabClick = useCallback(
     (path: string) => {
       setActiveFile(path);
+      // Background refresh to pick up external modifications
+      refreshFileContent(path);
     },
-    [setActiveFile]
+    [setActiveFile, refreshFileContent]
   );
 
   // Handle tab close

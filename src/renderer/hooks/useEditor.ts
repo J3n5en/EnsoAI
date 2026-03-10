@@ -24,6 +24,28 @@ export function useEditor() {
 
   const queryClient = useQueryClient();
 
+  // Background refresh: re-read file from disk and silently update store (only if tab is not dirty)
+  const refreshFileContent = useCallback(
+    async (path: string) => {
+      const currentTabs = useEditorStore.getState().tabs;
+      const tab = currentTabs.find((t) => t.path === path);
+      if (!tab || tab.isDirty) return;
+
+      try {
+        const { content, isBinary } = await window.electronAPI.file.read(path);
+        if (isBinary) return;
+        // Re-check after async IO to avoid race conditions
+        const latestTab = useEditorStore.getState().tabs.find((t) => t.path === path);
+        if (latestTab && !latestTab.isDirty && latestTab.content !== content) {
+          updateFileContent(path, content, false);
+        }
+      } catch {
+        // File may have been deleted or become inaccessible
+      }
+    },
+    [updateFileContent]
+  );
+
   const loadFile = useMutation({
     mutationFn: async (path: string) => {
       const { content, encoding, isBinary } = await window.electronAPI.file.read(path);
@@ -65,6 +87,8 @@ export function useEditor() {
 
       if (existingTab) {
         setActiveFile(path);
+        // Background refresh to pick up external modifications
+        refreshFileContent(path);
       } else {
         try {
           const { content, encoding, isBinary } = await window.electronAPI.file.read(path);
@@ -85,7 +109,7 @@ export function useEditor() {
         setPendingCursor({ path, line, column, matchLength, previewMode });
       }
     },
-    [tabs, setActiveFile, openFile, setPendingCursor]
+    [tabs, setActiveFile, openFile, setPendingCursor, refreshFileContent]
   );
 
   const activeTab = tabs.find((f) => f.path === activeTabPath) || null;
@@ -107,5 +131,6 @@ export function useEditor() {
     reorderTabs,
     setPendingCursor,
     navigateToFile,
+    refreshFileContent,
   };
 }
