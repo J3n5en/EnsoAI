@@ -49,6 +49,7 @@ import {
 } from '@/hooks/useSubmodules';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
 import { useSourceControlStore } from '@/stores/sourceControl';
 import { BranchSwitcher } from './BranchSwitcher';
 import { ChangesList } from './ChangesList';
@@ -75,6 +76,7 @@ export function SourceControlPanel({
 }: SourceControlPanelProps) {
   const { t, tNode } = useI18n();
   const queryClient = useQueryClient();
+  const repositoryListDisplayMode = useSettingsStore((s) => s.repositoryListDisplayMode);
 
   // Accordion state - collapsible sections
   const [changesExpanded, setChangesExpanded] = useState(true);
@@ -870,6 +872,9 @@ export function SourceControlPanel({
             selectedId={selectedRepo?.path ?? null}
             onSelect={handleRepoSelect}
             isLoading={submodulesLoading}
+            displayMode={repositoryListDisplayMode}
+            onCheckout={handleBranchCheckout}
+            isCheckingOut={checkoutMutation.isPending || checkoutSubmoduleMutation.isPending}
           />
 
           {/* Changes Section (Collapsible) */}
