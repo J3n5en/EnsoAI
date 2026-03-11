@@ -189,6 +189,8 @@ function getInitialState() {
 
     // Hide Groups default
     hideGroups: false,
+    hiddenOpenInApps: [] as string[],
+    openInMenuFilterEnabled: false,
 
     // Logging defaults
     loggingEnabled: false,
@@ -642,6 +644,13 @@ export const useSettingsStore = create<SettingsState>()(
 
       // Other Setters
       setHideGroups: (hideGroups) => set({ hideGroups }),
+      toggleHiddenOpenInApp: (bundleId) =>
+        set((state) => ({
+          hiddenOpenInApps: state.hiddenOpenInApps.includes(bundleId)
+            ? state.hiddenOpenInApps.filter((id) => id !== bundleId)
+            : [...state.hiddenOpenInApps, bundleId],
+        })),
+      setOpenInMenuFilterEnabled: (enabled) => set({ openInMenuFilterEnabled: enabled }),
 
       // Logging Setters
       setLoggingEnabled: (loggingEnabled) => {

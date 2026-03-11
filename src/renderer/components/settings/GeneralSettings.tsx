@@ -1,6 +1,16 @@
 import type { Locale } from '@shared/i18n';
 import type { ShellInfo } from '@shared/types';
-import { Columns3, FileText, FolderOpen, RefreshCw, TreePine } from 'lucide-react';
+import { AppCategory } from '@shared/types';
+import {
+  ChevronRight,
+  Columns3,
+  FileCode,
+  FileText,
+  FolderOpen,
+  RefreshCw,
+  Terminal,
+  TreePine,
+} from 'lucide-react';
 import * as React from 'react';
 import {
   AlertDialog,
@@ -12,6 +22,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -21,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useDetectedApps } from '@/hooks/useAppDetector';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import {
@@ -100,6 +112,10 @@ export function GeneralSettings() {
     setQuickTerminalEnabled,
     hideGroups,
     setHideGroups,
+    hiddenOpenInApps,
+    toggleHiddenOpenInApp,
+    openInMenuFilterEnabled,
+    setOpenInMenuFilterEnabled,
     copyOnSelection,
     setCopyOnSelection,
     todoEnabled,
@@ -118,6 +134,8 @@ export function GeneralSettings() {
     setLogRetentionDays,
   } = useSettingsStore();
   const { t, locale } = useI18n();
+  const { data: detectedApps = [] } = useDetectedApps();
+  const hiddenSet = React.useMemo(() => new Set(hiddenOpenInApps), [hiddenOpenInApps]);
 
   const layoutModeOptions: {
     value: LayoutMode;
@@ -498,6 +516,70 @@ export function GeneralSettings() {
           <Switch checked={hideGroups} onCheckedChange={setHideGroups} />
         </div>
       </div>
+
+      {/* Quick Open */}
+      {detectedApps.length > 0 && (
+        <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+          <span className="text-sm font-medium leading-8">{t('Quick Open')}</span>
+          <Collapsible>
+            <div className="flex h-8 items-center justify-between">
+              <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 [[data-panel-open]_&]:rotate-90" />
+                {t('Configure apps shown in the quick open menu')}
+              </CollapsibleTrigger>
+              <Switch
+                checked={openInMenuFilterEnabled}
+                onCheckedChange={setOpenInMenuFilterEnabled}
+              />
+            </div>
+            <CollapsibleContent>
+              {openInMenuFilterEnabled ? (
+                <div className="mt-2 space-y-2">
+                  {(
+                    [
+                      { category: AppCategory.Finder, label: t('File Manager'), icon: FolderOpen },
+                      { category: AppCategory.Terminal, label: t('Terminals'), icon: Terminal },
+                      { category: AppCategory.Editor, label: t('Editors'), icon: FileCode },
+                    ] as const
+                  ).map(({ category, label, icon: CategoryIcon }) => {
+                    const categoryApps = detectedApps.filter((app) => app.category === category);
+                    if (categoryApps.length === 0) return null;
+                    return (
+                      <div key={category}>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
+                          {label}
+                        </div>
+                        {categoryApps.map((app) => {
+                          const isVisible = !hiddenSet.has(app.bundleId);
+                          return (
+                            <div
+                              key={app.bundleId}
+                              className="flex items-center justify-between rounded-md pl-2 py-1.5 hover:bg-accent/50"
+                            >
+                              <div className="flex items-center gap-2">
+                                <CategoryIcon className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm">{app.name}</span>
+                              </div>
+                              <Switch
+                                checked={isVisible}
+                                onCheckedChange={() => toggleHiddenOpenInApp(app.bundleId)}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t('Enable filtering to configure which apps are shown')}
+                </p>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
 
       <div className="border-t pt-4">
         <h3 className="text-lg font-medium">{t('Worktree')}</h3>
