@@ -38,15 +38,14 @@ export function RepositoryList({
   // Scroll active tab into view when selectedId changes
   useEffect(() => {
     if (displayMode !== 'tabs') return;
-    // rAF ensures Base UI has flushed data-active attribute and layout is complete
+    // rAF ensures the active attribute and layout are flushed before measuring
     const frame = requestAnimationFrame(() => {
       if (!tabsListRef.current) return;
       // tabsListRef is on a wrapper div; find the actual scrollable TabsList inside
       const container =
         tabsListRef.current.querySelector<HTMLElement>('[data-slot="tabs-list"]') ??
         tabsListRef.current;
-      // Base UI uses data-active (not data-state=active like Radix UI)
-      const active = container.querySelector<HTMLElement>('[data-active]');
+      const active = container.querySelector<HTMLElement>('[data-state=active]');
       if (!active) return;
       const cr = container.getBoundingClientRect();
       const ar = active.getBoundingClientRect();
@@ -57,7 +56,7 @@ export function RepositoryList({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [displayMode]);
+  }, [displayMode, selectedId]);
 
   if (isLoading) {
     return (
