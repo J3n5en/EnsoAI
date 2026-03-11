@@ -170,6 +170,9 @@ export function useXterm({
   const [isLoading, setIsLoading] = useState(false);
   const hasReceivedDataRef = useRef(false);
   const initialCommandRef = useRef(initialCommand);
+  // Track if this terminal should respond to global shortcuts
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   // Memoize command key to avoid dependency array issues
   const commandKey = useMemo(
     () =>
@@ -461,13 +464,21 @@ export function useXterm({
         return true;
       }
 
+      // Only respond to tab/clear shortcuts when this terminal is active
+      const shouldHandleShortcuts = isActiveRef.current;
       if (
         matchesKeybinding(event, settings.xtermKeybindings.newTab) ||
         matchesKeybinding(event, settings.xtermKeybindings.closeTab) ||
         matchesKeybinding(event, settings.xtermKeybindings.nextTab) ||
-        matchesKeybinding(event, settings.xtermKeybindings.prevTab) ||
-        matchesKeybinding(event, settings.xtermKeybindings.clear)
+        matchesKeybinding(event, settings.xtermKeybindings.prevTab)
       ) {
+        return false;
+      }
+      // Handle clear directly here, only when active
+      if (shouldHandleShortcuts && matchesKeybinding(event, settings.xtermKeybindings.clear)) {
+        if (event.type === 'keydown') {
+          terminal.clear();
+        }
         return false;
       }
       if (event.type === 'keydown') {

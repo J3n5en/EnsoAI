@@ -262,7 +262,7 @@ export const defaultXtermKeybindings: XtermKeybindings = {
   prevTab: { key: '[', meta: true },
   split: { key: 'd', meta: true },
   merge: { key: 'd', meta: true, shift: true },
-  clear: { key: 'r', meta: true },
+  clear: { key: 'k', meta: true },
 };
 
 export const defaultMainTabKeybindings: MainTabKeybindings = {

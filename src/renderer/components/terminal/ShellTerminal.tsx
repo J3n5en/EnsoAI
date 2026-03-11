@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
-import { matchesKeybinding } from '@/lib/keybinding';
 import { useSettingsStore } from '@/stores/settings';
 import { TerminalSearchBar, type TerminalSearchBarRef } from './TerminalSearchBar';
 
@@ -67,7 +66,7 @@ export function ShellTerminal({
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
-  const xtermKeybindings = useSettingsStore((state) => state.xtermKeybindings);
+  const _xtermKeybindings = useSettingsStore((state) => state.xtermKeybindings);
   const { showScrollToBottom, handleScrollToBottom } = useTerminalScrollToBottom(terminal);
 
   // Handle keyboard shortcuts
@@ -83,14 +82,8 @@ export function ShellTerminal({
         }
         return;
       }
-
-      if (matchesKeybinding(e, xtermKeybindings.clear)) {
-        e.preventDefault();
-        clear();
-        return;
-      }
     },
-    [isSearchOpen, xtermKeybindings, clear]
+    [isSearchOpen]
   );
 
   // Handle right-click context menu

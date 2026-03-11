@@ -925,6 +925,15 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
                       left: `${position.left}%`,
                       width: `${position.width}%`,
                     }}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleGroupClick(info.group.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleGroupClick(info.group.id);
+                      }
+                    }}
                   >
                     <ShellTerminal
                       cwd={info.tab.cwd}
