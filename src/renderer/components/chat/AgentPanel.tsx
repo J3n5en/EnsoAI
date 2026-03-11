@@ -1308,10 +1308,17 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     // If no groups exist but sessions do, create a group with all sessions
     if (!currentState || currentState.groups.length === 0) {
       const sessionIds = currentWorktreeSessions.map((s) => s.id);
+
+      // Get the active session ID from store (if set) or fallback to first session
+      const storeActiveId = useAgentSessionsStore.getState().activeIds[normalizedCwd];
+      const validActiveId = sessionIds.includes(storeActiveId || '')
+        ? storeActiveId
+        : sessionIds[0];
+
       const newGroup: AgentGroupType = {
         id: crypto.randomUUID(),
         sessionIds,
-        activeSessionId: sessionIds[0] || null,
+        activeSessionId: validActiveId || null,
       };
       setGroupState(cwd, {
         groups: [newGroup],
