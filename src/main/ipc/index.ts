@@ -68,84 +68,61 @@ export function registerIpcHandlers(): void {
 }
 
 export async function cleanupAllResources(): Promise<void> {
-  const CLEANUP_TIMEOUT = 3000;
+  // Single global deadline well within FORCE_EXIT_TIMEOUT_MS (8000ms).
+  // Previous approach ran steps serially with per-step 3000ms timeouts, which
+  // could stack up to ~15s total — triggering the force-exit while async cleanup
+  // was still running and causing double-cleanup of node-pty native resources.
+  const TOTAL_ASYNC_TIMEOUT = 5500;
+  const deadline = new Promise<void>((resolve) => setTimeout(resolve, TOTAL_ASYNC_TIMEOUT));
 
-  // Ensure any in-flight execInPty commands are terminated before Node shutdown.
-  // Leaving node-pty PTYs alive can deadlock native addon cleanup on macOS.
-  await cleanupExecInPtys(CLEANUP_TIMEOUT);
+  const safeRun = async (fn: () => Promise<void>, label: string): Promise<void> => {
+    try {
+      await fn();
+    } catch (err) {
+      console.warn(`[cleanup] ${label} warning:`, err);
+    }
+  };
 
-  // Stop Hapi server first (graceful best-effort with timeout)
-  await cleanupHapi(CLEANUP_TIMEOUT);
+  // Run all independent async cleanup steps in parallel, bounded by a single deadline.
+  await Promise.race([
+    Promise.allSettled([
+      // node-pty PTYs used by short-lived commands (exec-in-pty pool)
+      safeRun(() => cleanupExecInPtys(4000), 'execInPty'),
+      // Hapi server + runner + cloudflared
+      safeRun(() => cleanupHapi(4000), 'hapi'),
+      // Interactive terminal PTY sessions
+      safeRun(async () => {
+        try {
+          await destroyAllTerminalsAndWait();
+        } catch (err) {
+          console.warn('[cleanup] terminals warning:', err);
+          // Fallback: force-kill without waiting
+          destroyAllTerminals();
+        }
+      }, 'terminals'),
+      // File system watchers
+      safeRun(() => stopAllFileWatchers(), 'fileWatchers'),
+      // Claude completions file watcher
+      safeRun(() => stopClaudeCompletionsWatchers(), 'claudeCompletions'),
+      // Temp files
+      safeRun(() => cleanupTempFiles(), 'tempFiles'),
+    ]),
+    deadline,
+  ]);
 
-  // Kill tmux enso server (sync, best-effort). Avoid spawning new PTYs during shutdown.
+  // Fast synchronous cleanup (runs after async steps or deadline)
   try {
     cleanupTmuxSync();
   } catch (err) {
-    console.warn('Tmux cleanup warning:', err);
+    console.warn('[cleanup] tmux warning:', err);
   }
-
-  // Stop Web Inspector server (sync, fast)
   webInspectorServer.stop();
-
-  // Stop all code review processes (sync, fast)
   stopAllCodeReviews();
-
-  // Destroy all PTY sessions and wait for them to exit
-  // This prevents crashes when PTY exit callbacks fire during Node cleanup
-  try {
-    await Promise.race([
-      destroyAllTerminalsAndWait(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Terminal cleanup timeout')), CLEANUP_TIMEOUT)
-      ),
-    ]);
-  } catch (err) {
-    console.warn('Terminal cleanup warning:', err);
-    // Force destroy without waiting as fallback
-    destroyAllTerminals();
-  }
-
-  // Stop file watchers with timeout to prevent hanging
-  try {
-    await Promise.race([
-      stopAllFileWatchers(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('File watcher cleanup timeout')), CLEANUP_TIMEOUT)
-      ),
-    ]);
-  } catch (err) {
-    console.warn('File watcher cleanup warning:', err);
-  }
-
-  // Stop Claude completions watcher (best-effort)
-  try {
-    await Promise.race([
-      stopClaudeCompletionsWatchers(),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error('Claude completions watcher cleanup timeout')),
-          CLEANUP_TIMEOUT
-        )
-      ),
-    ]);
-  } catch (err) {
-    console.warn('Claude completions watcher cleanup warning:', err);
-  }
-
-  // Clear service caches (sync, fast)
   clearAllGitServices();
   clearAllWorktreeServices();
-
   autoUpdaterService.cleanup();
-
-  // Dispose Claude IDE Bridge
   disposeClaudeIdeBridge();
-
-  // Close Todo database
   cleanupTodo();
-
-  // Clean up temp files
-  await cleanupTempFiles();
 }
 
 /**

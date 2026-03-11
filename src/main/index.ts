@@ -653,14 +653,21 @@ app.on('will-quit', (event) => {
   unwatchClaudeSettings();
   gitAutoFetchService.cleanup();
 
+  // Guard against double-cleanup: sync cleanup in the force-exit path must be
+  // skipped if async cleanup already finished, otherwise both paths would
+  // concurrently tear down node-pty native resources and cause a crash.
+  let asyncCleanupDone = false;
+
   const forceExitTimer = setTimeout(() => {
     console.error('[app] Cleanup timed out, forcing exit');
-    // Best-effort: kill native resources synchronously before forcing exit to
-    // avoid deadlocking during Node addon cleanup (e.g. node-pty on macOS).
-    try {
-      cleanupAllResourcesSync();
-    } catch (err) {
-      console.error('[app] Sync cleanup error:', err);
+    if (!asyncCleanupDone) {
+      // Async cleanup is still running — kill native resources synchronously
+      // before Node starts tearing down addons to avoid a deadlock/crash.
+      try {
+        cleanupAllResourcesSync();
+      } catch (err) {
+        console.error('[app] Sync cleanup error:', err);
+      }
     }
     app.exit(0);
   }, FORCE_EXIT_TIMEOUT_MS);
@@ -668,6 +675,7 @@ app.on('will-quit', (event) => {
   cleanupAllResources()
     .catch((err) => console.error('[app] Cleanup error:', err))
     .finally(() => {
+      asyncCleanupDone = true;
       clearTimeout(forceExitTimer);
       app.exit(0);
     });
