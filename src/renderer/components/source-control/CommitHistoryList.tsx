@@ -122,11 +122,20 @@ export function CommitHistoryList({
                       <span>{formatDate(commit.date)}</span>
                     </div>
                     {commit.refs && (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                      <div
+                        className="mt-1 flex gap-1 overflow-hidden"
+                        title={commit.refs}
+                        style={{
+                          maskImage:
+                            'linear-gradient(to right, black calc(100% - 24px), transparent)',
+                          WebkitMaskImage:
+                            'linear-gradient(to right, black calc(100% - 24px), transparent)',
+                        }}
+                      >
                         {commit.refs.split(', ').map((ref) => (
                           <span
                             key={ref}
-                            className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
+                            className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
                           >
                             {ref.replace('HEAD ->', '').replace('tag:', '').trim()}
                           </span>

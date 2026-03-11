@@ -40,7 +40,7 @@ export function GitSyncButton({
         }}
         disabled={isSyncing}
         className={cn(
-          'flex items-center gap-1 rounded px-0.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50',
+          'flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50',
           className
         )}
         title={t('Publish branch to remote')}
@@ -68,7 +68,7 @@ export function GitSyncButton({
         }}
         disabled={isSyncing}
         className={cn(
-          'flex items-center gap-1 rounded px-0.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50',
+          'flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50',
           className
         )}
         title={t('Sync with remote')}

@@ -1,5 +1,4 @@
 import type { FileChange, FileChangeStatus } from '@shared/types';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronRight,
   ChevronsDownUp,
@@ -16,8 +15,8 @@ import {
 } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { SmoothCollapse } from '@/components/ui/smooth-collapse';
 import { useI18n } from '@/i18n';
-import { heightVariants, springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSourceControlStore } from '@/stores/sourceControl';
 import { useChangesActions } from './useChangesActions';
@@ -210,33 +209,24 @@ function FileTreeNode({
           </div>
         </div>
 
-        <AnimatePresence initial={false}>
-          {isExpanded && node.children && (
-            <motion.div
-              variants={heightVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={springFast}
-              className="overflow-hidden"
-            >
-              {node.children.map((child) => (
-                <FileTreeNode
-                  key={child.path}
-                  node={child}
-                  level={level + 1}
-                  staged={staged}
-                  selectedFile={selectedFile}
-                  onFileClick={onFileClick}
-                  onAction={onAction}
-                  actionIcon={ActionIcon}
-                  actionTitle={actionTitle}
-                  onDiscard={onDiscard}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {node.children && (
+          <SmoothCollapse open={isExpanded}>
+            {node.children.map((child) => (
+              <FileTreeNode
+                key={child.path}
+                node={child}
+                level={level + 1}
+                staged={staged}
+                selectedFile={selectedFile}
+                onFileClick={onFileClick}
+                onAction={onAction}
+                actionIcon={ActionIcon}
+                actionTitle={actionTitle}
+                onDiscard={onDiscard}
+              />
+            ))}
+          </SmoothCollapse>
+        )}
       </>
     );
   }
