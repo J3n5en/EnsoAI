@@ -480,6 +480,11 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         }
       });
 
+      // Add Ctrl+O shortcut: show file structure (go to symbol in file)
+      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyO, () => {
+        editor.getAction('editor.action.gotoSymbol')?.run();
+      });
+
       editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
         const selection = editor.getSelection();
         const selectedText =
