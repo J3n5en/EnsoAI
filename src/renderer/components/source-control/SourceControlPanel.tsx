@@ -2,6 +2,7 @@ import { getPathBasename, joinPath } from '@shared/utils/path';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, GitBranch, GripVertical, History, PanelLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getStoredBoolean, STORAGE_KEYS } from '@/App/storage';
 import { GitSyncButton } from '@/components/git/GitSyncButton';
 import {
   AlertDialog,
@@ -51,7 +52,6 @@ import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { useSourceControlStore } from '@/stores/sourceControl';
-import { STORAGE_KEYS, getStoredBoolean } from '@/App/storage';
 import { BranchSwitcher } from './BranchSwitcher';
 import { ChangesList } from './ChangesList';
 import { CommitBox } from './CommitBox';
@@ -90,6 +90,7 @@ export function SourceControlPanel({
 
   // Branch checkout state - tracks which repo is being checked out
   const [checkingOutPath, setCheckingOutPath] = useState<string | null>(null);
+  const [syncingPath, setSyncingPath] = useState<string | null>(null);
 
   // Selected repository - null means main repo, string means submodule path
   const [selectedSubmodulePath, setSelectedSubmodulePath] = useState<string | null>(null);
@@ -275,6 +276,7 @@ export function SourceControlPanel({
   const handleSync = useCallback(
     async (repoPath: string) => {
       if (!repoPath || pullMutation.isPending || pushMutation.isPending) return;
+      setSyncingPath(repoPath);
 
       const isSubmodule = repoPath !== rootPath;
       const repo = repositories.find((r) => r.path === repoPath);
@@ -352,6 +354,8 @@ export function SourceControlPanel({
           type: 'error',
           timeout: 5000,
         });
+      } finally {
+        setSyncingPath(null);
       }
     },
     [
@@ -370,6 +374,7 @@ export function SourceControlPanel({
   const handlePublish = useCallback(
     async (repoPath: string) => {
       if (!repoPath || pushMutation.isPending) return;
+      setSyncingPath(repoPath);
 
       const isSubmodule = repoPath !== rootPath;
       const repo = repositories.find((r) => r.path === repoPath);
@@ -406,6 +411,8 @@ export function SourceControlPanel({
           type: 'error',
           timeout: 5000,
         });
+      } finally {
+        setSyncingPath(null);
       }
     },
     [rootPath, repositories, pushMutation, queryClient, refetchStatus, refetch, refetchCommits, t]
@@ -886,6 +893,9 @@ export function SourceControlPanel({
             displayMode={repositoryListDisplayMode}
             onCheckout={handleBranchCheckout}
             checkingOutPath={checkingOutPath}
+            onSync={handleSync}
+            onPublish={handlePublish}
+            syncingPath={syncingPath}
           />
 
           {/* Changes Section (Collapsible) */}

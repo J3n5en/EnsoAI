@@ -1,6 +1,7 @@
 import { ChevronDown, FolderGit2, GitBranch, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { getStoredBoolean, STORAGE_KEYS } from '@/App/storage';
+import { GitSyncButton } from '@/components/git/GitSyncButton';
 import { SmoothCollapse } from '@/components/ui/smooth-collapse';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/i18n';
@@ -19,6 +20,12 @@ interface RepositoryListProps {
   onCheckout?: (repoPath: string, branch: string) => void;
   /** Path of the repository currently being checked out, or null if none */
   checkingOutPath?: string | null;
+  /** Sync handler for list mode GitSyncButton */
+  onSync?: (repoPath: string) => void;
+  /** Publish handler for list mode GitSyncButton */
+  onPublish?: (repoPath: string) => void;
+  /** Path of the repository currently being synced, or null if none */
+  syncingPath?: string | null;
 }
 
 /**
@@ -34,6 +41,9 @@ export function RepositoryList({
   displayMode = 'tabs',
   onCheckout,
   checkingOutPath,
+  onSync,
+  onPublish,
+  syncingPath,
 }: RepositoryListProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(() =>
@@ -113,6 +123,9 @@ export function RepositoryList({
                 onSelect={() => onSelect(repo.path)}
                 onCheckout={onCheckout ? (branch) => onCheckout(repo.path, branch) : undefined}
                 isCheckingOut={checkingOutPath === repo.path}
+                onSync={onSync ? () => onSync(repo.path) : undefined}
+                onPublish={onPublish ? () => onPublish(repo.path) : undefined}
+                isSyncing={syncingPath === repo.path}
               />
             ))}
           </div>
@@ -160,6 +173,9 @@ interface RepositoryItemProps {
   onSelect: () => void;
   onCheckout?: (branch: string) => void;
   isCheckingOut?: boolean;
+  onSync?: () => void;
+  onPublish?: () => void;
+  isSyncing?: boolean;
 }
 
 function RepositoryItem({
@@ -168,6 +184,9 @@ function RepositoryItem({
   onSelect,
   onCheckout,
   isCheckingOut,
+  onSync,
+  onPublish,
+  isSyncing,
 }: RepositoryItemProps) {
   const isSubmodule = repository.type === 'submodule';
   const Icon = isSubmodule ? FolderGit2 : GitBranch;
@@ -217,6 +236,16 @@ function RepositoryItem({
           {repository.changesCount}
         </span>
       )}
+
+      <GitSyncButton
+        ahead={repository.ahead}
+        behind={repository.behind}
+        tracking={repository.tracking}
+        currentBranch={repository.branch}
+        isSyncing={isSyncing}
+        onSync={onSync}
+        onPublish={onPublish}
+      />
     </div>
   );
 }
