@@ -480,9 +480,11 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         }
       });
 
-      // Add Ctrl+O shortcut: show file structure (go to symbol in file)
+      // Add Ctrl/Cmd+O shortcut: show file structure (go to symbol in file)
+      // Uses editor.action.quickOutline — the correct standalone Monaco action ID
+      // KeyMod.CtrlCmd maps to Cmd on macOS and Ctrl on Windows/Linux
       editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyO, () => {
-        editor.getAction('editor.action.gotoSymbol')?.run();
+        editor.getAction('editor.action.quickOutline')?.run();
       });
 
       editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
