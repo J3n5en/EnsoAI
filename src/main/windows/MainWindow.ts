@@ -202,7 +202,7 @@ export function createMainWindow(): BrowserWindow {
       timeout = setTimeout(() => finalize(null), timeoutMs);
 
       ipcMain.on(channel, handler);
-      win.on('closed', handleWindowGone);
+      win.once('closed', handleWindowGone);
       webContents.once('destroyed', handleWindowGone);
     });
 

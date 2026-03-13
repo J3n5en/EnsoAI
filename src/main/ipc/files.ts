@@ -81,7 +81,11 @@ const ownerWatcherKeys = new Map<number, Set<string>>();
 const fileResourceOwners = new Set<number>();
 
 function normalizeWatchedPath(inputPath: string): string {
-  return inputPath.replace(/\\/g, '/').toLowerCase();
+  const normalizedPath = inputPath.replace(/\\/g, '/');
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    return normalizedPath.toLowerCase();
+  }
+  return normalizedPath;
 }
 
 function getWatcherKey(ownerId: number, dirPath: string): string {
