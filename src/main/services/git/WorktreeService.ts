@@ -89,6 +89,20 @@ export class WorktreeService {
   }
 
   /**
+   * Force delete a directory by killing locking processes and using system-level removal
+   */
+  private async forceDeleteDirectory(dirPath: string): Promise<void> {
+    await killProcessesInDirectory(dirPath);
+    // Wait briefly for processes to release file handles
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (process.platform === 'win32') {
+      await execAsync(`rmdir /s /q "${dirPath}"`);
+    } else {
+      await rm(dirPath, { recursive: true, force: true });
+    }
+  }
+
+  /**
    * Safely delete a worktree and optionally its branch
    */
   private async deleteWorktreeSafely(
@@ -108,15 +122,8 @@ export class WorktreeService {
 
       // On Windows, locked files cause "Permission denied" — fall back to force removal
       if (msg.includes('Permission denied') && existsSync(worktreePath)) {
-        await killProcessesInDirectory(worktreePath);
-        // Wait briefly for processes to release file handles
-        await new Promise((resolve) => setTimeout(resolve, 500));
         try {
-          if (process.platform === 'win32') {
-            await execAsync(`rmdir /s /q "${worktreePath}"`);
-          } else {
-            await rm(worktreePath, { recursive: true, force: true });
-          }
+          await this.forceDeleteDirectory(worktreePath);
           // Clean up the stale worktree entry from git's registry
           await git.raw(['worktree', 'prune']);
           worktreeDeleted = true;
@@ -227,19 +234,8 @@ export class WorktreeService {
       if (isPermissionDenied || isNotWorktree) {
         // Try to clean up the directory manually
         if (existsSync(options.path)) {
-          // First attempt: try to kill processes using the directory
-          await killProcessesInDirectory(options.path);
-
-          // Wait a bit for processes to terminate
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
           try {
-            if (process.platform === 'win32') {
-              // Use Windows rmdir which can be more effective for locked files
-              await execAsync(`rmdir /s /q "${options.path}"`);
-            } else {
-              await rm(options.path, { recursive: true, force: true });
-            }
+            await this.forceDeleteDirectory(options.path);
           } catch {
             // If manual deletion also fails, throw a more helpful error
             throw new Error(
