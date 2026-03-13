@@ -607,6 +607,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   // Register close handler for external close requests
   useEffect(() => {
     const handleCloseAll = (worktreePath: string) => {
+      // Close every session for the worktree, including uninitialized ones, to avoid orphaned state.
       const worktreeSessions = allSessions.filter((s) => pathsEqual(s.cwd, worktreePath));
       if (worktreeSessions.length === 0) return;
 

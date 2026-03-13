@@ -23,6 +23,7 @@ function ensureTerminalCleanup(sender: WebContents): void {
 }
 
 export function destroyAllTerminals(): void {
+  terminalCleanupOwners.clear();
   ptyManager.destroyAll();
 }
 
@@ -31,6 +32,7 @@ export function destroyAllTerminals(): void {
  * This should be used during app shutdown to prevent crashes.
  */
 export async function destroyAllTerminalsAndWait(): Promise<void> {
+  terminalCleanupOwners.clear();
   await ptyManager.destroyAllAndWait();
 }
 
