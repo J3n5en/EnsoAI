@@ -43,6 +43,7 @@ export function TaskDialog({ open, onOpenChange, task, defaultStatus, repoPath }
 
   useEffect(() => {
     if (open) {
+      setIsPolishing(false);
       if (task) {
         setTitle(task.title);
         setDescription(task.description);

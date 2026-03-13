@@ -73,7 +73,7 @@ Raw requirement:
 {text}`;
 
   const promptTemplate = customPrompt || defaultPrompt;
-  const prompt = promptTemplate.replace(/\{text\}/g, text);
+  const prompt = promptTemplate.replace(/\{text\}/g, () => text);
 
   return new Promise((resolve) => {
     const timeoutMs = timeout * 1000;

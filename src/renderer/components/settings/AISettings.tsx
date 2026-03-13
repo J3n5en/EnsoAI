@@ -804,6 +804,29 @@ export function AISettings() {
               </div>
             )}
 
+            {/* Timeout */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Timeout')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={String(todoPolish.timeout)}
+                  onValueChange={(v) => setTodoPolish({ timeout: Number(v) })}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue>{todoPolish.timeout}s</SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {[30, 60, 120, 180].map((sec) => (
+                      <SelectItem key={sec} value={String(sec)}>
+                        {sec}s
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('Timeout in seconds')}</p>
+              </div>
+            </div>
+
             {/* Prompt */}
             <div className="space-y-1.5">
               <span className="text-sm font-medium">{t('Prompt')}</span>
