@@ -128,8 +128,8 @@ export class WorktreeService {
       }
     }
 
-    // Delete branch if requested, regardless of whether worktree deletion succeeded
-    if (options?.deleteBranch && options.branchName) {
+    // Only delete branch if worktree was successfully removed
+    if (worktreeDeleted && options?.deleteBranch && options.branchName) {
       const branchWarning = await this.deleteBranchSafely(git, options.branchName);
       if (branchWarning) {
         warnings.push(branchWarning);
