@@ -116,13 +116,15 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
 
     // Only restore once per rootPath switch (childrenRestoredRef resets on rootPath change)
     if (childrenRestoredRef.current) return;
-    childrenRestoredRef.current = true;
 
     // Read directly from localStorage to avoid stale ref when this effect fires
     // in the same flush as the rootPath effect (expandedPathsRef may still hold
     // the previous rootPath's paths before setExpandedPaths state update is applied)
     const restored = loadFileTreeExpandedPaths(rootPath);
-    if (restored.size === 0) return;
+    if (restored.size === 0) {
+      childrenRestoredRef.current = true;
+      return;
+    }
 
     // Sort shallow-first so parent nodes are populated before their children
     const sortedPaths = [...restored].sort((a, b) => a.split('/').length - b.split('/').length);
@@ -142,6 +144,10 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         } catch {
           // Silently skip paths that fail to load (e.g. deleted directories)
         }
+      }
+      // Only mark as restored after all children loaded successfully without cancellation
+      if (!cancelled) {
+        childrenRestoredRef.current = true;
       }
     };
 
