@@ -134,7 +134,7 @@ function ensureFileOwnerCleanup(sender: WebContents): void {
   sender.once('destroyed', () => {
     fileResourceOwners.delete(ownerId);
     unregisterAllowedLocalFileRootsByOwner(ownerId);
-    void stopFileWatchersForOwner(ownerId);
+    void stopFileWatchersForOwner(ownerId).catch(() => {});
   });
 }
 

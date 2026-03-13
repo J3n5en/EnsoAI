@@ -203,7 +203,7 @@ export function createMainWindow(): BrowserWindow {
 
       ipcMain.on(channel, handler);
       win.on('closed', handleWindowGone);
-      webContents.on('destroyed', handleWindowGone);
+      webContents.once('destroyed', handleWindowGone);
     });
 
   win.on('close', (e) => {
