@@ -214,12 +214,14 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
         }
 
         const newSessions = state.sessions.filter((s) => s.id !== id);
-        const newActiveIds = Object.fromEntries(
-          Object.entries(state.activeIds).map(([cwd, activeId]) => [
-            cwd,
-            activeId === id ? null : activeId,
-          ])
-        );
+        let newActiveIds = state.activeIds;
+        for (const [cwd, activeId] of Object.entries(state.activeIds)) {
+          if (activeId !== id) continue;
+          if (newActiveIds === state.activeIds) {
+            newActiveIds = { ...state.activeIds };
+          }
+          newActiveIds[cwd] = null;
+        }
         // Clean up runtime states
         const newRuntimeStates = { ...state.runtimeStates };
         delete newRuntimeStates[id];

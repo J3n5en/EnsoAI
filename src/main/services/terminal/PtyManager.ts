@@ -539,16 +539,18 @@ export class PtyManager {
   }
 
   destroyAll(): void {
-    for (const id of this.sessions.keys()) {
+    const ids = Array.from(this.sessions.keys());
+    for (const id of ids) {
       this.destroy(id);
     }
   }
 
   destroyByOwner(ownerId: number): void {
-    for (const [id, session] of this.sessions.entries()) {
-      if (session.ownerId === ownerId) {
-        this.destroy(id);
-      }
+    const ids = Array.from(this.sessions.entries())
+      .filter(([, session]) => session.ownerId === ownerId)
+      .map(([id]) => id);
+    for (const id of ids) {
+      this.destroy(id);
     }
   }
 
@@ -567,14 +569,16 @@ export class PtyManager {
 
   destroyByWorkdir(workdir: string): void {
     const normalizedWorkdir = workdir.replace(/\\/g, '/').toLowerCase();
-    for (const [id, session] of this.sessions.entries()) {
-      const normalizedCwd = session.cwd.replace(/\\/g, '/').toLowerCase();
-      if (
-        normalizedCwd === normalizedWorkdir ||
-        normalizedCwd.startsWith(`${normalizedWorkdir}/`)
-      ) {
-        this.destroy(id);
-      }
+    const ids = Array.from(this.sessions.entries())
+      .filter(([, session]) => {
+        const normalizedCwd = session.cwd.replace(/\\/g, '/').toLowerCase();
+        return (
+          normalizedCwd === normalizedWorkdir || normalizedCwd.startsWith(`${normalizedWorkdir}/`)
+        );
+      })
+      .map(([id]) => id);
+    for (const id of ids) {
+      this.destroy(id);
     }
   }
 

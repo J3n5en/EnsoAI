@@ -166,6 +166,7 @@ export function createMainWindow(): BrowserWindow {
     timeoutMs: number
   ) =>
     new Promise<T | null>((resolve) => {
+      const webContents = win.webContents;
       let settled = false;
       let handler: (event: Electron.IpcMainEvent, ...args: any[]) => void;
       let timeout: NodeJS.Timeout | null = null;
@@ -179,8 +180,14 @@ export function createMainWindow(): BrowserWindow {
         }
 
         ipcMain.removeListener(channel, handler);
-        win.removeListener('closed', handleWindowGone);
-        win.webContents.removeListener('destroyed', handleWindowGone);
+        if (!win.isDestroyed()) {
+          win.removeListener('closed', handleWindowGone);
+        }
+        try {
+          webContents.removeListener('destroyed', handleWindowGone);
+        } catch {
+          // webContents may already be destroyed while close flow is settling.
+        }
         resolve(value);
       };
 
@@ -196,7 +203,7 @@ export function createMainWindow(): BrowserWindow {
 
       ipcMain.on(channel, handler);
       win.on('closed', handleWindowGone);
-      win.webContents.on('destroyed', handleWindowGone);
+      webContents.on('destroyed', handleWindowGone);
     });
 
   win.on('close', (e) => {
