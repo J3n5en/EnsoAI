@@ -91,8 +91,10 @@ Raw requirement:
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
 
     const timer = setTimeout(() => {
+      settled = true;
       kill();
       resolve({ success: false, error: 'timeout' });
     }, timeoutMs);
@@ -107,6 +109,8 @@ Raw requirement:
 
     proc.on('close', (code) => {
       clearTimeout(timer);
+      if (settled) return;
+      settled = true;
 
       if (code !== 0) {
         console.error(`[todo-polish] Exit code: ${code}, stderr: ${stderr}`);
@@ -131,6 +135,8 @@ Raw requirement:
 
     proc.on('error', (err) => {
       clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       console.error(`[todo-polish] Process error:`, err);
       resolve({ success: false, error: err.message });
     });
