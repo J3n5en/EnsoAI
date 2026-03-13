@@ -150,6 +150,42 @@ monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
 
 // --- DocumentSymbolProviders for languages without built-in language servers ---
 
+/** Build a DocumentSymbol and push it into the symbols array */
+function pushSymbol(
+  symbols: monaco.languages.DocumentSymbol[],
+  model: monaco.editor.ITextModel,
+  name: string,
+  detail: string,
+  kind: monaco.languages.SymbolKind,
+  matchIndex: number,
+  matchLength: number,
+  nameOffset: number,
+  nameLength: number
+): void {
+  const startPos = model.getPositionAt(matchIndex);
+  const endPos = model.getPositionAt(matchIndex + matchLength);
+  const nameStart = model.getPositionAt(nameOffset);
+  const nameEnd = model.getPositionAt(nameOffset + nameLength);
+  symbols.push({
+    name,
+    detail,
+    kind,
+    tags: [],
+    range: {
+      startLineNumber: startPos.lineNumber,
+      startColumn: startPos.column,
+      endLineNumber: endPos.lineNumber,
+      endColumn: endPos.column,
+    },
+    selectionRange: {
+      startLineNumber: nameStart.lineNumber,
+      startColumn: nameStart.column,
+      endLineNumber: nameEnd.lineNumber,
+      endColumn: nameEnd.column,
+    },
+  });
+}
+
 // Java: regex-based extraction of classes, methods, and fields
 monaco.languages.registerDocumentSymbolProvider('java', {
   provideDocumentSymbols(model) {
@@ -161,34 +197,25 @@ monaco.languages.registerDocumentSymbolProvider('java', {
       /^\s*(?:(?:public|private|protected|static|abstract|final)\s+)*(?:class|interface|enum)\s+(\w+)/gm;
     let m: RegExpExecArray | null = classRe.exec(text);
     while (m !== null) {
-      const startPos = model.getPositionAt(m.index);
-      const endPos = model.getPositionAt(m.index + m[0].length);
-      const nameStart = model.getPositionAt(m.index + m[0].indexOf(m[1]));
-      const nameEnd = model.getPositionAt(m.index + m[0].indexOf(m[1]) + m[1].length);
-      symbols.push({
-        name: m[1],
-        detail: '',
-        kind: monaco.languages.SymbolKind.Class,
-        tags: [],
-        range: {
-          startLineNumber: startPos.lineNumber,
-          startColumn: startPos.column,
-          endLineNumber: endPos.lineNumber,
-          endColumn: endPos.column,
-        },
-        selectionRange: {
-          startLineNumber: nameStart.lineNumber,
-          startColumn: nameStart.column,
-          endLineNumber: nameEnd.lineNumber,
-          endColumn: nameEnd.column,
-        },
-      });
+      const nameIdx = m[0].indexOf(m[1]);
+      pushSymbol(
+        symbols,
+        model,
+        m[1],
+        '',
+        monaco.languages.SymbolKind.Class,
+        m.index,
+        m[0].length,
+        m.index + nameIdx,
+        m[1].length
+      );
       m = classRe.exec(text);
     }
 
     // Match method declarations (modifiers + return-type + name + params)
+    // Note: 'override' is removed — it is a Java annotation (@Override), not a modifier keyword
     const methodRe =
-      /^\s*((?:(?:public|private|protected|static|final|abstract|synchronized|native|override)\s+)*)(<[^>]+>\s+)?(\w+(?:\[\])*(?:<[^>]*>)?(?:\[\])*)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+\w+(?:\s*,\s*\w+)*)?\s*(?:\{|;)/gm;
+      /^\s*((?:(?:public|private|protected|static|final|abstract|synchronized|native)\s+)*)(<[^>]+>\s+)?(\w+(?:\[\])*(?:<[^>]*>)?(?:\[\])*)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+\w+(?:\s*,\s*\w+)*)?\s*(?:\{|;)/gm;
     let methodMatch: RegExpExecArray | null = methodRe.exec(text);
     while (methodMatch !== null) {
       const modifiers = methodMatch[1].trim();
@@ -196,32 +223,21 @@ monaco.languages.registerDocumentSymbolProvider('java', {
       const methodName = methodMatch[4];
       const params = methodMatch[5].trim();
       const detail = `${modifiers ? `${modifiers} ` : ''}${returnType} (${params})`;
-      const startPos = model.getPositionAt(methodMatch.index);
-      const endPos = model.getPositionAt(methodMatch.index + methodMatch[0].length);
       const nameIdx = methodMatch[0].indexOf(
         methodName,
         (methodMatch[1] + (methodMatch[2] ?? '') + methodMatch[3]).length
       );
-      const nameStart = model.getPositionAt(methodMatch.index + nameIdx);
-      const nameEnd = model.getPositionAt(methodMatch.index + nameIdx + methodName.length);
-      symbols.push({
-        name: methodName,
+      pushSymbol(
+        symbols,
+        model,
+        methodName,
         detail,
-        kind: monaco.languages.SymbolKind.Method,
-        tags: [],
-        range: {
-          startLineNumber: startPos.lineNumber,
-          startColumn: startPos.column,
-          endLineNumber: endPos.lineNumber,
-          endColumn: endPos.column,
-        },
-        selectionRange: {
-          startLineNumber: nameStart.lineNumber,
-          startColumn: nameStart.column,
-          endLineNumber: nameEnd.lineNumber,
-          endColumn: nameEnd.column,
-        },
-      });
+        monaco.languages.SymbolKind.Method,
+        methodMatch.index,
+        methodMatch[0].length,
+        methodMatch.index + nameIdx,
+        methodName.length
+      );
       methodMatch = methodRe.exec(text);
     }
 
@@ -232,29 +248,18 @@ monaco.languages.registerDocumentSymbolProvider('java', {
     while (fieldMatch !== null) {
       const fieldName = fieldMatch[3];
       const typeName = fieldMatch[2];
-      const startPos = model.getPositionAt(fieldMatch.index);
-      const endPos = model.getPositionAt(fieldMatch.index + fieldMatch[0].length);
       const nameIdx = fieldMatch[0].lastIndexOf(fieldName);
-      const nameStart = model.getPositionAt(fieldMatch.index + nameIdx);
-      const nameEnd = model.getPositionAt(fieldMatch.index + nameIdx + fieldName.length);
-      symbols.push({
-        name: fieldName,
-        detail: typeName,
-        kind: monaco.languages.SymbolKind.Field,
-        tags: [],
-        range: {
-          startLineNumber: startPos.lineNumber,
-          startColumn: startPos.column,
-          endLineNumber: endPos.lineNumber,
-          endColumn: endPos.column,
-        },
-        selectionRange: {
-          startLineNumber: nameStart.lineNumber,
-          startColumn: nameStart.column,
-          endLineNumber: nameEnd.lineNumber,
-          endColumn: nameEnd.column,
-        },
-      });
+      pushSymbol(
+        symbols,
+        model,
+        fieldName,
+        typeName,
+        monaco.languages.SymbolKind.Field,
+        fieldMatch.index,
+        fieldMatch[0].length,
+        fieldMatch.index + nameIdx,
+        fieldName.length
+      );
       fieldMatch = fieldRe.exec(text);
     }
 
@@ -262,22 +267,153 @@ monaco.languages.registerDocumentSymbolProvider('java', {
   },
 });
 
-// Vue SFC: extract symbols from <script> block (methods, computed, data, props)
+// Vue SFC: extract symbols from all <script> and <script setup> blocks
 monaco.languages.registerDocumentSymbolProvider('vue', {
   provideDocumentSymbols(model) {
     const text = model.getValue();
     const symbols: monaco.languages.DocumentSymbol[] = [];
 
-    // Locate <script> block (Options API or setup)
-    const scriptMatch = /<script(?:[^>]*)>([\s\S]*?)<\/script>/i.exec(text);
-    if (!scriptMatch) return symbols;
+    // Collect all <script> blocks (supports both <script> and <script setup>)
+    const scriptBlockRe = /<script(\s[^>]*)?>[\s\S]*?<\/script>/gi;
+    let blockMatch: RegExpExecArray | null = scriptBlockRe.exec(text);
+    while (blockMatch !== null) {
+      const blockTag = blockMatch[0];
+      const blockAttrs = blockMatch[1] ?? '';
+      const isSetup = /\bsetup\b/i.test(blockAttrs);
 
-    const scriptOffset = text.indexOf(scriptMatch[1]);
-    const scriptText = scriptMatch[1];
+      // Extract inner content (between opening and closing tag)
+      const openTagEnd = blockTag.indexOf('>') + 1;
+      const scriptText = blockTag.slice(openTagEnd, blockTag.lastIndexOf('</script>'));
+      const scriptOffset = blockMatch.index + openTagEnd;
 
-    /** Helper: find all keys under a top-level object property like `methods: { ... }` */
-    function extractObjectKeys(
+      if (isSetup) {
+        // <script setup>: extract top-level variables and functions
+        extractSetupSymbols(scriptText, scriptOffset);
+      } else {
+        // <script> Options API: extract methods, computed, props, data fields
+        extractOptionsApiSymbols(scriptText, scriptOffset);
+      }
+
+      blockMatch = scriptBlockRe.exec(text);
+    }
+
+    /** Extract symbols from <script setup>: all top-level const/let/var/function declarations */
+    function extractSetupSymbols(source: string, offset: number): void {
+      // Match: (export) (async) function name
+      const fnRe = /(?:^|\n)([ \t]*)(?:export\s+)?(?:async\s+)?function\s+(\w+)/g;
+      let fm: RegExpExecArray | null = fnRe.exec(source);
+      while (fm !== null) {
+        const indent = fm[1].length;
+        // Only top-level declarations (no indentation inside blocks)
+        if (indent === 0) {
+          const name = fm[2];
+          const nameIdx = fm[0].lastIndexOf(name);
+          pushSymbol(
+            symbols,
+            model,
+            name,
+            'function',
+            monaco.languages.SymbolKind.Function,
+            offset + fm.index,
+            fm[0].length,
+            offset + fm.index + nameIdx,
+            name.length
+          );
+        }
+        fm = fnRe.exec(source);
+      }
+
+      // Match: (export) const/let/var name = ...
+      // Distinguishes arrow functions from regular variables by checking for => after =
+      const varRe = /(?:^|\n)([ \t]*)(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*([^\n;,}]*)/g;
+      let vm: RegExpExecArray | null = varRe.exec(source);
+      while (vm !== null) {
+        const indent = vm[1].length;
+        if (indent === 0) {
+          const name = vm[2];
+          const rhs = vm[3].trim();
+          // Arrow function: rhs starts with ( or identifier followed by =>
+          const isArrow =
+            /^(?:\([^)]*\)|\w+)\s*=>/.test(rhs) || /^async\s*(?:\([^)]*\)|\w+)\s*=>/.test(rhs);
+          const kind = isArrow
+            ? monaco.languages.SymbolKind.Function
+            : monaco.languages.SymbolKind.Variable;
+          const nameIdx = vm[0].indexOf(name, vm[1].length);
+          pushSymbol(
+            symbols,
+            model,
+            name,
+            isArrow ? 'arrow function' : 'variable',
+            kind,
+            offset + vm.index,
+            vm[0].length,
+            offset + vm.index + nameIdx,
+            name.length
+          );
+        }
+        vm = varRe.exec(source);
+      }
+    }
+
+    /** Extract symbols from Options API <script> block */
+    function extractOptionsApiSymbols(source: string, offset: number): void {
+      extractSection(source, offset, 'methods', monaco.languages.SymbolKind.Method);
+      extractSection(source, offset, 'computed', monaco.languages.SymbolKind.Property);
+      extractSection(source, offset, 'props', monaco.languages.SymbolKind.Property);
+      extractDataFields(source, offset);
+    }
+
+    /**
+     * Walk a brace-delimited body and collect only the direct (depth-1) key names.
+     * Returns an array of { name, localIndex } where localIndex is the char offset
+     * inside `body` where the key identifier starts.
+     */
+    function collectTopLevelKeys(body: string): { name: string; localIndex: number }[] {
+      const keys: { name: string; localIndex: number }[] = [];
+      let depth = 0; // 0 = top level inside the body
+      let i = 0;
+      while (i < body.length) {
+        const ch = body[i];
+        if (ch === '{' || ch === '[' || ch === '(') {
+          depth++;
+          i++;
+          continue;
+        }
+        if (ch === '}' || ch === ']' || ch === ')') {
+          depth--;
+          i++;
+          continue;
+        }
+        // Only match keys at depth 0 (direct children)
+        if (depth === 0) {
+          // Skip whitespace / newlines
+          if (/\s/.test(ch)) {
+            i++;
+            continue;
+          }
+          // Try to match: (async ) identifier followed by ( or :
+          const slice = body.slice(i);
+          const keyM = /^(?:async\s+)?([a-zA-Z_$][\w$]*)\s*(?:\(|:)/.exec(slice);
+          if (keyM) {
+            const name = keyM[1];
+            const nameOffset = keyM[0].indexOf(name);
+            if (name !== 'return' && name !== 'async') {
+              keys.push({ name, localIndex: i + nameOffset });
+            }
+            // Advance past the identifier to avoid re-matching same position
+            i += keyM[0].length - 1;
+            continue;
+          }
+        }
+        i++;
+      }
+      return keys;
+    }
+
+    /** Extract keys from a top-level Options API section like `methods: { ... }` */
+    function extractSection(
       source: string,
+      offset: number,
       sectionName: string,
       kind: monaco.languages.SymbolKind
     ): void {
@@ -285,86 +421,62 @@ monaco.languages.registerDocumentSymbolProvider('vue', {
       const sectionMatch = sectionRe.exec(source);
       if (!sectionMatch) return;
 
-      // Find the matching closing brace
+      const bodyStart = sectionMatch.index + sectionMatch[0].length;
       let depth = 1;
-      let i = sectionMatch.index + sectionMatch[0].length;
+      let i = bodyStart;
       while (i < source.length && depth > 0) {
         if (source[i] === '{') depth++;
         else if (source[i] === '}') depth--;
         i++;
       }
-      const sectionBody = source.slice(sectionMatch.index + sectionMatch[0].length, i - 1);
-      const bodyOffset = scriptOffset + sectionMatch.index + sectionMatch[0].length;
+      const sectionBody = source.slice(bodyStart, i - 1);
+      const bodyOffset = offset + bodyStart;
 
-      // Match property / method names (identifier followed by : or ()
-      const keyRe = /^\s*(?:async\s+)?(\w+)\s*(?:\([^)]*\)|:)/gm;
-      let km: RegExpExecArray | null = keyRe.exec(sectionBody);
-      while (km !== null) {
-        const name = km[1];
-        if (name !== 'return') {
-          const absOffset = bodyOffset + km.index;
-          const nameAbsOffset = absOffset + km[0].indexOf(name);
-          const startPos = model.getPositionAt(absOffset);
-          const nameStart = model.getPositionAt(nameAbsOffset);
-          const nameEnd = model.getPositionAt(nameAbsOffset + name.length);
-          symbols.push({
-            name,
-            detail: sectionName,
-            kind,
-            tags: [],
-            range: {
-              startLineNumber: startPos.lineNumber,
-              startColumn: startPos.column,
-              endLineNumber: startPos.lineNumber,
-              endColumn: startPos.column + km[0].trimEnd().length,
-            },
-            selectionRange: {
-              startLineNumber: nameStart.lineNumber,
-              startColumn: nameStart.column,
-              endLineNumber: nameEnd.lineNumber,
-              endColumn: nameEnd.column,
-            },
-          });
-        }
-        km = keyRe.exec(sectionBody);
+      for (const { name, localIndex } of collectTopLevelKeys(sectionBody)) {
+        pushSymbol(
+          symbols,
+          model,
+          name,
+          sectionName,
+          kind,
+          bodyOffset + localIndex,
+          name.length,
+          bodyOffset + localIndex,
+          name.length
+        );
       }
     }
 
-    extractObjectKeys(scriptText, 'methods', monaco.languages.SymbolKind.Method);
-    extractObjectKeys(scriptText, 'computed', monaco.languages.SymbolKind.Property);
-    extractObjectKeys(scriptText, 'props', monaco.languages.SymbolKind.Property);
+    /** Extract properties returned from the data() function */
+    function extractDataFields(source: string, offset: number): void {
+      // Find data() { return { ... } }
+      const dataRe = /\bdata\s*\(\s*\)\s*\{[\s\S]*?return\s*\{/g;
+      const dataMatch = dataRe.exec(source);
+      if (!dataMatch) return;
 
-    // Extract <script setup> top-level const/function declarations
-    const isSetup = /<script\s[^>]*setup[^>]*>/i.test(scriptMatch[0]);
-    if (isSetup) {
-      const fnRe = /(?:^|\n)\s*(?:export\s+)?(?:const|function|async function)\s+(\w+)/g;
-      let fm: RegExpExecArray | null = fnRe.exec(scriptText);
-      while (fm !== null) {
-        const name = fm[1];
-        const absOffset = scriptOffset + fm.index;
-        const nameAbsOffset = absOffset + fm[0].indexOf(name);
-        const startPos = model.getPositionAt(absOffset);
-        const nameStart = model.getPositionAt(nameAbsOffset);
-        const nameEnd = model.getPositionAt(nameAbsOffset + name.length);
-        symbols.push({
+      const returnBraceIdx = dataMatch.index + dataMatch[0].length - 1; // points to '{'
+      let depth = 1;
+      let i = returnBraceIdx + 1;
+      while (i < source.length && depth > 0) {
+        if (source[i] === '{') depth++;
+        else if (source[i] === '}') depth--;
+        i++;
+      }
+      const returnBody = source.slice(returnBraceIdx + 1, i - 1);
+      const returnOffset = offset + returnBraceIdx + 1;
+
+      for (const { name, localIndex } of collectTopLevelKeys(returnBody)) {
+        pushSymbol(
+          symbols,
+          model,
           name,
-          detail: 'setup',
-          kind: monaco.languages.SymbolKind.Function,
-          tags: [],
-          range: {
-            startLineNumber: startPos.lineNumber,
-            startColumn: startPos.column,
-            endLineNumber: startPos.lineNumber,
-            endColumn: startPos.column + fm[0].trimEnd().length,
-          },
-          selectionRange: {
-            startLineNumber: nameStart.lineNumber,
-            startColumn: nameStart.column,
-            endLineNumber: nameEnd.lineNumber,
-            endColumn: nameEnd.column,
-          },
-        });
-        fm = fnRe.exec(scriptText);
+          'data',
+          monaco.languages.SymbolKind.Variable,
+          returnOffset + localIndex,
+          name.length,
+          returnOffset + localIndex,
+          name.length
+        );
       }
     }
 
