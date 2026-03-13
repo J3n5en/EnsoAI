@@ -80,6 +80,10 @@ export function registerTodoHandlers(): void {
   });
 }
 
-export function cleanupTodo(): void {
-  todoService.close();
+export function cleanupTodo(): Promise<void> {
+  return todoService.close();
+}
+
+export function cleanupTodoSync(): void {
+  todoService.closeSync();
 }

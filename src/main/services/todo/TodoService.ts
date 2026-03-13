@@ -88,15 +88,11 @@ export async function initialize(): Promise<void> {
   const dbPath = getDbPath();
 
   await new Promise<void>((resolve, reject) => {
-    db = new sqlite3.Database(
-      dbPath,
-      sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
-      (err) => {
-        if (err) return reject(err);
-        db!.configure('busyTimeout', BUSY_TIMEOUT_MS);
-        resolve();
-      }
-    );
+    db = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+      if (err) return reject(err);
+      db!.configure('busyTimeout', BUSY_TIMEOUT_MS);
+      resolve();
+    });
   });
 
   await dbExec(
@@ -254,7 +250,18 @@ export async function reorderTasks(
 export async function migrateFromLocalStorage(boardsJson: string): Promise<void> {
   const boards = JSON.parse(boardsJson) as Record<
     string,
-    { tasks: Array<{ id: string; title: string; description: string; priority: string; status: string; createdAt: number; updatedAt: number; order: number }> }
+    {
+      tasks: Array<{
+        id: string;
+        title: string;
+        description: string;
+        priority: string;
+        status: string;
+        createdAt: number;
+        updatedAt: number;
+        order: number;
+      }>;
+    }
   >;
 
   const database = getDb();
@@ -290,11 +297,25 @@ export async function migrateFromLocalStorage(boardsJson: string): Promise<void>
   }
 }
 
-export function close(): void {
-  if (db) {
-    db.close((err) => {
-      if (err) console.warn('[TodoService] Failed to close database:', err);
-    });
-    db = null;
-  }
+export function close(): Promise<void> {
+  return new Promise((resolve) => {
+    if (db) {
+      const ref = db;
+      db = null;
+      ref.close((err) => {
+        if (err) console.warn('[TodoService] Failed to close database:', err);
+        resolve();
+      });
+    } else {
+      resolve();
+    }
+  });
+}
+
+export function closeSync(): void {
+  // Just null the reference; let the process exit handle the rest.
+  // SQLite is crash-safe — the OS will release the file descriptor.
+  // Calling db.close() with a callback here would leave an async
+  // cleanup hook that fires during FreeEnvironment(), causing SIGABRT.
+  db = null;
 }
