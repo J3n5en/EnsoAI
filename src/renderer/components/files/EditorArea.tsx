@@ -134,12 +134,15 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const focus = useTerminalWriteStore((state) => state.focus);
 
   // Helper function to format line reference from selection
-  const formatLineRef = useCallback((selection: monaco.Selection): string => {
-    const endLine =
-      selection.endColumn === 1 ? selection.endLineNumber - 1 : selection.endLineNumber;
-    return selection.startLineNumber === endLine
-      ? `L${selection.startLineNumber}`
-      : `L${selection.startLineNumber}-L${endLine}`;
+  const formatLineRef = useCallback((selection: monaco.ISelection): string => {
+    const startLine = Math.min(selection.selectionStartLineNumber, selection.positionLineNumber);
+    const rawEndLine = Math.max(selection.selectionStartLineNumber, selection.positionLineNumber);
+    const rawEndColumn =
+      rawEndLine === selection.positionLineNumber
+        ? selection.positionColumn
+        : selection.selectionStartColumn;
+    const endLine = rawEndColumn === 1 ? rawEndLine - 1 : rawEndLine;
+    return startLine === endLine ? `L${startLine}` : `L${startLine}-L${endLine}`;
   }, []);
 
   // Helper function to convert absolute path to relative path

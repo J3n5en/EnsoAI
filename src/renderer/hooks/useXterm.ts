@@ -148,8 +148,6 @@ export function useXterm({
   const linkProviderDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const rendererAddonRef = useRef<{ dispose: () => void } | null>(null);
   const copyOnSelectionHandlerRef = useRef<(() => void) | null>(null);
-  const isUnmountedRef = useRef(false);
-  const createRequestIdRef = useRef(0);
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
   const onDataRef = useRef(onData);
@@ -586,7 +584,6 @@ export function useXterm({
     });
 
     try {
-      const createRequestId = ++createRequestIdRef.current;
       const ptyId = await window.electronAPI.terminal.create({
         cwd: cwd || window.electronAPI.env.HOME,
         // If command is provided (e.g., for agent), use shell/args directly
@@ -597,11 +594,6 @@ export function useXterm({
         env,
         initialCommand: initialCommandRef.current,
       });
-
-      if (isUnmountedRef.current || createRequestId !== createRequestIdRef.current) {
-        await window.electronAPI.terminal.destroy(ptyId).catch(() => {});
-        return;
-      }
 
       ptyIdRef.current = ptyId;
 
@@ -666,9 +658,6 @@ export function useXterm({
       // Note: Don't focus here - wait for first data to avoid cursor on blank screen
       // Focus is handled by the isActive effect after isLoading becomes false
     } catch (error) {
-      if (isUnmountedRef.current) {
-        return;
-      }
       setIsLoading(false);
       terminal.writeln(`\x1b[31mFailed to start terminal.\x1b[0m`);
       terminal.writeln(`\x1b[33mError: ${error}\x1b[0m`);
@@ -697,8 +686,6 @@ export function useXterm({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      isUnmountedRef.current = true;
-      createRequestIdRef.current += 1;
       cleanupRef.current?.();
       exitCleanupRef.current?.();
       if (ptyIdRef.current) {

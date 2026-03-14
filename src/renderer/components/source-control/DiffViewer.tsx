@@ -176,8 +176,7 @@ export function DiffViewer({
   }, [lineChanges]);
 
   const [boundaryHint, setBoundaryHint] = useState<'top' | 'bottom' | null>(null);
-  const modifiedDecorationsRef = useRef<string[]>([]);
-  const originalDecorationsRef = useRef<string[]>([]);
+  const decorationsRef = useRef<string[]>([]);
   const hasAutoNavigatedRef = useRef(false);
   const handleSaveRef = useRef<() => void>(() => {});
   const pendingNavigationDirectionRef = useRef<'next' | 'prev' | null>(null);
@@ -612,14 +611,8 @@ export function DiffViewer({
         if (editor) {
           const modifiedEditor = editor.getModifiedEditor();
           const originalEditor = editor.getOriginalEditor();
-          modifiedDecorationsRef.current = modifiedEditor.deltaDecorations(
-            modifiedDecorationsRef.current,
-            []
-          );
-          originalDecorationsRef.current = originalEditor.deltaDecorations(
-            originalDecorationsRef.current,
-            []
-          );
+          decorationsRef.current = modifiedEditor.deltaDecorations(decorationsRef.current, []);
+          originalEditor.deltaDecorations([], []);
         }
         return;
       }
@@ -632,26 +625,23 @@ export function DiffViewer({
       const modifiedStartLine = change.modifiedStartLineNumber;
       const modifiedEndLine = change.modifiedEndLineNumber || modifiedStartLine;
 
-      modifiedDecorationsRef.current = modifiedEditor.deltaDecorations(
-        modifiedDecorationsRef.current,
-        [
-          {
-            range: new monaco.Range(modifiedStartLine, 1, modifiedEndLine, 1),
-            options: {
-              isWholeLine: true,
-              className: 'current-diff-highlight',
-              linesDecorationsClassName: 'current-diff-gutter',
-            },
+      decorationsRef.current = modifiedEditor.deltaDecorations(decorationsRef.current, [
+        {
+          range: new monaco.Range(modifiedStartLine, 1, modifiedEndLine, 1),
+          options: {
+            isWholeLine: true,
+            className: 'current-diff-highlight',
+            linesDecorationsClassName: 'current-diff-gutter',
           },
-        ]
-      );
+        },
+      ]);
 
       // Highlight in original editor
       const originalStartLine = change.originalStartLineNumber;
       const originalEndLine = change.originalEndLineNumber || originalStartLine;
 
-      originalDecorationsRef.current = originalEditor.deltaDecorations(
-        originalDecorationsRef.current,
+      originalEditor.deltaDecorations(
+        [],
         [
           {
             range: new monaco.Range(originalStartLine, 1, originalEndLine, 1),
