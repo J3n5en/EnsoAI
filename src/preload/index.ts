@@ -8,6 +8,8 @@ import type {
   CloneResult,
   CommitFileChange,
   ConflictResolution,
+  ConnectionProfile,
+  ConnectionTestResult,
   ContentSearchParams,
   ContentSearchResult,
   CustomAgent,
@@ -34,6 +36,9 @@ import type {
   ProxySettings,
   PullRequest,
   RecentEditorProject,
+  RemoteAuthPrompt,
+  RemoteAuthResponse,
+  RemoteConnectionStatus,
   ShellConfig,
   ShellInfo,
   TempWorkspaceCheckResult,
@@ -447,6 +452,35 @@ const electronAPI = {
     openFile: (options?: {
       filters?: Array<{ name: string; extensions: string[] }>;
     }): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FILE, options),
+  },
+
+  // Remote connections
+  remote: {
+    listProfiles: (): Promise<ConnectionProfile[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_PROFILE_LIST),
+    saveProfile: (
+      profile: Omit<ConnectionProfile, 'id' | 'createdAt' | 'updatedAt'> &
+        Partial<Pick<ConnectionProfile, 'id'>>
+    ): Promise<ConnectionProfile> => ipcRenderer.invoke(IPC_CHANNELS.REMOTE_PROFILE_SAVE, profile),
+    deleteProfile: (profileId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_PROFILE_DELETE, profileId),
+    testConnection: (profileOrId: string | ConnectionProfile): Promise<ConnectionTestResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_TEST_CONNECTION, profileOrId),
+    connect: (profileOrId: string | ConnectionProfile): Promise<RemoteConnectionStatus> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_CONNECT, profileOrId),
+    disconnect: (connectionId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_DISCONNECT, connectionId),
+    getStatus: (connectionId: string): Promise<RemoteConnectionStatus> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_GET_STATUS, connectionId),
+    browseRoots: (profileOrId: string | ConnectionProfile): Promise<string[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_BROWSE_ROOTS, profileOrId),
+    onAuthPrompt: (callback: (prompt: RemoteAuthPrompt) => void): (() => void) => {
+      const handler = (_: unknown, prompt: RemoteAuthPrompt) => callback(prompt);
+      ipcRenderer.on(IPC_CHANNELS.REMOTE_AUTH_PROMPT, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.REMOTE_AUTH_PROMPT, handler);
+    },
+    respondAuthPrompt: (response: RemoteAuthResponse): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_AUTH_RESPONSE, response),
   },
 
   // Context Menu

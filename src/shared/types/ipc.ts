@@ -136,6 +136,18 @@ export const IPC_CHANNELS = {
   DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
   DIALOG_OPEN_FILE: 'dialog:openFile',
 
+  // Remote connections
+  REMOTE_PROFILE_LIST: 'remote:profile:list',
+  REMOTE_PROFILE_SAVE: 'remote:profile:save',
+  REMOTE_PROFILE_DELETE: 'remote:profile:delete',
+  REMOTE_TEST_CONNECTION: 'remote:testConnection',
+  REMOTE_CONNECT: 'remote:connect',
+  REMOTE_DISCONNECT: 'remote:disconnect',
+  REMOTE_GET_STATUS: 'remote:getStatus',
+  REMOTE_BROWSE_ROOTS: 'remote:browseRoots',
+  REMOTE_AUTH_PROMPT: 'remote:auth:prompt',
+  REMOTE_AUTH_RESPONSE: 'remote:auth:response',
+
   // Context Menu
   CONTEXT_MENU_SHOW: 'contextMenu:show',
 

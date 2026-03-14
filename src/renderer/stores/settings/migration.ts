@@ -190,6 +190,11 @@ export function migrateSettings(
       ...currentState.hapiSettings,
       ...persisted.hapiSettings,
     },
+    remoteSettings: {
+      ...currentState.remoteSettings,
+      ...persisted.remoteSettings,
+      profiles: persisted.remoteSettings?.profiles ?? currentState.remoteSettings.profiles,
+    },
     proxySettings: {
       ...currentState.proxySettings,
       ...persisted.proxySettings,

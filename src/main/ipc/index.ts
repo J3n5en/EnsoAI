@@ -25,8 +25,10 @@ import { autoStartHapi, cleanupHapi, cleanupHapiSync, registerHapiHandlers } fro
 
 export { autoStartHapi };
 
+import { remoteConnectionManager } from '../services/remote/RemoteConnectionManager';
 import { registerLogHandlers } from './log';
 import { registerNotificationHandlers } from './notification';
+import { registerRemoteHandlers } from './remote';
 import { registerSearchHandlers } from './search';
 import { registerSettingsHandlers } from './settings';
 import { registerShellHandlers } from './shell';
@@ -55,6 +57,7 @@ export function registerIpcHandlers(): void {
   registerSettingsHandlers();
   registerLogHandlers();
   registerNotificationHandlers();
+  registerRemoteHandlers();
   registerUpdaterHandlers();
   registerSearchHandlers();
   registerHapiHandlers();
@@ -122,6 +125,7 @@ export async function cleanupAllResources(): Promise<void> {
   clearAllWorktreeServices();
   autoUpdaterService.cleanup();
   disposeClaudeIdeBridge();
+  await remoteConnectionManager.cleanup();
   await cleanupTodo();
 }
 
@@ -162,6 +166,8 @@ export function cleanupAllResourcesSync(): void {
 
   // Dispose Claude IDE Bridge (sync)
   disposeClaudeIdeBridge();
+
+  void remoteConnectionManager.cleanup();
 
   // Close Todo database (sync — just nulls the reference, no async callback)
   cleanupTodoSync();

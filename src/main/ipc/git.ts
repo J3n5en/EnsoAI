@@ -13,6 +13,12 @@ import {
 } from '../services/ai';
 import { gitAutoFetchService } from '../services/git/GitAutoFetchService';
 import { GitService } from '../services/git/GitService';
+import {
+  createUnsupportedRemoteFeatureError,
+  type RemoteUnsupportedFeature,
+} from '../services/remote/RemoteI18n';
+import { isRemoteVirtualPath } from '../services/remote/RemotePath';
+import { remoteRepositoryBackend } from '../services/remote/RemoteRepositoryBackend';
 
 const gitServices = new Map<string, GitService>();
 
@@ -61,8 +67,19 @@ function getGitService(workdir: string): GitService {
   return gitServices.get(resolved)!;
 }
 
+function isRemoteWorkdir(workdir: string): boolean {
+  return isRemoteVirtualPath(workdir);
+}
+
+function assertRemoteUnsupported(feature: RemoteUnsupportedFeature): never {
+  throw createUnsupportedRemoteFeatureError(feature);
+}
+
 export function registerGitHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      return remoteRepositoryBackend.getStatus(workdir);
+    }
     const git = getGitService(workdir);
     return git.getStatus();
   });
@@ -70,12 +87,21 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_LOG,
     async (_, workdir: string, maxCount?: number, skip?: number, submodulePath?: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        if (submodulePath) {
+          assertRemoteUnsupported('submoduleHistory');
+        }
+        return remoteRepositoryBackend.getLog(workdir, maxCount, skip);
+      }
       const git = getGitService(workdir);
       return git.getLog(maxCount, skip, submodulePath);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      return remoteRepositoryBackend.getBranches(workdir);
+    }
     const git = getGitService(workdir);
     return git.getBranches();
   });
@@ -83,12 +109,20 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_BRANCH_CREATE,
     async (_, workdir: string, name: string, startPoint?: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        await remoteRepositoryBackend.createBranch(workdir, name, startPoint);
+        return;
+      }
       const git = getGitService(workdir);
       await git.createBranch(name, startPoint);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_CHECKOUT, async (_, workdir: string, branch: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      await remoteRepositoryBackend.checkout(workdir, branch);
+      return;
+    }
     const git = getGitService(workdir);
     await git.checkout(branch);
   });
@@ -96,6 +130,12 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_COMMIT,
     async (_, workdir: string, message: string, files?: string[]) => {
+      if (isRemoteWorkdir(workdir)) {
+        if (files?.length) {
+          assertRemoteUnsupported('partialCommit');
+        }
+        return remoteRepositoryBackend.commit(workdir, message);
+      }
       const git = getGitService(workdir);
       return git.commit(message, files);
     }
@@ -104,6 +144,10 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_PUSH,
     async (_, workdir: string, remote?: string, branch?: string, setUpstream?: boolean) => {
+      if (isRemoteWorkdir(workdir)) {
+        await remoteRepositoryBackend.push(workdir, remote, branch, setUpstream);
+        return;
+      }
       const git = getGitService(workdir);
       await git.push(remote, branch, setUpstream);
     }
@@ -112,12 +156,20 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_PULL,
     async (_, workdir: string, remote?: string, branch?: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        await remoteRepositoryBackend.pull(workdir, remote, branch);
+        return;
+      }
       const git = getGitService(workdir);
       await git.pull(remote, branch);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.GIT_FETCH, async (_, workdir: string, remote?: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      await remoteRepositoryBackend.fetch(workdir, remote);
+      return;
+    }
     const git = getGitService(workdir);
     await git.fetch(remote);
   });
@@ -125,12 +177,18 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_DIFF,
     async (_, workdir: string, options?: { staged?: boolean }) => {
+      if (isRemoteWorkdir(workdir)) {
+        return remoteRepositoryBackend.getDiff(workdir, options?.staged);
+      }
       const git = getGitService(workdir);
       return git.getDiff(options);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.GIT_INIT, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      assertRemoteUnsupported('gitInit');
+    }
     const resolved = path.resolve(workdir);
 
     // For git init, only validate path exists and is a directory (no .git check)
@@ -148,6 +206,9 @@ export function registerGitHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.GIT_FILE_CHANGES, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      return remoteRepositoryBackend.getFileChanges(workdir);
+    }
     const git = getGitService(workdir);
     return git.getFileChanges();
   });
@@ -155,27 +216,45 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_FILE_DIFF,
     async (_, workdir: string, filePath: string, staged: boolean) => {
+      if (isRemoteWorkdir(workdir)) {
+        return remoteRepositoryBackend.getFileDiff(workdir, filePath, staged);
+      }
       const git = getGitService(workdir);
       return git.getFileDiff(filePath, staged);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.GIT_STAGE, async (_, workdir: string, paths: string[]) => {
+    if (isRemoteWorkdir(workdir)) {
+      await remoteRepositoryBackend.stage(workdir, paths);
+      return;
+    }
     const git = getGitService(workdir);
     await git.stage(paths);
   });
 
   ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, async (_, workdir: string, paths: string[]) => {
+    if (isRemoteWorkdir(workdir)) {
+      await remoteRepositoryBackend.unstage(workdir, paths);
+      return;
+    }
     const git = getGitService(workdir);
     await git.unstage(paths);
   });
 
   ipcMain.handle(IPC_CHANNELS.GIT_DISCARD, async (_, workdir: string, paths: string[]) => {
+    if (isRemoteWorkdir(workdir)) {
+      await remoteRepositoryBackend.discard(workdir, paths);
+      return;
+    }
     const git = getGitService(workdir);
     await git.discard(paths);
   });
 
   ipcMain.handle(IPC_CHANNELS.GIT_COMMIT_SHOW, async (_, workdir: string, hash: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      return remoteRepositoryBackend.showCommit(workdir, hash);
+    }
     const git = getGitService(workdir);
     return git.showCommit(hash);
   });
@@ -183,6 +262,12 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_COMMIT_FILES,
     async (_, workdir: string, hash: string, submodulePath?: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        if (submodulePath) {
+          assertRemoteUnsupported('submoduleCommitFiles');
+        }
+        return remoteRepositoryBackend.getCommitFiles(workdir, hash);
+      }
       const git = getGitService(workdir);
       return git.getCommitFiles(hash, submodulePath);
     }
@@ -198,12 +283,21 @@ export function registerGitHandlers(): void {
       status?: FileChangeStatus,
       submodulePath?: string
     ) => {
+      if (isRemoteWorkdir(workdir)) {
+        if (status || submodulePath) {
+          assertRemoteUnsupported('commitDiffVariants');
+        }
+        return remoteRepositoryBackend.getCommitDiff(workdir, hash, filePath);
+      }
       const git = getGitService(workdir);
       return git.getCommitDiff(hash, filePath, status, submodulePath);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.GIT_DIFF_STATS, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      return remoteRepositoryBackend.getDiffStats(workdir);
+    }
     const git = getGitService(workdir);
     return git.getDiffStats();
   });
@@ -222,6 +316,9 @@ export function registerGitHandlers(): void {
         prompt?: string;
       }
     ): Promise<{ success: boolean; message?: string; error?: string }> => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('aiCommitMessageGeneration');
+      }
       const resolved = validateWorkdir(workdir);
       return generateCommitMessage({
         workdir: resolved,
@@ -251,6 +348,9 @@ export function registerGitHandlers(): void {
         prompt?: string; // Custom prompt template
       }
     ): Promise<{ success: boolean; error?: string; sessionId?: string }> => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('codeReview');
+      }
       const resolved = validateWorkdir(workdir);
       const sender = event.sender;
 
@@ -303,12 +403,18 @@ export function registerGitHandlers(): void {
 
   // GitHub CLI - Status
   ipcMain.handle(IPC_CHANNELS.GIT_GH_STATUS, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      assertRemoteUnsupported('githubCliIntegration');
+    }
     const git = getGitService(workdir);
     return git.getGhCliStatus();
   });
 
   // GitHub CLI - List PRs
   ipcMain.handle(IPC_CHANNELS.GIT_PR_LIST, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      assertRemoteUnsupported('pullRequestListing');
+    }
     const git = getGitService(workdir);
     return git.listPullRequests();
   });
@@ -317,6 +423,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_PR_FETCH,
     async (_, workdir: string, prNumber: number, localBranch: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('pullRequestFetch');
+      }
       const git = getGitService(workdir);
       return git.fetchPullRequest(prNumber, localBranch);
     }
@@ -346,6 +455,9 @@ export function registerGitHandlers(): void {
         reasoningEffort?: string;
       }
     ): Promise<{ success: boolean; branchName?: string; error?: string }> => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('aiBranchNameGeneration');
+      }
       const resolved = validateWorkdir(workdir);
       return generateBranchName({
         workdir: resolved,
@@ -394,6 +506,9 @@ export function registerGitHandlers(): void {
 
   // Git Submodule - List
   ipcMain.handle(IPC_CHANNELS.GIT_SUBMODULE_LIST, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      assertRemoteUnsupported('submodules');
+    }
     const git = getGitService(workdir);
     return git.listSubmodules();
   });
@@ -402,6 +517,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_INIT,
     async (_, workdir: string, recursive?: boolean) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.initSubmodules(recursive);
     }
@@ -411,6 +529,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_UPDATE,
     async (_, workdir: string, recursive?: boolean) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.updateSubmodules(recursive);
     }
@@ -418,6 +539,9 @@ export function registerGitHandlers(): void {
 
   // Git Submodule - Sync
   ipcMain.handle(IPC_CHANNELS.GIT_SUBMODULE_SYNC, async (_, workdir: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      assertRemoteUnsupported('submodules');
+    }
     const git = getGitService(workdir);
     await git.syncSubmodules();
   });
@@ -426,6 +550,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_FETCH,
     async (_, workdir: string, submodulePath: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.fetchSubmodule(submodulePath);
     }
@@ -435,6 +562,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_PULL,
     async (_, workdir: string, submodulePath: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.pullSubmodule(submodulePath);
     }
@@ -444,6 +574,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_PUSH,
     async (_, workdir: string, submodulePath: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.pushSubmodule(submodulePath);
     }
@@ -453,6 +586,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_COMMIT,
     async (_, workdir: string, submodulePath: string, message: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       return git.commitSubmodule(submodulePath, message);
     }
@@ -462,6 +598,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_STAGE,
     async (_, workdir: string, submodulePath: string, paths: string[]) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.stageSubmodule(submodulePath, paths);
     }
@@ -471,6 +610,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_UNSTAGE,
     async (_, workdir: string, submodulePath: string, paths: string[]) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.unstageSubmodule(submodulePath, paths);
     }
@@ -480,6 +622,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_DISCARD,
     async (_, workdir: string, submodulePath: string, paths: string[]) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.discardSubmodule(submodulePath, paths);
     }
@@ -489,6 +634,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_CHANGES,
     async (_, workdir: string, submodulePath: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       return git.getSubmoduleChanges(submodulePath);
     }
@@ -498,6 +646,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_FILE_DIFF,
     async (_, workdir: string, submodulePath: string, filePath: string, staged: boolean) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       return git.getSubmoduleFileDiff(submodulePath, filePath, staged);
     }
@@ -507,6 +658,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_BRANCHES,
     async (_, workdir: string, submodulePath: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       return git.getSubmoduleBranches(submodulePath);
     }
@@ -516,6 +670,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_SUBMODULE_CHECKOUT,
     async (_, workdir: string, submodulePath: string, branch: string) => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteUnsupported('submodules');
+      }
       const git = getGitService(workdir);
       await git.checkoutSubmoduleBranch(submodulePath, branch);
     }

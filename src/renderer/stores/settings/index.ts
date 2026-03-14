@@ -21,6 +21,7 @@ import {
   defaultMainTabKeybindings,
   defaultProxySettings,
   defaultQuickTerminalSettings,
+  defaultRemoteSettings,
   defaultSearchKeybindings,
   defaultSourceControlKeybindings,
   defaultWorkspaceKeybindings,
@@ -144,6 +145,7 @@ function getInitialState() {
     // App Settings
     autoUpdateEnabled: true,
     hapiSettings: defaultHapiSettings,
+    remoteSettings: defaultRemoteSettings,
     defaultWorktreePath: '',
     proxySettings: defaultProxySettings,
     autoCreateSessionOnActivate: false,
@@ -451,6 +453,33 @@ export const useSettingsStore = create<SettingsState>()(
       setHapiSettings: (settings) =>
         set((state) => ({
           hapiSettings: { ...state.hapiSettings, ...settings },
+        })),
+
+      setRemoteProfiles: (profiles) =>
+        set((state) => ({
+          remoteSettings: { ...state.remoteSettings, profiles },
+        })),
+
+      upsertRemoteProfile: (profile) =>
+        set((state) => {
+          const index = state.remoteSettings.profiles.findIndex((item) => item.id === profile.id);
+          const profiles =
+            index >= 0
+              ? state.remoteSettings.profiles.map((item) =>
+                  item.id === profile.id ? profile : item
+                )
+              : [...state.remoteSettings.profiles, profile];
+          return {
+            remoteSettings: { ...state.remoteSettings, profiles },
+          };
+        }),
+
+      removeRemoteProfile: (profileId) =>
+        set((state) => ({
+          remoteSettings: {
+            ...state.remoteSettings,
+            profiles: state.remoteSettings.profiles.filter((profile) => profile.id !== profileId),
+          },
         })),
 
       setDefaultWorktreePath: (defaultWorktreePath) => set({ defaultWorktreePath }),

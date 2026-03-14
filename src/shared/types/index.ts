@@ -9,6 +9,7 @@ export * from './ipc';
 export * from './mcp';
 export * from './plugins';
 export * from './prompts';
+export * from './remote';
 export * from './search';
 export * from './shell';
 export * from './tempWorkspace';

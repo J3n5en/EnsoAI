@@ -6,6 +6,8 @@ export interface TerminalSession {
 
 export interface TerminalCreateOptions {
   cwd?: string;
+  /** Internal use: OS cwd for the spawned PTY process when logical cwd is virtual. */
+  spawnCwd?: string;
   shell?: string;
   args?: string[];
   cols?: number;

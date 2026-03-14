@@ -1,5 +1,5 @@
 import type { CloneProgress, RecentEditorProject, ValidateLocalPathResult } from '@shared/types';
-import { FolderOpen, Globe, Loader2, Minus, Plus } from 'lucide-react';
+import { FolderOpen, Globe, Loader2, Minus, Plus, Server } from 'lucide-react';
 import { matchSorter } from 'match-sorter';
 import * as React from 'react';
 import type { RepositoryGroup } from '@/App/constants';
@@ -41,7 +41,14 @@ import { Z_INDEX } from '@/lib/z-index';
 import { useCloneTasksStore } from '@/stores/cloneTasks';
 import { useSettingsStore } from '@/stores/settings';
 
-type AddMode = 'local' | 'remote';
+type AddMode = 'local' | 'remote' | 'ssh';
+
+const REMOTE_PATH_PREFIX = '/__enso_remote__';
+
+function buildRemoteVirtualPath(connectionId: string, remotePath: string): string {
+  const cleaned = remotePath.replace(/\\/g, '/').replace(/\/+$/g, '') || '/';
+  return `${REMOTE_PATH_PREFIX}/${encodeURIComponent(connectionId)}${cleaned.startsWith('/') ? cleaned : `/${cleaned}`}`;
+}
 
 interface AddRepositoryDialogProps {
   open: boolean;
@@ -50,6 +57,7 @@ interface AddRepositoryDialogProps {
   defaultGroupId: string | null;
   onAddLocal: (path: string, groupId: string | null) => void;
   onCloneComplete: (path: string, groupId: string | null) => void;
+  onAddRemote: (path: string, groupId: string | null, connectionId: string) => void;
   onCreateGroup: (name: string, emoji: string, color: string) => RepositoryGroup;
   /** Pre-filled local path (e.g., from drag-and-drop) */
   initialLocalPath?: string;
@@ -64,12 +72,15 @@ export function AddRepositoryDialog({
   defaultGroupId,
   onAddLocal,
   onCloneComplete,
+  onAddRemote,
   onCreateGroup,
   initialLocalPath,
   onClearInitialLocalPath,
 }: AddRepositoryDialogProps) {
   const { t } = useI18n();
   const hideGroups = useSettingsStore((s) => s.hideGroups);
+  const remoteProfiles = useSettingsStore((s) => s.remoteSettings.profiles);
+  const setRemoteProfiles = useSettingsStore((s) => s.setRemoteProfiles);
 
   // Progress stage display labels (使用 t() 支持国际化，useMemo 避免重复创建)
   const stageLabels = React.useMemo<Record<string, string>>(
@@ -128,6 +139,13 @@ export function AddRepositoryDialog({
   const [targetDir, setTargetDir] = React.useState('');
   const [repoName, setRepoName] = React.useState('');
   const [isValidUrl, setIsValidUrl] = React.useState(false);
+
+  // SSH remote workspace mode state
+  const [sshProfileId, setSshProfileId] = React.useState('');
+  const [sshRepoPath, setSshRepoPath] = React.useState('');
+  const [sshRoots, setSshRoots] = React.useState<string[]>([]);
+  const [isLoadingProfiles, setIsLoadingProfiles] = React.useState(false);
+  const [isLoadingRoots, setIsLoadingRoots] = React.useState(false);
 
   // Clone progress state
   const [isCloning, setIsCloning] = React.useState(false);
@@ -191,6 +209,50 @@ export function AddRepositoryDialog({
         .catch(() => setRecentProjects([]));
     }
   }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    setIsLoadingProfiles(true);
+    window.electronAPI.remote
+      .listProfiles()
+      .then((profiles) => {
+        setRemoteProfiles(profiles);
+        if (profiles.length > 0 && !profiles.some((profile) => profile.id === sshProfileId)) {
+          setSshProfileId(profiles[0].id);
+        }
+      })
+      .catch(() => {
+        setRemoteProfiles([]);
+        setSshProfileId('');
+      })
+      .finally(() => {
+        setIsLoadingProfiles(false);
+      });
+  }, [open, setRemoteProfiles, sshProfileId]);
+
+  React.useEffect(() => {
+    if (!open || !sshProfileId) {
+      setSshRoots([]);
+      return;
+    }
+
+    setIsLoadingRoots(true);
+    window.electronAPI.remote
+      .browseRoots(sshProfileId)
+      .then((roots) => {
+        setSshRoots(roots);
+        setSshRepoPath((current) => current || roots[roots.length - 1] || '');
+        setError(null);
+      })
+      .catch((error) => {
+        setSshRoots([]);
+        setError(error instanceof Error ? error.message : t('Failed to browse remote roots'));
+      })
+      .finally(() => {
+        setIsLoadingRoots(false);
+      });
+  }, [open, sshProfileId, t]);
 
   // Debounced path validation (300ms, matching URL validation)
   React.useEffect(() => {
@@ -276,6 +338,28 @@ export function AddRepositoryDialog({
       }
       onAddLocal(localPath, groupIdToSave);
       handleClose();
+    } else if (mode === 'ssh') {
+      if (!sshProfileId) {
+        setError(t('Please choose an SSH profile first'));
+        return;
+      }
+
+      if (!sshRepoPath.trim()) {
+        setError(t('Please enter the remote repository path'));
+        return;
+      }
+
+      try {
+        await window.electronAPI.remote.connect(sshProfileId);
+        onAddRemote(
+          buildRemoteVirtualPath(sshProfileId, sshRepoPath.trim()),
+          groupIdToSave,
+          sshProfileId
+        );
+        handleClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('Failed to connect to remote host'));
+      }
     } else {
       // Remote mode
       if (!isValidUrl) {
@@ -376,6 +460,11 @@ export function AddRepositoryDialog({
     setTargetDir('');
     setRepoName('');
     setIsValidUrl(false);
+    setSshProfileId('');
+    setSshRepoPath('');
+    setSshRoots([]);
+    setIsLoadingProfiles(false);
+    setIsLoadingRoots(false);
     setError(null);
     setIsCloning(false);
     setCloneProgress(null);
@@ -402,6 +491,9 @@ export function AddRepositoryDialog({
     if (isCloning) return true;
     if (mode === 'local') {
       return !localPath || isValidating || (pathValidation !== null && !pathValidation.isDirectory);
+    }
+    if (mode === 'ssh') {
+      return !sshProfileId || !sshRepoPath.trim() || isLoadingProfiles || isLoadingRoots;
     }
     return !isValidUrl || !targetDir || !repoName.trim();
   };
@@ -489,20 +581,33 @@ export function AddRepositoryDialog({
           <DialogHeader>
             <DialogTitle>{t('Add Repository')}</DialogTitle>
             <DialogDescription>
-              {t('Add a local Git repository or clone from a remote URL.')}
+              {t(
+                'Add a local Git repository, clone from a remote URL, or attach a remote workspace over SSH.'
+              )}
             </DialogDescription>
           </DialogHeader>
 
           <DialogPanel className="space-y-4">
-            <Tabs value={mode} onValueChange={(v) => !isCloning && setMode(v as AddMode)}>
+            <Tabs
+              value={mode}
+              onValueChange={(v) => {
+                if (isCloning) return;
+                setMode(v as AddMode);
+                setError(null);
+              }}
+            >
               <TabsList className="w-full">
                 <TabsTrigger value="local" className="flex-1" disabled={isCloning}>
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  {t('Local')}
+                  <FolderOpen className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{t('Local')}</span>
                 </TabsTrigger>
                 <TabsTrigger value="remote" className="flex-1" disabled={isCloning}>
-                  <Globe className="mr-2 h-4 w-4" />
-                  {t('Remote')}
+                  <Globe className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{t('Clone')}</span>
+                </TabsTrigger>
+                <TabsTrigger value="ssh" className="flex-1" disabled={isCloning}>
+                  <Server className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{t('SSH')}</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -664,22 +769,120 @@ export function AddRepositoryDialog({
                   </div>
                 )}
               </TabsContent>
+
+              {/* SSH Remote Workspace Tab */}
+              <TabsContent value="ssh" className="mt-4 space-y-4">
+                <div className="grid gap-4 xl:grid-cols-2">
+                  <Field className="min-w-0">
+                    <FieldLabel>{t('SSH profile')}</FieldLabel>
+                    <Select
+                      value={sshProfileId}
+                      onValueChange={(value) => setSshProfileId(value ?? '')}
+                    >
+                      <SelectTrigger className="min-w-0">
+                        <SelectValue>
+                          {sshProfileId
+                            ? remoteProfiles.find((profile) => profile.id === sshProfileId)?.name ||
+                              t('Unknown profile')
+                            : isLoadingProfiles
+                              ? t('Loading profiles...')
+                              : t('Select a saved SSH profile')}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectPopup zIndex={Z_INDEX.DROPDOWN_IN_MODAL}>
+                        {remoteProfiles.length === 0 ? (
+                          <SelectItem value="" disabled>
+                            {t('No saved profiles')}
+                          </SelectItem>
+                        ) : (
+                          remoteProfiles.map((profile) => (
+                            <SelectItem key={profile.id} value={profile.id}>
+                              {profile.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectPopup>
+                    </Select>
+                    <FieldDescription>
+                      {remoteProfiles.length === 0
+                        ? t('Create SSH profiles in Settings > Remote Connection first.')
+                        : t(
+                            'The same SSH credentials and config you already use will be reused here.'
+                          )}
+                    </FieldDescription>
+                  </Field>
+
+                  <Field className="min-w-0">
+                    <FieldLabel>{t('Remote repository path')}</FieldLabel>
+                    <Input
+                      value={sshRepoPath}
+                      onChange={(event) => setSshRepoPath(event.target.value)}
+                      placeholder={t('/srv/project or ~/workspace/project')}
+                      disabled={!sshProfileId || isLoadingRoots}
+                    />
+                    <FieldDescription>
+                      {isLoadingRoots
+                        ? t('Resolving remote roots...')
+                        : t(
+                            'Pick a root below or type the full repository path on the remote host.'
+                          )}
+                    </FieldDescription>
+                  </Field>
+                </div>
+
+                {sshRoots.length > 0 && (
+                  <div className="flex flex-wrap gap-2 rounded-xl border bg-muted/20 p-3">
+                    {sshRoots.map((root) => (
+                      <Button
+                        key={root}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!sshProfileId || isLoadingRoots}
+                        onClick={() => {
+                          setSshRepoPath(root);
+                          setError(null);
+                        }}
+                      >
+                        {root}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+
+                {!hideGroups && groupSelect}
+              </TabsContent>
             </Tabs>
 
             {/* Error Display */}
-            {error && <div className="text-sm text-destructive">{error}</div>}
+            {error && (
+              <div className="rounded-lg border border-destructive/24 bg-destructive/6 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
           </DialogPanel>
 
           <DialogFooter variant="bare">
             {isCloning ? (
-              <Button type="button" variant="outline" onClick={handleMinimize}>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-w-24 justify-center"
+                onClick={handleMinimize}
+              >
                 <Minus className="mr-2 h-4 w-4" />
                 {t('Minimize')}
               </Button>
             ) : (
-              <DialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+              <DialogClose
+                render={
+                  <Button variant="outline" className="min-w-24 justify-center">
+                    {t('Cancel')}
+                  </Button>
+                }
+              />
             )}
-            <Button type="submit" disabled={isSubmitDisabled()}>
+            <Button type="submit" className="min-w-24 justify-center" disabled={isSubmitDisabled()}>
               {isCloning ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -687,6 +890,8 @@ export function AddRepositoryDialog({
                 </>
               ) : mode === 'local' ? (
                 t('Add')
+              ) : mode === 'ssh' ? (
+                t('Connect')
               ) : (
                 t('Clone')
               )}

@@ -12,6 +12,7 @@ import type {
   HapiSettings,
   MainTabKeybindings,
   QuickTerminalSettings,
+  RemoteSettings,
   SearchKeybindings,
   SourceControlKeybindings,
   StatusLineFieldSettings,
@@ -206,6 +207,10 @@ export const defaultHapiSettings: HapiSettings = {
   runnerEnabled: false,
   // Happy defaults
   happyEnabled: false,
+};
+
+export const defaultRemoteSettings: RemoteSettings = {
+  profiles: [],
 };
 
 // Default proxy settings

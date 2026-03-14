@@ -10,6 +10,9 @@ import { ipcMain } from 'electron';
 import { updateClaudeWorkspaceFolders } from '../services/claude/ClaudeIdeBridge';
 import { gitAutoFetchService } from '../services/git/GitAutoFetchService';
 import { WorktreeService } from '../services/git/WorktreeService';
+import { createRemoteError } from '../services/remote/RemoteI18n';
+import { isRemoteVirtualPath } from '../services/remote/RemotePath';
+import { remoteRepositoryBackend } from '../services/remote/RemoteRepositoryBackend';
 import { stopWatchersInDirectory } from './files';
 import { ptyManager } from './terminal';
 
@@ -32,6 +35,10 @@ export function clearAllWorktreeServices(): void {
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.WORKTREE_LIST, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      return remoteRepositoryBackend.listWorktrees(workdir);
+    }
+
     const service = getWorktreeService(workdir);
     const worktrees = await service.list();
 
@@ -47,6 +54,10 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_ADD,
     async (_, workdir: string, options: WorktreeCreateOptions) => {
+      if (isRemoteVirtualPath(workdir)) {
+        await remoteRepositoryBackend.addWorktree(workdir, options);
+        return;
+      }
       const service = getWorktreeService(workdir);
       await service.add(options);
     }
@@ -58,6 +69,11 @@ export function registerWorktreeHandlers(): void {
       // Stop all resources using the worktree directory before removal
       await stopWatchersInDirectory(options.path);
       ptyManager.destroyByWorkdir(options.path);
+
+      if (isRemoteVirtualPath(workdir)) {
+        await remoteRepositoryBackend.removeWorktree(workdir, options);
+        return;
+      }
 
       // Unregister from auto-fetch service
       gitAutoFetchService.unregisterWorktree(options.path);
@@ -71,24 +87,33 @@ export function registerWorktreeHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_ACTIVATE, async (_, worktreePaths: string[]) => {
-    updateClaudeWorkspaceFolders(worktreePaths);
+    updateClaudeWorkspaceFolders(worktreePaths.filter((item) => !isRemoteVirtualPath(item)));
   });
 
   // Merge handlers
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE,
     async (_, workdir: string, options: WorktreeMergeOptions) => {
+      if (isRemoteVirtualPath(workdir)) {
+        throw createRemoteError('Remote worktree merge is not supported yet');
+      }
       const service = getWorktreeService(workdir);
       return service.merge(options);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_STATE, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      throw createRemoteError('Remote worktree merge state is not supported yet');
+    }
     const service = getWorktreeService(workdir);
     return service.getMergeState(workdir);
   });
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_CONFLICTS, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      throw createRemoteError('Remote worktree conflicts are not supported yet');
+    }
     const service = getWorktreeService(workdir);
     return service.getConflicts(workdir);
   });
@@ -96,6 +121,9 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE_CONFLICT_CONTENT,
     async (_, workdir: string, filePath: string) => {
+      if (isRemoteVirtualPath(workdir)) {
+        throw createRemoteError('Remote conflict content is not supported yet');
+      }
       const service = getWorktreeService(workdir);
       return service.getConflictContent(workdir, filePath);
     }
@@ -104,12 +132,18 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE_RESOLVE,
     async (_, workdir: string, resolution: ConflictResolution) => {
+      if (isRemoteVirtualPath(workdir)) {
+        throw createRemoteError('Remote conflict resolution is not supported yet');
+      }
       const service = getWorktreeService(workdir);
       await service.resolveConflict(workdir, resolution);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_ABORT, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      throw createRemoteError('Remote merge abort is not supported yet');
+    }
     const service = getWorktreeService(workdir);
     await service.abortMerge(workdir);
   });
@@ -117,6 +151,9 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE_CONTINUE,
     async (_, workdir: string, message?: string, cleanupOptions?: WorktreeMergeCleanupOptions) => {
+      if (isRemoteVirtualPath(workdir)) {
+        throw createRemoteError('Remote merge continue is not supported yet');
+      }
       const service = getWorktreeService(workdir);
       return service.continueMerge(workdir, message, cleanupOptions);
     }

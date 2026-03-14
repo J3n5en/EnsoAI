@@ -5,6 +5,7 @@ import type {
   WorktreeMergeResult,
 } from '@shared/types';
 import { getPathBasename } from '@shared/utils/path';
+import { buildRepositoryId } from '@shared/utils/workspace';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -57,6 +58,7 @@ import { TemporaryWorkspacePanel } from './components/layout/TemporaryWorkspaceP
 import { TreeSidebar } from './components/layout/TreeSidebar';
 import { WindowTitleBar } from './components/layout/WindowTitleBar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
+import { RemoteAuthPromptHost } from './components/remote/RemoteAuthPromptHost';
 import { DraggableSettingsWindow } from './components/settings/DraggableSettingsWindow';
 import { TempWorkspaceDialogs } from './components/temp-workspace/TempWorkspaceDialogs';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -659,31 +661,56 @@ export default function App() {
   switchWorktreePathRef.current = handleSwitchWorktreePath;
 
   // Handle adding a local repository
+  const createRepositoryEntry = useCallback(
+    (
+      repoPath: string,
+      groupId: string | null,
+      options?: { kind?: 'local' | 'remote'; connectionId?: string }
+    ): Repository => ({
+      id: buildRepositoryId(options?.kind ?? 'local', repoPath, {
+        connectionId: options?.connectionId,
+        platform:
+          window.electronAPI.env.platform === 'win32'
+            ? 'win32'
+            : window.electronAPI.env.platform === 'darwin'
+              ? 'darwin'
+              : 'linux',
+      }),
+      name: getPathBasename(repoPath),
+      path: repoPath,
+      kind: options?.kind ?? 'local',
+      connectionId: options?.connectionId,
+      groupId: groupId || undefined,
+    }),
+    []
+  );
+
+  const findExistingRepository = useCallback(
+    (candidate: Repository) =>
+      repositories.find((repo) => repo.id === candidate.id || repo.path === candidate.path),
+    [repositories]
+  );
+
   const handleAddLocalRepository = useCallback(
     (selectedPath: string, groupId: string | null) => {
-      // Check if repo already exists
-      if (repositories.some((r) => r.path === selectedPath)) {
+      const candidate = createRepositoryEntry(selectedPath, groupId);
+      const existingRepo = findExistingRepository(candidate);
+      if (existingRepo) {
+        setSelectedRepo(existingRepo.path);
         return;
       }
 
-      // Extract repo name from path (handle both / and \ for Windows compatibility)
-      const name = getPathBasename(selectedPath);
-
-      const newRepo: Repository = {
-        name,
-        path: selectedPath,
-        groupId: groupId || undefined,
-      };
-
-      const updated = [...repositories, newRepo];
+      const updated = [...repositories, candidate];
       saveRepositories(updated);
 
       // Auto-select the new repo
-      setSelectedRepo(selectedPath);
+      setSelectedRepo(candidate.path);
       setActiveWorktree(null);
       setActiveTab('chat');
     },
     [
+      createRepositoryEntry,
+      findExistingRepository,
       repositories,
       saveRepositories,
       setActiveWorktree,
@@ -695,34 +722,57 @@ export default function App() {
   // Handle cloning a remote repository
   const handleCloneRepository = useCallback(
     (clonedPath: string, groupId: string | null) => {
-      // Check if repo already exists
-      if (repositories.some((r) => r.path === clonedPath)) {
-        setSelectedRepo(clonedPath);
+      const candidate = createRepositoryEntry(clonedPath, groupId);
+      const existingRepo = findExistingRepository(candidate);
+      if (existingRepo) {
+        setSelectedRepo(existingRepo.path);
         return;
       }
 
-      // Extract repo name from path
-      const name = getPathBasename(clonedPath);
-
-      const newRepo: Repository = {
-        name,
-        path: clonedPath,
-        groupId: groupId || undefined,
-      };
-
-      const updated = [...repositories, newRepo];
+      const updated = [...repositories, candidate];
       saveRepositories(updated);
 
       // Auto-select the new repo
-      setSelectedRepo(clonedPath);
+      setSelectedRepo(candidate.path);
       setActiveWorktree(null);
       setActiveTab('chat');
     },
     [
+      createRepositoryEntry,
+      findExistingRepository,
       repositories,
       saveRepositories,
       setActiveWorktree,
       setActiveTab, // Auto-select the new repo
+      setSelectedRepo,
+    ]
+  );
+
+  const handleAddRemoteRepository = useCallback(
+    (remotePath: string, groupId: string | null, connectionId: string) => {
+      const candidate = createRepositoryEntry(remotePath, groupId, {
+        kind: 'remote',
+        connectionId,
+      });
+      const existingRepo = findExistingRepository(candidate);
+      if (existingRepo) {
+        setSelectedRepo(existingRepo.path);
+        return;
+      }
+
+      const updated = [...repositories, candidate];
+      saveRepositories(updated);
+      setSelectedRepo(candidate.path);
+      setActiveWorktree(null);
+      setActiveTab('chat');
+    },
+    [
+      createRepositoryEntry,
+      findExistingRepository,
+      repositories,
+      saveRepositories,
+      setActiveTab,
+      setActiveWorktree,
       setSelectedRepo,
     ]
   );
@@ -1192,6 +1242,7 @@ export default function App() {
           defaultGroupId={activeGroupId === ALL_GROUP_ID ? null : activeGroupId}
           onAddLocal={handleAddLocalRepository}
           onCloneComplete={handleCloneRepository}
+          onAddRemote={handleAddRemoteRepository}
           onCreateGroup={handleCreateGroup}
           initialLocalPath={initialLocalPath ?? undefined}
           onClearInitialLocalPath={() => setInitialLocalPath(null)}
@@ -1220,6 +1271,9 @@ export default function App() {
 
         {/* Unsaved Prompt Host */}
         <UnsavedPromptHost />
+
+        {/* Remote SSH Auth Prompt Host */}
+        <RemoteAuthPromptHost />
 
         {/* Close Confirmation Dialog */}
         <Dialog

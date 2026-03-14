@@ -2,16 +2,21 @@ import { rmSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { type FileEntry, type FileReadResult, IPC_CHANNELS } from '@shared/types';
-import { app, ipcMain, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import iconv from 'iconv-lite';
 import { isBinaryFile } from 'isbinaryfile';
 import jschardet from 'jschardet';
 import { FileWatcher } from '../services/files/FileWatcher';
-import {
-  registerAllowedLocalFileRoot,
-  unregisterAllowedLocalFileRootsByOwner,
-} from '../services/files/LocalFileAccess';
+import { registerAllowedLocalFileRoot } from '../services/files/LocalFileAccess';
 import { createSimpleGit, normalizeGitRelativePath } from '../services/git/runtime';
+import { remoteConnectionManager } from '../services/remote/RemoteConnectionManager';
+import { createRemoteError } from '../services/remote/RemoteI18n';
+import {
+  isRemoteVirtualPath,
+  parseRemoteVirtualPath,
+  toRemoteVirtualPath,
+} from '../services/remote/RemotePath';
+import { remoteRepositoryBackend } from '../services/remote/RemoteRepositoryBackend';
 
 /**
  * Normalize encoding name to a consistent format
@@ -63,95 +68,75 @@ function detectEncoding(buffer: Buffer): { encoding: string; confidence: number 
   return { encoding: 'utf-8', confidence: 0 };
 }
 
-type FileWatcherEventType = 'create' | 'update' | 'delete';
-type FileWatcherState = 'starting' | 'running' | 'stopping';
-
-interface FileWatcherEntry {
-  watcher: FileWatcher;
-  dirPath: string;
-  normalizedDirPath: string;
-  ownerId: number;
-  state: FileWatcherState;
-  startPromise: Promise<void>;
-  cleanup: () => void;
-}
-
-const watchers = new Map<string, FileWatcherEntry>();
-const ownerWatcherKeys = new Map<number, Set<string>>();
-const fileResourceOwners = new Set<number>();
-
-function normalizeWatchedPath(inputPath: string): string {
-  return inputPath.replace(/\\/g, '/').toLowerCase();
-}
-
-function getWatcherKey(ownerId: number, dirPath: string): string {
-  return `${ownerId}:${normalizeWatchedPath(dirPath)}`;
-}
-
-function trackWatcherKey(ownerId: number, key: string): void {
-  const keys = ownerWatcherKeys.get(ownerId) ?? new Set<string>();
-  keys.add(key);
-  ownerWatcherKeys.set(ownerId, keys);
-}
-
-function untrackWatcherKey(ownerId: number, key: string): void {
-  const keys = ownerWatcherKeys.get(ownerId);
-  if (!keys) return;
-
-  keys.delete(key);
-  if (keys.size === 0) {
-    ownerWatcherKeys.delete(ownerId);
-  }
-}
-
-async function stopWatcherEntry(key: string): Promise<void> {
-  const entry = watchers.get(key);
-  if (!entry || entry.state === 'stopping') {
-    return;
-  }
-
-  entry.state = 'stopping';
-  entry.cleanup();
-  await entry.startPromise.catch(() => {});
-  await entry.watcher.stop().catch(() => {});
-
-  watchers.delete(key);
-  untrackWatcherKey(entry.ownerId, key);
-}
-
-async function stopFileWatchersForOwner(ownerId: number): Promise<void> {
-  const keys = Array.from(ownerWatcherKeys.get(ownerId) ?? []);
-  await Promise.all(keys.map((key) => stopWatcherEntry(key)));
-}
-
-function ensureFileOwnerCleanup(sender: WebContents): void {
-  const ownerId = sender.id;
-  if (fileResourceOwners.has(ownerId)) {
-    return;
-  }
-
-  fileResourceOwners.add(ownerId);
-  sender.once('destroyed', () => {
-    fileResourceOwners.delete(ownerId);
-    unregisterAllowedLocalFileRootsByOwner(ownerId);
-    void stopFileWatchersForOwner(ownerId).catch(() => {});
-  });
-}
+const watchers = new Map<string, FileWatcher>();
+const watcherCleanups = new Map<string, () => void>();
+const remoteWatcherStopHandlers = new Map<string, () => Promise<void>>();
 
 /**
  * Stop all file watchers for paths under the given directory
  */
 export async function stopWatchersInDirectory(dirPath: string): Promise<void> {
-  const normalizedDir = normalizeWatchedPath(dirPath);
+  if (isRemoteVirtualPath(dirPath)) {
+    const stopRemoteWatcher = remoteWatcherStopHandlers.get(dirPath);
+    if (stopRemoteWatcher) {
+      await stopRemoteWatcher();
+      remoteWatcherStopHandlers.delete(dirPath);
+    }
+    return;
+  }
 
-  for (const [key, entry] of Array.from(watchers.entries())) {
-    if (
-      entry.normalizedDirPath === normalizedDir ||
-      entry.normalizedDirPath.startsWith(`${normalizedDir}/`)
-    ) {
-      await stopWatcherEntry(key);
+  const normalizedDir = dirPath.replace(/\\/g, '/').toLowerCase();
+
+  for (const [path, watcher] of watchers.entries()) {
+    const normalizedPath = path.replace(/\\/g, '/').toLowerCase();
+    if (normalizedPath === normalizedDir || normalizedPath.startsWith(`${normalizedDir}/`)) {
+      watcherCleanups.get(path)?.();
+      await watcher.stop();
+      watchers.delete(path);
+      watcherCleanups.delete(path);
     }
   }
+}
+
+async function startRemoteWatcher(window: BrowserWindow, dirPath: string): Promise<void> {
+  const { connectionId, remotePath } = parseRemoteVirtualPath(dirPath);
+  const watcherId = `remote-watch:${connectionId}:${remotePath}`;
+
+  const handleRemoteEvent = (payload: unknown) => {
+    if (window.isDestroyed()) return;
+    const event = payload as {
+      watcherId?: string;
+      type?: 'create' | 'update' | 'delete';
+      path?: string;
+    };
+    if (event.watcherId !== watcherId || !event.type || !event.path) return;
+    window.webContents.send(IPC_CHANNELS.FILE_CHANGE, {
+      type: event.type,
+      path: toRemoteVirtualPath(connectionId, event.path),
+    });
+  };
+
+  const removeListener = await remoteConnectionManager.addEventListener(
+    connectionId,
+    'remote:file:change',
+    handleRemoteEvent
+  );
+  await remoteConnectionManager.call(connectionId, 'fs:watchStart', {
+    id: watcherId,
+    path: remotePath,
+  });
+
+  remoteWatcherStopHandlers.set(dirPath, async () => {
+    remoteWatcherStopHandlers.delete(dirPath);
+    removeListener();
+    try {
+      await remoteConnectionManager.call(connectionId, 'fs:watchStop', {
+        id: watcherId,
+      });
+    } catch {
+      // Helper may already be gone. Cleanup should stay best-effort.
+    }
+  });
 }
 
 export function registerFileHandlers(): void {
@@ -159,17 +144,16 @@ export function registerFileHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.FILE_SAVE_TO_TEMP,
     async (
-      event,
+      _,
       filename: string,
       data: Uint8Array
     ): Promise<{ success: boolean; path?: string; error?: string }> => {
       try {
         const tempDir = app.getPath('temp');
         const ensoaiInputDir = join(tempDir, 'ensoai-input');
-        ensureFileOwnerCleanup(event.sender);
         // Allow renderer to preview saved temp images via local-file:// protocol.
         // Without this, local-file access is denied by default.
-        registerAllowedLocalFileRoot(ensoaiInputDir, event.sender.id);
+        registerAllowedLocalFileRoot(ensoaiInputDir);
         await mkdir(ensoaiInputDir, { recursive: true });
 
         // Defense-in-depth: never trust renderer-controlled path segments.
@@ -200,6 +184,10 @@ export function registerFileHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.FILE_READ, async (_, filePath: string): Promise<FileReadResult> => {
+    if (isRemoteVirtualPath(filePath)) {
+      return remoteRepositoryBackend.readFile(filePath);
+    }
+
     // Design Decision: Binary File Detection
     // ----------------------------------------
     // We detect binary files BEFORE reading the full content to avoid:
@@ -246,6 +234,11 @@ export function registerFileHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.FILE_WRITE,
     async (_, filePath: string, content: string, encoding?: string) => {
+      if (isRemoteVirtualPath(filePath)) {
+        await remoteRepositoryBackend.writeFile(filePath, content);
+        return;
+      }
+
       const targetEncoding = encoding || 'utf-8';
       const buffer = iconv.encode(content, targetEncoding);
       await writeFile(filePath, buffer);
@@ -255,6 +248,11 @@ export function registerFileHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.FILE_CREATE,
     async (_, filePath: string, content = '', options?: { overwrite?: boolean }) => {
+      if (isRemoteVirtualPath(filePath)) {
+        await remoteRepositoryBackend.createFile(filePath, content, options);
+        return;
+      }
+
       await mkdir(dirname(filePath), { recursive: true });
       const flag = options?.overwrite ? 'w' : 'wx';
       await writeFile(filePath, content, { encoding: 'utf-8', flag });
@@ -262,25 +260,49 @@ export function registerFileHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.FILE_CREATE_DIR, async (_, dirPath: string) => {
+    if (isRemoteVirtualPath(dirPath)) {
+      await remoteRepositoryBackend.createDirectory(dirPath);
+      return;
+    }
+
     await mkdir(dirPath, { recursive: true });
   });
 
   ipcMain.handle(IPC_CHANNELS.FILE_RENAME, async (_, fromPath: string, toPath: string) => {
+    if (isRemoteVirtualPath(fromPath) || isRemoteVirtualPath(toPath)) {
+      await remoteRepositoryBackend.rename(fromPath, toPath);
+      return;
+    }
+
     await rename(fromPath, toPath);
   });
 
   ipcMain.handle(IPC_CHANNELS.FILE_MOVE, async (_, fromPath: string, toPath: string) => {
+    if (isRemoteVirtualPath(fromPath) || isRemoteVirtualPath(toPath)) {
+      await remoteRepositoryBackend.move(fromPath, toPath);
+      return;
+    }
+
     await rename(fromPath, toPath);
   });
 
   ipcMain.handle(
     IPC_CHANNELS.FILE_DELETE,
     async (_, targetPath: string, options?: { recursive?: boolean }) => {
+      if (isRemoteVirtualPath(targetPath)) {
+        await remoteRepositoryBackend.delete(targetPath, options);
+        return;
+      }
+
       await rm(targetPath, { recursive: options?.recursive ?? true, force: false });
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.FILE_EXISTS, async (_, filePath: string): Promise<boolean> => {
+    if (isRemoteVirtualPath(filePath)) {
+      return remoteRepositoryBackend.exists(filePath);
+    }
+
     try {
       const stats = await stat(filePath);
       return stats.isFile();
@@ -292,16 +314,22 @@ export function registerFileHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.FILE_REVEAL_IN_FILE_MANAGER,
     async (_, filePath: string): Promise<void> => {
+      if (isRemoteVirtualPath(filePath)) {
+        throw createRemoteError('Reveal in file manager is not supported for remote files');
+      }
       shell.showItemInFolder(filePath);
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.FILE_LIST,
-    async (event, dirPath: string, gitRoot?: string): Promise<FileEntry[]> => {
-      ensureFileOwnerCleanup(event.sender);
+    async (_, dirPath: string, gitRoot?: string): Promise<FileEntry[]> => {
+      if (isRemoteVirtualPath(dirPath)) {
+        return remoteRepositoryBackend.listFiles(dirPath);
+      }
+
       if (gitRoot) {
-        registerAllowedLocalFileRoot(gitRoot, event.sender.id);
+        registerAllowedLocalFileRoot(gitRoot);
       }
 
       const entries = await readdir(dirPath);
@@ -352,11 +380,18 @@ export function registerFileHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.FILE_WATCH_START, async (event, dirPath: string) => {
-    ensureFileOwnerCleanup(event.sender);
-    const ownerId = event.sender.id;
-    const watcherKey = getWatcherKey(ownerId, dirPath);
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return;
 
-    if (watchers.has(watcherKey)) {
+    if (isRemoteVirtualPath(dirPath)) {
+      if (remoteWatcherStopHandlers.has(dirPath)) {
+        return;
+      }
+      await startRemoteWatcher(window, dirPath);
+      return;
+    }
+
+    if (watchers.has(dirPath)) {
       return;
     }
 
@@ -364,7 +399,7 @@ export function registerFileHandlers(): void {
     const MAX_FLUSH_EVENTS = 500;
     const FLUSH_DELAY_MS = 100;
 
-    const pendingEvents = new Map<string, FileWatcherEventType>();
+    const pendingEvents = new Map<string, 'create' | 'update' | 'delete'>();
     let bulkMode = false;
     let flushTimer: NodeJS.Timeout | null = null;
 
@@ -381,20 +416,20 @@ export function registerFileHandlers(): void {
       if (flushTimer) return;
       flushTimer = setTimeout(() => {
         flushTimer = null;
-        if (event.sender.isDestroyed()) {
-          void stopWatcherEntry(watcherKey);
+        if (window.isDestroyed()) {
+          cleanup();
           return;
         }
 
         if (bulkMode || pendingEvents.size > MAX_FLUSH_EVENTS) {
           const normalizedDir = dirPath.replace(/\\/g, '/');
-          event.sender.send(IPC_CHANNELS.FILE_CHANGE, {
+          window.webContents.send(IPC_CHANNELS.FILE_CHANGE, {
             type: 'update',
             path: `${normalizedDir}/.enso-bulk`,
           });
         } else {
           for (const [path, type] of pendingEvents) {
-            event.sender.send(IPC_CHANNELS.FILE_CHANGE, { type, path });
+            window.webContents.send(IPC_CHANNELS.FILE_CHANGE, { type, path });
           }
         }
 
@@ -404,10 +439,7 @@ export function registerFileHandlers(): void {
     };
 
     const watcher = new FileWatcher(dirPath, (eventType, changedPath) => {
-      if (event.sender.isDestroyed()) {
-        void stopWatcherEntry(watcherKey);
-        return;
-      }
+      if (window.isDestroyed()) return;
 
       if (bulkMode) {
         scheduleFlush();
@@ -423,43 +455,36 @@ export function registerFileHandlers(): void {
       scheduleFlush();
     });
 
-    const entry: FileWatcherEntry = {
-      watcher,
-      dirPath,
-      normalizedDirPath: normalizeWatchedPath(dirPath),
-      ownerId,
-      state: 'starting',
-      startPromise: Promise.resolve(),
-      cleanup,
-    };
-    watchers.set(watcherKey, entry);
-    trackWatcherKey(ownerId, watcherKey);
-
-    const startPromise = watcher.start();
-    entry.startPromise = startPromise;
-
-    try {
-      await startPromise;
-
-      if (!watchers.has(watcherKey)) {
-        await watcher.stop().catch(() => {});
-        return;
-      }
-
-      entry.state = 'running';
-    } catch (error) {
-      await stopWatcherEntry(watcherKey);
-      throw error;
-    }
+    await watcher.start();
+    watchers.set(dirPath, watcher);
+    watcherCleanups.set(dirPath, cleanup);
   });
 
-  ipcMain.handle(IPC_CHANNELS.FILE_WATCH_STOP, async (event, dirPath: string) => {
-    const watcherKey = getWatcherKey(event.sender.id, dirPath);
-    await stopWatcherEntry(watcherKey);
+  ipcMain.handle(IPC_CHANNELS.FILE_WATCH_STOP, async (_, dirPath: string) => {
+    if (isRemoteVirtualPath(dirPath)) {
+      const stopRemoteWatcher = remoteWatcherStopHandlers.get(dirPath);
+      if (stopRemoteWatcher) {
+        await stopRemoteWatcher();
+        remoteWatcherStopHandlers.delete(dirPath);
+      }
+      return;
+    }
+
+    const watcher = watchers.get(dirPath);
+    if (watcher) {
+      watcherCleanups.get(dirPath)?.();
+      await watcher.stop();
+      watchers.delete(dirPath);
+      watcherCleanups.delete(dirPath);
+    }
   });
 
   // FILE_COPY: Copy a single file/directory
   ipcMain.handle(IPC_CHANNELS.FILE_COPY, async (_, sourcePath: string, targetPath: string) => {
+    if (isRemoteVirtualPath(sourcePath) || isRemoteVirtualPath(targetPath)) {
+      throw createRemoteError('Remote copy is not supported yet');
+    }
+
     const sourceStats = await stat(sourcePath);
 
     if (sourceStats.isDirectory()) {
@@ -489,6 +514,10 @@ export function registerFileHandlers(): void {
         targetModified: number;
       }>
     > => {
+      if (sources.some(isRemoteVirtualPath) || isRemoteVirtualPath(targetDir)) {
+        throw createRemoteError('Remote conflict detection is not supported yet');
+      }
+
       const conflicts = [];
 
       for (const sourcePath of sources) {
@@ -524,6 +553,10 @@ export function registerFileHandlers(): void {
       targetDir: string,
       conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
     ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> => {
+      if (sources.some(isRemoteVirtualPath) || isRemoteVirtualPath(targetDir)) {
+        throw createRemoteError('Remote batch copy is not supported yet');
+      }
+
       const success: string[] = [];
       const failed: Array<{ path: string; error: string }> = [];
 
@@ -577,6 +610,10 @@ export function registerFileHandlers(): void {
       targetDir: string,
       conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
     ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> => {
+      if (sources.some(isRemoteVirtualPath) || isRemoteVirtualPath(targetDir)) {
+        throw createRemoteError('Remote batch move is not supported yet');
+      }
+
       const success: string[] = [];
       const failed: Array<{ path: string; error: string }> = [];
 
@@ -658,10 +695,20 @@ async function copyDirectory(source: string, target: string): Promise<void> {
 }
 
 export async function stopAllFileWatchers(): Promise<void> {
-  const keys = Array.from(watchers.keys());
-  await Promise.all(keys.map((key) => stopWatcherEntry(key)));
-  ownerWatcherKeys.clear();
-  fileResourceOwners.clear();
+  const stopPromises: Promise<void>[] = [];
+  for (const watcher of watchers.values()) {
+    stopPromises.push(watcher.stop());
+  }
+  for (const stopRemoteWatcher of remoteWatcherStopHandlers.values()) {
+    stopPromises.push(stopRemoteWatcher());
+  }
+  await Promise.allSettled(stopPromises);
+  watchers.clear();
+  for (const cleanup of watcherCleanups.values()) {
+    cleanup();
+  }
+  watcherCleanups.clear();
+  remoteWatcherStopHandlers.clear();
 }
 
 /**
@@ -669,14 +716,15 @@ export async function stopAllFileWatchers(): Promise<void> {
  * Fires unsubscribe without waiting - process will exit anyway.
  */
 export function stopAllFileWatchersSync(): void {
-  for (const [key, entry] of watchers.entries()) {
-    entry.cleanup();
-    entry.watcher.stop().catch(() => {});
-    untrackWatcherKey(entry.ownerId, key);
+  for (const watcher of watchers.values()) {
+    watcher.stop().catch(() => {});
   }
   watchers.clear();
-  ownerWatcherKeys.clear();
-  fileResourceOwners.clear();
+  for (const cleanup of watcherCleanups.values()) {
+    cleanup();
+  }
+  watcherCleanups.clear();
+  remoteWatcherStopHandlers.clear();
 }
 
 /**
