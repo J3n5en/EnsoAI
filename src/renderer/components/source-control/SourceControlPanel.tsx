@@ -902,7 +902,7 @@ export function SourceControlPanel({
           <div
             className={cn(
               'flex min-h-0 flex-col overflow-hidden border-b transition-[flex-grow] duration-200 ease-out',
-              changesExpanded ? 'min-h-0 flex-1 basis-0' : 'flex-none'
+              changesExpanded ? 'flex-1 basis-0' : 'flex-none'
             )}
           >
             <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors pr-4">
@@ -1020,7 +1020,7 @@ export function SourceControlPanel({
           <div
             className={cn(
               'flex min-h-0 flex-col overflow-hidden transition-[flex-grow] duration-200 ease-out',
-              historyExpanded ? 'min-h-0 flex-1 basis-0' : 'flex-none'
+              historyExpanded ? 'flex-1 basis-0' : 'flex-none'
             )}
           >
             <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors">
@@ -1050,7 +1050,7 @@ export function SourceControlPanel({
                 historyExpanded ? 'flex-1 min-h-0 opacity-100' : 'h-0 opacity-0 pointer-events-none'
               )}
             >
-              <div className="absolute inset-0 min-h-0">
+              <div className="absolute inset-0">
                 <CommitHistoryList
                   commits={currentCommits}
                   selectedHash={selectedCommitHash}
