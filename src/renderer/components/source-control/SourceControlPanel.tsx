@@ -860,9 +860,9 @@ export function SourceControlPanel({
   }
 
   return (
-    <div ref={containerRef} className="flex h-full flex-col">
+    <div ref={containerRef} className="flex h-full min-h-0 flex-col">
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left Sidebar Expand Button (when collapsed) */}
         <button
           type="button"
@@ -879,7 +879,7 @@ export function SourceControlPanel({
         {/* Left: Changes List */}
         <div
           className={cn(
-            'flex shrink-0 flex-col border-r overflow-hidden transition-[width,opacity] duration-200 ease-out',
+            'flex shrink-0 min-h-0 flex-col border-r overflow-hidden transition-[width,opacity] duration-200 ease-out',
             sidebarCollapsed ? 'w-0 opacity-0' : 'opacity-100'
           )}
           style={{ width: sidebarCollapsed ? 0 : panelWidth }}
@@ -901,8 +901,8 @@ export function SourceControlPanel({
           {/* Changes Section (Collapsible) */}
           <div
             className={cn(
-              'flex flex-col border-b overflow-hidden shrink-0 min-h-0 transition-[flex-grow] duration-200 ease-out',
-              changesExpanded ? 'grow' : 'grow-0'
+              'flex min-h-0 flex-col overflow-hidden border-b transition-[flex-grow] duration-200 ease-out',
+              changesExpanded ? 'min-h-0 flex-1 basis-0' : 'flex-none'
             )}
           >
             <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors pr-4">
@@ -1019,8 +1019,8 @@ export function SourceControlPanel({
           {/* History Section (Collapsible) */}
           <div
             className={cn(
-              'flex flex-col overflow-hidden shrink-0 min-h-0 transition-[flex-grow] duration-200 ease-out',
-              historyExpanded ? 'grow' : 'grow-0'
+              'flex min-h-0 flex-col overflow-hidden transition-[flex-grow] duration-200 ease-out',
+              historyExpanded ? 'min-h-0 flex-1 basis-0' : 'flex-none'
             )}
           >
             <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors">
@@ -1050,7 +1050,7 @@ export function SourceControlPanel({
                 historyExpanded ? 'flex-1 min-h-0 opacity-100' : 'h-0 opacity-0 pointer-events-none'
               )}
             >
-              <div className="absolute inset-0">
+              <div className="absolute inset-0 min-h-0">
                 <CommitHistoryList
                   commits={currentCommits}
                   selectedHash={selectedCommitHash}
