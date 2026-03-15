@@ -107,6 +107,18 @@ export const IPC_CHANNELS = {
   TERMINAL_EXIT: 'terminal:exit',
   TERMINAL_GET_ACTIVITY: 'terminal:getActivity',
 
+  // Session
+  SESSION_CREATE: 'session:create',
+  SESSION_ATTACH: 'session:attach',
+  SESSION_DETACH: 'session:detach',
+  SESSION_KILL: 'session:kill',
+  SESSION_WRITE: 'session:write',
+  SESSION_RESIZE: 'session:resize',
+  SESSION_LIST: 'session:list',
+  SESSION_GET_ACTIVITY: 'session:getActivity',
+  SESSION_DATA: 'session:data',
+  SESSION_EXIT: 'session:exit',
+
   // Agent
   AGENT_LIST: 'agent:list',
   AGENT_STOP_NOTIFICATION: 'agent:stop:notification',

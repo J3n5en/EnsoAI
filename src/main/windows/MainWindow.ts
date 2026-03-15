@@ -12,6 +12,7 @@ import { IPC_CHANNELS } from '@shared/types';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import { getCurrentLocale } from '../services/i18n';
 import { remoteSessionManager } from '../services/remote/RemoteSessionManager';
+import { sessionManager } from '../services/session/SessionManager';
 import { autoUpdaterService } from '../services/updater/AutoUpdater';
 import { windowContextManager } from './WindowContext';
 
@@ -386,6 +387,7 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
   }
 
   win.on('closed', () => {
+    void sessionManager.detachWindowSessions(win.id);
     void remoteSessionManager.closeSessionForClosedWindow(win.id);
   });
 

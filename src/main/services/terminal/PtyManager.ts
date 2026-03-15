@@ -314,12 +314,20 @@ export class PtyManager {
   >();
   private readonly ACTIVITY_CACHE_TTL_MS = 2000; // 缓存 2 秒
 
+  allocateId(): string {
+    return `pty-${++this.counter}`;
+  }
+
   create(
     options: TerminalCreateOptions,
     onData: (data: string) => void,
-    onExit?: (exitCode: number, signal?: number) => void
+    onExit?: (exitCode: number, signal?: number) => void,
+    providedId?: string
   ): string {
-    const id = `pty-${++this.counter}`;
+    const id = providedId || this.allocateId();
+    if (this.sessions.has(id)) {
+      throw new Error(`PTY session already exists: ${id}`);
+    }
     const home = process.env.HOME || process.env.USERPROFILE || homedir();
     const cwd = options.cwd || home;
     const spawnCwd = options.spawnCwd || cwd;

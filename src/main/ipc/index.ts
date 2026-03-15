@@ -30,14 +30,14 @@ import { registerLogHandlers } from './log';
 import { registerNotificationHandlers } from './notification';
 import { registerRemoteHandlers } from './remote';
 import { registerSearchHandlers } from './search';
-import { registerSettingsHandlers } from './settings';
-import { registerShellHandlers } from './shell';
-import { registerTempWorkspaceHandlers } from './tempWorkspace';
 import {
   destroyAllTerminals,
   destroyAllTerminalsAndWait,
-  registerTerminalHandlers,
-} from './terminal';
+  registerSessionHandlers,
+} from './session';
+import { registerSettingsHandlers } from './settings';
+import { registerShellHandlers } from './shell';
+import { registerTempWorkspaceHandlers } from './tempWorkspace';
 import { cleanupTmuxSync, registerTmuxHandlers } from './tmux';
 import { cleanupTodo, cleanupTodoSync, registerTodoHandlers } from './todo';
 import { registerUpdaterHandlers } from './updater';
@@ -48,7 +48,7 @@ export function registerIpcHandlers(): void {
   registerGitHandlers();
   registerWorktreeHandlers();
   registerFileHandlers();
-  registerTerminalHandlers();
+  registerSessionHandlers();
   registerAgentHandlers();
   registerDialogHandlers();
   registerAppHandlers();

@@ -1,3 +1,5 @@
+import type { SessionKind } from '@shared/types';
+import { isRemoteVirtualPath, parseRemoteVirtualPath } from '@shared/utils/remotePath';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -17,21 +19,14 @@ import '@xterm/xterm/css/xterm.css';
 const FILE_PATH_REGEX =
   /(?:^|[\s'"({[@])((?:\.{1,2}\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:tsx|ts|jsx|json|mjs|cjs|js|scss|css|less|html|vue|svelte|md|yaml|yml|toml|py|go|rs|java|cpp|hpp|c|h|rb|php|bash|zsh|sh))(?::(\d+))?(?::(\d+))?/g;
 
-// Check if data contains visible characters (not just ANSI control sequences)
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
 const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;?]*[a-zA-Z]/g;
 
 // Maximum length for session name derived from terminal current line
 const SESSION_NAME_MAX_LENGTH = 36;
 
-function hasVisibleContent(data: string): boolean {
-  // Remove all ANSI escape sequences
-  const stripped = data.replace(ANSI_ESCAPE_REGEX, '');
-  // Check if there are any non-whitespace visible characters
-  return stripped.trim().length > 0;
-}
-
 export interface UseXtermOptions {
+  backendSessionId?: string;
   cwd?: string;
   command?: {
     shell: string;
@@ -40,6 +35,8 @@ export interface UseXtermOptions {
   env?: Record<string, string>;
   isActive?: boolean;
   initialCommand?: string;
+  kind?: SessionKind;
+  persistOnDisconnect?: boolean;
   onExit?: () => void;
   onData?: (data: string) => void;
   onCustomKey?: (
@@ -49,6 +46,7 @@ export interface UseXtermOptions {
   ) => boolean;
   onTitleChange?: (title: string) => void;
   onInit?: (ptyId: string) => void;
+  onSessionIdChange?: (sessionId: string) => void;
   onSplit?: () => void;
   onMerge?: () => void;
   canMerge?: boolean;
@@ -117,16 +115,20 @@ function useTerminalSettings() {
 }
 
 export function useXterm({
+  backendSessionId,
   cwd,
   command,
   env,
   isActive = true,
   initialCommand,
+  kind = 'terminal',
+  persistOnDisconnect = false,
   onExit,
   onData,
   onCustomKey,
   onTitleChange,
   onInit,
+  onSessionIdChange,
   onSplit,
   onMerge,
   canMerge = false,
@@ -158,6 +160,8 @@ export function useXterm({
   onTitleChangeRef.current = onTitleChange;
   const onInitRef = useRef(onInit);
   onInitRef.current = onInit;
+  const onSessionIdChangeRef = useRef(onSessionIdChange);
+  onSessionIdChangeRef.current = onSessionIdChange;
   const onSplitRef = useRef(onSplit);
   onSplitRef.current = onSplit;
   const onMergeRef = useRef(onMerge);
@@ -168,8 +172,8 @@ export function useXterm({
   copyOnSelectionRef.current = copyOnSelection;
   const hasBeenActivatedRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
-  const hasReceivedDataRef = useRef(false);
   const initialCommandRef = useRef(initialCommand);
+  initialCommandRef.current = initialCommand;
   // Track if this terminal should respond to global shortcuts
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
@@ -178,8 +182,8 @@ export function useXterm({
     () =>
       command
         ? `${command.shell}:${command.args.join(' ')}`
-        : `shellConfig:${shellConfig.shellType}`,
-    [command, shellConfig.shellType]
+        : `shellConfig:${JSON.stringify(shellConfig)}:initialCommand:${initialCommand || ''}`,
+    [command, shellConfig, initialCommand]
   );
   // rAF write buffer for smooth rendering
   const writeBufferRef = useRef('');
@@ -187,14 +191,14 @@ export function useXterm({
 
   const write = useCallback((data: string) => {
     if (ptyIdRef.current) {
-      window.electronAPI.terminal.write(ptyIdRef.current, data);
+      window.electronAPI.session.write(ptyIdRef.current, data);
     }
   }, []);
 
   const fit = useCallback(() => {
     if (fitAddonRef.current && terminalRef.current && ptyIdRef.current) {
       fitAddonRef.current.fit();
-      window.electronAPI.terminal.resize(ptyIdRef.current, {
+      window.electronAPI.session.resize(ptyIdRef.current, {
         cols: terminalRef.current.cols,
         rows: terminalRef.current.rows,
       });
@@ -531,32 +535,32 @@ export function useXterm({
       if (event.type === 'keydown' && ptyIdRef.current) {
         // Cmd+Left: jump to line start (Ctrl+A)
         if (event.metaKey && !event.altKey && event.key === 'ArrowLeft') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x01');
+          window.electronAPI.session.write(ptyIdRef.current, '\x01');
           return false;
         }
         // Cmd+Right: jump to line end (Ctrl+E)
         if (event.metaKey && !event.altKey && event.key === 'ArrowRight') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x05');
+          window.electronAPI.session.write(ptyIdRef.current, '\x05');
           return false;
         }
         // Option+Left: jump word backward (ESC+b)
         if (event.altKey && !event.metaKey && event.key === 'ArrowLeft') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x1bb');
+          window.electronAPI.session.write(ptyIdRef.current, '\x1bb');
           return false;
         }
         // Option+Right: jump word forward (ESC+f)
         if (event.altKey && !event.metaKey && event.key === 'ArrowRight') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x1bf');
+          window.electronAPI.session.write(ptyIdRef.current, '\x1bf');
           return false;
         }
         // Option+Backspace: delete word backward (Ctrl+W)
         if (event.altKey && !event.metaKey && event.key === 'Backspace') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x17');
+          window.electronAPI.session.write(ptyIdRef.current, '\x17');
           return false;
         }
         // Cmd+Backspace: delete to line start (Ctrl+U)
         if (event.metaKey && !event.altKey && event.key === 'Backspace') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x15');
+          window.electronAPI.session.write(ptyIdRef.current, '\x15');
           return false;
         }
       }
@@ -584,26 +588,10 @@ export function useXterm({
     });
 
     try {
-      const ptyId = await window.electronAPI.terminal.create({
-        cwd: cwd || window.electronAPI.env.HOME,
-        // If command is provided (e.g., for agent), use shell/args directly
-        // Otherwise, use shellConfig from settings
-        ...(command ? { shell: command.shell, args: command.args } : { shellConfig }),
-        cols: terminal.cols,
-        rows: terminal.rows,
-        env,
-        initialCommand: initialCommandRef.current,
-      });
-
-      ptyIdRef.current = ptyId;
-
-      // Call onInit callback with ptyId
-      onInitRef.current?.(ptyId);
-
       // Handle data from pty with debounced buffering for smooth rendering
       // 30ms delay merges fragmented TUI packets (clear + write)
-      const cleanup = window.electronAPI.terminal.onData((event) => {
-        if (event.id === ptyId) {
+      const cleanup = window.electronAPI.session.onData((event) => {
+        if (event.sessionId === ptyIdRef.current) {
           // Buffer data
           writeBufferRef.current += event.data;
 
@@ -613,11 +601,6 @@ export function useXterm({
               if (writeBufferRef.current.length > 0) {
                 const bufferedData = writeBufferRef.current;
                 terminal.write(bufferedData);
-                // Hide loading only after receiving visible content (not just control sequences)
-                if (!hasReceivedDataRef.current && hasVisibleContent(bufferedData)) {
-                  hasReceivedDataRef.current = true;
-                  setIsLoading(false);
-                }
                 // Call onData after write to avoid React re-render storm
                 onDataRef.current?.(bufferedData);
                 writeBufferRef.current = '';
@@ -631,8 +614,8 @@ export function useXterm({
 
       // Handle exit - delay to ensure pending data events are received
       // then flush remaining buffer before calling onExit
-      const exitCleanup = window.electronAPI.terminal.onExit((event) => {
-        if (event.id === ptyId) {
+      const exitCleanup = window.electronAPI.session.onExit((event) => {
+        if (event.sessionId === ptyIdRef.current) {
           // Wait for any pending data events to arrive (IPC race condition)
           setTimeout(() => {
             // Flush any remaining buffered data
@@ -648,24 +631,139 @@ export function useXterm({
       });
       exitCleanupRef.current = exitCleanup;
 
+      const createOptions = {
+        cwd: cwd || window.electronAPI.env.HOME,
+        // If command is provided (e.g., for agent), use shell/args directly
+        // Otherwise, use shellConfig from settings
+        ...(command ? { shell: command.shell, args: command.args } : { shellConfig }),
+        cols: terminal.cols,
+        rows: terminal.rows,
+        env,
+        initialCommand: initialCommandRef.current,
+        kind,
+        persistOnDisconnect,
+      } as const;
+
+      const setCurrentSessionId = (sessionId: string) => {
+        ptyIdRef.current = sessionId;
+        onInitRef.current?.(sessionId);
+        onSessionIdChangeRef.current?.(sessionId);
+      };
+
+      const attachToSession = (sessionId: string) =>
+        window.electronAPI.session.attach({
+          sessionId,
+          cwd: createOptions.cwd,
+        });
+
+      const remoteConnectionId =
+        typeof createOptions.cwd === 'string' && isRemoteVirtualPath(createOptions.cwd)
+          ? parseRemoteVirtualPath(createOptions.cwd).connectionId
+          : null;
+      const isAttachSessionMissingError = (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return message.includes('远程会话不存在') || message.includes('Session not found');
+      };
+      let hasRetriedRemoteAttach = false;
+
+      const createAndAttachSession = async () => {
+        const created = await window.electronAPI.session.create(createOptions);
+        const createdSessionId = created.session.sessionId;
+        setCurrentSessionId(createdSessionId);
+
+        try {
+          return await attachToSession(createdSessionId);
+        } catch (attachError) {
+          await window.electronAPI.session.kill(createdSessionId).catch(() => {});
+
+          if (
+            remoteConnectionId &&
+            !hasRetriedRemoteAttach &&
+            isAttachSessionMissingError(attachError)
+          ) {
+            hasRetriedRemoteAttach = true;
+            console.warn(
+              '[xterm] Remote session disappeared before attach completed, reconnecting once:',
+              attachError
+            );
+            await window.electronAPI.remote.disconnect(remoteConnectionId).catch(() => {});
+            await window.electronAPI.remote.connect(remoteConnectionId);
+
+            const recreated = await window.electronAPI.session.create(createOptions);
+            const recreatedSessionId = recreated.session.sessionId;
+            setCurrentSessionId(recreatedSessionId);
+
+            try {
+              return await attachToSession(recreatedSessionId);
+            } catch (retryAttachError) {
+              await window.electronAPI.session.kill(recreatedSessionId).catch(() => {});
+              throw retryAttachError;
+            }
+          }
+
+          throw attachError;
+        }
+      };
+
+      let session = null;
+      let replay: string | undefined;
+      if (backendSessionId) {
+        try {
+          setCurrentSessionId(backendSessionId);
+          const result = await attachToSession(backendSessionId);
+          session = result.session;
+          replay = result.replay;
+        } catch (error) {
+          console.warn('[xterm] Failed to attach existing session, creating a new one:', error);
+          ptyIdRef.current = null;
+        }
+      }
+
+      if (!session) {
+        const attached = await createAndAttachSession();
+        session = attached.session;
+        replay = attached.replay;
+      }
+
+      ptyIdRef.current = session.sessionId;
+      setIsLoading(false);
+
+      if (replay) {
+        terminal.write(replay);
+        onDataRef.current?.(replay);
+      }
+
       // Handle input
       terminal.onData((data) => {
         if (ptyIdRef.current) {
-          window.electronAPI.terminal.write(ptyIdRef.current, data);
+          window.electronAPI.session.write(ptyIdRef.current, data);
         }
       });
 
-      // Note: Don't focus here - wait for first data to avoid cursor on blank screen
-      // Focus is handled by the isActive effect after isLoading becomes false
+      // Focus is handled by the isActive effect after loading ends.
     } catch (error) {
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+      exitCleanupRef.current?.();
+      exitCleanupRef.current = null;
+      ptyIdRef.current = null;
       setIsLoading(false);
       terminal.writeln(`\x1b[31mFailed to start terminal.\x1b[0m`);
       terminal.writeln(`\x1b[33mError: ${error}\x1b[0m`);
     }
-  }, [cwd, command, shellConfig, commandKey, terminalRenderer]);
+  }, [
+    backendSessionId,
+    cwd,
+    command,
+    shellConfig,
+    commandKey,
+    terminalRenderer,
+    kind,
+    persistOnDisconnect,
+  ]);
 
   useEffect(() => {
-    const shouldActivate = isActive || initialCommandRef.current;
+    const shouldActivate = isActive || Boolean(initialCommand);
     if (shouldActivate && !hasBeenActivatedRef.current) {
       hasBeenActivatedRef.current = true;
       requestAnimationFrame(() => {
@@ -674,7 +772,7 @@ export function useXterm({
         });
       });
     }
-  }, [isActive, initTerminal]);
+  }, [isActive, initialCommand, initTerminal]);
 
   // Handle dynamic renderer switching
   useEffect(() => {
@@ -689,7 +787,7 @@ export function useXterm({
       cleanupRef.current?.();
       exitCleanupRef.current?.();
       if (ptyIdRef.current) {
-        window.electronAPI.terminal.destroy(ptyIdRef.current);
+        window.electronAPI.session.detach(ptyIdRef.current).catch(() => {});
       }
       // Remove copy-on-selection listener before disposing terminal
       if (copyOnSelectionHandlerRef.current) {
@@ -728,7 +826,7 @@ export function useXterm({
     const handleResize = () => {
       if (fitAddonRef.current && terminalRef.current && ptyIdRef.current) {
         fitAddonRef.current.fit();
-        window.electronAPI.terminal.resize(ptyIdRef.current, {
+        window.electronAPI.session.resize(ptyIdRef.current, {
           cols: terminalRef.current.cols,
           rows: terminalRef.current.rows,
         });

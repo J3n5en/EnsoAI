@@ -8,6 +8,7 @@ import {
   clearTerminalThemeFromApp,
   isTerminalThemeDark,
 } from '@/lib/ghosttyTheme';
+import { getBootstrappedRemoteSession } from '@/session/bootstrap';
 import { updateRendererLogging } from '@/utils/logging';
 import {
   defaultAgentSettings,
@@ -740,10 +741,9 @@ export const useSettingsStore = create<SettingsState>()(
 
           // Auto-detect best shell on Windows for new users
           const shellAutoDetectKey = 'enso-shell-auto-detected';
-          if (
-            window.electronAPI?.env?.platform === 'win32' &&
-            !localStorage.getItem(shellAutoDetectKey)
-          ) {
+          const remoteSession = getBootstrappedRemoteSession();
+          const executionPlatform = remoteSession?.platform ?? window.electronAPI?.env?.platform;
+          if (executionPlatform === 'win32' && !localStorage.getItem(shellAutoDetectKey)) {
             localStorage.setItem(shellAutoDetectKey, 'true');
             window.electronAPI.shell
               .detect()

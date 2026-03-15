@@ -23,6 +23,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { getBootstrappedRemoteSession } from '@/session/bootstrap';
 import {
   type FileTreeDisplayMode,
   type LayoutMode,
@@ -308,7 +309,9 @@ export function GeneralSettings() {
     });
   }, [customArgsText, shellConfig, setShellConfig]);
 
-  const isWindows = window.electronAPI?.env.platform === 'win32';
+  const remoteSession = getBootstrappedRemoteSession();
+  const executionPlatform = remoteSession?.platform ?? window.electronAPI?.env.platform;
+  const isWindows = executionPlatform === 'win32';
   const shellPathPlaceholder = isWindows ? 'cmd.exe' : '/bin/bash';
   const shellArgsPlaceholder = isWindows
     ? '/k "C:\\Program Files\\init.bat"'

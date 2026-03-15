@@ -38,6 +38,8 @@ export interface RemoteConnectionStatus {
   helperVersion?: string;
   platform?: RemotePlatform;
   arch?: RemoteArchitecture;
+  ptySupported?: boolean;
+  ptyError?: string;
   error?: string;
   lastCheckedAt?: number;
 }
@@ -51,6 +53,8 @@ export interface RemoteRuntimeStatus {
   runtimeVersion?: string;
   serverVersion?: string;
   connected: boolean;
+  ptySupported?: boolean;
+  ptyError?: string;
   error?: string;
   lastCheckedAt?: number;
 }

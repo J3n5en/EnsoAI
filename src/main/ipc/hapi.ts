@@ -5,6 +5,8 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { type CloudflaredConfig, cloudflaredManager } from '../services/hapi/CloudflaredManager';
 import { hapiRunnerManager } from '../services/hapi/HapiRunnerManager';
 import { type HapiConfig, hapiServerManager } from '../services/hapi/HapiServerManager';
+import { remoteConnectionManager } from '../services/remote/RemoteConnectionManager';
+import { remoteSessionManager } from '../services/remote/RemoteSessionManager';
 
 interface StoredHapiSettings {
   enabled: boolean;
@@ -76,12 +78,24 @@ function syncRunnerStateInBackground(runnerEnabled: boolean): void {
 
 export function registerHapiHandlers(): void {
   // Check global hapi installation (cached)
-  ipcMain.handle(IPC_CHANNELS.HAPI_CHECK_GLOBAL, async (_, forceRefresh?: boolean) => {
+  ipcMain.handle(IPC_CHANNELS.HAPI_CHECK_GLOBAL, async (event, forceRefresh?: boolean) => {
+    const session = remoteSessionManager.getSession(event.sender);
+    if (session) {
+      return await remoteConnectionManager.call(session.connectionId, 'hapi:checkGlobal', {
+        forceRefresh,
+      });
+    }
     return await hapiServerManager.checkGlobalInstall(forceRefresh);
   });
 
   // Check global happy installation (cached)
-  ipcMain.handle(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, async (_, forceRefresh?: boolean) => {
+  ipcMain.handle(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, async (event, forceRefresh?: boolean) => {
+    const session = remoteSessionManager.getSession(event.sender);
+    if (session) {
+      return await remoteConnectionManager.call(session.connectionId, 'happy:checkGlobal', {
+        forceRefresh,
+      });
+    }
     return await hapiServerManager.checkHappyGlobalInstall(forceRefresh);
   });
 

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
@@ -21,6 +21,7 @@ import { getRemoteServerSource, REMOTE_SERVER_VERSION } from './RemoteHelperSour
 import { createRemoteError, getRemoteErrorDetail, translateRemote } from './RemoteI18n';
 import {
   ensureRemoteRuntimeAsset,
+  getRemoteRuntimeAsset,
   MANAGED_REMOTE_NODE_VERSION,
   MANAGED_REMOTE_RUNTIME_DIR,
   type RemoteRuntimeAsset,
@@ -91,7 +92,9 @@ interface RuntimeInstallPaths {
   incomingDir: string;
   archivePath: string;
   runtimeRootDir: string;
+  nodeModulesPath: string;
   serverPath: string;
+  manifestPath: string;
   nodePath: string;
 }
 
@@ -101,6 +104,24 @@ interface RemoteEnvironmentInfo {
   homeDir: string;
   nodeVersion: string;
   gitVersion?: string | null;
+  ptySupported?: boolean;
+  ptyError?: string | null;
+}
+
+interface RemoteRuntimeVerificationResult {
+  ptySupported?: boolean;
+  ptyError?: string;
+}
+
+interface RemoteRuntimeManifest {
+  manifestVersion: 1;
+  serverVersion: string;
+  nodeVersion: string;
+  platform: RemotePlatform;
+  arch: RemoteArchitecture;
+  linuxPtyRequired: boolean;
+  helperSourceSha256: string;
+  runtimeArchiveName: string;
 }
 
 interface RemoteDirectoryEntry {
@@ -119,8 +140,12 @@ const REMOTE_KNOWN_HOSTS_PATH = 'remote-known_hosts';
 const SSH_KEYSCAN_TIMEOUT_SECONDS = 5;
 const MAX_REMOTE_DIAGNOSTIC_LINES = 40;
 const MAX_REMOTE_DIAGNOSTIC_CHARS = 8_192;
+const REMOTE_PTY_UNAVAILABLE_PREFIX = 'REMOTE_PTY_UNAVAILABLE:';
+const RUNTIME_MANIFEST_FILENAME = 'enso-remote-runtime-manifest.json';
+const REMOTE_SERVER_SOURCE = normalizeLineEndings(getRemoteServerSource());
+const REMOTE_SERVER_SOURCE_SHA256 = createHash('sha256').update(REMOTE_SERVER_SOURCE).digest('hex');
 
-type RemoteServerLaunchMode = 'stdio' | 'self-test';
+type RemoteServerLaunchMode = 'bridge' | 'ensure-daemon' | 'self-test' | 'stop-daemon';
 
 function now(): number {
   return Date.now();
@@ -161,6 +186,32 @@ function normalizeRemotePath(input: string): string {
     return `${replaced}/`;
   }
   return replaced || '/';
+}
+
+function parseJsonLine<T>(input: string): T | null {
+  const lines = normalizeLineEndings(input)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      return JSON.parse(lines[index]) as T;
+    } catch {
+      // Ignore non-JSON noise and keep searching backwards.
+    }
+  }
+
+  return null;
+}
+
+function extractRemotePtyError(detail: string | undefined): string | undefined {
+  if (!detail) {
+    return undefined;
+  }
+
+  const match = detail.match(/REMOTE_PTY_UNAVAILABLE:\s*([^\n]+)/);
+  return match?.[1]?.trim() || undefined;
 }
 
 function shellQuote(value: string): string {
@@ -361,6 +412,7 @@ export class RemoteConnectionManager {
   private pendingConnections = new Map<string, Promise<RemoteConnectionStatus>>();
   private runtimes = new Map<string, ConnectionRuntime>();
   private volatileStatuses = new Map<string, RemoteConnectionStatus>();
+  private disconnectListeners = new Map<string, Set<() => void>>();
   private readonly authBroker = new RemoteAuthBroker();
   private loaded = false;
 
@@ -459,7 +511,10 @@ export class RemoteConnectionManager {
 
   async getRuntimeStatus(profileOrId: string | ConnectionProfile): Promise<RemoteRuntimeStatus> {
     const profile = await this.resolveProfile(profileOrId);
-    const connected = this.servers.get(profile.id)?.status.connected ?? false;
+    const connectionStatus = this.getStatus(profile.id);
+    const connected = connectionStatus.connected;
+    let ptySupported = connectionStatus.ptySupported;
+    let ptyError = connectionStatus.ptyError;
 
     try {
       const runtime = await this.resolveRuntime(profile, false);
@@ -468,9 +523,17 @@ export class RemoteConnectionManager {
       let error: string | undefined;
       if (installedVersions.includes(REMOTE_SERVER_VERSION)) {
         try {
-          await this.verifyManagedRuntime(profile, runtime, paths);
+          const verification = await this.verifyManagedRuntime(profile, runtime, paths);
+          ptySupported = verification.ptySupported ?? ptySupported;
+          ptyError =
+            verification.ptySupported === true ? undefined : (verification.ptyError ?? ptyError);
         } catch (verificationError) {
           error = getRemoteErrorDetail(verificationError);
+          const verificationPtyError = extractRemotePtyError(error);
+          if (verificationPtyError) {
+            ptySupported = false;
+            ptyError = verificationPtyError;
+          }
         }
       }
 
@@ -483,6 +546,8 @@ export class RemoteConnectionManager {
         runtimeVersion: MANAGED_REMOTE_NODE_VERSION,
         serverVersion: REMOTE_SERVER_VERSION,
         connected,
+        ptySupported,
+        ptyError,
         error,
         lastCheckedAt: now(),
       };
@@ -502,6 +567,8 @@ export class RemoteConnectionManager {
         runtimeVersion: MANAGED_REMOTE_NODE_VERSION,
         serverVersion: REMOTE_SERVER_VERSION,
         connected,
+        ptySupported,
+        ptyError,
         error: error instanceof Error ? error.message : String(error),
         lastCheckedAt: now(),
       };
@@ -514,8 +581,10 @@ export class RemoteConnectionManager {
 
   async installRuntime(profileOrId: string | ConnectionProfile): Promise<RemoteRuntimeStatus> {
     const profile = await this.resolveProfile(profileOrId);
+    await this.disconnect(profile.id).catch(() => {});
     const runtime = await this.resolveRuntime(profile, false);
     const paths = this.getRuntimeInstallPaths(profile, runtime);
+    await this.stopRemoteDaemon(profile, runtime, paths).catch(() => {});
     await this.installManagedRuntime(profile, runtime, paths);
     return this.getRuntimeStatus(profile);
   }
@@ -531,6 +600,7 @@ export class RemoteConnectionManager {
     await this.disconnect(profile.id).catch(() => {});
     const runtime = await this.resolveRuntime(profile, false);
     const paths = this.getRuntimeInstallPaths(profile, runtime);
+    await this.stopRemoteDaemon(profile, runtime, paths).catch(() => {});
     await this.installManagedRuntime(profile, runtime, paths);
     await this.cleanupOldRuntimeVersionsOnHost(profile, runtime, paths);
     return this.getRuntimeStatus(profile);
@@ -545,6 +615,7 @@ export class RemoteConnectionManager {
     await this.disconnect(profile.id).catch(() => {});
     const runtime = await this.resolveRuntime(profile, false);
     const paths = this.getRuntimeInstallPaths(profile, runtime);
+    await this.stopRemoteDaemon(profile, runtime, paths).catch(() => {});
     await this.deleteInstalledRuntimeVersions(profile, runtime, paths);
     return this.getRuntimeStatus(profile);
   }
@@ -602,19 +673,6 @@ export class RemoteConnectionManager {
     });
   }
 
-  async getTerminalSshOptions(
-    connectionId: string,
-    remoteCommand: string
-  ): Promise<{ args: string[]; env: Record<string, string> }> {
-    const profile = await this.resolveProfile(connectionId);
-    const runtime = await this.resolveRuntime(profile, false);
-    const sshContext = await this.buildSshContext(profile, runtime.resolvedHost);
-    return {
-      args: [...sshContext.optionArgs, '-tt', profile.sshTarget, remoteCommand],
-      env: sshContext.env,
-    };
-  }
-
   async getRuntimeInfo(
     profileOrId: string | ConnectionProfile
   ): Promise<RemoteConnectionRuntimeInfo> {
@@ -656,6 +714,22 @@ export class RemoteConnectionManager {
     server.proc.on(event, listener);
     return () => {
       server.proc.off(event, listener);
+    };
+  }
+
+  onDidDisconnect(connectionId: string, listener: () => void): () => void {
+    const listeners = this.disconnectListeners.get(connectionId) ?? new Set<() => void>();
+    listeners.add(listener);
+    this.disconnectListeners.set(connectionId, listeners);
+    return () => {
+      const current = this.disconnectListeners.get(connectionId);
+      if (!current) {
+        return;
+      }
+      current.delete(listener);
+      if (current.size === 0) {
+        this.disconnectListeners.delete(connectionId);
+      }
     };
   }
 
@@ -724,6 +798,9 @@ export class RemoteConnectionManager {
       );
     }
 
+    await this.disconnect(profile.id).catch(() => {});
+    await this.stopRemoteDaemon(profile, runtime, paths).catch(() => {});
+
     this.setStatus(profile.id, (current) => ({
       ...current,
       phase: 'preparing-runtime',
@@ -768,7 +845,9 @@ export class RemoteConnectionManager {
       incomingDir,
       archivePath,
       runtimeRootDir,
+      nodeModulesPath: normalizeRemotePath(`${versionDir}/node_modules`),
       serverPath: normalizeRemotePath(`${versionDir}/${SERVER_FILENAME}`),
+      manifestPath: normalizeRemotePath(`${versionDir}/${RUNTIME_MANIFEST_FILENAME}`),
       nodePath,
     };
   }
@@ -800,7 +879,9 @@ export class RemoteConnectionManager {
               )})`,
               'foreach ($path in $paths) { New-Item -ItemType Directory -Force -Path $path | Out-Null }',
             ].join('; ')
-          : `mkdir -p ${shellQuote(paths.installDir)} ${shellQuote(paths.versionDir)} ${shellQuote(paths.incomingDir)} ${shellQuote(paths.runtimeRootDir)}`,
+          : runtime.platform === 'linux'
+            ? `mkdir -p ${shellQuote(paths.installDir)} ${shellQuote(paths.versionDir)} ${shellQuote(paths.incomingDir)}`
+            : `mkdir -p ${shellQuote(paths.installDir)} ${shellQuote(paths.versionDir)} ${shellQuote(paths.incomingDir)} ${shellQuote(paths.runtimeRootDir)}`,
       ],
       runtime.resolvedHost
     );
@@ -827,6 +908,7 @@ export class RemoteConnectionManager {
     }));
 
     await this.syncRemoteServerSource(profile, runtime, paths.serverPath);
+    await this.syncRemoteRuntimeManifest(profile, runtime, paths, runtimeAsset.asset);
   }
 
   private async extractManagedRuntime(
@@ -847,9 +929,19 @@ export class RemoteConnectionManager {
               `Expand-Archive -LiteralPath ${this.toPowerShellString(paths.archivePath)} -DestinationPath ${this.toPowerShellString(paths.runtimeRootDir)} -Force`,
             ].join('; '),
           ]
-        : [
-            `rm -rf ${shellQuote(paths.runtimeRootDir)} && mkdir -p ${shellQuote(paths.runtimeRootDir)} && tar -xzf ${shellQuote(paths.archivePath)} -C ${shellQuote(paths.runtimeRootDir)}`,
-          ];
+        : runtime.platform === 'linux'
+          ? [
+              [
+                `rm -rf ${shellQuote(paths.runtimeRootDir)}`,
+                `rm -rf ${shellQuote(paths.nodeModulesPath)}`,
+                `rm -f ${shellQuote(paths.serverPath)}`,
+                `mkdir -p ${shellQuote(paths.versionDir)}`,
+                `tar -xzf ${shellQuote(paths.archivePath)} -C ${shellQuote(paths.versionDir)}`,
+              ].join(' && '),
+            ]
+          : [
+              `rm -rf ${shellQuote(paths.runtimeRootDir)} && mkdir -p ${shellQuote(paths.runtimeRootDir)} && tar -xzf ${shellQuote(paths.archivePath)} -C ${shellQuote(paths.runtimeRootDir)}`,
+            ];
 
     await this.execSsh(profile, command, runtime.resolvedHost);
 
@@ -874,11 +966,9 @@ export class RemoteConnectionManager {
       app.getPath('temp'),
       `enso-remote-server-${profile.id}-${randomUUID()}.cjs`
     );
-    const source = normalizeLineEndings(getRemoteServerSource());
-
     try {
-      await this.validateRemoteServerSource(source);
-      await writeFile(tempPath, source, 'utf8');
+      await this.validateRemoteServerSource(REMOTE_SERVER_SOURCE);
+      await writeFile(tempPath, REMOTE_SERVER_SOURCE, 'utf8');
       await this.uploadFileOverScp(profile, tempPath, serverPath, runtime.resolvedHost);
 
       if (runtime.platform !== 'win32') {
@@ -887,6 +977,109 @@ export class RemoteConnectionManager {
     } finally {
       await unlink(tempPath).catch(() => {});
     }
+  }
+
+  private buildExpectedRuntimeManifest(
+    runtime: ConnectionRuntime,
+    runtimeAsset: Pick<RemoteRuntimeAsset, 'archiveName'>
+  ): RemoteRuntimeManifest {
+    return {
+      manifestVersion: 1,
+      serverVersion: REMOTE_SERVER_VERSION,
+      nodeVersion: MANAGED_REMOTE_NODE_VERSION,
+      platform: runtime.platform,
+      arch: runtime.arch,
+      linuxPtyRequired: runtime.platform === 'linux',
+      helperSourceSha256: REMOTE_SERVER_SOURCE_SHA256,
+      runtimeArchiveName: runtimeAsset.archiveName,
+    };
+  }
+
+  private describeRuntimeManifestMismatch(
+    actual: RemoteRuntimeManifest,
+    expected: RemoteRuntimeManifest
+  ): string | null {
+    const mismatches: string[] = [];
+
+    if (actual.manifestVersion !== expected.manifestVersion) {
+      mismatches.push(
+        `manifestVersion=${actual.manifestVersion} (expected ${expected.manifestVersion})`
+      );
+    }
+    if (actual.serverVersion !== expected.serverVersion) {
+      mismatches.push(`serverVersion=${actual.serverVersion} (expected ${expected.serverVersion})`);
+    }
+    if (actual.nodeVersion !== expected.nodeVersion) {
+      mismatches.push(`nodeVersion=${actual.nodeVersion} (expected ${expected.nodeVersion})`);
+    }
+    if (actual.platform !== expected.platform) {
+      mismatches.push(`platform=${actual.platform} (expected ${expected.platform})`);
+    }
+    if (actual.arch !== expected.arch) {
+      mismatches.push(`arch=${actual.arch} (expected ${expected.arch})`);
+    }
+    if (actual.linuxPtyRequired !== expected.linuxPtyRequired) {
+      mismatches.push(
+        `linuxPtyRequired=${String(actual.linuxPtyRequired)} (expected ${String(expected.linuxPtyRequired)})`
+      );
+    }
+    if (actual.helperSourceSha256 !== expected.helperSourceSha256) {
+      mismatches.push('helperSourceSha256 mismatch');
+    }
+    if (actual.runtimeArchiveName !== expected.runtimeArchiveName) {
+      mismatches.push(
+        `runtimeArchiveName=${actual.runtimeArchiveName} (expected ${expected.runtimeArchiveName})`
+      );
+    }
+
+    return mismatches.length > 0 ? mismatches.join('; ') : null;
+  }
+
+  private async syncRemoteRuntimeManifest(
+    profile: ConnectionProfile,
+    runtime: ConnectionRuntime,
+    paths: RuntimeInstallPaths,
+    runtimeAsset: RemoteRuntimeAsset
+  ): Promise<void> {
+    const tempPath = join(
+      app.getPath('temp'),
+      `enso-remote-runtime-manifest-${profile.id}-${randomUUID()}.json`
+    );
+    const manifest = this.buildExpectedRuntimeManifest(runtime, runtimeAsset);
+
+    try {
+      await writeFile(tempPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+      await this.uploadFileOverScp(profile, tempPath, paths.manifestPath, runtime.resolvedHost);
+    } finally {
+      await unlink(tempPath).catch(() => {});
+    }
+  }
+
+  private async readRemoteTextFile(
+    profile: ConnectionProfile,
+    runtime: ConnectionRuntime,
+    targetPath: string
+  ): Promise<string> {
+    const command =
+      runtime.platform === 'win32'
+        ? [
+            'powershell',
+            '-NoProfile',
+            '-Command',
+            `Get-Content -LiteralPath ${this.toPowerShellString(targetPath)} -Raw`,
+          ]
+        : [`cat ${shellQuote(targetPath)}`];
+    const result = await this.runSshCommand(profile, command, runtime.resolvedHost);
+    if (result.code !== 0) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime manifest'),
+        },
+        this.formatCommandResultDetail(result)
+      );
+    }
+    return result.stdout;
   }
 
   private async validateRemoteServerSource(source: string): Promise<void> {
@@ -919,11 +1112,21 @@ export class RemoteConnectionManager {
     paths: RuntimeInstallPaths,
     mode: RemoteServerLaunchMode
   ): string {
+    return this.buildRemoteServerCommandWithArgs(runtime, paths, [mode]);
+  }
+
+  private buildRemoteServerCommandWithArgs(
+    runtime: ConnectionRuntime,
+    paths: RuntimeInstallPaths,
+    args: string[]
+  ): string {
     if (runtime.platform === 'win32') {
-      return `"${paths.nodePath.replace(/\//g, '\\')}" "${paths.serverPath.replace(/\//g, '\\')}" --${mode}`;
+      const quotedArgs = args.map((arg) => `--${arg}`).join(' ');
+      return `"${paths.nodePath.replace(/\//g, '\\')}" "${paths.serverPath.replace(/\//g, '\\')}" ${quotedArgs}`;
     }
 
-    return `${shellQuote(paths.nodePath)} ${shellQuote(paths.serverPath)} --${mode}`;
+    const quotedArgs = args.map((arg) => `--${arg}`).join(' ');
+    return `${shellQuote(paths.nodePath)} ${shellQuote(paths.serverPath)} ${quotedArgs}`;
   }
 
   private formatCommandResultDetail(result: LocalCommandResult): string | undefined {
@@ -973,32 +1176,93 @@ export class RemoteConnectionManager {
     profile: ConnectionProfile,
     runtime: ConnectionRuntime,
     paths: RuntimeInstallPaths
-  ): Promise<void> {
-    const checks = [
-      {
-        labelKey: 'Managed runtime node --version',
-        remoteCommand: [this.buildRemoteNodeCommand(runtime, paths, ['--version'])],
-      },
-      {
-        labelKey: 'Managed remote server self-test',
-        remoteCommand: [this.buildRemoteServerCommand(runtime, paths, 'self-test')],
-      },
-    ];
+  ): Promise<RemoteRuntimeVerificationResult> {
+    const runtimeAsset = getRemoteRuntimeAsset(runtime.platform, runtime.arch);
+    const expectedManifest = this.buildExpectedRuntimeManifest(runtime, runtimeAsset);
+    let manifest: RemoteRuntimeManifest;
 
-    for (const check of checks) {
-      const result = await this.runSshCommand(profile, check.remoteCommand, runtime.resolvedHost);
-      if (result.code === 0) {
-        continue;
-      }
+    try {
+      manifest = JSON.parse(
+        normalizeLineEndings(await this.readRemoteTextFile(profile, runtime, paths.manifestPath))
+      ) as RemoteRuntimeManifest;
+    } catch (error) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime manifest'),
+        },
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+
+    const manifestMismatch = this.describeRuntimeManifestMismatch(manifest, expectedManifest);
+    if (manifestMismatch) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime manifest'),
+        },
+        manifestMismatch
+      );
+    }
+
+    const nodeVersionResult = await this.runSshCommand(
+      profile,
+      [this.buildRemoteNodeCommand(runtime, paths, ['--version'])],
+      runtime.resolvedHost
+    );
+    if (nodeVersionResult.code !== 0) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime node --version'),
+        },
+        this.formatCommandResultDetail(nodeVersionResult)
+      );
+    }
+
+    const reportedNodeVersion = nodeVersionResult.stdout.trim() || nodeVersionResult.stderr.trim();
+    const expectedNodeVersion = `v${MANAGED_REMOTE_NODE_VERSION}`;
+    if (reportedNodeVersion !== expectedNodeVersion) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime node --version'),
+        },
+        `Unexpected node version: ${reportedNodeVersion || '<empty>'} (expected ${expectedNodeVersion})`
+      );
+    }
+
+    const selfTestResult = await this.runSshCommand(
+      profile,
+      [this.buildRemoteServerCommand(runtime, paths, 'self-test')],
+      runtime.resolvedHost
+    );
+    const selfTestInfo =
+      parseJsonLine<RemoteEnvironmentInfo>(selfTestResult.stdout) ??
+      parseJsonLine<RemoteEnvironmentInfo>(selfTestResult.stderr);
+
+    if (selfTestResult.code !== 0) {
+      const detail =
+        selfTestInfo?.ptySupported === false && selfTestInfo.ptyError
+          ? `${REMOTE_PTY_UNAVAILABLE_PREFIX} ${selfTestInfo.ptyError}`
+          : selfTestInfo?.ptyError ||
+            this.formatCommandResultDetail(selfTestResult) ||
+            translateRemote('Remote server bootstrap timed out');
 
       throw createRemoteError(
         'Managed remote runtime verification failed during {{step}}',
         {
-          step: translateRemote(check.labelKey),
+          step: translateRemote('Managed remote server self-test'),
         },
-        this.formatCommandResultDetail(result)
+        detail
       );
     }
+
+    return {
+      ptySupported: selfTestInfo?.ptySupported,
+      ptyError: selfTestInfo?.ptyError || undefined,
+    };
   }
 
   private async startConnectedServer(
@@ -1017,6 +1281,7 @@ export class RemoteConnectionManager {
       helperVersion: REMOTE_SERVER_VERSION,
     }));
 
+    await this.ensureRemoteDaemon(profile, runtime, paths);
     const server = await this.spawnServerProcess(profile, runtime, paths);
     try {
       this.setStatus(profile.id, (current) => ({
@@ -1043,6 +1308,8 @@ export class RemoteConnectionManager {
         runtimeVersion: envInfo.nodeVersion,
         serverVersion: REMOTE_SERVER_VERSION,
         helperVersion: REMOTE_SERVER_VERSION,
+        ptySupported: envInfo.ptySupported,
+        ptyError: envInfo.ptyError || undefined,
         lastCheckedAt: now(),
       };
       this.servers.set(profile.id, server);
@@ -1071,7 +1338,7 @@ export class RemoteConnectionManager {
     paths: RuntimeInstallPaths
   ): Promise<RemoteServerProcess> {
     const { spawn } = await import('node:child_process');
-    const remoteCommand = this.buildRemoteServerCommand(runtime, paths, 'stdio');
+    const remoteCommand = this.buildRemoteServerCommand(runtime, paths, 'bridge');
     const sshContext = await this.buildSshContext(profile, runtime.resolvedHost);
     const proc = spawn('ssh', [...sshContext.optionArgs, profile.sshTarget, remoteCommand], {
       env: sshContext.env,
@@ -1178,6 +1445,39 @@ export class RemoteConnectionManager {
     return server;
   }
 
+  private async ensureRemoteDaemon(
+    profile: ConnectionProfile,
+    runtime: ConnectionRuntime,
+    paths: RuntimeInstallPaths
+  ): Promise<void> {
+    const result = await this.runSshCommand(
+      profile,
+      [this.buildRemoteServerCommand(runtime, paths, 'ensure-daemon')],
+      runtime.resolvedHost
+    );
+    if (result.code === 0) {
+      return;
+    }
+
+    throw createRemoteError(
+      'Failed to start remote server',
+      undefined,
+      this.formatCommandResultDetail(result)
+    );
+  }
+
+  private async stopRemoteDaemon(
+    profile: ConnectionProfile,
+    runtime: ConnectionRuntime,
+    paths: RuntimeInstallPaths
+  ): Promise<void> {
+    await this.runSshCommand(
+      profile,
+      [this.buildRemoteServerCommand(runtime, paths, 'stop-daemon')],
+      runtime.resolvedHost
+    );
+  }
+
   private finalizeServerShutdown(server: RemoteServerProcess, error?: unknown): void {
     if (server.closed) {
       return;
@@ -1205,6 +1505,17 @@ export class RemoteConnectionManager {
       this.servers.delete(server.connectionId);
     }
     this.volatileStatuses.set(server.connectionId, server.status);
+
+    const disconnectListeners = this.disconnectListeners.get(server.connectionId);
+    if (disconnectListeners) {
+      for (const listener of disconnectListeners) {
+        try {
+          listener();
+        } catch (listenerError) {
+          console.warn('[remote] Disconnect listener failed:', listenerError);
+        }
+      }
+    }
   }
 
   private async callServer<T = unknown>(

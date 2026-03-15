@@ -35,7 +35,7 @@ export function ShellTerminal({
   const handleCustomKey = useCallback((event: KeyboardEvent, ptyId: string) => {
     if (event.key === 'Enter' && event.shiftKey) {
       if (event.type === 'keydown') {
-        window.electronAPI.terminal.write(ptyId, '\x0a');
+        window.electronAPI.session.write(ptyId, '\x0a');
       }
       return false; // Prevent default Enter behavior
     }

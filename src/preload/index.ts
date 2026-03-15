@@ -43,6 +43,14 @@ import type {
   RemoteHelperStatus,
   RemoteRuntimeStatus,
   RemoteWindowSession,
+  SessionAttachOptions,
+  SessionAttachResult,
+  SessionCreateOptions,
+  SessionDataEvent,
+  SessionDescriptor,
+  SessionExitEvent,
+  SessionOpenResult,
+  SessionResizeOptions,
   ShellConfig,
   ShellInfo,
   TempWorkspaceCheckResult,
@@ -383,17 +391,46 @@ const electronAPI = {
     getActivity: (id: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_ACTIVITY, id),
     onData: (callback: (event: { id: string; data: string }) => void): (() => void) => {
-      const handler = (_: unknown, event: { id: string; data: string }) => callback(event);
-      ipcRenderer.on(IPC_CHANNELS.TERMINAL_DATA, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.TERMINAL_DATA, handler);
+      const handler = (_: unknown, event: SessionDataEvent) =>
+        callback({ id: event.sessionId, data: event.data });
+      ipcRenderer.on(IPC_CHANNELS.SESSION_DATA, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_DATA, handler);
     },
     onExit: (
       callback: (event: { id: string; exitCode: number; signal?: number }) => void
     ): (() => void) => {
-      const handler = (_: unknown, event: { id: string; exitCode: number; signal?: number }) =>
-        callback(event);
-      ipcRenderer.on(IPC_CHANNELS.TERMINAL_EXIT, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.TERMINAL_EXIT, handler);
+      const handler = (_: unknown, event: SessionExitEvent) =>
+        callback({ id: event.sessionId, exitCode: event.exitCode, signal: event.signal });
+      ipcRenderer.on(IPC_CHANNELS.SESSION_EXIT, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_EXIT, handler);
+    },
+  },
+
+  session: {
+    create: (options?: SessionCreateOptions): Promise<SessionOpenResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_CREATE, options),
+    attach: (options: SessionAttachOptions): Promise<SessionAttachResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_ATTACH, options),
+    detach: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_DETACH, sessionId),
+    kill: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_KILL, sessionId),
+    write: (sessionId: string, data: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_WRITE, sessionId, data),
+    resize: (sessionId: string, size: SessionResizeOptions): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_RESIZE, sessionId, size),
+    list: (): Promise<SessionDescriptor[]> => ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST),
+    getActivity: (sessionId: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_ACTIVITY, sessionId),
+    onData: (callback: (event: SessionDataEvent) => void): (() => void) => {
+      const handler = (_: unknown, event: SessionDataEvent) => callback(event);
+      ipcRenderer.on(IPC_CHANNELS.SESSION_DATA, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_DATA, handler);
+    },
+    onExit: (callback: (event: SessionExitEvent) => void): (() => void) => {
+      const handler = (_: unknown, event: SessionExitEvent) => callback(event);
+      ipcRenderer.on(IPC_CHANNELS.SESSION_EXIT, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_EXIT, handler);
     },
   },
 

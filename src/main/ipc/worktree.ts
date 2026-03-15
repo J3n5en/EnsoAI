@@ -13,8 +13,8 @@ import { WorktreeService } from '../services/git/WorktreeService';
 import { createRemoteError } from '../services/remote/RemoteI18n';
 import { isRemoteVirtualPath } from '../services/remote/RemotePath';
 import { remoteRepositoryBackend } from '../services/remote/RemoteRepositoryBackend';
+import { sessionManager } from '../services/session/SessionManager';
 import { stopWatchersInDirectory } from './files';
-import { ptyManager } from './terminal';
 
 const worktreeServices = new Map<string, WorktreeService>();
 
@@ -68,7 +68,7 @@ export function registerWorktreeHandlers(): void {
     async (_, workdir: string, options: WorktreeRemoveOptions) => {
       // Stop all resources using the worktree directory before removal
       await stopWatchersInDirectory(options.path);
-      ptyManager.destroyByWorkdir(options.path);
+      await sessionManager.killByWorkdir(options.path);
 
       if (isRemoteVirtualPath(workdir)) {
         await remoteRepositoryBackend.removeWorktree(workdir, options);
