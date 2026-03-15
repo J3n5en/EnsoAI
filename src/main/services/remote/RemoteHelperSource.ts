@@ -17,10 +17,12 @@ const state = {
   watchers: new Map(),
 };
 
+const REMOTE_SERVER_VERSION = ${JSON.stringify(REMOTE_SERVER_VERSION)};
 const DAEMON_INFO_FILE = 'enso-remote-daemon.json';
 const MAX_SESSION_REPLAY_CHARS = 65536;
 const REMOTE_PTY_UNAVAILABLE = 'REMOTE_PTY_UNAVAILABLE';
 const REMOTE_SETTINGS_PATH = '.ensoai/settings.json';
+const RUNTIME_MANIFEST_FILENAME = 'enso-remote-runtime-manifest.json';
 const GLOBAL_STATUS_CACHE_TTL = 300000;
 let cachedNodePty = undefined;
 let cachedNodePtyLoadError = null;
@@ -306,13 +308,15 @@ async function fileExists(filePath) {
   }
 }
 
-async function testEnvironment() {
+async function testEnvironment(options = {}) {
   let gitVersion = null;
-  try {
-    const git = await execCommand('git', ['--version']);
-    gitVersion = git.stdout.trim() || git.stderr.trim() || null;
-  } catch {
-    gitVersion = null;
+  if (options.includeGitVersion !== false) {
+    try {
+      const git = await execCommand('git', ['--version']);
+      gitVersion = git.stdout.trim() || git.stderr.trim() || null;
+    } catch {
+      gitVersion = null;
+    }
   }
 
   const ptyStatus = getPtyStatus();
@@ -328,14 +332,22 @@ async function testEnvironment() {
 }
 
 async function runSelfTest() {
-  const env = await testEnvironment();
+  const [env, runtimeManifest, helperSourceSha256] = await Promise.all([
+    testEnvironment({ includeGitVersion: false }),
+    readRuntimeManifest(),
+    sha256File(__filename),
+  ]);
   const payload = {
     ok: env.platform !== 'linux' || env.ptySupported,
     platform: env.platform,
+    arch: process.arch,
     nodeVersion: env.nodeVersion,
     homeDir: env.homeDir,
     ptySupported: env.ptySupported,
     ptyError: env.ptyError,
+    helperSourceSha256,
+    serverVersion: REMOTE_SERVER_VERSION,
+    runtimeManifest,
   };
   const output = JSON.stringify(payload) + '\n';
 
@@ -898,6 +910,25 @@ function createPtyUnavailableError(reason) {
 
 function getRemoteSettingsFilePath() {
   return path.join(os.homedir(), REMOTE_SETTINGS_PATH);
+}
+
+function getRuntimeManifestPath() {
+  return path.join(path.dirname(__filename), RUNTIME_MANIFEST_FILENAME);
+}
+
+async function readRuntimeManifest() {
+  try {
+    const content = await fsp.readFile(getRuntimeManifestPath(), 'utf8');
+    const parsed = JSON.parse(content);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function sha256File(filePath) {
+  const content = await fsp.readFile(filePath);
+  return crypto.createHash('sha256').update(content).digest('hex');
 }
 
 async function readStoredSettings() {

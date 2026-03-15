@@ -157,13 +157,20 @@ export class RemoteSessionManager {
   private readonly sessions = new Map<number, ActiveRemoteSession>();
 
   async openSession(profileOrId: string | ConnectionProfile): Promise<ActiveRemoteSession> {
-    const runtime = await remoteConnectionManager.getRuntimeInfo(profileOrId);
-    await remoteConnectionManager.connect(runtime.profile.id);
+    const status = await remoteConnectionManager.connect(profileOrId);
+    const runtime = await remoteConnectionManager.getRuntimeInfo(status.connectionId);
 
     const hostKey = buildHostKey(runtime);
     const session = buildRemoteSession(runtime, hostKey);
-    const storage = await this.loadOrCreateStorage(session);
-    storage.settingsData = await this.loadOrCreateSettings(session);
+    const [storage, settingsData] = await Promise.all([
+      this.measureConnectionStep(session.connectionId, 'load-session-storage', () =>
+        this.loadOrCreateStorage(session)
+      ),
+      this.measureConnectionStep(session.connectionId, 'load-session-settings', () =>
+        this.loadOrCreateSettings(session)
+      ),
+    ]);
+    storage.settingsData = settingsData;
 
     return {
       session,
@@ -448,6 +455,19 @@ export class RemoteSessionManager {
       throw new Error('No remote session is active for this window');
     }
     return state;
+  }
+
+  private async measureConnectionStep<T>(
+    connectionId: string,
+    step: 'load-session-storage' | 'load-session-settings',
+    action: () => Promise<T>
+  ): Promise<T> {
+    const startedAt = now();
+    try {
+      return await action();
+    } finally {
+      remoteConnectionManager.recordDiagnosticStep(connectionId, step, now() - startedAt);
+    }
   }
 
   private async loadOrCreateStorage(session: RemoteWindowSession): Promise<SessionStorageDocument> {

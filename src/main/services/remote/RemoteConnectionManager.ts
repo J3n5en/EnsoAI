@@ -7,6 +7,8 @@ import type {
   FileEntry,
   RemoteArchitecture,
   RemoteAuthResponse,
+  RemoteConnectionDiagnosticStep,
+  RemoteConnectionDiagnostics,
   RemoteConnectionPhase,
   RemoteConnectionStatus,
   RemoteHelperStatus,
@@ -98,19 +100,27 @@ interface RuntimeInstallPaths {
   nodePath: string;
 }
 
-interface RemoteEnvironmentInfo {
+interface RemoteRuntimeVerificationResult {
+  platform: RemotePlatform;
+  arch: RemoteArchitecture;
+  nodeVersion: string;
+  manifest: RemoteRuntimeManifest;
+  helperSourceSha256: string;
+  ptySupported?: boolean;
+  ptyError?: string;
+}
+
+interface RemoteRuntimeSelfTestResult {
+  ok: boolean;
   platform: RemotePlatform;
   arch?: RemoteArchitecture;
   homeDir: string;
   nodeVersion: string;
-  gitVersion?: string | null;
   ptySupported?: boolean;
   ptyError?: string | null;
-}
-
-interface RemoteRuntimeVerificationResult {
-  ptySupported?: boolean;
-  ptyError?: string;
+  helperSourceSha256?: string;
+  serverVersion?: string;
+  runtimeManifest?: RemoteRuntimeManifest | null;
 }
 
 interface RemoteRuntimeManifest {
@@ -412,6 +422,7 @@ export class RemoteConnectionManager {
   private pendingConnections = new Map<string, Promise<RemoteConnectionStatus>>();
   private runtimes = new Map<string, ConnectionRuntime>();
   private volatileStatuses = new Map<string, RemoteConnectionStatus>();
+  private diagnostics = new Map<string, RemoteConnectionDiagnostics>();
   private disconnectListeners = new Map<string, Set<() => void>>();
   private readonly authBroker = new RemoteAuthBroker();
   private loaded = false;
@@ -473,20 +484,21 @@ export class RemoteConnectionManager {
     this.profiles.delete(profileId);
     this.runtimes.delete(profileId);
     this.volatileStatuses.delete(profileId);
+    this.diagnostics.delete(profileId);
     this.authBroker.clearSecrets(profileId);
     await this.flush();
   }
 
   getStatus(connectionId: string): RemoteConnectionStatus {
-    return (
-      this.servers.get(connectionId)?.status ??
+    const status = this.servers.get(connectionId)?.status ??
       this.volatileStatuses.get(connectionId) ?? {
         connectionId,
         connected: false,
         phase: 'idle',
         lastCheckedAt: now(),
-      }
-    );
+      };
+    const diagnostics = this.diagnostics.get(connectionId);
+    return diagnostics ? { ...status, diagnostics } : status;
   }
 
   async testConnection(profileOrId: string | ConnectionProfile): Promise<ConnectionTestResult> {
@@ -636,6 +648,7 @@ export class RemoteConnectionManager {
       return pending;
     }
 
+    this.resetDiagnostics(profile.id);
     const connectionAttempt = this.establishManagedRuntimeConnection(profile).finally(() => {
       if (this.pendingConnections.get(profile.id) === connectionAttempt) {
         this.pendingConnections.delete(profile.id);
@@ -739,16 +752,35 @@ export class RemoteConnectionManager {
     await this.authBroker.dispose();
   }
 
+  recordDiagnosticStep(
+    connectionId: string,
+    step: RemoteConnectionDiagnosticStep,
+    durationMs: number
+  ): void {
+    const diagnostics = this.getOrCreateDiagnostics(connectionId);
+    diagnostics.stepDurationsMs = {
+      ...diagnostics.stepDurationsMs,
+      [step]: (diagnostics.stepDurationsMs?.[step] ?? 0) + durationMs,
+    };
+    if (diagnostics.attemptStartedAt) {
+      diagnostics.totalDurationMs = now() - diagnostics.attemptStartedAt;
+    }
+    this.diagnostics.set(connectionId, diagnostics);
+    this.setStatus(connectionId, (current) => current);
+  }
+
   private setStatus(
     connectionId: string,
     updater: (current: RemoteConnectionStatus) => RemoteConnectionStatus
   ): RemoteConnectionStatus {
     const current = this.getStatus(connectionId);
+    const timestamp = now();
     const next = {
       ...updater(current),
       connectionId,
-      lastCheckedAt: now(),
+      lastCheckedAt: timestamp,
     };
+    next.diagnostics = this.updateDiagnostics(connectionId, current.phase, next.phase, timestamp);
 
     const server = this.servers.get(connectionId);
     if (server) {
@@ -758,6 +790,79 @@ export class RemoteConnectionManager {
     }
 
     return next;
+  }
+
+  private resetDiagnostics(connectionId: string): void {
+    this.diagnostics.set(connectionId, {
+      attemptStartedAt: now(),
+      totalDurationMs: 0,
+      phaseDurationsMs: {},
+      stepDurationsMs: {},
+    });
+  }
+
+  private getOrCreateDiagnostics(connectionId: string): RemoteConnectionDiagnostics {
+    const existing = this.diagnostics.get(connectionId);
+    if (existing) {
+      return {
+        ...existing,
+        phaseDurationsMs: { ...existing.phaseDurationsMs },
+        stepDurationsMs: { ...existing.stepDurationsMs },
+      };
+    }
+
+    return {
+      attemptStartedAt: now(),
+      totalDurationMs: 0,
+      phaseDurationsMs: {},
+      stepDurationsMs: {},
+    };
+  }
+
+  private updateDiagnostics(
+    connectionId: string,
+    previousPhase: RemoteConnectionPhase | undefined,
+    nextPhase: RemoteConnectionPhase | undefined,
+    timestamp: number
+  ): RemoteConnectionDiagnostics | undefined {
+    const diagnostics = this.getOrCreateDiagnostics(connectionId);
+
+    if (
+      previousPhase &&
+      previousPhase !== nextPhase &&
+      typeof diagnostics.phaseStartedAt === 'number'
+    ) {
+      diagnostics.phaseDurationsMs = {
+        ...diagnostics.phaseDurationsMs,
+        [previousPhase]:
+          (diagnostics.phaseDurationsMs?.[previousPhase] ?? 0) +
+          (timestamp - diagnostics.phaseStartedAt),
+      };
+    }
+
+    if (previousPhase !== nextPhase) {
+      diagnostics.phaseStartedAt = timestamp;
+    }
+
+    if (diagnostics.attemptStartedAt) {
+      diagnostics.totalDurationMs = timestamp - diagnostics.attemptStartedAt;
+    }
+
+    this.diagnostics.set(connectionId, diagnostics);
+    return diagnostics;
+  }
+
+  private async measureDiagnosticStep<T>(
+    connectionId: string,
+    step: RemoteConnectionDiagnosticStep,
+    action: () => Promise<T>
+  ): Promise<T> {
+    const startedAt = now();
+    try {
+      return await action();
+    } finally {
+      this.recordDiagnosticStep(connectionId, step, now() - startedAt);
+    }
   }
 
   private async ensureConnected(connectionId: string): Promise<RemoteServerProcess> {
@@ -785,12 +890,16 @@ export class RemoteConnectionManager {
       helperVersion: REMOTE_SERVER_VERSION,
     }));
 
-    const runtime = await this.resolveRuntime(profile, false);
+    const runtime = await this.measureDiagnosticStep(profile.id, 'resolve-runtime', () =>
+      this.resolveRuntime(profile, false)
+    );
     const paths = this.getRuntimeInstallPaths(profile, runtime);
 
     try {
-      await this.verifyManagedRuntime(profile, runtime, paths);
-      return await this.startConnectedServer(profile, runtime, paths);
+      const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
+        this.verifyManagedRuntime(profile, runtime, paths)
+      );
+      return await this.startConnectedServer(profile, runtime, paths, verification);
     } catch (reuseError) {
       const detail = reuseError instanceof Error ? reuseError.message : String(reuseError);
       console.warn(
@@ -809,9 +918,13 @@ export class RemoteConnectionManager {
       arch: runtime.arch,
     }));
 
-    await this.installManagedRuntime(profile, runtime, paths);
-    await this.verifyManagedRuntime(profile, runtime, paths);
-    return this.startConnectedServer(profile, runtime, paths);
+    await this.measureDiagnosticStep(profile.id, 'install-runtime', () =>
+      this.installManagedRuntime(profile, runtime, paths)
+    );
+    const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
+      this.verifyManagedRuntime(profile, runtime, paths)
+    );
+    return this.startConnectedServer(profile, runtime, paths, verification);
   }
 
   private getRuntimeInstallPaths(
@@ -1055,33 +1168,6 @@ export class RemoteConnectionManager {
     }
   }
 
-  private async readRemoteTextFile(
-    profile: ConnectionProfile,
-    runtime: ConnectionRuntime,
-    targetPath: string
-  ): Promise<string> {
-    const command =
-      runtime.platform === 'win32'
-        ? [
-            'powershell',
-            '-NoProfile',
-            '-Command',
-            `Get-Content -LiteralPath ${this.toPowerShellString(targetPath)} -Raw`,
-          ]
-        : [`cat ${shellQuote(targetPath)}`];
-    const result = await this.runSshCommand(profile, command, runtime.resolvedHost);
-    if (result.code !== 0) {
-      throw createRemoteError(
-        'Managed remote runtime verification failed during {{step}}',
-        {
-          step: translateRemote('Managed runtime manifest'),
-        },
-        this.formatCommandResultDetail(result)
-      );
-    }
-    return result.stdout;
-  }
-
   private async validateRemoteServerSource(source: string): Promise<void> {
     try {
       const { Script } = await import('node:vm');
@@ -1090,21 +1176,6 @@ export class RemoteConnectionManager {
     } catch (error) {
       throw createRemoteError('Generated remote server source is invalid', undefined, error);
     }
-  }
-
-  private buildRemoteNodeCommand(
-    runtime: ConnectionRuntime,
-    paths: RuntimeInstallPaths,
-    args: string[]
-  ): string {
-    if (runtime.platform === 'win32') {
-      const nodePath = paths.nodePath.replace(/\//g, '\\');
-      const commandArgs = args.map((arg) => (arg.includes(' ') ? `"${arg}"` : arg)).join(' ');
-      return commandArgs ? `"${nodePath}" ${commandArgs}` : `"${nodePath}"`;
-    }
-
-    const quotedArgs = args.map((arg) => shellQuote(arg)).join(' ');
-    return quotedArgs ? `${shellQuote(paths.nodePath)} ${quotedArgs}` : shellQuote(paths.nodePath);
   }
 
   private buildRemoteServerCommand(
@@ -1179,68 +1250,14 @@ export class RemoteConnectionManager {
   ): Promise<RemoteRuntimeVerificationResult> {
     const runtimeAsset = getRemoteRuntimeAsset(runtime.platform, runtime.arch);
     const expectedManifest = this.buildExpectedRuntimeManifest(runtime, runtimeAsset);
-    let manifest: RemoteRuntimeManifest;
-
-    try {
-      manifest = JSON.parse(
-        normalizeLineEndings(await this.readRemoteTextFile(profile, runtime, paths.manifestPath))
-      ) as RemoteRuntimeManifest;
-    } catch (error) {
-      throw createRemoteError(
-        'Managed remote runtime verification failed during {{step}}',
-        {
-          step: translateRemote('Managed runtime manifest'),
-        },
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-
-    const manifestMismatch = this.describeRuntimeManifestMismatch(manifest, expectedManifest);
-    if (manifestMismatch) {
-      throw createRemoteError(
-        'Managed remote runtime verification failed during {{step}}',
-        {
-          step: translateRemote('Managed runtime manifest'),
-        },
-        manifestMismatch
-      );
-    }
-
-    const nodeVersionResult = await this.runSshCommand(
-      profile,
-      [this.buildRemoteNodeCommand(runtime, paths, ['--version'])],
-      runtime.resolvedHost
-    );
-    if (nodeVersionResult.code !== 0) {
-      throw createRemoteError(
-        'Managed remote runtime verification failed during {{step}}',
-        {
-          step: translateRemote('Managed runtime node --version'),
-        },
-        this.formatCommandResultDetail(nodeVersionResult)
-      );
-    }
-
-    const reportedNodeVersion = nodeVersionResult.stdout.trim() || nodeVersionResult.stderr.trim();
-    const expectedNodeVersion = `v${MANAGED_REMOTE_NODE_VERSION}`;
-    if (reportedNodeVersion !== expectedNodeVersion) {
-      throw createRemoteError(
-        'Managed remote runtime verification failed during {{step}}',
-        {
-          step: translateRemote('Managed runtime node --version'),
-        },
-        `Unexpected node version: ${reportedNodeVersion || '<empty>'} (expected ${expectedNodeVersion})`
-      );
-    }
-
     const selfTestResult = await this.runSshCommand(
       profile,
       [this.buildRemoteServerCommand(runtime, paths, 'self-test')],
       runtime.resolvedHost
     );
     const selfTestInfo =
-      parseJsonLine<RemoteEnvironmentInfo>(selfTestResult.stdout) ??
-      parseJsonLine<RemoteEnvironmentInfo>(selfTestResult.stderr);
+      parseJsonLine<RemoteRuntimeSelfTestResult>(selfTestResult.stdout) ??
+      parseJsonLine<RemoteRuntimeSelfTestResult>(selfTestResult.stderr);
 
     if (selfTestResult.code !== 0) {
       const detail =
@@ -1259,7 +1276,98 @@ export class RemoteConnectionManager {
       );
     }
 
+    if (!selfTestInfo) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed remote server self-test'),
+        },
+        translateRemote('Remote server bootstrap timed out')
+      );
+    }
+
+    const manifest = selfTestInfo.runtimeManifest;
+    if (!manifest) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime manifest'),
+        },
+        'Runtime manifest missing from self-test payload'
+      );
+    }
+
+    const manifestMismatch = this.describeRuntimeManifestMismatch(manifest, expectedManifest);
+    if (manifestMismatch) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime manifest'),
+        },
+        manifestMismatch
+      );
+    }
+
+    const reportedNodeVersion = selfTestInfo.nodeVersion?.trim();
+    const expectedNodeVersion = `v${MANAGED_REMOTE_NODE_VERSION}`;
+    if (reportedNodeVersion !== expectedNodeVersion) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed runtime node --version'),
+        },
+        `Unexpected node version: ${reportedNodeVersion || '<empty>'} (expected ${expectedNodeVersion})`
+      );
+    }
+
+    const helperSourceSha256 = selfTestInfo.helperSourceSha256?.trim();
+    if (helperSourceSha256 !== REMOTE_SERVER_SOURCE_SHA256) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed remote server self-test'),
+        },
+        'helperSourceSha256 mismatch'
+      );
+    }
+
+    if (selfTestInfo.serverVersion !== REMOTE_SERVER_VERSION) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed remote server self-test'),
+        },
+        `Unexpected server version: ${selfTestInfo.serverVersion || '<empty>'} (expected ${REMOTE_SERVER_VERSION})`
+      );
+    }
+
+    if (selfTestInfo.platform !== runtime.platform) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed remote server self-test'),
+        },
+        `Unexpected platform: ${selfTestInfo.platform} (expected ${runtime.platform})`
+      );
+    }
+
+    const reportedArch = this.normalizeArchitecture(selfTestInfo.arch);
+    if (reportedArch !== runtime.arch) {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed remote server self-test'),
+        },
+        `Unexpected architecture: ${reportedArch} (expected ${runtime.arch})`
+      );
+    }
+
     return {
+      platform: selfTestInfo.platform,
+      arch: reportedArch,
+      nodeVersion: reportedNodeVersion,
+      manifest,
+      helperSourceSha256,
       ptySupported: selfTestInfo?.ptySupported,
       ptyError: selfTestInfo?.ptyError || undefined,
     };
@@ -1268,7 +1376,8 @@ export class RemoteConnectionManager {
   private async startConnectedServer(
     profile: ConnectionProfile,
     runtime: ConnectionRuntime,
-    paths: RuntimeInstallPaths
+    paths: RuntimeInstallPaths,
+    verification: RemoteRuntimeVerificationResult
   ): Promise<RemoteConnectionStatus> {
     this.setStatus(profile.id, (current) => ({
       ...current,
@@ -1276,41 +1385,47 @@ export class RemoteConnectionManager {
       phaseLabel: phaseLabelFor('starting-server'),
       platform: runtime.platform,
       arch: runtime.arch,
-      runtimeVersion: MANAGED_REMOTE_NODE_VERSION,
+      runtimeVersion: verification.nodeVersion,
       serverVersion: REMOTE_SERVER_VERSION,
       helperVersion: REMOTE_SERVER_VERSION,
     }));
 
-    await this.ensureRemoteDaemon(profile, runtime, paths);
-    const server = await this.spawnServerProcess(profile, runtime, paths);
+    const server = await this.measureDiagnosticStep(profile.id, 'spawn-bridge', () =>
+      this.spawnServerProcess(profile, runtime, paths)
+    );
     try {
       this.setStatus(profile.id, (current) => ({
         ...current,
         phase: 'handshake',
         phaseLabel: phaseLabelFor('handshake'),
       }));
+      server.status = this.getStatus(profile.id);
 
-      const envInfo = await this.callServer<RemoteEnvironmentInfo>(
-        server,
-        'env:test',
-        {},
-        BOOTSTRAP_TIMEOUT_MS
+      await this.measureDiagnosticStep(profile.id, 'bridge-handshake', () =>
+        this.callServer(server, 'daemon:ping', {}, BOOTSTRAP_TIMEOUT_MS)
       );
 
+      const timestamp = now();
       server.status = {
         ...server.status,
         connected: true,
         phase: 'connected',
         phaseLabel: phaseLabelFor('connected'),
         error: undefined,
-        platform: envInfo.platform,
-        arch: envInfo.arch ?? runtime.arch,
-        runtimeVersion: envInfo.nodeVersion,
+        platform: verification.platform,
+        arch: verification.arch,
+        runtimeVersion: verification.nodeVersion,
         serverVersion: REMOTE_SERVER_VERSION,
         helperVersion: REMOTE_SERVER_VERSION,
-        ptySupported: envInfo.ptySupported,
-        ptyError: envInfo.ptyError || undefined,
-        lastCheckedAt: now(),
+        ptySupported: verification.ptySupported,
+        ptyError: verification.ptyError || undefined,
+        lastCheckedAt: timestamp,
+        diagnostics: this.updateDiagnostics(
+          profile.id,
+          server.status.phase,
+          'connected',
+          timestamp
+        ),
       };
       this.servers.set(profile.id, server);
       this.volatileStatuses.delete(profile.id);
@@ -1357,7 +1472,7 @@ export class RemoteConnectionManager {
       stderrTail: [],
       stdoutNoiseTail: [],
       status: {
-        connectionId: profile.id,
+        ...this.getStatus(profile.id),
         connected: false,
         phase: 'starting-server',
         phaseLabel: phaseLabelFor('starting-server'),
@@ -1445,27 +1560,6 @@ export class RemoteConnectionManager {
     return server;
   }
 
-  private async ensureRemoteDaemon(
-    profile: ConnectionProfile,
-    runtime: ConnectionRuntime,
-    paths: RuntimeInstallPaths
-  ): Promise<void> {
-    const result = await this.runSshCommand(
-      profile,
-      [this.buildRemoteServerCommand(runtime, paths, 'ensure-daemon')],
-      runtime.resolvedHost
-    );
-    if (result.code === 0) {
-      return;
-    }
-
-    throw createRemoteError(
-      'Failed to start remote server',
-      undefined,
-      this.formatCommandResultDetail(result)
-    );
-  }
-
   private async stopRemoteDaemon(
     profile: ConnectionProfile,
     runtime: ConnectionRuntime,
@@ -1484,6 +1578,7 @@ export class RemoteConnectionManager {
     }
 
     const detail = getRemoteErrorDetail(error);
+    const timestamp = now();
     server.closed = true;
     server.status = {
       ...server.status,
@@ -1491,7 +1586,13 @@ export class RemoteConnectionManager {
       phase: detail ? 'failed' : 'idle',
       phaseLabel: detail ? phaseLabelFor('failed') : phaseLabelFor('idle'),
       error: detail,
-      lastCheckedAt: now(),
+      lastCheckedAt: timestamp,
+      diagnostics: this.updateDiagnostics(
+        server.connectionId,
+        server.status.phase,
+        detail ? 'failed' : 'idle',
+        timestamp
+      ),
     };
 
     for (const pending of server.pending.values()) {

@@ -17,6 +17,23 @@ export type RemoteConnectionPhase =
   | 'connected'
   | 'failed';
 
+export type RemoteConnectionDiagnosticStep =
+  | 'resolve-runtime'
+  | 'verify-runtime'
+  | 'install-runtime'
+  | 'spawn-bridge'
+  | 'bridge-handshake'
+  | 'load-session-storage'
+  | 'load-session-settings';
+
+export interface RemoteConnectionDiagnostics {
+  attemptStartedAt?: number;
+  totalDurationMs?: number;
+  phaseStartedAt?: number;
+  phaseDurationsMs?: Partial<Record<RemoteConnectionPhase, number>>;
+  stepDurationsMs?: Partial<Record<RemoteConnectionDiagnosticStep, number>>;
+}
+
 export interface ConnectionProfile {
   id: string;
   name: string;
@@ -42,6 +59,7 @@ export interface RemoteConnectionStatus {
   ptyError?: string;
   error?: string;
   lastCheckedAt?: number;
+  diagnostics?: RemoteConnectionDiagnostics;
 }
 
 export interface RemoteRuntimeStatus {
