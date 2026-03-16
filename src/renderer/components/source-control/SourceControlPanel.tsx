@@ -588,6 +588,18 @@ export function SourceControlPanel({
   // All files in order: staged first, then unstaged
   const allFiles = useMemo(() => [...staged, ...unstaged], [staged, unstaged]);
 
+  // Clear selected file when it no longer exists in the file list
+  // (e.g., after commit, discard, or external changes)
+  useEffect(() => {
+    if (!selectedFile) return;
+    const stillExists = allFiles.some(
+      (f) => f.path === selectedFile.path && f.staged === selectedFile.staged
+    );
+    if (!stillExists) {
+      setSelectedFile(null);
+    }
+  }, [allFiles, selectedFile, setSelectedFile]);
+
   // Panel resize hooks
   const { width: panelWidth, isResizing, containerRef, handleMouseDown } = usePanelResize();
 
