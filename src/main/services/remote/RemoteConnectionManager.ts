@@ -29,6 +29,10 @@ import {
   type RemoteRuntimeAsset,
 } from './RemoteRuntimeAssets';
 
+interface StoredConnectionProfile extends ConnectionProfile {
+  platformHint?: 'linux' | 'darwin' | 'win32';
+}
+
 interface RemoteServerProcess {
   connectionId: string;
   profile: ConnectionProfile;
@@ -154,6 +158,7 @@ const REMOTE_PTY_UNAVAILABLE_PREFIX = 'REMOTE_PTY_UNAVAILABLE:';
 const RUNTIME_MANIFEST_FILENAME = 'enso-remote-runtime-manifest.json';
 const REMOTE_SERVER_SOURCE = normalizeLineEndings(getRemoteServerSource());
 const REMOTE_SERVER_SOURCE_SHA256 = createHash('sha256').update(REMOTE_SERVER_SOURCE).digest('hex');
+const LINUX_ONLY_REMOTE_ERROR = 'Only Linux x64 and arm64 remote hosts are supported';
 
 type RemoteServerLaunchMode = 'bridge' | 'ensure-daemon' | 'self-test' | 'stop-daemon';
 
@@ -167,6 +172,18 @@ function normalizeLineEndings(input: string): string {
 
 function stripHashbang(input: string): string {
   return input.replace(/^#!.*\r?\n/, '');
+}
+
+function sanitizeConnectionProfile(profile: StoredConnectionProfile): ConnectionProfile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    sshTarget: profile.sshTarget,
+    runtimeInstallDir: profile.runtimeInstallDir,
+    helperInstallDir: profile.helperInstallDir,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
 }
 
 function splitDiagnosticChunk(input: string): string[] {
@@ -433,12 +450,17 @@ export class RemoteConnectionManager {
     }
 
     const path = getRemoteSettingsPath();
+    let shouldFlush = false;
     if (await pathExists(path)) {
       try {
         const content = await readFile(path, 'utf8');
-        const parsed = JSON.parse(content) as ConnectionProfile[];
+        const parsed = JSON.parse(content) as StoredConnectionProfile[];
         for (const profile of parsed) {
-          this.profiles.set(profile.id, profile);
+          const sanitized = sanitizeConnectionProfile(profile);
+          if ('platformHint' in profile) {
+            shouldFlush = true;
+          }
+          this.profiles.set(sanitized.id, sanitized);
         }
       } catch (error) {
         console.warn('[remote] Failed to read profiles:', error);
@@ -446,6 +468,9 @@ export class RemoteConnectionManager {
     }
 
     this.loaded = true;
+    if (shouldFlush) {
+      await this.flush();
+    }
     return this.listProfiles();
   }
 
@@ -466,7 +491,6 @@ export class RemoteConnectionManager {
       runtimeInstallDir:
         input.runtimeInstallDir?.trim() || input.helperInstallDir?.trim() || undefined,
       helperInstallDir: input.helperInstallDir?.trim() || undefined,
-      platformHint: input.platformHint,
       createdAt: existing?.createdAt ?? input.createdAt ?? now(),
       updatedAt: now(),
     };
@@ -669,9 +693,6 @@ export class RemoteConnectionManager {
   async browseRoots(profileOrId: string | ConnectionProfile): Promise<string[]> {
     const profile = await this.resolveProfile(profileOrId);
     const runtime = await this.resolveRuntime(profile, false);
-    if (runtime.platform === 'win32') {
-      return [runtime.homeDir.replace(/\\/g, '/')];
-    }
     return ['/', runtime.homeDir.replace(/\\/g, '/')];
   }
 
@@ -939,18 +960,10 @@ export class RemoteConnectionManager {
 
     const versionDir = normalizeRemotePath(`${installDir}/${REMOTE_SERVER_VERSION}`);
     const incomingDir = normalizeRemotePath(`${installDir}/incoming`);
-    const archivePath = normalizeRemotePath(
-      `${incomingDir}/runtime.${runtime.platform === 'win32' ? 'zip' : 'tar.gz'}`
-    );
+    const archivePath = normalizeRemotePath(`${incomingDir}/runtime.tar.gz`);
     const runtimeRootDir = normalizeRemotePath(`${versionDir}/runtime`);
-    const nodeFolder =
-      runtime.platform === 'win32'
-        ? `node-v${MANAGED_REMOTE_NODE_VERSION}-win-${runtime.arch}`
-        : `node-v${MANAGED_REMOTE_NODE_VERSION}-${runtime.platform}-${runtime.arch}`;
-    const nodePath =
-      runtime.platform === 'win32'
-        ? normalizeRemotePath(`${runtimeRootDir}/${nodeFolder}/node.exe`)
-        : normalizeRemotePath(`${runtimeRootDir}/${nodeFolder}/bin/node`);
+    const nodeFolder = `node-v${MANAGED_REMOTE_NODE_VERSION}-${runtime.platform}-${runtime.arch}`;
+    const nodePath = normalizeRemotePath(`${runtimeRootDir}/${nodeFolder}/bin/node`);
 
     return {
       installDir,
@@ -983,18 +996,7 @@ export class RemoteConnectionManager {
     await this.execSsh(
       profile,
       [
-        runtime.platform === 'win32'
-          ? [
-              `$paths = @(${this.toPowerShellString(paths.installDir)}, ${this.toPowerShellString(
-                paths.versionDir
-              )}, ${this.toPowerShellString(paths.incomingDir)}, ${this.toPowerShellString(
-                paths.runtimeRootDir
-              )})`,
-              'foreach ($path in $paths) { New-Item -ItemType Directory -Force -Path $path | Out-Null }',
-            ].join('; ')
-          : runtime.platform === 'linux'
-            ? `mkdir -p ${shellQuote(paths.installDir)} ${shellQuote(paths.versionDir)} ${shellQuote(paths.incomingDir)}`
-            : `mkdir -p ${shellQuote(paths.installDir)} ${shellQuote(paths.versionDir)} ${shellQuote(paths.incomingDir)} ${shellQuote(paths.runtimeRootDir)}`,
+        `mkdir -p ${shellQuote(paths.installDir)} ${shellQuote(paths.versionDir)} ${shellQuote(paths.incomingDir)}`,
       ],
       runtime.resolvedHost
     );
@@ -1030,33 +1032,19 @@ export class RemoteConnectionManager {
     paths: RuntimeInstallPaths,
     asset: RemoteRuntimeAsset
   ): Promise<void> {
-    const command =
-      runtime.platform === 'win32'
-        ? [
-            'powershell',
-            '-NoProfile',
-            '-Command',
-            [
-              `if (Test-Path -LiteralPath ${this.toPowerShellString(paths.runtimeRootDir)}) { Remove-Item -LiteralPath ${this.toPowerShellString(paths.runtimeRootDir)} -Force -Recurse }`,
-              `New-Item -ItemType Directory -Force -Path ${this.toPowerShellString(paths.runtimeRootDir)} | Out-Null`,
-              `Expand-Archive -LiteralPath ${this.toPowerShellString(paths.archivePath)} -DestinationPath ${this.toPowerShellString(paths.runtimeRootDir)} -Force`,
-            ].join('; '),
-          ]
-        : runtime.platform === 'linux'
-          ? [
-              [
-                `rm -rf ${shellQuote(paths.runtimeRootDir)}`,
-                `rm -rf ${shellQuote(paths.nodeModulesPath)}`,
-                `rm -f ${shellQuote(paths.serverPath)}`,
-                `mkdir -p ${shellQuote(paths.versionDir)}`,
-                `tar -xzf ${shellQuote(paths.archivePath)} -C ${shellQuote(paths.versionDir)}`,
-              ].join(' && '),
-            ]
-          : [
-              `rm -rf ${shellQuote(paths.runtimeRootDir)} && mkdir -p ${shellQuote(paths.runtimeRootDir)} && tar -xzf ${shellQuote(paths.archivePath)} -C ${shellQuote(paths.runtimeRootDir)}`,
-            ];
-
-    await this.execSsh(profile, command, runtime.resolvedHost);
+    await this.execSsh(
+      profile,
+      [
+        [
+          `rm -rf ${shellQuote(paths.runtimeRootDir)}`,
+          `rm -rf ${shellQuote(paths.nodeModulesPath)}`,
+          `rm -f ${shellQuote(paths.serverPath)}`,
+          `mkdir -p ${shellQuote(paths.versionDir)}`,
+          `tar -xzf ${shellQuote(paths.archivePath)} -C ${shellQuote(paths.versionDir)}`,
+        ].join(' && '),
+      ],
+      runtime.resolvedHost
+    );
 
     const nodeExists = await this.remoteFileExists(profile, runtime, paths.nodePath);
     if (!nodeExists) {
@@ -1065,9 +1053,7 @@ export class RemoteConnectionManager {
       );
     }
 
-    if (runtime.platform !== 'win32') {
-      await this.execSsh(profile, [`chmod +x ${shellQuote(paths.nodePath)}`], runtime.resolvedHost);
-    }
+    await this.execSsh(profile, [`chmod +x ${shellQuote(paths.nodePath)}`], runtime.resolvedHost);
   }
 
   private async syncRemoteServerSource(
@@ -1084,9 +1070,7 @@ export class RemoteConnectionManager {
       await writeFile(tempPath, REMOTE_SERVER_SOURCE, 'utf8');
       await this.uploadFileOverScp(profile, tempPath, serverPath, runtime.resolvedHost);
 
-      if (runtime.platform !== 'win32') {
-        await this.execSsh(profile, [`chmod +x ${shellQuote(serverPath)}`], runtime.resolvedHost);
-      }
+      await this.execSsh(profile, [`chmod +x ${shellQuote(serverPath)}`], runtime.resolvedHost);
     } finally {
       await unlink(tempPath).catch(() => {});
     }
@@ -1102,7 +1086,7 @@ export class RemoteConnectionManager {
       nodeVersion: MANAGED_REMOTE_NODE_VERSION,
       platform: runtime.platform,
       arch: runtime.arch,
-      linuxPtyRequired: runtime.platform === 'linux',
+      linuxPtyRequired: true,
       helperSourceSha256: REMOTE_SERVER_SOURCE_SHA256,
       runtimeArchiveName: runtimeAsset.archiveName,
     };
@@ -1179,23 +1163,14 @@ export class RemoteConnectionManager {
   }
 
   private buildRemoteServerCommand(
-    runtime: ConnectionRuntime,
+    _runtime: ConnectionRuntime,
     paths: RuntimeInstallPaths,
     mode: RemoteServerLaunchMode
   ): string {
-    return this.buildRemoteServerCommandWithArgs(runtime, paths, [mode]);
+    return this.buildRemoteServerCommandWithArgs(paths, [mode]);
   }
 
-  private buildRemoteServerCommandWithArgs(
-    runtime: ConnectionRuntime,
-    paths: RuntimeInstallPaths,
-    args: string[]
-  ): string {
-    if (runtime.platform === 'win32') {
-      const quotedArgs = args.map((arg) => `--${arg}`).join(' ');
-      return `"${paths.nodePath.replace(/\//g, '\\')}" "${paths.serverPath.replace(/\//g, '\\')}" ${quotedArgs}`;
-    }
-
+  private buildRemoteServerCommandWithArgs(paths: RuntimeInstallPaths, args: string[]): string {
     const quotedArgs = args.map((arg) => `--${arg}`).join(' ');
     return `${shellQuote(paths.nodePath)} ${shellQuote(paths.serverPath)} ${quotedArgs}`;
   }
@@ -1760,52 +1735,25 @@ export class RemoteConnectionManager {
     runtime: ConnectionRuntime,
     dirPath: string
   ): Promise<RemoteDirectoryEntry[]> {
-    const command =
-      runtime.platform === 'win32'
-        ? [
-            'powershell',
-            '-NoProfile',
-            '-Command',
-            [
-              `$dir = ${this.toPowerShellString(dirPath)}`,
-              'if (-not (Test-Path -LiteralPath $dir)) { Write-Output "[]"; exit 0 }',
-              '$entries = Get-ChildItem -LiteralPath $dir -Force | ForEach-Object {',
-              '  [PSCustomObject]@{',
-              '    name = $_.Name',
-              "    path = ($_.FullName -replace '\\\\', '/')",
-              '    isDirectory = $_.PSIsContainer',
-              '  }',
-              '}',
-              '$entries | ConvertTo-Json -Compress',
-            ].join('; '),
-          ]
-        : [
-            `sh -lc ${shellQuote(
-              [
-                'dir=$1',
-                '[ -d "$dir" ] || exit 0',
-                'for entry in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do',
-                '  [ -e "$entry" ] || continue',
-                '  name=$(basename "$entry")',
-                '  if [ -d "$entry" ]; then is_directory=true; else is_directory=false; fi',
-                '  printf "%s\\t%s\\t%s\\n" "$name" "$entry" "$is_directory"',
-                'done',
-              ].join('; ')
-            )} sh ${shellQuote(dirPath)}`,
-          ];
+    const command = [
+      `sh -lc ${shellQuote(
+        [
+          'dir=$1',
+          '[ -d "$dir" ] || exit 0',
+          'for entry in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do',
+          '  [ -e "$entry" ] || continue',
+          '  name=$(basename "$entry")',
+          '  if [ -d "$entry" ]; then is_directory=true; else is_directory=false; fi',
+          '  printf "%s\\t%s\\t%s\\n" "$name" "$entry" "$is_directory"',
+          'done',
+        ].join('; ')
+      )} sh ${shellQuote(dirPath)}`,
+    ];
 
     const output = await this.execSsh(profile, command, runtime.resolvedHost);
     const trimmed = output.trim();
     if (!trimmed) {
       return [];
-    }
-
-    if (runtime.platform === 'win32') {
-      const parsed = JSON.parse(trimmed) as RemoteDirectoryEntry | RemoteDirectoryEntry[];
-      return (Array.isArray(parsed) ? parsed : [parsed]).map((entry) => ({
-        ...entry,
-        path: normalizeRemotePath(entry.path),
-      }));
     }
 
     return trimmed
@@ -1827,15 +1775,7 @@ export class RemoteConnectionManager {
     runtime: ConnectionRuntime,
     targetPath: string
   ): Promise<boolean> {
-    const command =
-      runtime.platform === 'win32'
-        ? [
-            'powershell',
-            '-NoProfile',
-            '-Command',
-            `if (Test-Path -LiteralPath ${this.toPowerShellString(targetPath)} -PathType Leaf) { Write-Output true } else { Write-Output false }`,
-          ]
-        : [`test -f ${shellQuote(targetPath)} && printf true || printf false`];
+    const command = [`test -f ${shellQuote(targetPath)} && printf true || printf false`];
     const output = await this.execSsh(profile, command, runtime.resolvedHost);
     return output.trim() === 'true';
   }
@@ -1845,20 +1785,8 @@ export class RemoteConnectionManager {
     runtime: ConnectionRuntime,
     targetPath: string
   ): Promise<void> {
-    const command =
-      runtime.platform === 'win32'
-        ? [
-            'powershell',
-            '-NoProfile',
-            '-Command',
-            `if (Test-Path -LiteralPath ${this.toPowerShellString(targetPath)}) { Remove-Item -LiteralPath ${this.toPowerShellString(targetPath)} -Recurse -Force }`,
-          ]
-        : [`rm -rf ${shellQuote(targetPath)}`];
+    const command = [`rm -rf ${shellQuote(targetPath)}`];
     await this.execSsh(profile, command, runtime.resolvedHost);
-  }
-
-  private toPowerShellString(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`;
   }
 
   private async resolveRuntime(
@@ -1883,38 +1811,27 @@ export class RemoteConnectionManager {
       [
         `sh -lc ${shellQuote(
           [
-            'set +e',
-            "arch=$(uname -m 2>/dev/null || printf '')",
+            'platform=$(uname -s 2>/dev/null | tr "[:upper:]" "[:lower:]" || printf "")',
+            'arch=$(uname -m 2>/dev/null || printf "")',
             'home=$(printf %s "$HOME")',
-            'printf \'{"platform":"linux","arch":"%s","homeDir":"%s"}\' "$arch" "$home"',
+            'printf \'{"platform":"%s","arch":"%s","homeDir":"%s"}\' "$platform" "$arch" "$home"',
           ].join('; ')
         )}`,
       ],
-      resolvedHost,
-      false
-    ).catch(async () => {
-      return this.execSsh(
-        profile,
-        [
-          'powershell',
-          '-NoProfile',
-          '-Command',
-          [
-            "$arch = if ([Environment]::Is64BitOperatingSystem) { if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'x64' } } else { 'x64' }",
-            '$homeDir = $HOME',
-            'Write-Output (\'{"platform":"win32","arch":"\' + $arch + \'","homeDir":"\' + (($homeDir -replace \'\\\\\', \'/\')) + \'"}\')',
-          ].join('; '),
-        ],
-        resolvedHost,
-        false
-      );
+      resolvedHost
+    ).catch((error) => {
+      throw createRemoteError(LINUX_ONLY_REMOTE_ERROR, undefined, error);
     });
 
-    const envInfo = JSON.parse(envInfoRaw.trim()) as {
+    const envInfo = parseJsonLine<{
       platform: RemotePlatform;
       arch: string;
       homeDir: string;
-    };
+    }>(envInfoRaw.trim());
+
+    if (!envInfo || envInfo.platform !== 'linux') {
+      throw createRemoteError(LINUX_ONLY_REMOTE_ERROR);
+    }
 
     const runtime: ConnectionRuntime = {
       platform: envInfo.platform,
@@ -1933,7 +1850,18 @@ export class RemoteConnectionManager {
     if (normalized.includes('arm64') || normalized.includes('aarch64')) {
       return 'arm64';
     }
-    return 'x64';
+    if (
+      normalized.includes('x64') ||
+      normalized.includes('x86_64') ||
+      normalized.includes('amd64')
+    ) {
+      return 'x64';
+    }
+    throw createRemoteError(
+      LINUX_ONLY_REMOTE_ERROR,
+      undefined,
+      `Unsupported architecture: ${value || '<empty>'}`
+    );
   }
 
   private async getRemoteGitVersion(

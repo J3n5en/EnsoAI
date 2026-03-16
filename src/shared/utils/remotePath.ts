@@ -1,5 +1,3 @@
-import type { RemotePlatform } from '../types/remote';
-
 export const REMOTE_PATH_PREFIX = '/__enso_remote__';
 
 function encodeSegment(value: string): string {
@@ -41,13 +39,7 @@ export function parseRemoteVirtualPath(inputPath: string): ParsedRemoteVirtualPa
   return { connectionId, remotePath };
 }
 
-export function normalizeRemotePath(
-  inputPath: string,
-  platform: RemotePlatform | 'linux' = 'linux'
-): string {
+export function normalizeRemotePath(inputPath: string): string {
   const normalized = inputPath.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
-  if (platform === 'win32') {
-    return normalized.replace(/^([a-z]):/, (_, drive: string) => `${drive.toUpperCase()}:`);
-  }
   return normalized;
 }

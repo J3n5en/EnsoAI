@@ -1059,14 +1059,14 @@ export const zhTranslations: Record<string, string> = {
   'The current remote helper version was reinstalled successfully.':
     '当前远程助手版本已成功重新安装。',
   'The managed remote runtime was reinstalled successfully.': '托管远程运行时已成功重新安装。',
+  'Remote connections currently support Linux x64 and arm64 hosts only.':
+    '远程连接目前仅支持 Linux x64 和 arm64 主机。',
   'Helper deleted': '助手已删除',
   'Runtime deleted': '运行时已删除',
   'All installed helper versions for this profile were removed.':
     '该配置下所有已安装的助手版本都已删除。',
   'All installed managed runtime versions for this profile were removed.':
     '该配置下所有已安装的托管运行时版本都已删除。',
-  'Platform hint': '平台提示',
-  'Auto detect': '自动识别',
   'Save profile': '保存配置',
   'Test connection': '测试连接',
   'Delete profile': '删除配置',

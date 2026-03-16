@@ -2,7 +2,8 @@ export type WorkspaceKind = 'local' | 'remote';
 export type WindowMode = 'local' | 'remote-host';
 export type RemoteWindowOpenTarget = 'current-window' | 'new-window';
 
-export type RemotePlatform = 'linux' | 'darwin' | 'win32';
+export type WorkspacePlatform = 'linux' | 'darwin' | 'win32';
+export type RemotePlatform = 'linux';
 export type RemoteArchitecture = 'x64' | 'arm64';
 export type RemoteConnectionPhase =
   | 'idle'
@@ -40,7 +41,6 @@ export interface ConnectionProfile {
   sshTarget: string;
   runtimeInstallDir?: string;
   helperInstallDir?: string;
-  platformHint?: RemotePlatform;
   createdAt: number;
   updatedAt: number;
 }
@@ -130,7 +130,7 @@ export interface WorkspaceHandle {
   id: string;
   kind: WorkspaceKind;
   rootPath: string;
-  platform: RemotePlatform;
+  platform: WorkspacePlatform;
   connectionId?: string;
 }
 

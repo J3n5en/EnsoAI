@@ -67,7 +67,7 @@ function buildHostKey(runtime: RemoteConnectionRuntimeInfo): string {
       JSON.stringify({
         host: runtime.resolvedHost.host,
         port: runtime.resolvedHost.port,
-        homeDir: normalizeRemotePath(runtime.homeDir, runtime.platform),
+        homeDir: normalizeRemotePath(runtime.homeDir),
       })
     )
     .digest('hex')
@@ -91,14 +91,14 @@ function getRemoteStorageRealPath(session: RemoteWindowSession): string {
 }
 
 function getRemoteSettingsRealPath(session: RemoteWindowSession): string {
-  return `${normalizeRemotePath(session.remoteHomeDir, session.platform)}/${REMOTE_SETTINGS_PATH}`;
+  return `${normalizeRemotePath(session.remoteHomeDir)}/${REMOTE_SETTINGS_PATH}`;
 }
 
 function buildRemoteSession(
   runtime: RemoteConnectionRuntimeInfo,
   hostKey: string
 ): RemoteWindowSession {
-  const remoteHomeDir = normalizeRemotePath(runtime.homeDir, runtime.platform);
+  const remoteHomeDir = normalizeRemotePath(runtime.homeDir);
   const storagePath = `${buildRemoteWindowRoot(runtime.homeDir, hostKey)}/session-state.json`;
 
   return {

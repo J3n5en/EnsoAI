@@ -1,9 +1,4 @@
-import type {
-  ConnectionProfile,
-  ConnectionTestResult,
-  RemotePlatform,
-  RemoteRuntimeStatus,
-} from '@shared/types';
+import type { ConnectionProfile, ConnectionTestResult, RemoteRuntimeStatus } from '@shared/types';
 import {
   Download,
   Loader2,
@@ -39,31 +34,17 @@ import {
 import { useI18n } from '@/i18n';
 import { useSettingsStore } from '@/stores/settings';
 
-type PlatformSelectValue = '' | RemotePlatform;
-
 interface RemoteProfileFormState {
   name: string;
   sshTarget: string;
   runtimeInstallDir: string;
-  platformHint: PlatformSelectValue;
 }
 
 const EMPTY_FORM: RemoteProfileFormState = {
   name: '',
   sshTarget: '',
   runtimeInstallDir: '',
-  platformHint: '',
 };
-
-function getPlatformLabel(
-  value: PlatformSelectValue | RemotePlatform | undefined,
-  t: (key: string) => string
-) {
-  if (value === 'linux') return 'Linux';
-  if (value === 'darwin') return 'macOS';
-  if (value === 'win32') return 'Windows';
-  return t('Auto detect');
-}
 
 export function RemoteSettings() {
   const { t } = useI18n();
@@ -106,7 +87,6 @@ export function RemoteSettings() {
       name: profile.name,
       sshTarget: profile.sshTarget,
       runtimeInstallDir: profile.runtimeInstallDir ?? profile.helperInstallDir ?? '',
-      platformHint: profile.platformHint ?? '',
     });
   }, []);
 
@@ -193,7 +173,6 @@ export function RemoteSettings() {
       sshTarget: form.sshTarget.trim(),
       runtimeInstallDir: form.runtimeInstallDir.trim() || undefined,
       helperInstallDir: form.runtimeInstallDir.trim() || undefined,
-      platformHint: form.platformHint || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -226,7 +205,6 @@ export function RemoteSettings() {
         sshTarget: form.sshTarget.trim(),
         runtimeInstallDir: form.runtimeInstallDir.trim() || undefined,
         helperInstallDir: form.runtimeInstallDir.trim() || undefined,
-        platformHint: form.platformHint || undefined,
       });
       upsertRemoteProfile(savedProfile);
       setSelectedProfileId(savedProfile.id);
@@ -389,7 +367,7 @@ export function RemoteSettings() {
         ? [
             {
               label: t('Platform'),
-              value: testResult.platform ? getPlatformLabel(testResult.platform, t) : '-',
+              value: testResult.platform ?? '-',
             },
             { label: t('Home directory'), value: testResult.homeDir || '-' },
             { label: t('Node'), value: testResult.nodeVersion || '-' },
@@ -443,6 +421,9 @@ export function RemoteSettings() {
           {t(
             'Save SSH profiles here, then use the Remote Host entry in the sidebar to open a full remote window.'
           )}
+        </p>
+        <p className="text-muted-foreground text-sm">
+          {t('Remote connections currently support Linux x64 and arm64 hosts only.')}
         </p>
       </div>
 
@@ -552,29 +533,6 @@ export function RemoteSettings() {
                 }
                 placeholder={t('Optional override, for example ~/.ensoai/remote-runtime')}
               />
-            </Field>
-
-            <Field className="min-w-0">
-              <FieldLabel>{t('Platform hint')}</FieldLabel>
-              <Select
-                value={form.platformHint}
-                onValueChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    platformHint: (value as PlatformSelectValue) || '',
-                  }))
-                }
-              >
-                <SelectTrigger className="min-w-0">
-                  <SelectValue>{getPlatformLabel(form.platformHint, t)}</SelectValue>
-                </SelectTrigger>
-                <SelectPopup>
-                  <SelectItem value="">{t('Auto detect')}</SelectItem>
-                  <SelectItem value="linux">Linux</SelectItem>
-                  <SelectItem value="darwin">macOS</SelectItem>
-                  <SelectItem value="win32">Windows</SelectItem>
-                </SelectPopup>
-              </Select>
             </Field>
           </div>
 

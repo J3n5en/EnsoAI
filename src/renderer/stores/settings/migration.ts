@@ -1,5 +1,23 @@
 import type { SettingsState, TerminalKeybinding, XtermKeybindings } from './types';
 
+function sanitizeRemoteProfiles(
+  profiles: SettingsState['remoteSettings']['profiles'] | undefined
+): SettingsState['remoteSettings']['profiles'] | undefined {
+  if (!profiles) {
+    return undefined;
+  }
+
+  return profiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    sshTarget: profile.sshTarget,
+    runtimeInstallDir: profile.runtimeInstallDir,
+    helperInstallDir: profile.helperInstallDir,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  }));
+}
+
 /**
  * Helper functions for sanitizing persisted values
  */
@@ -193,7 +211,9 @@ export function migrateSettings(
     remoteSettings: {
       ...currentState.remoteSettings,
       ...persisted.remoteSettings,
-      profiles: persisted.remoteSettings?.profiles ?? currentState.remoteSettings.profiles,
+      profiles:
+        sanitizeRemoteProfiles(persisted.remoteSettings?.profiles) ??
+        currentState.remoteSettings.profiles,
     },
     proxySettings: {
       ...currentState.proxySettings,

@@ -9,7 +9,7 @@ import pkg from '../../../../package.json';
 import { REMOTE_SERVER_VERSION } from './RemoteHelperSource';
 
 export type RemoteRuntimeArch = 'x64' | 'arm64';
-export type RemoteRuntimeArchiveKind = 'tar.gz' | 'zip';
+export type RemoteRuntimeArchiveKind = 'tar.gz';
 
 export interface RemoteRuntimeAsset {
   platform: RemotePlatform;
@@ -39,22 +39,6 @@ function buildReleaseAssetUrl(fileName: string): string {
 }
 
 const REMOTE_RUNTIME_ARCHIVES: Record<string, Omit<RemoteRuntimeAsset, 'url'>> = {
-  'darwin-arm64': {
-    platform: 'darwin',
-    arch: 'arm64',
-    archiveName: 'node-v20.19.0-darwin-arm64.tar.gz',
-    checksum: 'c016cd1975a264a29dc1b07c6fbe60d5df0a0c2beb4113c0450e3d998d1a0d9c',
-    kind: 'tar.gz',
-    nodeVersion: MANAGED_REMOTE_NODE_VERSION,
-  },
-  'darwin-x64': {
-    platform: 'darwin',
-    arch: 'x64',
-    archiveName: 'node-v20.19.0-darwin-x64.tar.gz',
-    checksum: 'a8554af97d6491fdbdabe63d3a1cfb9571228d25a3ad9aed2df856facb131b20',
-    kind: 'tar.gz',
-    nodeVersion: MANAGED_REMOTE_NODE_VERSION,
-  },
   'linux-arm64': {
     platform: 'linux',
     arch: 'arm64',
@@ -69,22 +53,6 @@ const REMOTE_RUNTIME_ARCHIVES: Record<string, Omit<RemoteRuntimeAsset, 'url'>> =
     archiveName: buildManagedLinuxRuntimeArchiveName('x64'),
     checksumFileName: `${buildManagedLinuxRuntimeArchiveName('x64')}.sha256`,
     kind: 'tar.gz',
-    nodeVersion: MANAGED_REMOTE_NODE_VERSION,
-  },
-  'win32-arm64': {
-    platform: 'win32',
-    arch: 'arm64',
-    archiveName: 'node-v20.19.0-win-arm64.zip',
-    checksum: '773325a26ad51a5ba857963825dee3a871eacef653c31d62e5492574c965accb',
-    kind: 'zip',
-    nodeVersion: MANAGED_REMOTE_NODE_VERSION,
-  },
-  'win32-x64': {
-    platform: 'win32',
-    arch: 'x64',
-    archiveName: 'node-v20.19.0-win-x64.zip',
-    checksum: 'be72284c7bc62de07d5a9fd0ae196879842c085f11f7f2b60bf8864c0c9d6a4f',
-    kind: 'zip',
     nodeVersion: MANAGED_REMOTE_NODE_VERSION,
   },
 };
@@ -125,12 +93,8 @@ function resolveLocalRuntimeAssetPath(fileName: string): {
   };
 }
 
-function buildNodeDownloadUrl(archiveName: string): string {
-  return `https://nodejs.org/dist/v${MANAGED_REMOTE_NODE_VERSION}/${archiveName}`;
-}
-
 function buildChecksumDownloadUrl(asset: Omit<RemoteRuntimeAsset, 'url'>): string | undefined {
-  if (asset.platform === 'linux' && asset.checksumFileName) {
+  if (asset.checksumFileName) {
     return buildReleaseAssetUrl(asset.checksumFileName);
   }
   return undefined;
@@ -337,10 +301,7 @@ export function getRemoteRuntimeAsset(
 
   return {
     ...asset,
-    url:
-      platform === 'linux'
-        ? buildReleaseAssetUrl(asset.archiveName)
-        : buildNodeDownloadUrl(asset.archiveName),
+    url: buildReleaseAssetUrl(asset.archiveName),
     checksumUrl: buildChecksumDownloadUrl(asset),
   };
 }
@@ -457,7 +418,7 @@ export async function ensureRemoteRuntimeAsset(
     await writeResponseBodyToFile(asset.checksumUrl, tempChecksumPath, {
       fileName: asset.checksumFileName ?? asset.archiveName,
       role: 'checksum',
-      source: asset.platform === 'linux' ? 'release' : 'nodejs',
+      source: 'release',
     });
     const downloadedChecksum = await readChecksumFile(tempChecksumPath);
     if (!downloadedChecksum) {
@@ -470,7 +431,7 @@ export async function ensureRemoteRuntimeAsset(
   await writeResponseBodyToFile(asset.url, tempPath, {
     fileName: asset.archiveName,
     role: 'archive',
-    source: asset.platform === 'linux' ? 'release' : 'nodejs',
+    source: 'release',
   });
 
   if (!(await fileHasExpectedChecksum(tempPath, expectedChecksum))) {

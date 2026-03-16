@@ -4,6 +4,7 @@ import type {
   RepositoryDescriptor,
   WorkspaceHandle,
   WorkspaceKind,
+  WorkspacePlatform,
 } from '../types/remote';
 
 const LOCAL_PREFIX = 'local:';
@@ -22,7 +23,7 @@ function trimTrailingSlash(value: string): string {
 
 export function normalizeWorkspacePath(
   inputPath: string,
-  platform: RemotePlatform | 'linux' = 'linux'
+  platform: WorkspacePlatform = 'linux'
 ): string {
   const normalized = trimTrailingSlash(normalizeSlashes(inputPath));
   if (platform === 'win32') {
@@ -33,7 +34,7 @@ export function normalizeWorkspacePath(
 
 export function normalizeWorkspaceKey(
   inputPath: string,
-  platform: RemotePlatform | 'linux' = 'linux'
+  platform: WorkspacePlatform = 'linux'
 ): string {
   const normalized = normalizeWorkspacePath(inputPath, platform);
   if (platform === 'win32' || platform === 'darwin') {
@@ -45,7 +46,7 @@ export function normalizeWorkspaceKey(
 export function buildWorkspaceId(
   kind: WorkspaceKind,
   path: string,
-  options?: { connectionId?: string; platform?: RemotePlatform }
+  options?: { connectionId?: string; platform?: WorkspacePlatform }
 ): string {
   const platform = options?.platform ?? 'linux';
   const normalized = normalizeWorkspaceKey(path, platform);
@@ -61,7 +62,7 @@ export function buildWorkspaceId(
 export function buildRepositoryId(
   kind: WorkspaceKind,
   path: string,
-  options?: { connectionId?: string; platform?: RemotePlatform }
+  options?: { connectionId?: string; platform?: WorkspacePlatform }
 ): string {
   return buildWorkspaceId(kind, path, options);
 }
@@ -95,7 +96,7 @@ export function parseWorkspaceId(id: string): {
 
 export function createLocalWorkspaceHandle(
   rootPath: string,
-  platform: RemotePlatform | 'linux' = 'linux'
+  platform: WorkspacePlatform = 'linux'
 ): WorkspaceHandle {
   const normalizedPath = normalizeWorkspacePath(rootPath, platform);
   return {
@@ -107,11 +108,11 @@ export function createLocalWorkspaceHandle(
 }
 
 export function createRemoteWorkspaceHandle(
-  profile: Pick<ConnectionProfile, 'id' | 'platformHint'>,
+  profile: Pick<ConnectionProfile, 'id'>,
   rootPath: string,
   platform?: RemotePlatform
 ): WorkspaceHandle {
-  const resolvedPlatform = platform ?? profile.platformHint ?? 'linux';
+  const resolvedPlatform = platform ?? 'linux';
   const normalizedPath = normalizeWorkspacePath(rootPath, resolvedPlatform);
   return {
     id: buildWorkspaceId('remote', normalizedPath, {
@@ -131,7 +132,7 @@ export function deriveRepositoryDescriptor(input: {
   kind?: WorkspaceKind;
   connectionId?: string;
   groupId?: string;
-  platform?: RemotePlatform;
+  platform?: WorkspacePlatform;
 }): RepositoryDescriptor {
   const kind = input.kind ?? 'local';
   const platform = input.platform ?? 'linux';
