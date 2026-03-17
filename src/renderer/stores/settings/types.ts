@@ -395,6 +395,9 @@ export interface SettingsState {
   hiddenOpenInApps: string[];
   openInMenuFilterEnabled: boolean;
 
+  // File Tree settings
+  fileTreeAutoReveal: boolean; // Auto-reveal active file in file tree (like VSCode)
+
   // Logging
   loggingEnabled: boolean;
   logLevel: 'error' | 'warn' | 'info' | 'debug';
@@ -539,6 +542,7 @@ export interface SettingsState {
   setHideGroups: (hide: boolean) => void;
   toggleHiddenOpenInApp: (bundleId: string) => void;
   setOpenInMenuFilterEnabled: (enabled: boolean) => void;
+  setFileTreeAutoReveal: (enabled: boolean) => void;
 
   // Setters - Logging
   setLoggingEnabled: (enabled: boolean) => void;

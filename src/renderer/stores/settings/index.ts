@@ -199,6 +199,9 @@ function getInitialState() {
     hiddenOpenInApps: [] as string[],
     openInMenuFilterEnabled: false,
 
+    // File Tree defaults
+    fileTreeAutoReveal: true, // Auto-reveal active file in file tree by default (like VSCode)
+
     // Logging defaults
     loggingEnabled: false,
     logLevel: 'info' as const,
@@ -698,6 +701,9 @@ export const useSettingsStore = create<SettingsState>()(
             : [...state.hiddenOpenInApps, bundleId],
         })),
       setOpenInMenuFilterEnabled: (enabled) => set({ openInMenuFilterEnabled: enabled }),
+
+      // File Tree Setters
+      setFileTreeAutoReveal: (fileTreeAutoReveal) => set({ fileTreeAutoReveal }),
 
       // Logging Setters
       setLoggingEnabled: (loggingEnabled) => {

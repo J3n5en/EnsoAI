@@ -12,14 +12,7 @@ import {
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { normalizePath } from '@/App/storage';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import {
   Empty,
   EmptyDescription,
@@ -35,6 +28,7 @@ import type { EditorTab, PendingCursor } from '@/stores/editor';
 import { useEditorStore } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
+import { BreadcrumbTreeMenu } from './BreadcrumbTreeMenu';
 import { CommentForm, useEditorLineComment } from './EditorLineComment';
 import { EditorTabs } from './EditorTabs';
 import { ExternalModificationBanner } from './ExternalModificationBanner';
@@ -85,10 +79,10 @@ interface EditorAreaProps {
   onViewStateChange: (path: string, viewState: unknown) => void;
   onSave: (path: string) => void;
   onClearPendingCursor: () => void;
-  onBreadcrumbClick?: (path: string) => void;
   onGlobalSearch?: (selectedText: string) => void;
   isFileTreeCollapsed?: boolean;
   onToggleFileTree?: () => void;
+  onNavigateToFile?: (path: string) => Promise<void>;
 }
 
 export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function EditorArea(
@@ -109,10 +103,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     onViewStateChange,
     onSave,
     onClearPendingCursor,
-    onBreadcrumbClick,
     onGlobalSearch,
     isFileTreeCollapsed,
     onToggleFileTree,
+    onNavigateToFile,
   }: EditorAreaProps,
   ref: React.Ref<EditorAreaRef>
 ) {
@@ -251,7 +245,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   });
 
   // Wrap onSave to refresh blame after save
-  const handleSaveWithBlameRefresh = useCallback(
+  const _handleSaveWithBlameRefresh = useCallback(
     (path: string) => {
       onSave(path);
       // Refresh blame after file is saved
@@ -1120,7 +1114,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       </div>
 
       {/* Breadcrumb */}
-      {activeTab && breadcrumbSegments.length > 0 && (
+      {activeTab && breadcrumbSegments.length > 0 && rootPath && (
         <div className="shrink-0 border-b px-3 py-1">
           <Breadcrumb>
             <BreadcrumbList className="flex-nowrap text-xs">
@@ -1128,17 +1122,20 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                 <span key={segment.path} className="contents">
                   {index > 0 && <BreadcrumbSeparator className="[&>svg]:size-3" />}
                   <BreadcrumbItem className="min-w-0">
-                    {segment.isLast ? (
-                      <BreadcrumbPage className="truncate">{segment.name}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink
-                        render={<button type="button" />}
-                        className="truncate"
-                        onClick={() => onBreadcrumbClick?.(segment.path)}
+                    <BreadcrumbTreeMenu
+                      dirPath={segment.path}
+                      rootPath={rootPath}
+                      onFileClick={onTabClick}
+                      onNavigateToFile={onNavigateToFile}
+                      activeTabPath={activeTabPath}
+                    >
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-sm hover:bg-accent/50 px-1 py-0.5 -mx-1 transition-colors text-foreground truncate"
                       >
                         {segment.name}
-                      </BreadcrumbLink>
-                    )}
+                      </button>
+                    </BreadcrumbTreeMenu>
                   </BreadcrumbItem>
                 </span>
               ))}
