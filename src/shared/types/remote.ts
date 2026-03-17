@@ -176,7 +176,6 @@ export interface RemoteWindowSession {
   platform: RemotePlatform;
   remoteHomeDir: string;
   storagePath: string;
-  hostKey: string;
 }
 
 export interface RemoteSessionState {

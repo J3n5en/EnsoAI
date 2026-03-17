@@ -50,6 +50,18 @@ import { checkGitInstalled } from './services/git/checkGit';
 import { gitAutoFetchService } from './services/git/GitAutoFetchService';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
+import {
+  getSharedStatePaths,
+  isLegacySettingsMigrated,
+  isLegacyTodoMigrated,
+  markLegacySettingsMigrated,
+  markLegacyTodoMigrated,
+  readSharedSessionState,
+  readSharedSettings,
+  writeSharedSessionState,
+  writeSharedSettings,
+} from './services/SharedSessionState';
+import * as todoService from './services/todo/TodoService';
 import { webInspectorServer } from './services/webInspector';
 import log, { initLogger } from './utils/logger';
 import { openLocalWindow } from './windows/WindowManager';
@@ -177,9 +189,7 @@ if (!gotTheLock) {
 
 function readStoredLanguage(): Locale {
   try {
-    const settingsPath = join(app.getPath('userData'), 'settings.json');
-    if (!existsSync(settingsPath)) return 'en';
-    const data = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+    const data = readSharedSettings();
     const persisted = data['enso-settings'];
     if (persisted && typeof persisted === 'object') {
       const state = (persisted as { state?: Record<string, unknown> }).state;
@@ -215,6 +225,61 @@ async function initAutoUpdater(window: BrowserWindow): Promise<void> {
 
   const { autoUpdaterService } = await import('./services/updater/AutoUpdater');
   autoUpdaterService.init(window, autoUpdateEnabled, proxySettings);
+}
+
+function migrateLegacySettingsIfNeeded(): void {
+  if (isLegacySettingsMigrated()) {
+    return;
+  }
+
+  const legacySettingsPath = join(app.getPath('userData'), 'settings.json');
+  if (!existsSync(legacySettingsPath)) {
+    markLegacySettingsMigrated();
+    return;
+  }
+
+  try {
+    const legacyData = JSON.parse(readFileSync(legacySettingsPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    writeSharedSettings(legacyData);
+    const currentSession = readSharedSessionState();
+    writeSharedSessionState({
+      ...currentSession,
+      updatedAt: Date.now(),
+      settingsData: legacyData,
+    });
+    markLegacySettingsMigrated();
+  } catch (error) {
+    console.warn('[migration] Failed to migrate legacy settings:', error);
+  }
+}
+
+async function migrateLegacyTodoIfNeeded(): Promise<void> {
+  if (isLegacyTodoMigrated()) {
+    return;
+  }
+
+  const legacyTodoPath = join(app.getPath('userData'), 'todo.db');
+  if (!existsSync(legacyTodoPath)) {
+    markLegacyTodoMigrated();
+    return;
+  }
+
+  try {
+    await todoService.initialize();
+    const boards = await todoService.exportAllTasks();
+    const currentSession = readSharedSessionState();
+    writeSharedSessionState({
+      ...currentSession,
+      updatedAt: Date.now(),
+      todos: boards,
+    });
+    markLegacyTodoMigrated();
+  } catch (error) {
+    console.warn('[migration] Failed to migrate legacy todo.db:', error);
+  }
 }
 
 async function init(): Promise<void> {
@@ -260,6 +325,11 @@ app.whenReady().then(async () => {
 
   // Clean up temp files from previous sessions
   await cleanupTempFiles();
+
+  const sharedPaths = getSharedStatePaths();
+  log.info('Shared state paths', sharedPaths);
+  migrateLegacySettingsIfNeeded();
+  await migrateLegacyTodoIfNeeded();
 
   // Register protocol to handle local file:// URLs for markdown images
   protocol.handle('local-file', (request) => {

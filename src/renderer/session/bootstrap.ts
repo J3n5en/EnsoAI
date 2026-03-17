@@ -46,8 +46,8 @@ function applyLocalStorageSnapshot(snapshot: Record<string, string>): void {
   }
 }
 
-function scheduleRemoteLocalStorageSync(): void {
-  if (!activeRemoteSession || suppressSync) {
+function scheduleSharedLocalStorageSync(): void {
+  if (suppressSync) {
     return;
   }
 
@@ -57,11 +57,11 @@ function scheduleRemoteLocalStorageSync(): void {
 
   syncTimer = window.setTimeout(() => {
     syncTimer = null;
-    if (!activeRemoteSession || suppressSync) {
+    if (suppressSync) {
       return;
     }
-    window.electronAPI.remote
-      .syncSessionLocalStorage(snapshotLocalStorage())
+    window.electronAPI.sessionStorage
+      .syncLocalStorage(snapshotLocalStorage())
       .catch((error) => console.warn('[remote-session] Failed to sync localStorage:', error));
   }, 150);
 }
@@ -79,45 +79,56 @@ function installLocalStoragePatch(): void {
   Storage.prototype.setItem = function patchedSetItem(key: string, value: string): void {
     setItem.call(this, key, value);
     if (this === window.localStorage) {
-      scheduleRemoteLocalStorageSync();
+      scheduleSharedLocalStorageSync();
     }
   };
 
   Storage.prototype.removeItem = function patchedRemoveItem(key: string): void {
     removeItem.call(this, key);
     if (this === window.localStorage) {
-      scheduleRemoteLocalStorageSync();
+      scheduleSharedLocalStorageSync();
     }
   };
 
   Storage.prototype.clear = function patchedClear(): void {
     clear.call(this);
     if (this === window.localStorage) {
-      scheduleRemoteLocalStorageSync();
+      scheduleSharedLocalStorageSync();
     }
   };
 
   window.addEventListener('beforeunload', () => {
-    if (!activeRemoteSession || suppressSync) {
+    if (suppressSync) {
       return;
     }
-    void window.electronAPI.remote.syncSessionLocalStorage(snapshotLocalStorage());
+    void window.electronAPI.sessionStorage.syncLocalStorage(snapshotLocalStorage());
   });
 }
 
 export async function bootstrapRemoteSessionState(): Promise<void> {
   installLocalStoragePatch();
 
+  const legacySnapshot = snapshotLocalStorage();
   bootstrapContext = await window.electronAPI.window.getContext();
   activeRemoteSession = bootstrapContext.mode === 'remote-host' ? bootstrapContext.session : null;
 
-  if (!activeRemoteSession) {
-    return;
+  const alreadyMigrated = await window.electronAPI.sessionStorage
+    .isLegacyLocalStorageMigrated()
+    .catch(() => false);
+
+  if (legacySnapshot && Object.keys(legacySnapshot).length > 0 && !alreadyMigrated) {
+    await window.electronAPI.sessionStorage
+      .importLocalStorage(legacySnapshot)
+      .catch((error) =>
+        console.warn('[shared-session] Failed to import legacy localStorage:', error)
+      );
   }
 
-  const sessionState = await window.electronAPI.remote.getSession();
+  const sessionState = await window.electronAPI.sessionStorage.get();
   if (sessionState) {
-    activeRemoteSession = sessionState.session;
+    if (sessionState.session) {
+      activeRemoteSession = sessionState.session;
+    }
     applyLocalStorageSnapshot(sessionState.localStorage);
   }
 }

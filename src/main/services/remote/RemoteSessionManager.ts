@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import type {
   ConnectionProfile,
@@ -7,7 +7,6 @@ import type {
   SessionTodoTask,
 } from '@shared/types';
 import { BrowserWindow, type WebContents } from 'electron';
-import type { RemoteConnectionRuntimeInfo } from './RemoteConnectionManager';
 import { remoteConnectionManager } from './RemoteConnectionManager';
 import { normalizeRemotePath, toRemoteVirtualPath } from './RemotePath';
 
@@ -28,7 +27,7 @@ interface RemoteDirectoryEntry {
 }
 
 const STORAGE_VERSION = 2;
-const REMOTE_WINDOW_ROOT = '.ensoai/host-windows';
+const REMOTE_STORAGE_PATH = '.ensoai/session-state.json';
 const REMOTE_SETTINGS_PATH = '.ensoai/settings.json';
 
 function now(): number {
@@ -61,33 +60,8 @@ function safeJsonParse<T>(value: string): T | null {
   }
 }
 
-function buildHostKey(runtime: RemoteConnectionRuntimeInfo): string {
-  const digest = createHash('sha256')
-    .update(
-      JSON.stringify({
-        host: runtime.resolvedHost.host,
-        port: runtime.resolvedHost.port,
-        homeDir: normalizeRemotePath(runtime.homeDir),
-      })
-    )
-    .digest('hex')
-    .slice(0, 16);
-
-  const basename = runtime.profile.name
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  return `${basename || 'remote-host'}-${digest}`;
-}
-
-function buildRemoteWindowRoot(homeDir: string, hostKey: string): string {
-  const normalizedHome = normalizeRemotePath(homeDir);
-  return `${normalizedHome}/${REMOTE_WINDOW_ROOT}/${hostKey}`;
-}
-
 function getRemoteStorageRealPath(session: RemoteWindowSession): string {
-  return `${buildRemoteWindowRoot(session.remoteHomeDir, session.hostKey)}/session-state.json`;
+  return `${normalizeRemotePath(session.remoteHomeDir)}/${REMOTE_STORAGE_PATH}`;
 }
 
 function getRemoteSettingsRealPath(session: RemoteWindowSession): string {
@@ -95,11 +69,10 @@ function getRemoteSettingsRealPath(session: RemoteWindowSession): string {
 }
 
 function buildRemoteSession(
-  runtime: RemoteConnectionRuntimeInfo,
-  hostKey: string
+  runtime: Awaited<ReturnType<typeof remoteConnectionManager.getRuntimeInfo>>
 ): RemoteWindowSession {
   const remoteHomeDir = normalizeRemotePath(runtime.homeDir);
-  const storagePath = `${buildRemoteWindowRoot(runtime.homeDir, hostKey)}/session-state.json`;
+  const storagePath = `${remoteHomeDir}/${REMOTE_STORAGE_PATH}`;
 
   return {
     sessionId: randomUUID(),
@@ -110,7 +83,6 @@ function buildRemoteSession(
     platform: runtime.platform,
     remoteHomeDir,
     storagePath: toRemoteVirtualPath(runtime.profile.id, storagePath),
-    hostKey,
   };
 }
 
@@ -160,8 +132,7 @@ export class RemoteSessionManager {
     const status = await remoteConnectionManager.connect(profileOrId);
     const runtime = await remoteConnectionManager.getRuntimeInfo(status.connectionId);
 
-    const hostKey = buildHostKey(runtime);
-    const session = buildRemoteSession(runtime, hostKey);
+    const session = buildRemoteSession(runtime);
     const [storage, settingsData] = await Promise.all([
       this.measureConnectionStep(session.connectionId, 'load-session-storage', () =>
         this.loadOrCreateStorage(session)

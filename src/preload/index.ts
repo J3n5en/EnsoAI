@@ -559,6 +559,19 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.REMOTE_AUTH_RESPONSE, response),
   },
 
+  sessionStorage: {
+    get: (): Promise<{
+      session?: RemoteWindowSession;
+      localStorage: Record<string, string>;
+    } | null> => ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_GET),
+    syncLocalStorage: (snapshot: Record<string, string>): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_SYNC_LOCAL_STORAGE, snapshot),
+    importLocalStorage: (snapshot: Record<string, string>): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_IMPORT_LOCAL_STORAGE, snapshot),
+    isLegacyLocalStorageMigrated: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_IS_LEGACY_LOCAL_STORAGE_MIGRATED),
+  },
+
   // Context Menu
   contextMenu: {
     show: (

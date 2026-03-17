@@ -1,5 +1,6 @@
 import { IPC_CHANNELS } from '@shared/types';
 import { ipcMain } from 'electron';
+import { localSessionManager } from '../services/LocalSessionManager';
 import { remoteSessionManager } from '../services/remote/RemoteSessionManager';
 import * as todoService from '../services/todo/TodoService';
 
@@ -19,8 +20,7 @@ export function registerTodoHandlers(): void {
     if (remoteSessionManager.hasSession(event.sender)) {
       return remoteSessionManager.getTodoTasks(event.sender, repoPath);
     }
-    await ensureReady();
-    return todoService.getTasks(repoPath);
+    return localSessionManager.getTodoTasks(repoPath);
   });
 
   ipcMain.handle(
@@ -42,8 +42,7 @@ export function registerTodoHandlers(): void {
       if (remoteSessionManager.hasSession(event.sender)) {
         return remoteSessionManager.addTodoTask(event.sender, repoPath, task);
       }
-      await ensureReady();
-      return todoService.addTask(repoPath, task);
+      return localSessionManager.addTodoTask(repoPath, task);
     }
   );
 
@@ -58,8 +57,7 @@ export function registerTodoHandlers(): void {
       if (remoteSessionManager.hasSession(event.sender)) {
         return remoteSessionManager.updateTodoTask(event.sender, repoPath, taskId, updates);
       }
-      await ensureReady();
-      return todoService.updateTask(repoPath, taskId, updates);
+      return localSessionManager.updateTodoTask(repoPath, taskId, updates);
     }
   );
 
@@ -67,8 +65,7 @@ export function registerTodoHandlers(): void {
     if (remoteSessionManager.hasSession(event.sender)) {
       return remoteSessionManager.deleteTodoTask(event.sender, repoPath, taskId);
     }
-    await ensureReady();
-    return todoService.deleteTask(repoPath, taskId);
+    return localSessionManager.deleteTodoTask(repoPath, taskId);
   });
 
   ipcMain.handle(
@@ -83,8 +80,7 @@ export function registerTodoHandlers(): void {
           newOrder
         );
       }
-      await ensureReady();
-      return todoService.moveTask(repoPath, taskId, newStatus, newOrder);
+      return localSessionManager.moveTodoTask(repoPath, taskId, newStatus, newOrder);
     }
   );
 
@@ -94,8 +90,7 @@ export function registerTodoHandlers(): void {
       if (remoteSessionManager.hasSession(event.sender)) {
         return remoteSessionManager.reorderTodoTasks(event.sender, repoPath, status, orderedIds);
       }
-      await ensureReady();
-      return todoService.reorderTasks(repoPath, status, orderedIds);
+      return localSessionManager.reorderTodoTasks(repoPath, status, orderedIds);
     }
   );
 

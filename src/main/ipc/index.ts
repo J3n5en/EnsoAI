@@ -35,6 +35,7 @@ import {
   destroyAllTerminalsAndWait,
   registerSessionHandlers,
 } from './session';
+import { registerSessionStorageHandlers } from './sessionStorage';
 import { registerSettingsHandlers } from './settings';
 import { registerShellHandlers } from './shell';
 import { registerTempWorkspaceHandlers } from './tempWorkspace';
@@ -49,6 +50,7 @@ export function registerIpcHandlers(): void {
   registerWorktreeHandlers();
   registerFileHandlers();
   registerSessionHandlers();
+  registerSessionStorageHandlers();
   registerAgentHandlers();
   registerDialogHandlers();
   registerAppHandlers();
