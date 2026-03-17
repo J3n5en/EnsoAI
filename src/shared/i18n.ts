@@ -52,6 +52,7 @@ export const zhTranslations: Record<string, string> = {
   'Size Mode': '填充模式',
   'Select Image': '选择图片',
   'Beta Features': 'Beta 功能',
+  'Binary file not supported for diff preview': '二进制文件不支持差异预览',
   'Temp Session': '临时会话',
   'Temp Session settings': '临时会话设置',
   'Show Temp Session entry for quick scratch sessions': '显示临时会话入口，用于快速临时会话',

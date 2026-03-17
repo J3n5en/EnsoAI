@@ -694,15 +694,23 @@ export function useXterm({
     }
   }, [terminalRenderer, loadRenderer]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount.
+  // Setup: reset isUnmountedRef so StrictMode re-mount can re-initialize.
+  // Cleanup: reset activation/data refs so the next mount gets consistent state;
+  // clear ptyIdRef after destroy to avoid holding a destroyed PTY id.
   useEffect(() => {
+    isUnmountedRef.current = false;
+
     return () => {
       isUnmountedRef.current = true;
+      hasBeenActivatedRef.current = false;
+      hasReceivedDataRef.current = false;
       createRequestIdRef.current += 1;
       cleanupRef.current?.();
       exitCleanupRef.current?.();
       if (ptyIdRef.current) {
         window.electronAPI.terminal.destroy(ptyIdRef.current);
+        ptyIdRef.current = null;
       }
       // Remove copy-on-selection listener before disposing terminal
       if (copyOnSelectionHandlerRef.current) {

@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Settings2,
+  X,
 } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -18,7 +19,11 @@ import {
   TEMP_REPO_ID,
   UNGROUPED_SECTION_ID,
 } from '@/App/constants';
-import { getStoredGroupCollapsedState, saveGroupCollapsedState } from '@/App/storage';
+import {
+  getStoredGroupCollapsedState,
+  normalizePath,
+  saveGroupCollapsedState,
+} from '@/App/storage';
 import {
   CreateGroupDialog,
   GroupEditDialog,
@@ -44,10 +49,12 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { RepoItemWithGlow } from '@/components/ui/glow-wrappers';
+import { useWorktreeListMultiple } from '@/hooks/useWorktree';
 import { useI18n } from '@/i18n';
 import { heightVariants, springFast, springStandard } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
+import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { RunningProjectsPopover } from './RunningProjectsPopover';
 
 interface Repository {
@@ -112,6 +119,7 @@ export function RepositorySidebar({
   const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const hideGroups = useSettingsStore((s) => s.hideGroups);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [menuRepo, setMenuRepo] = useState<Repository | null>(null);
@@ -245,23 +253,69 @@ export function RepositorySidebar({
     setRepoToRemove(null);
   };
 
+  const allRepoPaths = useMemo(() => repositories.map((repo) => repo.path), [repositories]);
+  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(allRepoPaths);
+  const activities = useWorktreeActivityStore((s) => s.activities);
+  const activePathSet = useMemo(
+    () =>
+      new Set(
+        Object.entries(activities)
+          .filter(([, activity]) => activity.agentCount > 0 || activity.terminalCount > 0)
+          .map(([path]) => normalizePath(path))
+      ),
+    [activities]
+  );
+
+  /**
+   * 解析搜索语法：当前仅支持 `:active`，其余内容继续作为仓库名称搜索词。
+   */
+  const parsedSearch = useMemo(() => {
+    const tokens = searchQuery.trim().split(/\s+/).filter(Boolean);
+    const textTokens: string[] = [];
+    let hasActiveFilter = false;
+
+    for (const token of tokens) {
+      if (token.toLowerCase() === ':active') {
+        hasActiveFilter = true;
+        continue;
+      }
+      textTokens.push(token);
+    }
+
+    return {
+      hasActiveFilter,
+      textQuery: textTokens.join(' ').toLowerCase(),
+    };
+  }, [searchQuery]);
+
   // Filter by group and search
-  const showSections = activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
+  const hasSearchFilter = parsedSearch.hasActiveFilter || parsedSearch.textQuery.length > 0;
+  const showSections = activeGroupId === ALL_GROUP_ID && !hasSearchFilter && !hideGroups;
 
   const filteredRepos = useMemo(() => {
     let filtered = repositories;
     if (activeGroupId !== ALL_GROUP_ID) {
       filtered = filtered.filter((r) => r.groupId === activeGroupId);
     }
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((repo) => repo.name.toLowerCase().includes(query));
+    if (parsedSearch.hasActiveFilter) {
+      filtered = filtered.filter((repo) => {
+        const normalizedRepoPath = normalizePath(repo.path);
+        if (activePathSet.has(normalizedRepoPath)) return true;
+
+        const repoWorktrees = allRepoWorktreesMap[repo.path] || [];
+        return repoWorktrees.some((worktree) => activePathSet.has(normalizePath(worktree.path)));
+      });
+    }
+    if (parsedSearch.textQuery) {
+      filtered = filtered.filter((repo) =>
+        repo.name.toLowerCase().includes(parsedSearch.textQuery)
+      );
     }
     return filtered.map((repo) => ({
       repo,
       originalIndex: repositories.indexOf(repo),
     }));
-  }, [repositories, activeGroupId, searchQuery]);
+  }, [repositories, activeGroupId, parsedSearch, activePathSet, allRepoWorktreesMap]);
 
   const groupedSections = useMemo(() => {
     if (!showSections) return [];
@@ -443,12 +497,26 @@ export function RepositorySidebar({
         <div className="flex h-8 items-center gap-2 rounded-lg border px-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder={t('Search repositories')}
+            placeholder={`${t('Search repositories')} (:active)`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
           />
+          {searchQuery.length > 0 && (
+            <button
+              type="button"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => {
+                setSearchQuery('');
+                searchInputRef.current?.focus();
+              }}
+              title={t('Clear')}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -483,7 +551,7 @@ export function RepositorySidebar({
             </RepoItemWithGlow>
           </div>
         )}
-        {filteredRepos.length === 0 && searchQuery.length > 0 ? (
+        {filteredRepos.length === 0 && hasSearchFilter ? (
           <Empty className="h-full border-0">
             <EmptyMedia variant="icon">
               <Search className="h-4.5 w-4.5" />

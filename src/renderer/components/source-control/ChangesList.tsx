@@ -195,7 +195,7 @@ export function ChangesList({
   // If tree mode, use ChangesTree component
   if (viewMode === 'tree') {
     return (
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         {/* View Mode Toggle */}
         <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b px-3">
           {codeReviewEnabled && (
@@ -231,7 +231,7 @@ export function ChangesList({
           )}
         </div>
         {/* Tree View */}
-        <div className="flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <ChangesTree
             staged={staged}
             trackedChanges={trackedChanges}
@@ -258,7 +258,7 @@ export function ChangesList({
     staged.length === 0 && trackedChanges.length === 0 && untrackedChanges.length === 0;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       {/* View Mode Toggle */}
       <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b px-3">
         {codeReviewEnabled && (
@@ -310,7 +310,7 @@ export function ChangesList({
         </div>
       ) : (
         /* List View */
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-4 p-3">
             {/* Staged Changes */}
             {staged.length > 0 && (

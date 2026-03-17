@@ -238,7 +238,7 @@ export function CommitHistoryList({
 
   return (
     <>
-      <ScrollArea className="h-full">
+      <ScrollArea className="h-full min-h-0">
         <div className="space-y-0.5 p-2">
           {commits.map((commit) => {
             const isSelected = selectedHash === commit.hash;

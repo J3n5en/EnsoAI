@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Expand,
   FileCode,
+  FileX2,
   FolderGit2,
   FoldVertical,
   Loader2,
@@ -27,6 +28,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFileChanges, useFileDiff } from '@/hooks/useSourceControl';
 import { useSubmoduleChanges, useSubmoduleFileDiff, useSubmodules } from '@/hooks/useSubmodules';
@@ -1187,6 +1189,17 @@ export function DiffReviewModal({ open, onOpenChange, rootPath, onSend }: DiffRe
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   {t('Select a file to view diff')}
                 </div>
+              ) : diff?.isBinary ? (
+                <Empty className="h-full">
+                  <EmptyMedia variant="icon">
+                    <FileX2 className="h-4.5 w-4.5" />
+                  </EmptyMedia>
+                  <EmptyHeader>
+                    <EmptyDescription>
+                      {t('Binary file not supported for diff preview')}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : diff && isThemeReady ? (
                 <DiffEditor
                   key={`${selectedFile.path}-${selectedFile.staged}`}

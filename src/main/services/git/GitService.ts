@@ -19,7 +19,7 @@ import type {
   SubmoduleStatus,
 } from '@shared/types';
 import type { SimpleGit, StatusResult } from 'simple-git';
-import { decodeBuffer, gitShow } from './encoding';
+import { decodeBuffer, detectBinaryFile, gitShow } from './encoding';
 import {
   createGitEnv,
   createSimpleGit,
@@ -668,6 +668,11 @@ export class GitService {
       throw new Error('Invalid file path: path traversal detected');
     }
 
+    // 3. Detect binary files to avoid rendering garbage in Monaco
+    if (await detectBinaryFile(absolutePath, this.workdir, `:${filePath}`)) {
+      return { path: filePath, original: '', modified: '', isBinary: true };
+    }
+
     let original = '';
     let modified = '';
 
@@ -815,6 +820,17 @@ export class GitService {
     submodulePath?: string
   ): Promise<FileDiff> {
     const git = this.getGitInstance(submodulePath);
+
+    // Detect binary using git diff --numstat (binary files show "-" for insertions/deletions)
+    try {
+      const numstat = await git.diff(['--numstat', `${hash}^..${hash}`, '--', filePath]);
+      if (numstat.startsWith('-\t-\t')) {
+        return { path: filePath, original: '', modified: '', isBinary: true };
+      }
+    } catch {
+      // If detection fails (e.g., root commit without parent), continue with text diff
+    }
+
     let originalContent = '';
     let modifiedContent = '';
 
@@ -1342,6 +1358,11 @@ export class GitService {
     const relativeFilePath = path.relative(fullSubPath, fullFilePath);
     if (relativeFilePath.startsWith('..') || path.isAbsolute(relativeFilePath)) {
       throw new Error('Invalid file path: path traversal detected');
+    }
+
+    // Detect binary files
+    if (await detectBinaryFile(fullFilePath, fullSubPath, `:${filePath}`)) {
+      return { path: filePath, original: '', modified: '', isBinary: true };
     }
 
     let original = '';

@@ -1,10 +1,12 @@
 import { DiffEditor } from '@monaco-editor/react';
+import type { FileDiff } from '@shared/types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
   FileCode,
+  FileX2,
   FoldVertical,
   MessageSquare,
   Pencil,
@@ -109,7 +111,7 @@ interface DiffViewerProps {
   onNextFile?: () => void;
   hasPrevFile?: boolean;
   hasNextFile?: boolean;
-  diff?: { path: string; original: string; modified: string };
+  diff?: FileDiff;
   skipFetch?: boolean;
   isCommitView?: boolean; // Add flag to indicate commit history view
 }
@@ -1047,6 +1049,20 @@ export function DiffViewer({
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <p className="text-sm">{t('Failed to load diff')}</p>
       </div>
+    );
+  }
+
+  if (diff.isBinary) {
+    return (
+      <Empty className="h-full">
+        <EmptyMedia variant="icon">
+          <FileX2 className="h-4.5 w-4.5" />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle>{file.path}</EmptyTitle>
+          <EmptyDescription>{t('Binary file not supported for diff preview')}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 

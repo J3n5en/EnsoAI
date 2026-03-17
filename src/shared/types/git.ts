@@ -76,6 +76,7 @@ export interface FileDiff {
   path: string;
   original: string; // HEAD version (empty for new files)
   modified: string; // working tree version (empty for deleted files)
+  isBinary?: boolean; // true if file is binary (images, PDFs, executables, etc.)
 }
 
 // Commit history detail types
