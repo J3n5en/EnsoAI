@@ -74,6 +74,7 @@ export function BreadcrumbTreeMenu({
   activeTabPath,
 }: BreadcrumbTreeMenuProps) {
   const queryClient = useQueryClient();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [tree, setTree] = useState<TreeNode[]>([]);
 
@@ -193,23 +194,56 @@ export function BreadcrumbTreeMenu({
   const handleNodeClick = useCallback(
     (node: TreeNode) => {
       try {
-        // Directories: use onFileClick (synchronous, for navigation)
-        // Files: use onNavigateToFile (handles both new and existing tabs)
+        // Directories: expand/collapse, keep menu open
+        // Files: open file and close menu
         if (node.isDirectory) {
-          onFileClick(node.path);
+          // For directories, toggle expand/collapse
+          const newExpanded = togglePathInSet(expandedPathsRef.current, node.path);
+          setExpandedPaths(newExpanded);
+
+          // Load children if expanding and not already loaded
+          const foundNode = findNodeInTree(treeRef.current, node.path);
+          if (foundNode && !foundNode.children && !expandedPathsRef.current.has(node.path)) {
+            // Async load children - don't await to avoid blocking
+            setTree((current) =>
+              updateNodeInTree(current, node.path, (n) => ({ ...n, isLoading: true }))
+            );
+
+            loadChildren(node.path)
+              .then((children) => {
+                const childNodes = children.map((c) => ({ ...c })) as TreeNode[];
+                setTree((current) =>
+                  updateNodeInTree(current, node.path, (n) => ({
+                    ...n,
+                    children: childNodes,
+                    isLoading: false,
+                  }))
+                );
+              })
+              .catch(() => {
+                // Remove from expanded on error
+                setExpandedPaths((prev) => togglePathInSet(prev, node.path));
+                setTree((current) =>
+                  updateNodeInTree(current, node.path, (n) => ({ ...n, isLoading: false }))
+                );
+              });
+          }
         } else if (onNavigateToFile) {
+          // Close menu when opening file
+          setMenuOpen(false);
           // Fire and forget - don't await to avoid blocking UI
           onNavigateToFile(node.path).catch((error) => {
             console.error('Failed to open file:', node.path, error);
           });
         } else {
+          setMenuOpen(false);
           onFileClick(node.path);
         }
       } catch (error) {
         console.error('Failed to open file:', node.path, error);
       }
     },
-    [onFileClick, onNavigateToFile]
+    [loadChildren, onFileClick, onNavigateToFile]
   );
 
   const renderTree = useCallback(
@@ -257,7 +291,7 @@ export function BreadcrumbTreeMenu({
   );
 
   return (
-    <Menu>
+    <Menu open={menuOpen} onOpenChange={setMenuOpen}>
       <MenuTrigger>{children}</MenuTrigger>
       <MenuPopup align="start" sideOffset={4} className="max-h-80">
         {isLoading ? (
