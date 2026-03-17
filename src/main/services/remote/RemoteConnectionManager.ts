@@ -17,9 +17,12 @@ import type {
   RemoteRuntimeStatus,
 } from '@shared/types';
 import { app } from 'electron';
+import * as pty from 'node-pty';
+import { killProcessTree } from '../../utils/processUtils';
 import { getEnvForCommand } from '../../utils/shell';
 import { RemoteAuthBroker } from './RemoteAuthBroker';
 import { getRemoteServerSource, REMOTE_SERVER_VERSION } from './RemoteHelperSource';
+import { parseHostVerificationPrompt } from './RemoteHostVerification';
 import { createRemoteError, getRemoteErrorDetail, translateRemote } from './RemoteI18n';
 import {
   ensureRemoteRuntimeAsset,
@@ -77,6 +80,10 @@ interface LocalCommandResult {
   stdout: string;
   stderr: string;
   code: number | null;
+}
+
+interface HostTrustProbeResult extends LocalCommandResult {
+  promptShown: boolean;
 }
 
 export interface RemoteConnectionRuntimeInfo {
@@ -152,6 +159,7 @@ const BOOTSTRAP_TIMEOUT_MS = 5_000;
 const REMOTE_SETTINGS_PATH = 'remote-connections.json';
 const REMOTE_KNOWN_HOSTS_PATH = 'remote-known_hosts';
 const SSH_KEYSCAN_TIMEOUT_SECONDS = 5;
+const SSH_HOST_VERIFICATION_PROMPT_TIMEOUT_MS = 15_000;
 const MAX_REMOTE_DIAGNOSTIC_LINES = 40;
 const MAX_REMOTE_DIAGNOSTIC_CHARS = 8_192;
 const REMOTE_PTY_UNAVAILABLE_PREFIX = 'REMOTE_PTY_UNAVAILABLE:';
@@ -1877,34 +1885,49 @@ export class RemoteConnectionManager {
 
   private async ensureHostTrusted(profile: ConnectionProfile): Promise<ResolvedHostConfig> {
     const config = await this.resolveHostConfig(profile);
-    const allKnownHostsFiles = uniquePaths([
-      ...config.userKnownHostsFiles,
-      ...config.globalKnownHostsFiles,
-    ]);
-    const known = await this.isKnownHost(config.knownHost, config.port, allKnownHostsFiles);
-    if (known) {
-      return config;
-    }
-
     const appKnownHostsPath = getAppKnownHostsPath();
-    await mkdir(getRemoteStateRoot(), { recursive: true });
-    const scannedKeys = await this.scanHostKeys(config);
-    const fingerprints = await this.buildFingerprints(scannedKeys, config.knownHost, config.port);
-    await this.authBroker.requestHostVerification(profile, {
-      host: config.knownHost,
-      port: config.port,
-      fingerprints,
-    });
-    await appendFile(
-      appKnownHostsPath,
-      scannedKeys.endsWith('\n') ? scannedKeys : `${scannedKeys}\n`,
-      'utf8'
-    );
-
-    return {
+    const verifiedConfig = {
       ...config,
       userKnownHostsFiles: uniquePaths([appKnownHostsPath, ...config.userKnownHostsFiles]),
     };
+    if (await this.isTrustedHost(verifiedConfig)) {
+      return verifiedConfig;
+    }
+
+    await mkdir(getRemoteStateRoot(), { recursive: true });
+    let scannedKeys = '';
+    try {
+      scannedKeys = await this.scanHostKeys(verifiedConfig);
+      const fingerprints = await this.buildFingerprints(
+        scannedKeys,
+        verifiedConfig.knownHost,
+        verifiedConfig.port
+      );
+      await this.authBroker.requestHostVerification(profile, {
+        host: verifiedConfig.knownHost,
+        port: verifiedConfig.port,
+        fingerprints,
+      });
+      await appendFile(
+        appKnownHostsPath,
+        scannedKeys.endsWith('\n') ? scannedKeys : `${scannedKeys}\n`,
+        'utf8'
+      );
+      return verifiedConfig;
+    } catch (error) {
+      const detail = getRemoteErrorDetail(error);
+      if (detail === translateRemote('SSH authentication was cancelled')) {
+        throw error;
+      }
+      // Fall back to a real SSH handshake when keyscan cannot produce usable fingerprints.
+    }
+
+    await this.verifyHostTrustWithSshHandshake(profile, verifiedConfig);
+    if (await this.isTrustedHost(verifiedConfig)) {
+      return verifiedConfig;
+    }
+
+    throw createRemoteError('Failed to verify remote host with SSH handshake');
   }
 
   private async resolveHostConfig(profile: ConnectionProfile): Promise<ResolvedHostConfig> {
@@ -1953,6 +1976,14 @@ export class RemoteConnectionManager {
       }
     }
     return false;
+  }
+
+  private async isTrustedHost(config: ResolvedHostConfig): Promise<boolean> {
+    return this.isKnownHost(
+      config.knownHost,
+      config.port,
+      uniquePaths([...config.userKnownHostsFiles, ...config.globalKnownHostsFiles])
+    );
   }
 
   private async buildFingerprints(
@@ -2010,6 +2041,35 @@ export class RemoteConnectionManager {
     throw createRemoteError('Failed to scan remote host fingerprint', undefined, result.stderr);
   }
 
+  private async verifyHostTrustWithSshHandshake(
+    profile: ConnectionProfile,
+    resolvedHost: ResolvedHostConfig
+  ): Promise<void> {
+    const result = await this.runHostTrustProbe(profile, resolvedHost);
+    const detail = this.formatCommandResultDetail(result);
+    if (
+      result.code === 0 ||
+      (await this.isTrustedHost(resolvedHost)) ||
+      (detail && isAuthenticationFailure(detail))
+    ) {
+      return;
+    }
+
+    if (result.promptShown) {
+      throw createRemoteError(
+        'Failed to verify remote host with SSH handshake',
+        undefined,
+        detail || translateRemote('SSH handshake ended before host verification')
+      );
+    }
+
+    throw createRemoteError(
+      'Failed to verify remote host with SSH handshake',
+      undefined,
+      detail || translateRemote('SSH handshake timed out before host verification')
+    );
+  }
+
   private async buildSshContext(
     profile: ConnectionProfile,
     resolvedHost: ResolvedHostConfig
@@ -2035,6 +2095,183 @@ export class RemoteConnectionManager {
       `UserKnownHostsFile=${resolvedHost.userKnownHostsFiles.join(' ')}`,
     ];
     return { env, optionArgs };
+  }
+
+  private async runHostTrustProbe(
+    profile: ConnectionProfile,
+    resolvedHost: ResolvedHostConfig
+  ): Promise<HostTrustProbeResult> {
+    const env = {
+      ...getEnvForCommand(),
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      LANG: 'C',
+      LC_ALL: 'C',
+    } as Record<string, string>;
+    const args = [
+      '-o',
+      'BatchMode=no',
+      '-o',
+      'StrictHostKeyChecking=ask',
+      '-o',
+      `UserKnownHostsFile=${resolvedHost.userKnownHostsFiles.join(' ')}`,
+      '-o',
+      'PreferredAuthentications=none',
+      '-o',
+      'NumberOfPasswordPrompts=0',
+      '-o',
+      'PasswordAuthentication=no',
+      '-o',
+      'KbdInteractiveAuthentication=no',
+      '-o',
+      'PubkeyAuthentication=no',
+      '-o',
+      `ConnectTimeout=${SSH_KEYSCAN_TIMEOUT_SECONDS}`,
+      profile.sshTarget,
+      'true',
+    ];
+
+    return new Promise((resolve, reject) => {
+      let proc: pty.IPty;
+      try {
+        proc = pty.spawn('ssh', args, {
+          name: 'xterm-256color',
+          cols: 80,
+          rows: 24,
+          cwd: process.env.HOME || process.env.USERPROFILE || '/',
+          env,
+        });
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
+      let output = '';
+      let promptShown = false;
+      let settled = false;
+      let pendingPrompt: Promise<void> | null = null;
+
+      const finish = (result: HostTrustProbeResult) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        try {
+          dataDisposable.dispose();
+        } catch {
+          // Ignore
+        }
+        try {
+          exitDisposable.dispose();
+        } catch {
+          // Ignore
+        }
+        resolve(result);
+      };
+
+      const abort = (error: unknown) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        try {
+          dataDisposable.dispose();
+        } catch {
+          // Ignore
+        }
+        try {
+          exitDisposable.dispose();
+        } catch {
+          // Ignore
+        }
+        try {
+          killProcessTree(proc, 'SIGTERM');
+        } catch {
+          // Ignore
+        }
+        reject(error);
+      };
+
+      const maybeHandlePrompt = () => {
+        if (promptShown || pendingPrompt) {
+          return;
+        }
+        const hostPrompt = parseHostVerificationPrompt(
+          output,
+          resolvedHost.knownHost,
+          resolvedHost.port
+        );
+        if (!hostPrompt) {
+          return;
+        }
+
+        promptShown = true;
+        pendingPrompt = this.authBroker
+          .requestHostVerification(profile, hostPrompt, output)
+          .then(() => {
+            if (!settled) {
+              proc.write('yes\n');
+            }
+          })
+          .catch((error) => {
+            if (!settled) {
+              proc.write('no\n');
+              try {
+                killProcessTree(proc, 'SIGTERM');
+              } catch {
+                // Ignore
+              }
+            }
+            abort(error);
+          })
+          .finally(() => {
+            pendingPrompt = null;
+          });
+      };
+
+      const timer = setTimeout(() => {
+        finish({
+          stdout: '',
+          stderr: output,
+          code: null,
+          promptShown,
+        });
+        try {
+          killProcessTree(proc, 'SIGTERM');
+        } catch {
+          // Ignore
+        }
+      }, SSH_HOST_VERIFICATION_PROMPT_TIMEOUT_MS);
+
+      const dataDisposable = proc.onData((chunk) => {
+        output += chunk;
+        maybeHandlePrompt();
+      });
+      const exitDisposable = proc.onExit(({ exitCode }) => {
+        if (settled) {
+          return;
+        }
+        if (pendingPrompt) {
+          void pendingPrompt.finally(() => {
+            finish({
+              stdout: '',
+              stderr: output,
+              code: exitCode,
+              promptShown,
+            });
+          });
+          return;
+        }
+        finish({
+          stdout: '',
+          stderr: output,
+          code: exitCode,
+          promptShown,
+        });
+      });
+    });
   }
 
   private async resolveProfile(
