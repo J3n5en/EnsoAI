@@ -2,6 +2,8 @@ import { getDisplayPathBasename, joinPath } from '@shared/utils/path';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, GitBranch, GripVertical, History, PanelLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getStoredBoolean, STORAGE_KEYS } from '@/App/storage';
+import { GitSyncButton } from '@/components/git/GitSyncButton';
 import {
   AlertDialog,
   AlertDialogClose,
@@ -20,7 +22,13 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { toastManager } from '@/components/ui/toast';
-import { useGitBranches, useGitCheckout, useGitCreateBranch } from '@/hooks/useGit';
+import {
+  useGitBranches,
+  useGitCheckout,
+  useGitCreateBranch,
+  useGitPull,
+  useGitPush,
+} from '@/hooks/useGit';
 import { useCommitDiff, useCommitFiles, useGitHistoryInfinite } from '@/hooks/useGitHistory';
 import { useGitSync } from '@/hooks/useGitSync';
 import {
@@ -42,6 +50,7 @@ import {
 } from '@/hooks/useSubmodules';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings';
 import { useSourceControlStore } from '@/stores/sourceControl';
 import { BranchSwitcher } from './BranchSwitcher';
 import { ChangesList } from './ChangesList';
@@ -72,11 +81,20 @@ export function SourceControlPanel({
 }: SourceControlPanelProps) {
   const { t, tNode } = useI18n();
   const queryClient = useQueryClient();
+  const repositoryListDisplayMode = useSettingsStore((s) => s.repositoryListDisplayMode);
 
-  // Accordion state - collapsible sections
-  const [changesExpanded, setChangesExpanded] = useState(true);
-  const [historyExpanded, setHistoryExpanded] = useState(false);
+  // Accordion state - collapsible sections (persisted to localStorage)
+  const [changesExpanded, setChangesExpanded] = useState(() =>
+    getStoredBoolean(STORAGE_KEYS.SC_CHANGES_EXPANDED, true)
+  );
+  const [historyExpanded, setHistoryExpanded] = useState(() =>
+    getStoredBoolean(STORAGE_KEYS.SC_HISTORY_EXPANDED, false)
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Branch checkout state - tracks which repo is being checked out
+  const [checkingOutPath, setCheckingOutPath] = useState<string | null>(null);
+  const [syncingPath, setSyncingPath] = useState<string | null>(null);
 
   // Selected repository - null means main repo, string means submodule path
   const [selectedSubmodulePath, setSelectedSubmodulePath] = useState<string | null>(null);
@@ -132,6 +150,10 @@ export function SourceControlPanel({
 
   // Submodules
   const { data: submodules = [], isLoading: submodulesLoading } = useSubmodules(rootPath ?? null);
+
+  // Generic pull/push mutations for both main repo and submodules
+  const pullMutation = useGitPull();
+  const pushMutation = useGitPush();
 
   // Submodule branches - fetch when a submodule is selected (must be before repositories useMemo)
   const { data: submoduleBranches = [], isLoading: submoduleBranchesLoading } =
@@ -254,6 +276,151 @@ export function SourceControlPanel({
     }
   }, [isActive, rootPath, refetch, refetchCommits, refetchStatus, queryClient]);
 
+  // Wrap sync handlers to add additional refetch calls for SourceControlPanel
+  const handleSync = useCallback(
+    async (repoPath: string) => {
+      if (!repoPath || pullMutation.isPending || pushMutation.isPending) return;
+      setSyncingPath(repoPath);
+
+      const isSubmodule = repoPath !== rootPath;
+      const repo = repositories.find((r) => r.path === repoPath);
+      if (!repo) return;
+
+      const repoAhead = repo.ahead;
+      const repoBehind = repo.behind;
+
+      try {
+        let pulled = false;
+        let pushed = false;
+
+        // Pull first if behind
+        if (repoBehind > 0) {
+          await pullMutation.mutateAsync({ workdir: repoPath });
+          pulled = true;
+        }
+        // Then push if ahead
+        if (repoAhead > 0) {
+          await pushMutation.mutateAsync({ workdir: repoPath });
+          pushed = true;
+        }
+
+        if (isSubmodule) {
+          queryClient.invalidateQueries({ queryKey: ['git', 'submodules', rootPath] });
+        } else {
+          refetchStatus();
+        }
+        refetch();
+        refetchCommits();
+
+        const branch = repo.branch ?? '';
+        if (pulled && pushed) {
+          toastManager.add({
+            title: t('Sync completed'),
+            description: t(
+              'Pulled {{pulled}} commit(s), pushed {{pushed}} commit(s) on {{branch}}',
+              { pulled: repoBehind, pushed: repoAhead, branch }
+            ),
+            type: 'success',
+            timeout: 3000,
+          });
+        } else if (pulled) {
+          toastManager.add({
+            title: t('Sync completed'),
+            description: t('Pulled {{count}} commit(s) on {{branch}}', {
+              count: repoBehind,
+              branch,
+            }),
+            type: 'success',
+            timeout: 3000,
+          });
+        } else if (pushed) {
+          toastManager.add({
+            title: t('Sync completed'),
+            description: t('Pushed {{count}} commit(s) on {{branch}}', {
+              count: repoAhead,
+              branch,
+            }),
+            type: 'success',
+            timeout: 3000,
+          });
+        } else {
+          toastManager.add({
+            title: t('Already up to date'),
+            description: t('{{branch}} is in sync with remote', { branch }),
+            type: 'success',
+            timeout: 2000,
+          });
+        }
+      } catch (error) {
+        toastManager.add({
+          title: t('Sync failed'),
+          description: error instanceof Error ? error.message : String(error),
+          type: 'error',
+          timeout: 5000,
+        });
+      } finally {
+        setSyncingPath(null);
+      }
+    },
+    [
+      rootPath,
+      repositories,
+      pullMutation,
+      pushMutation,
+      queryClient,
+      refetchStatus,
+      refetch,
+      refetchCommits,
+      t,
+    ]
+  );
+
+  const handlePublish = useCallback(
+    async (repoPath: string) => {
+      if (!repoPath || pushMutation.isPending) return;
+      setSyncingPath(repoPath);
+
+      const isSubmodule = repoPath !== rootPath;
+      const repo = repositories.find((r) => r.path === repoPath);
+      const branch = repo?.branch;
+
+      try {
+        await pushMutation.mutateAsync({
+          workdir: repoPath,
+          remote: 'origin',
+          branch: branch ?? undefined,
+          setUpstream: true,
+        });
+
+        if (isSubmodule) {
+          queryClient.invalidateQueries({ queryKey: ['git', 'submodules', rootPath] });
+        } else {
+          refetchStatus();
+        }
+        refetch();
+        refetchCommits();
+
+        toastManager.add({
+          title: t('Branch published'),
+          description: t('Branch {{branch}} is now tracking origin/{{branch}}', {
+            branch: branch ?? '',
+          }),
+          type: 'success',
+          timeout: 3000,
+        });
+      } catch (error) {
+        toastManager.add({
+          title: t('Publish failed'),
+          description: error instanceof Error ? error.message : String(error),
+          type: 'error',
+          timeout: 5000,
+        });
+      } finally {
+        setSyncingPath(null);
+      }
+    },
+    [rootPath, repositories, pushMutation, queryClient, refetchStatus, refetch, refetchCommits, t]
+  );
   // Branch checkout handler - handles both main repo and submodule branches
   const handleBranchCheckout = useCallback(
     async (repoPath: string, branch: string) => {
@@ -263,6 +430,7 @@ export function SourceControlPanel({
       // Detect submodule by matching repoPath against the submodule list
       const submodule = submodules.find((s) => rootPath && repoPath === joinPath(rootPath, s.path));
 
+      setCheckingOutPath(repoPath);
       try {
         if (submodule && rootPath) {
           // Use dedicated submodule mutation so onSuccess invalidates
@@ -300,6 +468,8 @@ export function SourceControlPanel({
           type: 'error',
           timeout: 5000,
         });
+      } finally {
+        setCheckingOutPath(null);
       }
     },
     [
@@ -420,6 +590,18 @@ export function SourceControlPanel({
 
   // All files in order: staged first, then unstaged
   const allFiles = useMemo(() => [...staged, ...unstaged], [staged, unstaged]);
+
+  // Clear selected file when it no longer exists in the file list
+  // (e.g., after commit, discard, or external changes)
+  useEffect(() => {
+    if (!selectedFile) return;
+    const stillExists = allFiles.some(
+      (f) => f.path === selectedFile.path && f.staged === selectedFile.staged
+    );
+    if (!stillExists) {
+      setSelectedFile(null);
+    }
+  }, [allFiles, selectedFile, setSelectedFile]);
 
   // Panel resize hooks
   const { width: panelWidth, isResizing, containerRef, handleMouseDown } = usePanelResize();
@@ -695,9 +877,9 @@ export function SourceControlPanel({
   }
 
   return (
-    <div ref={containerRef} className="flex h-full flex-col">
+    <div ref={containerRef} className="flex h-full min-h-0 flex-col">
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left Sidebar Expand Button (when collapsed) */}
         <button
           type="button"
@@ -714,7 +896,7 @@ export function SourceControlPanel({
         {/* Left: Changes List */}
         <div
           className={cn(
-            'flex shrink-0 flex-col border-r overflow-hidden transition-[width,opacity] duration-200 ease-out',
+            'flex shrink-0 min-h-0 flex-col border-r overflow-hidden transition-[width,opacity] duration-200 ease-out',
             sidebarCollapsed ? 'w-0 opacity-0' : 'opacity-100'
           )}
           style={{ width: sidebarCollapsed ? 0 : panelWidth }}
@@ -725,19 +907,29 @@ export function SourceControlPanel({
             selectedId={selectedRepo?.path ?? null}
             onSelect={handleRepoSelect}
             isLoading={submodulesLoading}
+            displayMode={repositoryListDisplayMode}
+            onCheckout={handleBranchCheckout}
+            checkingOutPath={checkingOutPath}
+            onSync={handleSync}
+            onPublish={handlePublish}
+            syncingPath={syncingPath}
           />
 
           {/* Changes Section (Collapsible) */}
           <div
             className={cn(
-              'flex flex-col border-b overflow-hidden shrink-0 min-h-0 transition-[flex-grow] duration-200 ease-out',
-              changesExpanded ? 'grow' : 'grow-0'
+              'flex min-h-0 flex-col overflow-hidden border-b transition-[flex-grow] duration-200 ease-out',
+              changesExpanded ? 'flex-1 basis-0' : 'flex-none'
             )}
           >
             <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors pr-4">
               <button
                 type="button"
-                onClick={() => setChangesExpanded(!changesExpanded)}
+                onClick={() => {
+                  const next = !changesExpanded;
+                  setChangesExpanded(next);
+                  localStorage.setItem(STORAGE_KEYS.SC_CHANGES_EXPANDED, String(next));
+                }}
                 className="flex flex-1 items-center gap-2 px-4 py-2 text-left focus:outline-none"
               >
                 <ChevronDown
@@ -764,8 +956,21 @@ export function SourceControlPanel({
                   if (selectedRepoPath) await handleCreateBranch(selectedRepoPath, name);
                 }}
                 isLoading={currentBranchesLoading}
-                isCheckingOut={checkoutMutation.isPending || checkoutSubmoduleMutation.isPending}
+                isCheckingOut={checkingOutPath === selectedRepoPath}
                 size="xs"
+              />
+              <GitSyncButton
+                ahead={selectedRepo?.ahead ?? 0}
+                behind={selectedRepo?.behind ?? 0}
+                tracking={selectedRepo?.tracking ?? null}
+                currentBranch={selectedRepo?.branch ?? null}
+                isSyncing={
+                  syncingPath === selectedRepoPath ||
+                  pullMutation.isPending ||
+                  pushMutation.isPending
+                }
+                onSync={() => selectedRepoPath && handleSync(selectedRepoPath)}
+                onPublish={() => selectedRepoPath && handlePublish(selectedRepoPath)}
               />
             </div>
 
@@ -835,14 +1040,18 @@ export function SourceControlPanel({
           {/* History Section (Collapsible) */}
           <div
             className={cn(
-              'flex flex-col overflow-hidden shrink-0 min-h-0 transition-[flex-grow] duration-200 ease-out',
-              historyExpanded ? 'grow' : 'grow-0'
+              'flex min-h-0 flex-col overflow-hidden transition-[flex-grow] duration-200 ease-out',
+              historyExpanded ? 'flex-1 basis-0' : 'flex-none'
             )}
           >
             <div className="group flex items-center shrink-0 rounded-sm hover:bg-accent/50 transition-colors">
               <button
                 type="button"
-                onClick={() => setHistoryExpanded(!historyExpanded)}
+                onClick={() => {
+                  const next = !historyExpanded;
+                  setHistoryExpanded(next);
+                  localStorage.setItem(STORAGE_KEYS.SC_HISTORY_EXPANDED, String(next));
+                }}
                 className="flex flex-1 items-center gap-2 px-4 py-2 text-left focus:outline-none"
               >
                 <ChevronDown
@@ -880,6 +1089,12 @@ export function SourceControlPanel({
                   commitFilesLoading={commitFilesLoading}
                   selectedFile={selectedCommitFile}
                   onFileClick={handleCommitFileClick}
+                  workdir={selectedRepoPath ?? rootPath ?? undefined}
+                  onRefresh={() => {
+                    refetch();
+                    refetchCommits();
+                    refetchStatus();
+                  }}
                 />
               </div>
             </div>

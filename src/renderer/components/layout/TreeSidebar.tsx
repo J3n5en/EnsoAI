@@ -190,6 +190,7 @@ export function TreeSidebar({
   const _settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
   const hideGroups = useSettingsStore((s) => s.hideGroups);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [tempExpanded, setTempExpanded] = useState(true);
   const [expandedRepoList, setExpandedRepoList] = useState<string[]>([]);
 
@@ -236,6 +237,8 @@ export function TreeSidebar({
       enabled: canLoadRepo(repoPath),
     }))
   );
+  const allRepoPaths = useMemo(() => repositories.map((repo) => repo.path), [repositories]);
+  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(allRepoPaths);
 
   // Repository context menu
   const [repoMenuOpen, setRepoMenuOpen] = useState(false);
@@ -313,6 +316,15 @@ export function TreeSidebar({
   const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
   const activities = useWorktreeActivityStore((s) => s.activities);
   const shouldPoll = useShouldPoll();
+  const activePathSet = useMemo(
+    () =>
+      new Set(
+        Object.entries(activities)
+          .filter(([, activity]) => activity.agentCount > 0 || activity.terminalCount > 0)
+          .map(([path]) => normalizePath(path))
+      ),
+    [activities]
+  );
 
   useEffect(() => {
     const allWorktrees = Object.values(worktreesMap).flat();
@@ -574,7 +586,30 @@ export function TreeSidebar({
     setRepoToRemove(null);
   };
 
-  const showSections = activeGroupId === ALL_GROUP_ID && !searchQuery && !hideGroups;
+  /**
+   * 解析搜索语法：当前仅支持 `:active`，其余内容继续作为仓库 / worktree 搜索词。
+   */
+  const parsedSearch = useMemo(() => {
+    const tokens = searchQuery.trim().split(/\s+/).filter(Boolean);
+    const textTokens: string[] = [];
+    let hasActiveFilter = false;
+
+    for (const token of tokens) {
+      if (token.toLowerCase() === ':active') {
+        hasActiveFilter = true;
+        continue;
+      }
+      textTokens.push(token);
+    }
+
+    return {
+      hasActiveFilter,
+      textQuery: textTokens.join(' ').toLowerCase(),
+    };
+  }, [searchQuery]);
+
+  const hasSearchFilter = parsedSearch.hasActiveFilter || parsedSearch.textQuery.length > 0;
+  const showSections = activeGroupId === ALL_GROUP_ID && !hasSearchFilter && !hideGroups;
 
   const filteredRepos = useMemo(() => {
     let filtered = repositories;
@@ -589,8 +624,18 @@ export function TreeSidebar({
       filtered = filtered.filter((r) => r.groupId === activeGroupId);
     }
 
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (parsedSearch.hasActiveFilter) {
+      filtered = filtered.filter((repo) => {
+        const normalizedRepoPath = normalizePath(repo.path);
+        if (activePathSet.has(normalizedRepoPath)) return true;
+
+        const repoWorktrees = allRepoWorktreesMap[repo.path] || [];
+        return repoWorktrees.some((worktree) => activePathSet.has(normalizePath(worktree.path)));
+      });
+    }
+
+    if (parsedSearch.textQuery) {
+      const query = parsedSearch.textQuery;
       filtered = filtered.filter((repo) => {
         if (repo.name.toLowerCase().includes(query)) return true;
         const repoWorktrees = worktreesMap[repo.path] || [];
@@ -606,7 +651,15 @@ export function TreeSidebar({
       repo,
       originalIndex: repositories.indexOf(repo),
     }));
-  }, [repositories, worktreesMap, searchQuery, activeGroupId, repoSettingsMap]);
+  }, [
+    repositories,
+    worktreesMap,
+    allRepoWorktreesMap,
+    activeGroupId,
+    repoSettingsMap,
+    parsedSearch,
+    activePathSet,
+  ]);
 
   const groupedSections = useMemo(() => {
     if (!showSections) return [];
@@ -661,15 +714,23 @@ export function TreeSidebar({
   const getFilteredWorktrees = useCallback(
     (repoPath: string) => {
       const repoWorktrees = worktreesMap[repoPath] || [];
-      if (!searchQuery) return repoWorktrees;
-      const query = searchQuery.toLowerCase();
-      return repoWorktrees.filter(
-        (wt) =>
-          wt.branch?.toLowerCase().includes(query) ||
-          getDisplayPath(wt.path).toLowerCase().includes(query)
-      );
+      return repoWorktrees.filter((wt) => {
+        if (parsedSearch.hasActiveFilter) {
+          const activity = activities[normalizePath(wt.path)] ?? activities[wt.path];
+          const hasActivity =
+            activity !== undefined && (activity.agentCount > 0 || activity.terminalCount > 0);
+          if (!hasActivity) return false;
+        }
+
+        if (!parsedSearch.textQuery) return true;
+
+        return (
+          wt.branch?.toLowerCase().includes(parsedSearch.textQuery) ||
+          wt.path.toLowerCase().includes(parsedSearch.textQuery)
+        );
+      });
     },
-    [worktreesMap, searchQuery]
+    [worktreesMap, parsedSearch, activities]
   );
 
   const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
@@ -866,7 +927,7 @@ export function TreeSidebar({
                 </div>
               ) : repoWorktrees.length === 0 ? (
                 <div className="py-2 px-2 text-xs text-muted-foreground">
-                  {searchQuery
+                  {hasSearchFilter
                     ? t('No matching worktrees')
                     : t('No worktrees. Create one to get started.')}
                 </div>
@@ -975,12 +1036,26 @@ export function TreeSidebar({
         <div className="flex h-8 items-center gap-2 rounded-lg border px-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
+            ref={searchInputRef}
             type="text"
-            placeholder={t('Search')}
+            placeholder={`${t('Search')} (:active)`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
           />
+          {searchQuery.length > 0 && (
+            <button
+              type="button"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => {
+                setSearchQuery('');
+                searchInputRef.current?.focus();
+              }}
+              title={t('Clear')}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

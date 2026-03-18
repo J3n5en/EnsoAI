@@ -257,6 +257,7 @@ export function CurrentFilePanel({ rootPath, isActive = false }: CurrentFilePane
           rootPath={rootPath}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
+          onNavigateToFile={navigateToFile}
           onCloseOthers={async (keepPath) => {
             const paths = tabs.filter((t) => t.path !== keepPath).map((t) => t.path);
             await requestCloseTabs(paths);

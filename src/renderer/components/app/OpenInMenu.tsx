@@ -1,9 +1,12 @@
 import { AppCategory, type DetectedApp } from '@shared/types';
 import { ChevronDown, FileCode, FolderOpen, Terminal } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { TabId } from '@/App/constants';
 import { Select, SelectItem, SelectPopup, SelectTrigger } from '@/components/ui/select';
 import { useDetectedApps, useOpenWith } from '@/hooks/useAppDetector';
+import { useI18n } from '@/i18n';
 import { useEditorStore } from '@/stores/editor';
+import { useSettingsStore } from '@/stores/settings';
 
 function AppIcon({
   bundleId,
@@ -27,20 +30,24 @@ function AppIcon({
   }
   return <Fallback className="size-5" />;
 }
-
-import type { TabId } from '@/App/constants';
-
 interface OpenInMenuProps {
   path?: string;
   activeTab?: TabId;
 }
 
 export function OpenInMenu({ path, activeTab }: OpenInMenuProps) {
+  const { t } = useI18n();
   const { data: apps = [], isLoading } = useDetectedApps();
   const openWith = useOpenWith();
   const [lastUsedApp, setLastUsedApp] = useState<string>('');
   const { activeTabPath, tabs, currentCursorLine } = useEditorStore();
   const isRemotePath = path?.startsWith('/__enso_remote__/') ?? false;
+  const hiddenOpenInApps = useSettingsStore((s) => s.hiddenOpenInApps);
+  const openInMenuFilterEnabled = useSettingsStore((s) => s.openInMenuFilterEnabled);
+  const hiddenSet = useMemo(() => new Set(hiddenOpenInApps), [hiddenOpenInApps]);
+  const visibleApps = openInMenuFilterEnabled
+    ? apps.filter((app) => !hiddenSet.has(app.bundleId))
+    : apps;
 
   useEffect(() => {
     const saved = localStorage.getItem('enso-last-opened-app');
@@ -87,7 +94,7 @@ export function OpenInMenu({ path, activeTab }: OpenInMenuProps) {
     );
   }
 
-  if (apps.length === 0) {
+  if (visibleApps.length === 0) {
     return (
       <div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-sm">
         <FolderOpen className="h-3.5 w-3.5" />
@@ -105,9 +112,10 @@ export function OpenInMenu({ path, activeTab }: OpenInMenuProps) {
     );
   }
 
-  const lastApp = apps.find((app) => app.bundleId === lastUsedApp);
-  const defaultApp = lastApp || apps.find((app) => app.category === 'finder') || apps[0];
-  const groupedApps = groupAppsByCategory(apps);
+  const lastApp = visibleApps.find((app) => app.bundleId === lastUsedApp);
+  const defaultApp =
+    lastApp || visibleApps.find((app) => app.category === 'finder') || visibleApps[0];
+  const groupedApps = groupAppsByCategory(visibleApps);
 
   // Determine what we're opening
   const isOpeningFile = activeTab === 'file' && activeTabPath;
@@ -131,21 +139,28 @@ export function OpenInMenu({ path, activeTab }: OpenInMenuProps) {
           <ChevronDown className="h-3 w-3" />
         </SelectTrigger>
         <SelectPopup>
-          {/* Finder at top */}
-          {groupedApps.finder.map((app) => (
-            <SelectItem key={app.bundleId} value={app.bundleId}>
-              <div className="flex items-center gap-2">
-                <AppIcon bundleId={app.bundleId} name={app.name} fallback={FolderOpen} />
-                <span>{app.name}</span>
+          {/* Finder */}
+          {groupedApps.finder.length > 0 && (
+            <>
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                {t('File Manager')}
               </div>
-            </SelectItem>
-          ))}
+              {groupedApps.finder.map((app) => (
+                <SelectItem key={app.bundleId} value={app.bundleId}>
+                  <div className="flex items-center gap-2">
+                    <AppIcon bundleId={app.bundleId} name={app.name} fallback={FolderOpen} />
+                    <span>{app.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </>
+          )}
 
           {/* Terminals */}
           {groupedApps.terminal.length > 0 && (
             <>
               <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                Terminals
+                {t('Terminals')}
               </div>
               {groupedApps.terminal.map((app) => (
                 <SelectItem key={app.bundleId} value={app.bundleId}>
@@ -161,7 +176,9 @@ export function OpenInMenu({ path, activeTab }: OpenInMenuProps) {
           {/* Editors */}
           {groupedApps.editor.length > 0 && (
             <>
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Editors</div>
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                {t('Editors')}
+              </div>
               {groupedApps.editor.map((app) => (
                 <SelectItem key={app.bundleId} value={app.bundleId}>
                   <div className="flex items-center gap-2">

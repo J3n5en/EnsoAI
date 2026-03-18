@@ -42,6 +42,15 @@ export interface GitWorktree {
   prunable: boolean;
 }
 
+// Git Blame types
+export interface GitBlameLineInfo {
+  hash: string;
+  author: string;
+  date: string; // ISO date string
+  message: string;
+  lineNumber: number;
+}
+
 // Source Control types
 // M=Modified, A=Added(staged), D=Deleted, R=Renamed, C=Copied, U=Untracked, X=Conflict
 export type FileChangeStatus = 'M' | 'A' | 'D' | 'R' | 'C' | 'U' | 'X';
@@ -67,6 +76,7 @@ export interface FileDiff {
   path: string;
   original: string; // HEAD version (empty for new files)
   modified: string; // working tree version (empty for deleted files)
+  isBinary?: boolean; // true if file is binary (images, PDFs, executables, etc.)
 }
 
 // Commit history detail types
@@ -143,4 +153,25 @@ export interface GitSubmodule {
   hasChanges: boolean;
   stagedCount: number;
   unstagedCount: number;
+}
+
+// Git Clone Directory Mapping types
+export interface GitHostMapping {
+  /** Git host domain pattern (supports wildcards, e.g., "*.github.com") */
+  pattern: string;
+  /** Directory name for this host */
+  dirname: string;
+}
+
+export interface ParsedGitUrl {
+  /** Protocol (https, ssh, git) */
+  protocol: string;
+  /** Host domain (e.g., github.com) */
+  host: string;
+  /** Owner/organization name */
+  owner: string;
+  /** Repository name */
+  repo: string;
+  /** Full path segments (owner, subgroups, repo) */
+  pathSegments: string[];
 }

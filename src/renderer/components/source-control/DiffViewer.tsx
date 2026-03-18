@@ -1,10 +1,13 @@
 import { DiffEditor } from '@monaco-editor/react';
+import type { FileDiff } from '@shared/types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
   FileCode,
+  FileX2,
+  FoldVertical,
   MessageSquare,
   Pencil,
   Plus,
@@ -108,7 +111,7 @@ interface DiffViewerProps {
   onNextFile?: () => void;
   hasPrevFile?: boolean;
   hasNextFile?: boolean;
-  diff?: { path: string; original: string; modified: string };
+  diff?: FileDiff;
   skipFetch?: boolean;
   isCommitView?: boolean; // Add flag to indicate commit history view
 }
@@ -139,6 +142,9 @@ export function DiffViewer({
   const [editedContent, setEditedContent] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const isDirty = editedContent !== null;
+
+  // Hide unchanged regions state
+  const [hideUnchangedRegions, setHideUnchangedRegions] = useState(true);
 
   // Can edit: not commit view (history is readonly)
   const canEdit = !isCommitView;
@@ -176,7 +182,8 @@ export function DiffViewer({
   }, [lineChanges]);
 
   const [boundaryHint, setBoundaryHint] = useState<'top' | 'bottom' | null>(null);
-  const decorationsRef = useRef<string[]>([]);
+  const modifiedDecorationsRef = useRef<string[]>([]);
+  const originalDecorationsRef = useRef<string[]>([]);
   const hasAutoNavigatedRef = useRef(false);
   const handleSaveRef = useRef<() => void>(() => {});
   const pendingNavigationDirectionRef = useRef<'next' | 'prev' | null>(null);
@@ -611,8 +618,14 @@ export function DiffViewer({
         if (editor) {
           const modifiedEditor = editor.getModifiedEditor();
           const originalEditor = editor.getOriginalEditor();
-          decorationsRef.current = modifiedEditor.deltaDecorations(decorationsRef.current, []);
-          originalEditor.deltaDecorations([], []);
+          modifiedDecorationsRef.current = modifiedEditor.deltaDecorations(
+            modifiedDecorationsRef.current,
+            []
+          );
+          originalDecorationsRef.current = originalEditor.deltaDecorations(
+            originalDecorationsRef.current,
+            []
+          );
         }
         return;
       }
@@ -625,23 +638,26 @@ export function DiffViewer({
       const modifiedStartLine = change.modifiedStartLineNumber;
       const modifiedEndLine = change.modifiedEndLineNumber || modifiedStartLine;
 
-      decorationsRef.current = modifiedEditor.deltaDecorations(decorationsRef.current, [
-        {
-          range: new monaco.Range(modifiedStartLine, 1, modifiedEndLine, 1),
-          options: {
-            isWholeLine: true,
-            className: 'current-diff-highlight',
-            linesDecorationsClassName: 'current-diff-gutter',
+      modifiedDecorationsRef.current = modifiedEditor.deltaDecorations(
+        modifiedDecorationsRef.current,
+        [
+          {
+            range: new monaco.Range(modifiedStartLine, 1, modifiedEndLine, 1),
+            options: {
+              isWholeLine: true,
+              className: 'current-diff-highlight',
+              linesDecorationsClassName: 'current-diff-gutter',
+            },
           },
-        },
-      ]);
+        ]
+      );
 
       // Highlight in original editor
       const originalStartLine = change.originalStartLineNumber;
       const originalEndLine = change.originalEndLineNumber || originalStartLine;
 
-      originalEditor.deltaDecorations(
-        [],
+      originalDecorationsRef.current = originalEditor.deltaDecorations(
+        originalDecorationsRef.current,
         [
           {
             range: new monaco.Range(originalStartLine, 1, originalEndLine, 1),
@@ -774,6 +790,20 @@ export function DiffViewer({
     },
     [file?.path, performAutoNavigation]
   );
+
+  // Toggle hide unchanged regions
+  const handleToggleUnchangedRegions = useCallback(() => {
+    const editor = editorRef.current;
+    if (editor) {
+      const newValue = !hideUnchangedRegions;
+      editor.updateOptions({
+        hideUnchangedRegions: {
+          enabled: newValue,
+        },
+      });
+      setHideUnchangedRegions(newValue);
+    }
+  }, [hideUnchangedRegions]);
 
   // Sync pendingNavigationDirectionRef with navigationDirection state
   useEffect(() => {
@@ -1022,6 +1052,20 @@ export function DiffViewer({
     );
   }
 
+  if (diff.isBinary) {
+    return (
+      <Empty className="h-full">
+        <EmptyMedia variant="icon">
+          <FileX2 className="h-4.5 w-4.5" />
+        </EmptyMedia>
+        <EmptyHeader>
+          <EmptyTitle>{file.path}</EmptyTitle>
+          <EmptyDescription>{t('Binary file not supported for diff preview')}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
   const getBoundaryTooltip = () => {
     if (boundaryHint === 'top') {
       return hasPrevFile ? t('Switch to previous file') : t('Already at the first change');
@@ -1098,6 +1142,21 @@ export function DiffViewer({
             title={t('Open in editor')}
           >
             <ExternalLink className="h-4 w-4" />
+          </button>
+
+          {/* Collapse unchanged regions toggle */}
+          <button
+            type="button"
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+              hideUnchangedRegions
+                ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+            )}
+            onClick={handleToggleUnchangedRegions}
+            title={hideUnchangedRegions ? t('Show unchanged code') : t('Collapse unchanged code')}
+          >
+            <FoldVertical className="h-4 w-4" />
           </button>
 
           {/* Edit / Save toggle */}
@@ -1183,6 +1242,10 @@ export function DiffViewer({
               // Fixed options
               scrollBeyondLastLine: false,
               automaticLayout: true,
+              // Hide unchanged regions (collapse unchanged code)
+              hideUnchangedRegions: {
+                enabled: hideUnchangedRegions,
+              },
             }}
             // Prevent library from disposing models before DiffEditorWidget resets
             keepCurrentOriginalModel

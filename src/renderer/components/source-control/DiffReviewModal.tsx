@@ -5,7 +5,9 @@ import {
   ChevronRight,
   Expand,
   FileCode,
+  FileX2,
   FolderGit2,
+  FoldVertical,
   Loader2,
   MessageSquare,
   Plus,
@@ -26,6 +28,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia } from '@/components/ui/empty';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useFileChanges, useFileDiff } from '@/hooks/useSourceControl';
 import { useSubmoduleChanges, useSubmoduleFileDiff, useSubmodules } from '@/hooks/useSubmodules';
@@ -298,6 +301,7 @@ export function DiffReviewModal({ open, onOpenChange, rootPath, onSend }: DiffRe
   const [editorReady, setEditorReady] = useState(false);
   const [expandedSubmodules, setExpandedSubmodules] = useState<Set<string>>(new Set());
   const [isMaximized, setIsMaximized] = useState(true);
+  const [hideUnchangedRegions, setHideUnchangedRegions] = useState(true);
 
   // Editor refs
   const editorRef = useRef<DiffEditorInstance | null>(null);
@@ -476,6 +480,20 @@ export function DiffReviewModal({ open, onOpenChange, rootPath, onSend }: DiffRe
     editorRef.current = editor;
     setEditorReady(true);
   }, []);
+
+  // Toggle hide unchanged regions
+  const handleToggleUnchangedRegions = useCallback(() => {
+    const editor = editorRef.current;
+    if (editor) {
+      const newValue = !hideUnchangedRegions;
+      editor.updateOptions({
+        hideUnchangedRegions: {
+          enabled: newValue,
+        },
+      });
+      setHideUnchangedRegions(newValue);
+    }
+  }, [hideUnchangedRegions]);
 
   // Handle add comment (store locally, not send immediately)
   const handleAddComment = useCallback(
@@ -1134,13 +1152,31 @@ export function DiffReviewModal({ open, onOpenChange, rootPath, onSend }: DiffRe
           {/* Right: Diff viewer */}
           <div className="flex-1 min-w-0 flex flex-col relative overflow-hidden">
             {selectedFile && (
-              <div className="h-9 flex items-center px-3 border-b text-sm shrink-0">
-                <span className="text-muted-foreground truncate">{selectedFile.path}</span>
-                {selectedFile.staged && (
-                  <span className="ml-2 rounded bg-green-500/20 px-1.5 py-0.5 text-xs text-green-500">
-                    {t('Staged')}
-                  </span>
-                )}
+              <div className="h-9 flex items-center justify-between px-3 border-b text-sm shrink-0">
+                <div className="flex items-center min-w-0">
+                  <span className="text-muted-foreground truncate">{selectedFile.path}</span>
+                  {selectedFile.staged && (
+                    <span className="ml-2 rounded bg-green-500/20 px-1.5 py-0.5 text-xs text-green-500 shrink-0">
+                      {t('Staged')}
+                    </span>
+                  )}
+                </div>
+                {/* Collapse unchanged regions toggle */}
+                <button
+                  type="button"
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-md transition-colors shrink-0',
+                    hideUnchangedRegions
+                      ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  )}
+                  onClick={handleToggleUnchangedRegions}
+                  title={
+                    hideUnchangedRegions ? t('Show unchanged code') : t('Collapse unchanged code')
+                  }
+                >
+                  <FoldVertical className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
 
@@ -1153,6 +1189,17 @@ export function DiffReviewModal({ open, onOpenChange, rootPath, onSend }: DiffRe
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   {t('Select a file to view diff')}
                 </div>
+              ) : diff?.isBinary ? (
+                <Empty className="h-full">
+                  <EmptyMedia variant="icon">
+                    <FileX2 className="h-4.5 w-4.5" />
+                  </EmptyMedia>
+                  <EmptyHeader>
+                    <EmptyDescription>
+                      {t('Binary file not supported for diff preview')}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : diff && isThemeReady ? (
                 <DiffEditor
                   key={`${selectedFile.path}-${selectedFile.staged}`}
@@ -1175,6 +1222,10 @@ export function DiffReviewModal({ open, onOpenChange, rootPath, onSend }: DiffRe
                     fontFamily: editorSettings.fontFamily,
                     scrollBeyondLastLine: false,
                     automaticLayout: true,
+                    // Hide unchanged regions (collapse unchanged code)
+                    hideUnchangedRegions: {
+                      enabled: hideUnchangedRegions,
+                    },
                   }}
                 />
               ) : null}

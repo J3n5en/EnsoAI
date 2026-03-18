@@ -152,6 +152,8 @@ export function useXterm({
   const linkProviderDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const rendererAddonRef = useRef<{ dispose: () => void } | null>(null);
   const copyOnSelectionHandlerRef = useRef<(() => void) | null>(null);
+  const isUnmountedRef = useRef(false);
+  const createRequestIdRef = useRef(0);
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
   const onDataRef = useRef(onData);
@@ -173,6 +175,7 @@ export function useXterm({
   const copyOnSelectionRef = useRef(copyOnSelection);
   copyOnSelectionRef.current = copyOnSelection;
   const hasBeenActivatedRef = useRef(false);
+  const hasReceivedDataRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [runtimeState, setRuntimeState] = useState<SessionRuntimeState>('live');
   const runtimeStateRef = useRef<SessionRuntimeState>('live');
@@ -598,6 +601,7 @@ export function useXterm({
     });
 
     try {
+      const createRequestId = ++createRequestIdRef.current;
       // Handle data from pty with debounced buffering for smooth rendering
       // 30ms delay merges fragmented TUI packets (clear + write)
       const cleanup = window.electronAPI.session.onData((event) => {
@@ -705,6 +709,11 @@ export function useXterm({
         replay = attached.replay;
       }
 
+      if (isUnmountedRef.current || createRequestId !== createRequestIdRef.current) {
+        await window.electronAPI.session.kill(session.sessionId).catch(() => {});
+        return;
+      }
+
       ptyIdRef.current = session.sessionId;
       setIsLoading(false);
 
@@ -729,6 +738,9 @@ export function useXterm({
       stateCleanupRef.current?.();
       stateCleanupRef.current = null;
       ptyIdRef.current = null;
+      if (isUnmountedRef.current) {
+        return;
+      }
       setIsLoading(false);
       terminal.writeln(`\x1b[31mFailed to start terminal.\x1b[0m`);
       terminal.writeln(`\x1b[33mError: ${error}\x1b[0m`);
@@ -764,14 +776,24 @@ export function useXterm({
     }
   }, [terminalRenderer, loadRenderer]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount.
+  // Setup: reset isUnmountedRef so StrictMode re-mount can re-initialize.
+  // Cleanup: reset activation/data refs so the next mount gets consistent state;
+  // clear ptyIdRef after destroy to avoid holding a destroyed PTY id.
   useEffect(() => {
+    isUnmountedRef.current = false;
+
     return () => {
+      isUnmountedRef.current = true;
+      hasBeenActivatedRef.current = false;
+      hasReceivedDataRef.current = false;
+      createRequestIdRef.current += 1;
       cleanupRef.current?.();
       exitCleanupRef.current?.();
       stateCleanupRef.current?.();
       if (ptyIdRef.current) {
         window.electronAPI.session.detach(ptyIdRef.current).catch(() => {});
+        ptyIdRef.current = null;
       }
       // Remove copy-on-selection listener before disposing terminal
       if (copyOnSelectionHandlerRef.current) {

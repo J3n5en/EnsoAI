@@ -46,6 +46,7 @@ export interface Session {
   displayOrder?: number; // order in SessionBar (lower = first), used for drag reorder
   terminalTitle?: string; // current terminal title from OSC escape sequence
   userRenamed?: boolean; // true when user has manually renamed this session
+  pendingCommand?: string; // command to send after agent is ready (e.g., from todo task)
 }
 
 interface SessionBarProps {

@@ -39,6 +39,12 @@ export const IPC_CHANNELS = {
   GIT_CLONE: 'git:clone',
   GIT_CLONE_PROGRESS: 'git:clone:progress',
   GIT_VALIDATE_URL: 'git:validate-url',
+  // Git Blame
+  GIT_BLAME: 'git:blame',
+  // Git Revert & Reset
+  GIT_REVERT: 'git:revert',
+  GIT_RESET: 'git:reset',
+
   // Git Auto Fetch
   GIT_AUTO_FETCH_SET_ENABLED: 'git:autoFetch:setEnabled',
   GIT_AUTO_FETCH_COMPLETED: 'git:autoFetch:completed',
@@ -301,6 +307,7 @@ export const IPC_CHANNELS = {
   TODO_MOVE_TASK: 'todo:moveTask',
   TODO_REORDER_TASKS: 'todo:reorderTasks',
   TODO_MIGRATE: 'todo:migrate',
+  TODO_AI_POLISH: 'todo:aiPolish',
 
   // Logging
   LOG_UPDATE_CONFIG: 'log:update-config',

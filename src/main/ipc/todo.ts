@@ -1,5 +1,7 @@
 import { IPC_CHANNELS } from '@shared/types';
 import { ipcMain } from 'electron';
+import type { AIProvider, ModelId, ReasoningEffort } from '../services/ai';
+import { polishTodoTask } from '../services/ai';
 import { localSessionManager } from '../services/LocalSessionManager';
 import * as todoService from '../services/todo/TodoService';
 
@@ -73,6 +75,30 @@ export function registerTodoHandlers(): void {
     await ensureReady();
     return todoService.migrateFromLocalStorage(boardsJson);
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.TODO_AI_POLISH,
+    async (
+      _,
+      options: {
+        text: string;
+        timeout: number;
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+        prompt?: string;
+      }
+    ): Promise<{ success: boolean; title?: string; description?: string; error?: string }> => {
+      return polishTodoTask({
+        text: options.text,
+        timeout: options.timeout,
+        provider: (options.provider ?? 'claude-code') as AIProvider,
+        model: options.model as ModelId,
+        reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
+        prompt: options.prompt,
+      });
+    }
+  );
 }
 
 export function cleanupTodo(): Promise<void> {

@@ -3,6 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { normalizePath } from '@/App/storage';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
@@ -95,28 +96,48 @@ export function TaskCard({
     (agent: ResolvedAgent) => {
       if (!worktreePath) return;
 
-      const { addSession, setEnhancedInputContent, setEnhancedInputOpen } =
-        useAgentSessionsStore.getState();
-
       const id = crypto.randomUUID();
-      addSession({
-        id,
-        sessionId: id,
-        name: `Task: ${task.title}`,
-        agentId: agent.agentId,
-        agentCommand: agent.command,
-        customPath: agent.customPath,
-        customArgs: agent.customArgs,
-        initialized: false,
-        repoPath,
-        cwd: worktreePath,
-        environment: agent.environment,
-      });
+      // Build task context for sending to agent
+      const taskContext = task.description ? `${task.title}\n\n${task.description}` : task.title;
 
-      // Pre-fill task context into enhanced input
-      const context = task.description ? `${task.title}\n\n${task.description}` : task.title;
-      setEnhancedInputContent(id, context);
-      setEnhancedInputOpen(id, true);
+      // Use setState callback to ensure all updates happen in the same batch
+      useAgentSessionsStore.setState((state) => {
+        // Calculate displayOrder: max order in same worktree + 1
+        const worktreeSessions = state.sessions.filter(
+          (s) => s.repoPath === repoPath && s.cwd === worktreePath
+        );
+        const maxOrder = worktreeSessions.reduce(
+          (max, s) => Math.max(max, s.displayOrder ?? 0),
+          -1
+        );
+
+        const newSession = {
+          id,
+          sessionId: id,
+          name: `Task: ${task.title}`,
+          agentId: agent.agentId,
+          agentCommand: agent.command,
+          customPath: agent.customPath,
+          customArgs: agent.customArgs,
+          initialized: false,
+          repoPath,
+          cwd: worktreePath,
+          environment: agent.environment,
+          displayOrder: maxOrder + 1,
+          // Store command to send after agent is ready
+          pendingCommand: taskContext,
+        };
+
+        return {
+          sessions: [...state.sessions, newSession],
+          activeIds: { ...state.activeIds, [normalizePath(worktreePath)]: id },
+          // Initialize enhanced input state (closed)
+          enhancedInputStates: {
+            ...state.enhancedInputStates,
+            [id]: { open: false, content: '', imagePaths: [] },
+          },
+        };
+      });
 
       // Move task to in-progress
       if (task.status === 'todo') {
@@ -171,14 +192,18 @@ export function TaskCard({
 
       {/* Actions */}
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        {worktreePath && onSwitchToAgent && task.status !== 'done' && (
+        {task.status !== 'done' && onSwitchToAgent && (
           <div className="relative" ref={menuRef}>
             <button
               ref={triggerRef}
               type="button"
-              onClick={() => setShowAgentMenu((v) => !v)}
-              className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              title={t('Launch Agent')}
+              onClick={() => {
+                if (!worktreePath) return;
+                setShowAgentMenu((v) => !v);
+              }}
+              disabled={!worktreePath}
+              className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title={worktreePath ? t('Launch Agent') : t('Please select a worktree first')}
             >
               <Play className="h-3 w-3" />
             </button>

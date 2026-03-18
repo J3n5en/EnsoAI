@@ -23,6 +23,7 @@ import { initAgentStatusListener } from '@/stores/agentStatus';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
 import { useTerminalStore } from '@/stores/terminal';
+import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
@@ -624,15 +625,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   // Register close handler for external close requests
   useEffect(() => {
     const handleCloseAll = (worktreePath: string) => {
-      // Close all initialized sessions for this worktree
-      const initializedSessions = allSessions.filter(
-        (s) => s.cwd === worktreePath && s.initialized
-      );
-      if (initializedSessions.length === 0) return;
+      // Close every session for the worktree, including uninitialized ones, to avoid orphaned state.
+      const worktreeSessions = allSessions.filter((s) => pathsEqual(s.cwd, worktreePath));
+      if (worktreeSessions.length === 0) return;
 
-      // Remove initialized sessions
-      for (const session of initializedSessions) {
-        killBackendSession(session);
+      for (const session of worktreeSessions) {
+        if (session.initialized) {
+          killBackendSession(session);
+        }
         removeSession(session.id);
       }
 
@@ -971,9 +971,32 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   const handleInitialized = useCallback(
     (id: string) => {
+      const session = allSessions.find((s) => s.id === id);
+      if (!session) return;
+
+      // Update initialized state
       updateSession(id, { initialized: true });
+
+      // Send pending command if exists (from todo task launch)
+      if (session.pendingCommand) {
+        const write = useTerminalWriteStore.getState().write;
+        if (write) {
+          const command = session.pendingCommand;
+          // Use bracketed paste mode for multi-line content
+          if (command.includes('\n')) {
+            write(id, `\x1b[200~${command}\x1b[201~`);
+          } else {
+            write(id, command);
+          }
+          // Send Enter after a short delay
+          setTimeout(() => write(id, '\r'), 100);
+
+          // Clear pending command after sending
+          updateSession(id, { pendingCommand: undefined });
+        }
+      }
     },
-    [updateSession]
+    [allSessions, updateSession]
   );
 
   const handleActivated = useCallback(

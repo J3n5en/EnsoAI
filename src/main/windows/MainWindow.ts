@@ -212,43 +212,53 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
   // Confirm before close (skip in dev mode)
   let forceClose = false;
   let closeFlowInProgress = false;
+  const CLOSE_RESPONSE_IPC_TIMEOUT_MS = 30000;
   const CLOSE_SAVE_IPC_TIMEOUT_MS = 30000;
-  const waitForNoTimeout = <T>(
-    channel: string,
-    predicate: (event: Electron.IpcMainEvent, ...args: any[]) => T | null
-  ) =>
-    new Promise<T>((resolve) => {
-      const handler = (event: Electron.IpcMainEvent, ...args: any[]) => {
-        const match = predicate(event, ...args);
-        if (match === null) return;
-        ipcMain.removeListener(channel, handler);
-        resolve(match);
-      };
 
-      ipcMain.on(channel, handler);
-    });
-
-  const waitForWithTimeout = <T>(
+  const waitForWindowIpc = <T>(
     channel: string,
     predicate: (event: Electron.IpcMainEvent, ...args: any[]) => T | null,
     timeoutMs: number
   ) =>
     new Promise<T | null>((resolve) => {
+      const webContents = win.webContents;
+      let settled = false;
       let handler: (event: Electron.IpcMainEvent, ...args: any[]) => void;
-      const timeout = setTimeout(() => {
+      let timeout: NodeJS.Timeout | null = null;
+
+      const finalize = (value: T | null) => {
+        if (settled) return;
+        settled = true;
+
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+
         ipcMain.removeListener(channel, handler);
-        resolve(null);
-      }, timeoutMs);
+        if (!win.isDestroyed()) {
+          win.removeListener('closed', handleWindowGone);
+        }
+        try {
+          webContents.removeListener('destroyed', handleWindowGone);
+        } catch {
+          // webContents may already be destroyed while close flow is settling.
+        }
+        resolve(value);
+      };
+
+      const handleWindowGone = () => finalize(null);
 
       handler = (event: Electron.IpcMainEvent, ...args: any[]) => {
         const match = predicate(event, ...args);
         if (match === null) return;
-        clearTimeout(timeout);
-        ipcMain.removeListener(channel, handler);
-        resolve(match);
+        finalize(match);
       };
 
+      timeout = setTimeout(() => finalize(null), timeoutMs);
+
       ipcMain.on(channel, handler);
+      win.once('closed', handleWindowGone);
+      webContents.once('destroyed', handleWindowGone);
     });
 
   const forceReplaceCloseCurrentWindow = () => {
@@ -279,16 +289,21 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
       const payload: AppCloseRequestPayload = { requestId, reason };
       win.webContents.send(IPC_CHANNELS.APP_CLOSE_REQUEST, payload);
 
-      const response = await waitForNoTimeout<{ confirmed: boolean; dirtyPaths: string[] }>(
+      const response = await waitForWindowIpc<{ confirmed: boolean; dirtyPaths: string[] }>(
         IPC_CHANNELS.APP_CLOSE_RESPONSE,
-        (event, respRequestId: string, payload: { confirmed: boolean; dirtyPaths: string[] }) => {
+        (
+          event,
+          respRequestId: string,
+          responsePayload: { confirmed: boolean; dirtyPaths: string[] }
+        ) => {
           if (event.sender !== win.webContents) return null;
           if (respRequestId !== requestId) return null;
-          return payload;
-        }
+          return responsePayload;
+        },
+        CLOSE_RESPONSE_IPC_TIMEOUT_MS
       );
 
-      if (!response.confirmed) {
+      if (!response?.confirmed) {
         return false;
       }
 
@@ -314,12 +329,16 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
           const saveRequestId = `${requestId}:${filePath}`;
           win.webContents.send(IPC_CHANNELS.APP_CLOSE_SAVE_REQUEST, saveRequestId, filePath);
 
-          const saveResult = await waitForWithTimeout<{ ok: boolean; error?: string }>(
+          const saveResult = await waitForWindowIpc<{ ok: boolean; error?: string }>(
             IPC_CHANNELS.APP_CLOSE_SAVE_RESPONSE,
-            (event, respSaveRequestId: string, payload: { ok: boolean; error?: string }) => {
+            (
+              event,
+              respSaveRequestId: string,
+              responsePayload: { ok: boolean; error?: string }
+            ) => {
               if (event.sender !== win.webContents) return null;
               if (respSaveRequestId !== saveRequestId) return null;
-              return payload;
+              return responsePayload;
             },
             CLOSE_SAVE_IPC_TIMEOUT_MS
           );

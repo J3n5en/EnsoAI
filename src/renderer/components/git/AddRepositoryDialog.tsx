@@ -53,6 +53,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
+import { generateClonePath } from '@/lib/gitClone';
 import { Z_INDEX } from '@/lib/z-index';
 import { useCloneTasksStore } from '@/stores/cloneTasks';
 import { useSettingsStore } from '@/stores/settings';
@@ -119,6 +120,7 @@ export function AddRepositoryDialog({
   const { t } = useI18n();
   const hideGroups = useSettingsStore((s) => s.hideGroups);
   const setRemoteProfiles = useSettingsStore((s) => s.setRemoteProfiles);
+  const gitClone = useSettingsStore((s) => s.gitClone);
 
   const [mode, setMode] = React.useState<AddMode>('local');
 
@@ -136,6 +138,7 @@ export function AddRepositoryDialog({
   const [targetDir, setTargetDir] = React.useState('');
   const [repoName, setRepoName] = React.useState('');
   const [isValidUrl, setIsValidUrl] = React.useState(false);
+  const targetDirUserModifiedRef = React.useRef(false);
 
   const [remoteProfiles, setProfiles] = React.useState<ConnectionProfile[]>([]);
   const [sshProfileId, setSshProfileId] = React.useState('');
@@ -312,6 +315,8 @@ export function AddRepositoryDialog({
     if (!remoteUrl.trim()) {
       setIsValidUrl(false);
       setRepoName('');
+      setTargetDir('');
+      targetDirUserModifiedRef.current = false;
       return;
     }
 
@@ -321,6 +326,19 @@ export function AddRepositoryDialog({
         setIsValidUrl(result.valid);
         if (result.valid && result.repoName) {
           setRepoName(result.repoName);
+
+          // Auto-generate target directory using gitClone settings
+          const { targetDir: autoTargetDir } = generateClonePath(
+            remoteUrl.trim(),
+            gitClone.baseDir,
+            gitClone.hostMappings,
+            gitClone.useOrganizedStructure
+          );
+
+          // Only auto-fill if user hasn't manually set a target directory
+          if (!targetDirUserModifiedRef.current) {
+            setTargetDir(autoTargetDir);
+          }
         }
       } catch {
         setIsValidUrl(false);
@@ -328,7 +346,7 @@ export function AddRepositoryDialog({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [remoteUrl]);
+  }, [remoteUrl, gitClone]);
 
   React.useEffect(() => {
     if (!localPath.trim()) {
@@ -387,6 +405,7 @@ export function AddRepositoryDialog({
       const selectedPath = await window.electronAPI.dialog.openDirectory();
       if (selectedPath) {
         setTargetDir(selectedPath);
+        targetDirUserModifiedRef.current = true;
         setError(null);
       }
     } catch (selectError) {
@@ -454,6 +473,7 @@ export function AddRepositoryDialog({
     setTargetDir('');
     setRepoName('');
     setIsValidUrl(false);
+    targetDirUserModifiedRef.current = false;
     setProfiles([]);
     setSshProfileId('');
     setSshRepoPath('');

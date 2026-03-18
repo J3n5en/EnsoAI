@@ -929,7 +929,8 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
                     tabIndex={0}
                     onClick={() => handleGroupClick(info.group.id)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
+                      // Only handle when the div itself has focus, not child elements (xterm)
+                      if (e.currentTarget === e.target && (e.key === 'Enter' || e.key === ' ')) {
                         e.preventDefault();
                         handleGroupClick(info.group.id);
                       }

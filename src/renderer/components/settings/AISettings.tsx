@@ -16,6 +16,8 @@ import {
   defaultCodeReviewPromptZh,
   defaultCommitPromptEn,
   defaultCommitPromptZh,
+  defaultTodoPolishPromptEn,
+  defaultTodoPolishPromptZh,
   type ReasoningEffort,
   useSettingsStore,
   validateCodeReviewPrompt,
@@ -78,6 +80,8 @@ export function AISettings() {
     setCodeReview,
     branchNameGenerator,
     setBranchNameGenerator,
+    todoPolish,
+    setTodoPolish,
   } = useSettingsStore();
 
   // Validation state for code review prompt
@@ -118,6 +122,13 @@ export function AISettings() {
 
   const handleBranchProviderChange = (provider: AIProvider) => {
     setBranchNameGenerator({
+      provider,
+      model: getDefaultModel(provider),
+    });
+  };
+
+  const handleTodoPolishProviderChange = (provider: AIProvider) => {
+    setTodoPolish({
       provider,
       model: getDefaultModel(provider),
     });
@@ -667,6 +678,184 @@ export function AISettings() {
                       ) {
                         setBranchNameGenerator({
                           prompt: defaultBranchNameGeneratorSettings.prompt,
+                        });
+                      }
+                    }}
+                    className="text-xs text-muted-foreground hover:text-primary underline"
+                  >
+                    {t('Restore default prompt')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Todo AI Polish Section */}
+      <div className="border-t pt-6">
+        <div>
+          <h4 className="text-base font-medium">{t('Todo AI Polish')}</h4>
+          <p className="text-sm text-muted-foreground">
+            {t('Use AI to generate a title and description from raw requirement text')}
+          </p>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-sm font-medium">{t('Enable AI Polish')}</span>
+            <p className="text-xs text-muted-foreground">
+              {t('Show AI polish button when creating or editing tasks')}
+            </p>
+          </div>
+          <Switch
+            checked={todoPolish.enabled}
+            onCheckedChange={(checked) => setTodoPolish({ enabled: checked })}
+          />
+        </div>
+
+        {todoPolish.enabled && (
+          <div className="mt-4 space-y-4 border-t pt-4">
+            {/* Provider */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Provider')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={todoPolish.provider ?? 'claude-code'}
+                  onValueChange={(v) => handleTodoPolishProviderChange(v as AIProvider)}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue>
+                      {PROVIDERS.find((p) => p.value === todoPolish.provider)?.label ??
+                        'Claude Code'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {PROVIDERS.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('AI provider to use')}</p>
+              </div>
+            </div>
+
+            {/* Model */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Model')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={todoPolish.model}
+                  onValueChange={(v) => v && setTodoPolish({ model: v })}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue>
+                      {MODELS_BY_PROVIDER[todoPolish.provider ?? 'claude-code']?.find(
+                        (m) => m.value === todoPolish.model
+                      )?.label ?? todoPolish.model}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {MODELS_BY_PROVIDER[todoPolish.provider ?? 'claude-code']?.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('Model for polishing task content')}
+                </p>
+              </div>
+            </div>
+
+            {/* Reasoning Level - Only for Codex CLI */}
+            {todoPolish.provider === 'codex-cli' && (
+              <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                <span className="text-sm font-medium">{t('Reasoning Level')}</span>
+                <div className="space-y-1.5">
+                  <Select
+                    value={todoPolish.reasoningEffort ?? 'medium'}
+                    onValueChange={(v) =>
+                      v && setTodoPolish({ reasoningEffort: v as ReasoningEffort })
+                    }
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue>
+                        {REASONING_EFFORTS.find(
+                          (r) => r.value === (todoPolish.reasoningEffort ?? 'medium')
+                        )?.label ?? 'Medium'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup>
+                      {REASONING_EFFORTS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t('Reasoning depth for Codex CLI')}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Timeout */}
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Timeout')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={String(todoPolish.timeout)}
+                  onValueChange={(v) => setTodoPolish({ timeout: Number(v) })}
+                >
+                  <SelectTrigger className="w-32">
+                    <SelectValue>{todoPolish.timeout}s</SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {[30, 60, 120, 180].map((sec) => (
+                      <SelectItem key={sec} value={String(sec)}>
+                        {sec}s
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t('Timeout in seconds')}</p>
+              </div>
+            </div>
+
+            {/* Prompt */}
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium">{t('Prompt')}</span>
+              <div className="space-y-1.5">
+                <textarea
+                  value={todoPolish.prompt}
+                  onChange={(e) => setTodoPolish({ prompt: e.target.value })}
+                  className="w-full h-40 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder={t(
+                    'Enter a prompt template.\nAvailable variables:\n• {text} - Raw requirement text'
+                  )}
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {t('Customize the AI prompt for polishing tasks')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          t(
+                            'This will restore the default AI prompt for todo polish. Your custom prompt will be lost.'
+                          )
+                        )
+                      ) {
+                        setTodoPolish({
+                          prompt:
+                            locale === 'zh' ? defaultTodoPolishPromptZh : defaultTodoPolishPromptEn,
                         });
                       }
                     }}

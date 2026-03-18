@@ -4,6 +4,7 @@ import { normalizePath, pathsEqual } from '@/App/storage';
 import type { Session } from '@/components/chat/SessionBar';
 import type { AgentGroupState } from '@/components/chat/types';
 import { createInitialGroupState } from '@/components/chat/types';
+import { useAgentStatusStore } from './agentStatus';
 
 // Global storage key for all sessions across all repos
 export const SESSIONS_STORAGE_KEY = 'enso-agent-sessions';
@@ -204,7 +205,23 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
         const removedSession = state.sessions.find((s) => s.id === id);
         console.log('[AgentSessions] Removing session:', removedSession?.sessionId);
 
+        if (removedSession) {
+          const { clearStatus } = useAgentStatusStore.getState();
+          clearStatus(removedSession.id);
+          if (removedSession.sessionId && removedSession.sessionId !== removedSession.id) {
+            clearStatus(removedSession.sessionId);
+          }
+        }
+
         const newSessions = state.sessions.filter((s) => s.id !== id);
+        let newActiveIds = state.activeIds;
+        for (const [cwd, activeId] of Object.entries(state.activeIds)) {
+          if (activeId !== id) continue;
+          if (newActiveIds === state.activeIds) {
+            newActiveIds = { ...state.activeIds };
+          }
+          newActiveIds[cwd] = null;
+        }
         // Clean up runtime states
         const newRuntimeStates = { ...state.runtimeStates };
         delete newRuntimeStates[id];
@@ -213,6 +230,7 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
         delete newEnhancedInputStates[id];
         return {
           sessions: newSessions,
+          activeIds: newActiveIds,
           runtimeStates: newRuntimeStates,
           enhancedInputStates: newEnhancedInputStates,
         };

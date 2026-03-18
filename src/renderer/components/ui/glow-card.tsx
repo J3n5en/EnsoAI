@@ -18,8 +18,8 @@ interface GlowCardProps {
   className?: string;
   as?: 'div' | 'button';
   onClick?: () => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
   tabIndex?: number;
   role?: string;
@@ -49,8 +49,8 @@ export const GlowCard = forwardRef<HTMLDivElement, GlowCardProps>(
       className,
       as = 'div',
       onClick,
-      onContextMenu,
       onDoubleClick,
+      onContextMenu,
       onKeyDown,
       tabIndex,
       role,
@@ -71,8 +71,8 @@ export const GlowCard = forwardRef<HTMLDivElement, GlowCardProps>(
         ref={ref as React.Ref<HTMLDivElement & HTMLButtonElement>}
         className={cn('relative overflow-hidden', className)}
         onClick={onClick}
-        onContextMenu={onContextMenu}
         onDoubleClick={onDoubleClick}
+        onContextMenu={onContextMenu}
         onKeyDown={onKeyDown}
         tabIndex={tabIndex}
         role={role}

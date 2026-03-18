@@ -1,6 +1,21 @@
 import type { Locale } from '@shared/i18n';
 import type { ShellInfo } from '@shared/types';
-import { Columns3, FileText, FolderOpen, RefreshCw, TreePine } from 'lucide-react';
+import { AppCategory } from '@shared/types';
+import {
+  ChevronRight,
+  Columns3,
+  FileCode,
+  FileText,
+  FolderOpen,
+  LayoutList,
+  Pencil,
+  Plus,
+  RefreshCw,
+  TableProperties,
+  Terminal,
+  Trash2,
+  TreePine,
+} from 'lucide-react';
 import * as React from 'react';
 import {
   AlertDialog,
@@ -12,6 +27,18 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -21,11 +48,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useDetectedApps } from '@/hooks/useAppDetector';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import {
   type FileTreeDisplayMode,
   type LayoutMode,
+  type RepositoryListDisplayMode,
   type TerminalRenderer,
   useSettingsStore,
 } from '@/stores/settings';
@@ -76,6 +105,8 @@ export function GeneralSettings() {
     setLayoutMode,
     fileTreeDisplayMode,
     setFileTreeDisplayMode,
+    repositoryListDisplayMode,
+    setRepositoryListDisplayMode,
     terminalRenderer,
     setTerminalRenderer,
     terminalScrollback,
@@ -100,6 +131,10 @@ export function GeneralSettings() {
     setQuickTerminalEnabled,
     hideGroups,
     setHideGroups,
+    hiddenOpenInApps,
+    toggleHiddenOpenInApp,
+    openInMenuFilterEnabled,
+    setOpenInMenuFilterEnabled,
     copyOnSelection,
     setCopyOnSelection,
     todoEnabled,
@@ -116,8 +151,15 @@ export function GeneralSettings() {
     setLogLevel,
     logRetentionDays,
     setLogRetentionDays,
+    gitClone,
+    setGitClone,
+    addHostMapping,
+    removeHostMapping,
+    updateHostMapping,
   } = useSettingsStore();
   const { t, locale } = useI18n();
+  const { data: detectedApps = [] } = useDetectedApps();
+  const hiddenSet = React.useMemo(() => new Set(hiddenOpenInApps), [hiddenOpenInApps]);
 
   const layoutModeOptions: {
     value: LayoutMode;
@@ -156,6 +198,26 @@ export function GeneralSettings() {
       icon: FolderOpen,
       label: t('Split sidebar'),
       description: t('Dedicated file sidebar + editor'),
+    },
+  ];
+
+  const repositoryListDisplayModeOptions: {
+    value: RepositoryListDisplayMode;
+    icon: React.ElementType;
+    label: string;
+    description: string;
+  }[] = [
+    {
+      value: 'list',
+      icon: LayoutList,
+      label: t('List'),
+      description: t('VSCode-style collapsible list'),
+    },
+    {
+      value: 'tabs',
+      icon: TableProperties,
+      label: t('Tabs'),
+      description: t('Horizontal tabs for quick switching'),
     },
   ];
 
@@ -216,6 +278,16 @@ export function GeneralSettings() {
   const [proxyTestError, setProxyTestError] = React.useState<string | null>(null);
   const [tempPathDialogOpen, setTempPathDialogOpen] = React.useState(false);
 
+  // Host mapping dialog state
+  const [hostMappingDialogOpen, setHostMappingDialogOpen] = React.useState(false);
+  const [editingMapping, setEditingMapping] = React.useState<{
+    pattern: string;
+    dirname: string;
+  } | null>(null);
+  const [mappingPattern, setMappingPattern] = React.useState('');
+  const [mappingDirname, setMappingDirname] = React.useState('');
+  const [mappingError, setMappingError] = React.useState('');
+
   const handleTestProxy = React.useCallback(async () => {
     if (!proxySettings.server) return;
 
@@ -254,6 +326,71 @@ export function GeneralSettings() {
     },
     [setProxySettings]
   );
+
+  const handleEditHostMapping = React.useCallback(
+    (mapping: { pattern: string; dirname: string }) => {
+      setEditingMapping(mapping);
+      setMappingPattern(mapping.pattern);
+      setMappingDirname(mapping.dirname);
+      setMappingError('');
+      setHostMappingDialogOpen(true);
+    },
+    []
+  );
+
+  const handleDeleteHostMapping = React.useCallback(
+    (pattern: string) => {
+      removeHostMapping(pattern);
+    },
+    [removeHostMapping]
+  );
+
+  const handleSaveHostMapping = React.useCallback(() => {
+    setMappingError('');
+
+    // Validate
+    if (!mappingPattern.trim()) {
+      setMappingError(t('Pattern is required'));
+      return;
+    }
+    if (!mappingDirname.trim()) {
+      setMappingError(t('Directory name is required'));
+      return;
+    }
+
+    // Check for duplicate pattern
+    const existing = gitClone.hostMappings.find(
+      (m) => m.pattern === mappingPattern.trim() && m.pattern !== editingMapping?.pattern
+    );
+    if (existing) {
+      setMappingError(t('Pattern already exists'));
+      return;
+    }
+
+    const newMapping = {
+      pattern: mappingPattern.trim(),
+      dirname: mappingDirname.trim(),
+    };
+
+    if (editingMapping) {
+      updateHostMapping(editingMapping.pattern, newMapping);
+    } else {
+      addHostMapping(newMapping);
+    }
+
+    setHostMappingDialogOpen(false);
+    setEditingMapping(null);
+    setMappingPattern('');
+    setMappingDirname('');
+  }, [
+    mappingPattern,
+    mappingDirname,
+    editingMapping,
+    gitClone.hostMappings,
+    t,
+    addHostMapping,
+    updateHostMapping,
+  ]);
 
   const handleOpenLogFolder = React.useCallback(async () => {
     await window.electronAPI.log.openFolder();
@@ -407,6 +544,42 @@ export function GeneralSettings() {
         ))}
       </div>
 
+      <div className="border-t pt-4">
+        <h3 className="text-lg font-medium">{t('Repository List Display')}</h3>
+        <p className="text-sm text-muted-foreground">
+          {t('Choose how repositories and submodules are displayed in source control')}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {repositoryListDisplayModeOptions.map((option) => (
+          <button
+            type="button"
+            key={option.value}
+            onClick={() => setRepositoryListDisplayMode(option.value)}
+            className={cn(
+              'flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-colors',
+              repositoryListDisplayMode === option.value
+                ? 'border-primary bg-accent text-accent-foreground'
+                : 'border-transparent bg-muted/50 hover:bg-muted'
+            )}
+          >
+            <div
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-full',
+                repositoryListDisplayMode === option.value
+                  ? 'bg-accent-foreground/20 text-accent-foreground'
+                  : 'bg-muted'
+              )}
+            >
+              <option.icon className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-medium">{option.label}</span>
+            <span className="text-xs text-muted-foreground text-center">{option.description}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Auto-create session */}
       {/* Quick Terminal */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
@@ -500,6 +673,70 @@ export function GeneralSettings() {
         </div>
       </div>
 
+      {/* Quick Open */}
+      {detectedApps.length > 0 && (
+        <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+          <span className="text-sm font-medium leading-8">{t('Quick Open')}</span>
+          <Collapsible>
+            <div className="flex h-8 items-center justify-between">
+              <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 [[data-panel-open]_&]:rotate-90" />
+                {t('Configure apps shown in the quick open menu')}
+              </CollapsibleTrigger>
+              <Switch
+                checked={openInMenuFilterEnabled}
+                onCheckedChange={setOpenInMenuFilterEnabled}
+              />
+            </div>
+            <CollapsibleContent>
+              {openInMenuFilterEnabled ? (
+                <div className="mt-2 space-y-2">
+                  {(
+                    [
+                      { category: AppCategory.Finder, label: t('File Manager'), icon: FolderOpen },
+                      { category: AppCategory.Terminal, label: t('Terminals'), icon: Terminal },
+                      { category: AppCategory.Editor, label: t('Editors'), icon: FileCode },
+                    ] as const
+                  ).map(({ category, label, icon: CategoryIcon }) => {
+                    const categoryApps = detectedApps.filter((app) => app.category === category);
+                    if (categoryApps.length === 0) return null;
+                    return (
+                      <div key={category}>
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
+                          {label}
+                        </div>
+                        {categoryApps.map((app) => {
+                          const isVisible = !hiddenSet.has(app.bundleId);
+                          return (
+                            <div
+                              key={app.bundleId}
+                              className="flex items-center justify-between rounded-md pl-2 py-1.5 hover:bg-accent/50"
+                            >
+                              <div className="flex items-center gap-2">
+                                <CategoryIcon className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm">{app.name}</span>
+                              </div>
+                              <Switch
+                                checked={isVisible}
+                                onCheckedChange={() => toggleHiddenOpenInApp(app.bundleId)}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t('Enable filtering to configure which apps are shown')}
+                </p>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
+
       <div className="border-t pt-4">
         <h3 className="text-lg font-medium">{t('Worktree')}</h3>
         <p className="text-sm text-muted-foreground">{t('Git worktree save location settings')}</p>
@@ -545,6 +782,115 @@ export function GeneralSettings() {
           </div>
           <p className="text-xs text-muted-foreground">
             {t('Default directory for new worktrees. Leave empty to use ~/ensoai/workspaces')}
+          </p>
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <h3 className="text-lg font-medium">{t('Git Clone')}</h3>
+        <p className="text-sm text-muted-foreground">
+          {t('Settings for cloning remote Git repositories')}
+        </p>
+      </div>
+
+      {/* Base Directory */}
+      <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+        <span className="text-sm font-medium mt-2">{t('Base directory')}</span>
+        <div className="space-y-1.5">
+          <div className="flex gap-2">
+            <Input
+              value={gitClone.baseDir}
+              onChange={(e) => setGitClone({ baseDir: e.target.value })}
+              placeholder="~/ensoai/repos"
+              className="flex-1"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={async () => {
+                const result = await window.electronAPI.dialog.openDirectory();
+                if (result) {
+                  setGitClone({ baseDir: result });
+                }
+              }}
+            >
+              <FolderOpen className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t('Base directory for cloned repositories. Leave empty to use ~/ensoai/repos')}
+          </p>
+        </div>
+      </div>
+
+      {/* Organized Structure Toggle */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Organized structure')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Clone to organized structure (baseDir/host/owner/repo) or flat (baseDir/repo)')}
+          </p>
+          <Switch
+            checked={gitClone.useOrganizedStructure}
+            onCheckedChange={(checked) => setGitClone({ useOrganizedStructure: checked })}
+          />
+        </div>
+      </div>
+
+      {/* Repository Domains */}
+      <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+        <span className="text-sm font-medium mt-2">{t('Repository domains')}</span>
+        <div className="space-y-1.5">
+          <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium">{t('Repository domains')}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => setHostMappingDialogOpen(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                {t('Add')}
+              </Button>
+            </div>
+            <div className="space-y-1">
+              {gitClone.hostMappings.length === 0 ? (
+                <div className="text-xs text-muted-foreground py-1">
+                  {t('No mappings configured')}
+                </div>
+              ) : (
+                gitClone.hostMappings.map((mapping) => (
+                  <div key={mapping.pattern} className="flex items-center gap-2 group py-1">
+                    <span className="font-mono text-xs flex-1 truncate">{mapping.pattern}</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="font-mono text-xs flex-1 truncate">{mapping.dirname}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleEditHostMapping(mapping)}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                      onClick={() => handleDeleteHostMapping(mapping.pattern)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t('Host-to-directory mappings for organizing cloned repositories')}
           </p>
         </div>
       </div>
@@ -1022,6 +1368,59 @@ export function GeneralSettings() {
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
+
+      {/* Host Mapping Edit Dialog */}
+      <Dialog open={hostMappingDialogOpen} onOpenChange={setHostMappingDialogOpen}>
+        <DialogPopup zIndexLevel="nested">
+          <DialogHeader>
+            <DialogTitle>
+              {editingMapping ? t('Edit repository domain') : t('Add repository domain')}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                'Map a Git repository domain to a directory name for organizing cloned repositories'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogPanel className="space-y-4">
+            <Field>
+              <FieldLabel>{t('Domain pattern')}</FieldLabel>
+              <Input
+                value={mappingPattern}
+                onChange={(e) => setMappingPattern(e.target.value)}
+                placeholder="gitlab.example.com"
+                className="font-mono"
+              />
+              <FieldDescription>
+                {t('Git host domain (e.g., gitlab.example.com or *.example.com)')}
+              </FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel>{t('Directory name')}</FieldLabel>
+              <Input
+                value={mappingDirname}
+                onChange={(e) => setMappingDirname(e.target.value)}
+                placeholder="gitlab"
+                className="font-mono"
+              />
+              <FieldDescription>
+                {t('Directory name for this host (e.g., gitlab, company-gitlab)')}
+              </FieldDescription>
+            </Field>
+
+            {mappingError && <div className="text-sm text-destructive">{mappingError}</div>}
+          </DialogPanel>
+
+          <DialogFooter variant="bare">
+            <Button variant="outline" onClick={() => setHostMappingDialogOpen(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleSaveHostMapping}>{t('Save')}</Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </div>
   );
 }

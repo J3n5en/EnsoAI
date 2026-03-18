@@ -31,15 +31,19 @@ export interface RenderTask {
   cancel: () => void;
 }
 
+export interface PDFLoadingTask {
+  promise: Promise<PDFDocumentProxy>;
+  destroy?: () => Promise<void> | void;
+  cancel?: () => void;
+}
+
 export interface PDFJS {
   getDocument: (params: {
     url?: string;
     data?: Uint8Array;
     cMapUrl?: string;
     cMapPacked?: boolean;
-  }) => {
-    promise: Promise<PDFDocumentProxy>;
-  };
+  }) => PDFLoadingTask;
   GlobalWorkerOptions: {
     workerSrc: string;
   };

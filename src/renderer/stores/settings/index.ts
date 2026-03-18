@@ -16,6 +16,7 @@ import {
   defaultCodeReviewSettings,
   defaultCommitMessageGeneratorSettings,
   defaultEditorSettings,
+  defaultGitCloneSettings,
   defaultGlobalKeybindings,
   defaultHapiSettings,
   defaultMainTabKeybindings,
@@ -24,6 +25,7 @@ import {
   defaultRemoteSettings,
   defaultSearchKeybindings,
   defaultSourceControlKeybindings,
+  defaultTodoPolishSettings,
   defaultWorkspaceKeybindings,
   defaultXtermKeybindings,
   getDefaultLocale,
@@ -99,6 +101,7 @@ function getInitialState() {
     theme: 'system' as Theme,
     layoutMode: 'tree' as const,
     fileTreeDisplayMode: 'legacy' as const,
+    repositoryListDisplayMode: 'list' as const,
     language: getDefaultLocale(),
     fontSize: 14,
     fontFamily: 'Inter',
@@ -141,6 +144,7 @@ function getInitialState() {
     commitMessageGenerator: defaultCommitMessageGeneratorSettings,
     codeReview: defaultCodeReviewSettings,
     branchNameGenerator: defaultBranchNameGeneratorSettings,
+    todoPolish: defaultTodoPolishSettings,
 
     // App Settings
     autoUpdateEnabled: true,
@@ -149,6 +153,9 @@ function getInitialState() {
     defaultWorktreePath: '',
     proxySettings: defaultProxySettings,
     autoCreateSessionOnActivate: false,
+
+    // Git Clone Settings
+    gitClone: defaultGitCloneSettings,
 
     // Beta features
     todoEnabled: false,
@@ -191,6 +198,11 @@ function getInitialState() {
 
     // Hide Groups default
     hideGroups: false,
+    hiddenOpenInApps: [] as string[],
+    openInMenuFilterEnabled: false,
+
+    // File Tree defaults
+    fileTreeAutoReveal: true, // Auto-reveal active file in file tree by default (like VSCode)
 
     // Logging defaults
     loggingEnabled: false,
@@ -219,6 +231,9 @@ export const useSettingsStore = create<SettingsState>()(
       setLayoutMode: (layoutMode) => set({ layoutMode }),
 
       setFileTreeDisplayMode: (fileTreeDisplayMode) => set({ fileTreeDisplayMode }),
+
+      setRepositoryListDisplayMode: (repositoryListDisplayMode) =>
+        set({ repositoryListDisplayMode }),
 
       setLanguage: (language) => {
         document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
@@ -444,6 +459,11 @@ export const useSettingsStore = create<SettingsState>()(
           branchNameGenerator: { ...state.branchNameGenerator, ...settings },
         })),
 
+      setTodoPolish: (settings) =>
+        set((state) => ({
+          todoPolish: { ...state.todoPolish, ...settings },
+        })),
+
       // App Setters
       setAutoUpdateEnabled: (autoUpdateEnabled) => {
         set({ autoUpdateEnabled });
@@ -494,6 +514,38 @@ export const useSettingsStore = create<SettingsState>()(
 
       setAutoCreateSessionOnActivate: (autoCreateSessionOnActivate) =>
         set({ autoCreateSessionOnActivate }),
+
+      // Git Clone Setters
+      setGitClone: (settings) =>
+        set((state) => ({
+          gitClone: { ...state.gitClone, ...settings },
+        })),
+
+      addHostMapping: (mapping) =>
+        set((state) => ({
+          gitClone: {
+            ...state.gitClone,
+            hostMappings: [...state.gitClone.hostMappings, mapping],
+          },
+        })),
+
+      removeHostMapping: (pattern) =>
+        set((state) => ({
+          gitClone: {
+            ...state.gitClone,
+            hostMappings: state.gitClone.hostMappings.filter((m) => m.pattern !== pattern),
+          },
+        })),
+
+      updateHostMapping: (oldPattern, updates) =>
+        set((state) => ({
+          gitClone: {
+            ...state.gitClone,
+            hostMappings: state.gitClone.hostMappings.map((m) =>
+              m.pattern === oldPattern ? { ...m, ...updates } : m
+            ),
+          },
+        })),
 
       // Beta Feature Setters
       setTodoEnabled: (todoEnabled) => set({ todoEnabled }),
@@ -671,6 +723,16 @@ export const useSettingsStore = create<SettingsState>()(
 
       // Other Setters
       setHideGroups: (hideGroups) => set({ hideGroups }),
+      toggleHiddenOpenInApp: (bundleId) =>
+        set((state) => ({
+          hiddenOpenInApps: state.hiddenOpenInApps.includes(bundleId)
+            ? state.hiddenOpenInApps.filter((id) => id !== bundleId)
+            : [...state.hiddenOpenInApps, bundleId],
+        })),
+      setOpenInMenuFilterEnabled: (enabled) => set({ openInMenuFilterEnabled: enabled }),
+
+      // File Tree Setters
+      setFileTreeAutoReveal: (fileTreeAutoReveal) => set({ fileTreeAutoReveal }),
 
       // Logging Setters
       setLoggingEnabled: (loggingEnabled) => {

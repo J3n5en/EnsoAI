@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { toLocalFileUrl } from '@/lib/localFileUrl';
 import { cn } from '@/lib/utils';
-import { getPDFJS, type PDFDocumentProxy } from './pdfSetup';
+import { getPDFJS, type PDFDocumentProxy, type PDFLoadingTask } from './pdfSetup';
 
 interface PdfPreviewProps {
   path: string;
@@ -23,11 +23,20 @@ export function PdfPreview({ path }: PdfPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
+  const loadingTaskRef = useRef<PDFLoadingTask | null>(null);
 
   // Convert file path to local-file:// URL (Electron custom protocol)
   const pdfUrl = useMemo(() => {
     return toLocalFileUrl(path);
   }, [path]);
+
+  const cancelInFlightWork = useCallback(() => {
+    renderTaskRef.current?.cancel();
+    renderTaskRef.current = null;
+    loadingTaskRef.current?.cancel?.();
+    void loadingTaskRef.current?.destroy?.();
+    loadingTaskRef.current = null;
+  }, []);
 
   // 加载 PDF 文档
   useEffect(() => {
@@ -40,19 +49,28 @@ export function PdfPreview({ path }: PdfPreviewProps) {
 
       try {
         const pdfjs = await getPDFJS();
+        cancelInFlightWork();
 
         // 使用 local-file:// 协议加载 PDF
         const loadingTask = pdfjs.getDocument({
           url: pdfUrl,
         });
+        loadingTaskRef.current = loadingTask;
 
         const doc = await loadingTask.promise;
         currentDoc = doc;
 
-        if (!cancelled) {
-          setPdfDoc(doc);
-          setLoading(false);
+        if (loadingTaskRef.current === loadingTask) {
+          loadingTaskRef.current = null;
         }
+
+        if (cancelled) {
+          await doc.destroy().catch(() => {});
+          return;
+        }
+
+        setPdfDoc(doc);
+        setLoading(false);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'PDF 加载失败');
@@ -65,12 +83,13 @@ export function PdfPreview({ path }: PdfPreviewProps) {
 
     return () => {
       cancelled = true;
+      cancelInFlightWork();
       // 清理旧的 PDF 文档
       if (currentDoc) {
-        currentDoc.destroy();
+        void currentDoc.destroy();
       }
     };
-  }, [pdfUrl]);
+  }, [cancelInFlightWork, pdfUrl]);
 
   // 渲染当前页
   const renderPage = useCallback(
@@ -120,6 +139,9 @@ export function PdfPreview({ path }: PdfPreviewProps) {
 
         renderTaskRef.current = renderTask;
         await renderTask.promise;
+        if (renderTaskRef.current === renderTask) {
+          renderTaskRef.current = null;
+        }
 
         if (targetScale !== undefined) {
           setScale(finalScale);
@@ -127,6 +149,9 @@ export function PdfPreview({ path }: PdfPreviewProps) {
 
         setRendering(false);
       } catch (err) {
+        if (renderTaskRef.current) {
+          renderTaskRef.current = null;
+        }
         if (err instanceof Error && err.message.includes('cancel')) {
           // 渲染被取消，忽略错误
           return;

@@ -15,9 +15,7 @@ import { normalizePath } from '@/App/storage';
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
   BreadcrumbList,
-  BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import {
@@ -35,6 +33,7 @@ import type { EditorTab, PendingCursor } from '@/stores/editor';
 import { useEditorStore } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
+import { BreadcrumbTreeMenu } from './BreadcrumbTreeMenu';
 import { CommentForm, useEditorLineComment } from './EditorLineComment';
 import { EditorTabs } from './EditorTabs';
 import { ExternalModificationBanner } from './ExternalModificationBanner';
@@ -43,6 +42,7 @@ import { ImagePreview } from './ImagePreview';
 import { MarkdownPreview } from './MarkdownPreview';
 import { CUSTOM_THEME_NAME, defineMonacoTheme } from './monacoTheme';
 import { PdfPreview } from './PdfPreview';
+import { useEditorBlame } from './useEditorBlame';
 // Import for side effects (Monaco setup)
 import './monacoSetup';
 
@@ -84,10 +84,10 @@ interface EditorAreaProps {
   onViewStateChange: (path: string, viewState: unknown) => void;
   onSave: (path: string) => void;
   onClearPendingCursor: () => void;
-  onBreadcrumbClick?: (path: string) => void;
   onGlobalSearch?: (selectedText: string) => void;
   isFileTreeCollapsed?: boolean;
   onToggleFileTree?: () => void;
+  onNavigateToFile?: (path: string) => Promise<void>;
 }
 
 export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function EditorArea(
@@ -108,10 +108,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     onViewStateChange,
     onSave,
     onClearPendingCursor,
-    onBreadcrumbClick,
     onGlobalSearch,
     isFileTreeCollapsed,
     onToggleFileTree,
+    onNavigateToFile,
   }: EditorAreaProps,
   ref: React.Ref<EditorAreaRef>
 ) {
@@ -134,15 +134,12 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const focus = useTerminalWriteStore((state) => state.focus);
 
   // Helper function to format line reference from selection
-  const formatLineRef = useCallback((selection: monaco.ISelection): string => {
-    const startLine = Math.min(selection.selectionStartLineNumber, selection.positionLineNumber);
-    const rawEndLine = Math.max(selection.selectionStartLineNumber, selection.positionLineNumber);
-    const rawEndColumn =
-      rawEndLine === selection.positionLineNumber
-        ? selection.positionColumn
-        : selection.selectionStartColumn;
-    const endLine = rawEndColumn === 1 ? rawEndLine - 1 : rawEndLine;
-    return startLine === endLine ? `L${startLine}` : `L${startLine}-L${endLine}`;
+  const formatLineRef = useCallback((selection: monaco.Selection): string => {
+    const endLine =
+      selection.endColumn === 1 ? selection.endLineNumber - 1 : selection.endLineNumber;
+    return selection.startLineNumber === endLine
+      ? `L${selection.startLineNumber}`
+      : `L${selection.startLineNumber}-L${endLine}`;
   }, []);
 
   // Helper function to convert absolute path to relative path
@@ -242,6 +239,28 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     enabled: editorReady && !!sessionId,
   });
 
+  // Inline git blame
+  const { refreshBlame } = useEditorBlame({
+    editor: editorInstance,
+    monacoInstance: monacoInstance,
+    filePath: activeTabPath,
+    rootPath,
+    enabled: editorReady && editorSettings.gitBlameEnabled,
+    t,
+  });
+
+  // Wrap onSave to refresh blame after save
+  const handleSaveWithBlameRefresh = useCallback(
+    (path: string) => {
+      onSave(path);
+      // Refresh blame after file is saved
+      if (path === activeTabPath) {
+        refreshBlame();
+      }
+    },
+    [onSave, activeTabPath, refreshBlame]
+  );
+
   // Calculate breadcrumb segments from active file path
   const breadcrumbSegments = useMemo(() => {
     if (!activeTabPath || !rootPath) return [];
@@ -302,7 +321,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       const handleBlur = () => {
         const path = activeTabPathRef.current;
         if (path && hasPendingAutoSaveRef.current) {
-          onSave(path);
+          handleSaveWithBlameRefresh(path);
           hasPendingAutoSaveRef.current = false;
         }
       };
@@ -315,7 +334,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         blurDisposableRef.current = null;
       }
     };
-  }, [editorSettings.autoSave, onSave]);
+  }, [editorSettings.autoSave, handleSaveWithBlameRefresh]);
 
   // Auto save: Save on window focus change
   useEffect(() => {
@@ -325,14 +344,14 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         editorSettings.autoSave === 'onWindowChange' &&
         hasPendingAutoSaveRef.current
       ) {
-        onSave(activeTabPath);
+        handleSaveWithBlameRefresh(activeTabPath);
         hasPendingAutoSaveRef.current = false;
       }
     };
 
     window.addEventListener('blur', handleWindowBlur);
     return () => window.removeEventListener('blur', handleWindowBlur);
-  }, [activeTabPath, editorSettings.autoSave, onSave]);
+  }, [activeTabPath, editorSettings.autoSave, handleSaveWithBlameRefresh]);
 
   // Listen for external file changes and update open tabs
   useEffect(() => {
@@ -479,8 +498,15 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       // Add Cmd/Ctrl+S shortcut
       editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
         if (activeTabPath) {
-          onSave(activeTabPath);
+          handleSaveWithBlameRefresh(activeTabPath);
         }
+      });
+
+      // Add Ctrl/Cmd+O shortcut: show file structure (go to symbol in file)
+      // Uses editor.action.quickOutline — the correct standalone Monaco action ID
+      // KeyMod.CtrlCmd maps to Cmd on macOS and Ctrl on Windows/Linux
+      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyO, () => {
+        editor.getAction('editor.action.quickOutline')?.run();
       });
 
       editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
@@ -584,7 +610,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     [
       activeTab?.viewState,
       activeTabPath,
-      onSave,
+      handleSaveWithBlameRefresh,
       onGlobalSearch,
       onClearPendingCursor,
       getRelativePath,
@@ -883,13 +909,19 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         // Trigger auto save based on mode
         if (editorSettings.autoSave === 'afterDelay') {
           triggerDebouncedSave(activeTabPath, (path) => {
-            onSave(path);
+            handleSaveWithBlameRefresh(path);
             hasPendingAutoSaveRef.current = false;
           });
         }
       }
     },
-    [activeTabPath, onContentChange, editorSettings.autoSave, triggerDebouncedSave, onSave]
+    [
+      activeTabPath,
+      onContentChange,
+      editorSettings.autoSave,
+      triggerDebouncedSave,
+      handleSaveWithBlameRefresh,
+    ]
   );
 
   const handleTabClose = useCallback(
@@ -1093,7 +1125,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       </div>
 
       {/* Breadcrumb */}
-      {activeTab && breadcrumbSegments.length > 0 && (
+      {activeTab && breadcrumbSegments.length > 0 && rootPath && (
         <div className="shrink-0 border-b px-3 py-1">
           <Breadcrumb>
             <BreadcrumbList className="flex-nowrap text-xs">
@@ -1101,17 +1133,20 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                 <span key={segment.path} className="contents">
                   {index > 0 && <BreadcrumbSeparator className="[&>svg]:size-3" />}
                   <BreadcrumbItem className="min-w-0">
-                    {segment.isLast ? (
-                      <BreadcrumbPage className="truncate">{segment.name}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink
-                        render={<button type="button" />}
-                        className="truncate"
-                        onClick={() => onBreadcrumbClick?.(segment.path)}
+                    <BreadcrumbTreeMenu
+                      dirPath={segment.path}
+                      rootPath={rootPath}
+                      onFileClick={onTabClick}
+                      onNavigateToFile={onNavigateToFile}
+                      activeTabPath={activeTabPath}
+                    >
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-sm hover:bg-accent/50 px-1 py-0.5 -mx-1 transition-colors text-foreground truncate"
                       >
                         {segment.name}
-                      </BreadcrumbLink>
-                    )}
+                      </button>
+                    </BreadcrumbTreeMenu>
                   </BreadcrumbItem>
                 </span>
               ))}

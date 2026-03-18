@@ -10,6 +10,7 @@ import type {
   FileChangesResult,
   FileDiff,
   GhCliStatus,
+  GitBlameLineInfo,
   GitBranch,
   GitLogEntry,
   GitStatus,
@@ -18,7 +19,7 @@ import type {
   SubmoduleStatus,
 } from '@shared/types';
 import type { SimpleGit, StatusResult } from 'simple-git';
-import { decodeBuffer, gitShow } from './encoding';
+import { decodeBuffer, detectBinaryFile, gitShow } from './encoding';
 import {
   createGitEnv,
   createSimpleGit,
@@ -667,6 +668,11 @@ export class GitService {
       throw new Error('Invalid file path: path traversal detected');
     }
 
+    // 3. Detect binary files to avoid rendering garbage in Monaco
+    if (await detectBinaryFile(absolutePath, this.workdir, `:${filePath}`)) {
+      return { path: filePath, original: '', modified: '', isBinary: true };
+    }
+
     let original = '';
     let modified = '';
 
@@ -814,6 +820,17 @@ export class GitService {
     submodulePath?: string
   ): Promise<FileDiff> {
     const git = this.getGitInstance(submodulePath);
+
+    // Detect binary using git diff --numstat (binary files show "-" for insertions/deletions)
+    try {
+      const numstat = await git.diff(['--numstat', `${hash}^..${hash}`, '--', filePath]);
+      if (numstat.startsWith('-\t-\t')) {
+        return { path: filePath, original: '', modified: '', isBinary: true };
+      }
+    } catch {
+      // If detection fails (e.g., root commit without parent), continue with text diff
+    }
+
     let originalContent = '';
     let modifiedContent = '';
 
@@ -1343,6 +1360,11 @@ export class GitService {
       throw new Error('Invalid file path: path traversal detected');
     }
 
+    // Detect binary files
+    if (await detectBinaryFile(fullFilePath, fullSubPath, `:${filePath}`)) {
+      return { path: filePath, original: '', modified: '', isBinary: true };
+    }
+
     let original = '';
     let modified = '';
 
@@ -1464,5 +1486,195 @@ export class GitService {
 
     // Execute clone with progress flag
     await git.clone(remoteUrl, cloneTarget, ['--progress']);
+  }
+
+  /**
+   * Find the submodule containing a file path.
+   * Returns the submodule path if found, null otherwise.
+   */
+  private async findSubmoduleForFile(filePath: string): Promise<string | null> {
+    try {
+      const submodules = await this.listSubmodules();
+      // Normalize path separators for comparison
+      const normalizedFilePath = filePath.replace(/\\/g, '/');
+
+      // Sort submodules by path length (descending) to match the longest path first
+      // This handles nested submodules correctly
+      const sortedSubmodules = [...submodules].sort((a, b) => b.path.length - a.path.length);
+
+      for (const submodule of sortedSubmodules) {
+        const subPath = submodule.path.replace(/\\/g, '/');
+        // Check if the file is within this submodule
+        if (normalizedFilePath.startsWith(`${subPath}/`) || normalizedFilePath === subPath) {
+          return subPath;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get blame info for all lines of a file using `git blame --porcelain`.
+   *
+   * Security note: Path traversal is not a concern here because:
+   * - Uses `--` separator to prevent command injection
+   * - filePath comes from internal app logic, not user input
+   * - spawnGit uses array arguments (not shell string), preventing injection
+   */
+  async blame(filePath: string): Promise<GitBlameLineInfo[]> {
+    const BLAME_TIMEOUT_MS = 30000; // 30 second timeout for git blame
+
+    // Check if the file is in a submodule
+    const submodulePath = await this.findSubmoduleForFile(filePath);
+    let workdir = this.workdir;
+    let relativePath = filePath;
+
+    if (submodulePath) {
+      // File is in a submodule, use submodule's git directory
+      workdir = path.join(this.workdir, submodulePath);
+      // Calculate the relative path within the submodule
+      const normalizedSubPath = submodulePath.replace(/\\/g, '/');
+      const normalizedFilePath = filePath.replace(/\\/g, '/');
+      relativePath = normalizedFilePath.slice(normalizedSubPath.length + 1);
+    }
+
+    return new Promise((resolve, reject) => {
+      const proc = spawnGit(workdir, ['blame', '--porcelain', '--', relativePath]);
+
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+
+      const timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        proc.kill('SIGKILL');
+        reject(new Error(`git blame timed out after ${BLAME_TIMEOUT_MS}ms`));
+      }, BLAME_TIMEOUT_MS);
+
+      proc.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString('utf-8');
+      });
+
+      proc.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString('utf-8');
+      });
+
+      proc.on('close', (code) => {
+        clearTimeout(timeoutTimer);
+        if (timedOut) return;
+
+        if (code !== 0) {
+          reject(new Error(`git blame failed: ${stderr.trim()}`));
+          return;
+        }
+
+        try {
+          const result = this.parsePorcelainBlame(stdout);
+          resolve(result);
+        } catch (e) {
+          reject(e);
+        }
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timeoutTimer);
+        if (timedOut) return;
+        reject(err);
+      });
+    });
+  }
+
+  /**
+   * Parse `git blame --porcelain` output into structured data.
+   *
+   * Porcelain format groups:
+   *   <hash> <orig-line> <final-line> [<num-lines>]
+   *   author <name>
+   *   author-time <timestamp>
+   *   summary <message>
+   *   ...
+   *   \t<content-line>
+   */
+  private parsePorcelainBlame(output: string): GitBlameLineInfo[] {
+    const lines = output.split('\n');
+    const results: GitBlameLineInfo[] = [];
+
+    // Cache commit metadata keyed by hash
+    const commitCache = new Map<string, { author: string; date: string; message: string }>();
+
+    let i = 0;
+    while (i < lines.length) {
+      const headerMatch = lines[i].match(/^([0-9a-f]{40})\s+(\d+)\s+(\d+)(?:\s+(\d+))?$/);
+      if (!headerMatch) {
+        i++;
+        continue;
+      }
+
+      const hash = headerMatch[1];
+      const lineNumber = parseInt(headerMatch[3], 10);
+
+      i++;
+
+      // Parse header fields until we hit the content line (starts with \t)
+      let author = '';
+      let authorTime = 0;
+      let summary = '';
+
+      while (i < lines.length && !lines[i].startsWith('\t')) {
+        const line = lines[i];
+        if (line.startsWith('author ')) {
+          author = line.slice(7);
+        } else if (line.startsWith('author-time ')) {
+          authorTime = parseInt(line.slice(12), 10);
+        } else if (line.startsWith('summary ')) {
+          summary = line.slice(8);
+        }
+        i++;
+      }
+
+      // Skip content line
+      if (i < lines.length && lines[i].startsWith('\t')) {
+        i++;
+      }
+
+      // Use cached metadata if available, otherwise store it
+      if (!commitCache.has(hash)) {
+        commitCache.set(hash, {
+          author,
+          date: authorTime ? new Date(authorTime * 1000).toISOString() : '',
+          message: summary,
+        });
+      }
+
+      const cached = commitCache.get(hash)!;
+      results.push({
+        hash,
+        author: cached.author,
+        date: cached.date,
+        message: cached.message,
+        lineNumber,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Revert a commit by creating a new commit that undoes the changes
+   * @param commitHash - The commit hash to revert
+   */
+  async revert(commitHash: string): Promise<void> {
+    await this.git.revert(commitHash, ['--no-edit']);
+  }
+
+  /**
+   * Reset the current HEAD to the specified state
+   * @param commitHash - The target commit hash
+   * @param mode - Reset mode: 'soft', 'mixed', or 'hard'
+   */
+  async reset(commitHash: string, mode: 'soft' | 'mixed' | 'hard' = 'mixed'): Promise<void> {
+    await this.git.reset([`--${mode}`, commitHash]);
   }
 }

@@ -380,6 +380,20 @@ export function EditorSettings() {
         </div>
       </div>
 
+      {/* Git Blame */}
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Git Blame')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Show inline git blame info at cursor line')}
+          </p>
+          <Switch
+            checked={editorSettings.gitBlameEnabled}
+            onCheckedChange={(checked) => setEditorSettings({ gitBlameEnabled: checked })}
+          />
+        </div>
+      </div>
+
       {/* Line Numbers */}
       <div className="grid grid-cols-[120px_1fr] items-center gap-4">
         <span className="text-sm font-medium">{t('Line numbers')}</span>

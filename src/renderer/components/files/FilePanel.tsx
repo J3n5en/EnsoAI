@@ -164,15 +164,24 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
   }, []);
 
   // Auto-sync file tree selection with active tab (like VSCode's "Auto Reveal")
+  const fileTreeAutoReveal = useSettingsStore((s) => s.fileTreeAutoReveal);
+
   useEffect(() => {
     if (!activeTab?.path || !rootPath) return;
 
-    // Update selected file path to match active tab
+    // Update selected file path to match active tab (always do this, it's fast)
     setSelectedFilePath(activeTab.path);
 
-    // Expand parent directories to reveal the file
-    revealFile(activeTab.path);
-  }, [activeTab?.path, rootPath, revealFile]);
+    // Expand parent directories to reveal the file (only if enabled)
+    // This runs in background to avoid blocking tab switching
+    if (fileTreeAutoReveal) {
+      // Don't await - let it run asynchronously in background
+      revealFile(activeTab.path).catch((error) => {
+        // Silently ignore errors from background reveal
+        console.debug('[FilePanel] revealFile error:', error);
+      });
+    }
+  }, [activeTab?.path, rootPath, revealFile, fileTreeAutoReveal]);
 
   // Refresh active tab content when window regains focus (like mini-program onShow)
   const { isWindowFocused } = useWindowFocus();
@@ -689,30 +698,6 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
     setPendingCursor(null);
   }, [setPendingCursor]);
 
-  // Handle breadcrumb click - expand path in file tree
-  const handleBreadcrumbClick = useCallback(
-    (path: string) => {
-      if (!rootPath) return;
-
-      // Get all parent paths that need to be expanded
-      const relativePath = path.startsWith(rootPath)
-        ? path.slice(rootPath.length).replace(/^\//, '')
-        : path;
-
-      const parts = relativePath.split('/');
-      let currentPath = rootPath;
-
-      // Expand each parent directory
-      for (const part of parts) {
-        currentPath = `${currentPath}/${part}`;
-        if (!expandedPaths.has(currentPath)) {
-          toggleExpand(currentPath);
-        }
-      }
-    },
-    [rootPath, expandedPaths, toggleExpand]
-  );
-
   // Handle open file from search
   const handleSearchOpenFile = useCallback(
     (path: string, line?: number, column?: number, matchLength?: number) => {
@@ -801,6 +786,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           rootPath={rootPath}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
+          onNavigateToFile={navigateToFile}
           onCloseOthers={async (keepPath) => {
             const paths = tabs.filter((t) => t.path !== keepPath).map((t) => t.path);
             await requestCloseTabs(paths);
@@ -826,7 +812,6 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           onViewStateChange={setTabViewState}
           onSave={handleSave}
           onClearPendingCursor={handleClearPendingCursor}
-          onBreadcrumbClick={handleBreadcrumbClick}
           onGlobalSearch={handleGlobalSearch}
           isFileTreeCollapsed={isFileTreeCollapsed}
           onToggleFileTree={handleToggleFileTree}

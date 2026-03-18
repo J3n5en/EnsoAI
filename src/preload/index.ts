@@ -144,6 +144,15 @@ const electronAPI = {
       ),
     getDiffStats: (workdir: string): Promise<{ insertions: number; deletions: number }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_STATS, workdir),
+    blame: (
+      workdir: string,
+      filePath: string
+    ): Promise<import('@shared/types').GitBlameLineInfo[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_BLAME, workdir, filePath),
+    revert: (workdir: string, commitHash: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_REVERT, workdir, commitHash),
+    reset: (workdir: string, commitHash: string, mode?: 'soft' | 'mixed' | 'hard'): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_RESET, workdir, commitHash, mode),
     generateCommitMessage: (
       workdir: string,
       options: {
@@ -678,6 +687,15 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.TODO_REORDER_TASKS, repoPath, status, orderedIds),
     migrate: (boardsJson: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.TODO_MIGRATE, boardsJson),
+    aiPolish: (options: {
+      text: string;
+      timeout: number;
+      provider: string;
+      model: string;
+      reasoningEffort?: string;
+      prompt?: string;
+    }): Promise<{ success: boolean; title?: string; description?: string; error?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TODO_AI_POLISH, options),
   },
 
   // Environment
