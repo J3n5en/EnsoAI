@@ -30,11 +30,12 @@ export function ShellTerminal({
   onMerge,
 }: ShellTerminalProps) {
   const { t } = useI18n();
+  const runtimeStateRef = useRef<'live' | 'reconnecting' | 'dead'>('live');
 
   // Handle Shift+Enter for newline (send LF character)
   const handleCustomKey = useCallback((event: KeyboardEvent, ptyId: string) => {
     if (event.key === 'Enter' && event.shiftKey) {
-      if (event.type === 'keydown') {
+      if (event.type === 'keydown' && runtimeStateRef.current === 'live') {
         window.electronAPI.session.write(ptyId, '\x0a');
       }
       return false; // Prevent default Enter behavior
@@ -45,6 +46,7 @@ export function ShellTerminal({
   const {
     containerRef,
     isLoading,
+    runtimeState,
     settings,
     findNext,
     findPrevious,
@@ -64,6 +66,7 @@ export function ShellTerminal({
     canMerge,
     onCustomKey: handleCustomKey,
   });
+  runtimeStateRef.current = runtimeState;
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
   const _xtermKeybindings = useSettingsStore((state) => state.xtermKeybindings);
@@ -186,6 +189,22 @@ export function ShellTerminal({
             <span style={{ color: settings.theme.foreground, opacity: 0.5 }} className="text-sm">
               {t('Starting shell...')}
             </span>
+          </div>
+        </div>
+      )}
+      {runtimeState !== 'live' && !isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="rounded-lg border bg-background/90 px-4 py-3 text-center shadow-sm">
+            <div className="text-sm font-medium">
+              {runtimeState === 'reconnecting'
+                ? t('Remote terminal reconnecting...')
+                : t('Remote terminal disconnected')}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {runtimeState === 'reconnecting'
+                ? t('Remote terminal input is temporarily disabled while reconnecting.')
+                : t('Remote terminal has disconnected. Reconnect the remote host to continue.')}
+            </div>
           </div>
         </div>
       )}

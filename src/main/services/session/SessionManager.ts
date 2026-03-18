@@ -1,11 +1,14 @@
-import type {
-  SessionAttachOptions,
-  SessionAttachResult,
-  SessionCreateOptions,
-  SessionDataEvent,
-  SessionDescriptor,
-  SessionExitEvent,
-  SessionOpenResult,
+import {
+  IPC_CHANNELS,
+  type SessionAttachOptions,
+  type SessionAttachResult,
+  type SessionCreateOptions,
+  type SessionDataEvent,
+  type SessionDescriptor,
+  type SessionExitEvent,
+  type SessionOpenResult,
+  type SessionRuntimeState,
+  type SessionStateEvent,
 } from '@shared/types';
 import { BrowserWindow, type WebContents } from 'electron';
 import { remoteConnectionManager } from '../remote/RemoteConnectionManager';
@@ -15,6 +18,7 @@ import { PtyManager } from '../terminal/PtyManager';
 interface ManagedSessionRecord extends SessionDescriptor {
   attachedWindowIds: Set<number>;
   connectionId?: string;
+  runtimeState?: SessionRuntimeState;
   replayBuffer?: string;
   streamState?: 'buffering' | 'attaching' | 'live';
   pendingExit?: SessionExitEvent;
@@ -54,6 +58,7 @@ export class SessionManager {
     }
   >();
   private readonly remoteDisconnectSubscriptions = new Map<string, () => void>();
+  private readonly remoteStatusSubscriptions = new Map<string, () => void>();
 
   async create(
     target: BrowserWindow | WebContents | number,
@@ -95,6 +100,7 @@ export class SessionManager {
         }
       );
       const record = this.registerRemoteSession(windowId, existing.connectionId, result.session);
+      this.setSessionRuntimeState(record.sessionId, 'live');
       return {
         session: this.toDescriptor(record),
         replay: result.replay,
@@ -115,6 +121,7 @@ export class SessionManager {
       }
     );
     const record = this.registerRemoteSession(windowId, connectionId, result.session);
+    this.setSessionRuntimeState(record.sessionId, 'live');
     return {
       session: this.toDescriptor(record),
       replay: result.replay,
@@ -167,6 +174,10 @@ export class SessionManager {
         .call(session.connectionId, 'session:kill', { sessionId })
         .catch(() => {});
       this.sessions.delete(sessionId);
+      this.emitState({
+        sessionId,
+        state: 'dead',
+      });
       return;
     }
 
@@ -181,12 +192,17 @@ export class SessionManager {
     }
 
     if (session.backend === 'remote' && session.connectionId) {
+      if (session.runtimeState && session.runtimeState !== 'live') {
+        return;
+      }
       const { connectionId } = session;
       void this.ensureRemoteSubscriptions(connectionId)
         .then(() =>
           remoteConnectionManager.call(connectionId, 'session:write', { sessionId, data })
         )
-        .catch(() => {});
+        .catch(() => {
+          this.setSessionRuntimeState(sessionId, 'reconnecting');
+        });
       return;
     }
 
@@ -200,6 +216,9 @@ export class SessionManager {
     }
 
     if (session.backend === 'remote' && session.connectionId) {
+      if (session.runtimeState && session.runtimeState !== 'live') {
+        return;
+      }
       const { connectionId } = session;
       void this.ensureRemoteSubscriptions(connectionId)
         .then(() =>
@@ -209,7 +228,9 @@ export class SessionManager {
             rows,
           })
         )
-        .catch(() => {});
+        .catch(() => {
+          this.setSessionRuntimeState(sessionId, 'reconnecting');
+        });
       return;
     }
 
@@ -335,6 +356,7 @@ export class SessionManager {
       existing.kind = descriptor.kind;
       existing.persistOnDisconnect = descriptor.persistOnDisconnect;
       existing.metadata = descriptor.metadata;
+      existing.runtimeState = existing.runtimeState ?? 'live';
       return existing;
     }
 
@@ -342,6 +364,7 @@ export class SessionManager {
       ...descriptor,
       backend: 'remote',
       connectionId,
+      runtimeState: 'live',
       attachedWindowIds: new Set([windowId]),
     };
     this.sessions.set(record.sessionId, record);
@@ -426,6 +449,13 @@ export class SessionManager {
       this.remoteDisconnectSubscriptions.set(connectionId, offDisconnect);
     }
 
+    if (!this.remoteStatusSubscriptions.has(connectionId)) {
+      const offStatus = remoteConnectionManager.onDidStatusChange(connectionId, (status) => {
+        void this.handleRemoteStatusChange(connectionId, status);
+      });
+      this.remoteStatusSubscriptions.set(connectionId, offStatus);
+    }
+
     if (this.remoteSubscriptions.has(connectionId)) {
       return;
     }
@@ -440,11 +470,95 @@ export class SessionManager {
         const session = this.sessions.get(event.sessionId);
         const attachedWindowIds = session ? new Set(session.attachedWindowIds) : new Set<number>();
         this.sessions.delete(event.sessionId);
+        this.emitState({
+          sessionId: event.sessionId,
+          state: 'dead',
+        });
         this.emitExit(event, attachedWindowIds);
       }),
     ]);
 
     this.remoteSubscriptions.set(connectionId, { offData, offExit });
+  }
+
+  private async handleRemoteStatusChange(
+    connectionId: string,
+    status: { connected: boolean; phase?: string; recoverable?: boolean }
+  ): Promise<void> {
+    const sessions = [...this.sessions.values()].filter(
+      (session) => session.backend === 'remote' && session.connectionId === connectionId
+    );
+    if (sessions.length === 0) {
+      return;
+    }
+
+    if (status.connected) {
+      await this.ensureRemoteSubscriptions(connectionId);
+      const remoteSessions = await remoteConnectionManager
+        .call<SessionDescriptor[]>(connectionId, 'session:list', {})
+        .then((items) => new Set(items.map((item) => item.sessionId)))
+        .catch(() => null);
+      if (!remoteSessions) {
+        for (const session of sessions) {
+          this.setSessionRuntimeState(session.sessionId, 'reconnecting');
+        }
+        return;
+      }
+      await Promise.allSettled(
+        sessions.map(async (session) => {
+          if (remoteSessions.has(session.sessionId)) {
+            this.setSessionRuntimeState(session.sessionId, 'live');
+            return;
+          }
+          const attachedWindowIds = new Set(session.attachedWindowIds);
+          this.sessions.delete(session.sessionId);
+          this.emitState({ sessionId: session.sessionId, state: 'dead' }, attachedWindowIds);
+          this.emitExit(
+            {
+              sessionId: session.sessionId,
+              exitCode: 1,
+            },
+            attachedWindowIds
+          );
+        })
+      );
+      return;
+    }
+
+    const nextState: SessionRuntimeState = status.recoverable ? 'reconnecting' : 'dead';
+    for (const session of sessions) {
+      this.setSessionRuntimeState(session.sessionId, nextState);
+      if (nextState === 'dead') {
+        const attachedWindowIds = new Set(session.attachedWindowIds);
+        this.sessions.delete(session.sessionId);
+        this.emitState(
+          {
+            sessionId: session.sessionId,
+            state: 'dead',
+          },
+          attachedWindowIds
+        );
+        this.emitExit(
+          {
+            sessionId: session.sessionId,
+            exitCode: 1,
+          },
+          attachedWindowIds
+        );
+      }
+    }
+  }
+
+  private setSessionRuntimeState(sessionId: string, state: SessionRuntimeState): void {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.backend !== 'remote') {
+      return;
+    }
+    if (session.runtimeState === state) {
+      return;
+    }
+    session.runtimeState = state;
+    this.emitState({ sessionId, state });
   }
 
   private emitData(sessionId: string, data: string, windowIds?: Set<number>): void {
@@ -466,10 +580,18 @@ export class SessionManager {
     this.emitToWindows(windowIds, 'session:exit', event);
   }
 
+  private emitState(event: SessionStateEvent, windowIds?: Set<number>): void {
+    this.emitToWindows(
+      windowIds ?? this.sessions.get(event.sessionId)?.attachedWindowIds,
+      'session:state',
+      event
+    );
+  }
+
   private emitToWindows(
     windowIds: Set<number> | undefined,
-    channel: 'session:data' | 'session:exit',
-    payload: SessionDataEvent | SessionExitEvent
+    channel: 'session:data' | 'session:exit' | 'session:state',
+    payload: SessionDataEvent | SessionExitEvent | SessionStateEvent
   ): void {
     if (!windowIds || windowIds.size === 0) {
       return;
@@ -480,7 +602,13 @@ export class SessionManager {
       if (!window || window.isDestroyed()) {
         continue;
       }
-      window.webContents.send(channel, payload);
+      const resolvedChannel =
+        channel === 'session:data'
+          ? IPC_CHANNELS.SESSION_DATA
+          : channel === 'session:exit'
+            ? IPC_CHANNELS.SESSION_EXIT
+            : IPC_CHANNELS.SESSION_STATE;
+      window.webContents.send(resolvedChannel, payload);
     }
   }
 

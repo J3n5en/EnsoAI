@@ -13,6 +13,7 @@ export type RemoteConnectionPhase =
   | 'syncing-server'
   | 'starting-server'
   | 'handshake'
+  | 'reconnecting'
   | 'connected'
   | 'failed';
 
@@ -56,8 +57,17 @@ export interface RemoteConnectionStatus {
   ptySupported?: boolean;
   ptyError?: string;
   error?: string;
+  recoverable?: boolean;
+  reconnectAttempt?: number;
+  nextRetryAt?: number;
+  lastDisconnectReason?: string;
   lastCheckedAt?: number;
   diagnostics?: RemoteConnectionDiagnostics;
+}
+
+export interface RemoteConnectionStatusEvent {
+  connectionId: string;
+  status: RemoteConnectionStatus;
 }
 
 export interface RemoteRuntimeStatus {

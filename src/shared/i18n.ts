@@ -91,6 +91,16 @@ export const zhTranslations: Record<string, string> = {
   'Check failed': '检查失败',
   'Checking...': '检查中...',
   'Connecting...': '连接中...',
+  Reconnecting: '重连中',
+  'Reconnecting remote connection...': '正在重连远程连接...',
+  'Remote connection lost. Attempting to reconnect...': '远程连接已断开，正在尝试重连...',
+  'Remote connection lost': '远程连接已断开',
+  'Remote terminal reconnecting...': '远程终端正在重连...',
+  'Remote terminal disconnected': '远程终端已断开',
+  'Remote terminal input is temporarily disabled while reconnecting.':
+    '远程终端正在重连，输入暂时不可用。',
+  'Remote terminal has disconnected. Reconnect the remote host to continue.':
+    '远程终端已断开，请重新连接远程主机后继续。',
   characters: '字符',
   Chat: '聊天',
   'Choose base branch...': '选择基准分支...',

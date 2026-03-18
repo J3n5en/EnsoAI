@@ -70,17 +70,26 @@ function detectEncoding(buffer: Buffer): { encoding: string; confidence: number 
 
 const watchers = new Map<string, FileWatcher>();
 const watcherCleanups = new Map<string, () => void>();
-const remoteWatcherStopHandlers = new Map<string, () => Promise<void>>();
+interface RemoteWatcherRegistration {
+  connectionId: string;
+  dirPath: string;
+  remotePath: string;
+  watcherId: string;
+  windowId: number;
+  removeListener?: () => void;
+}
+
+const remoteWatchers = new Map<string, RemoteWatcherRegistration>();
+const remoteWatcherConnectionSubscriptions = new Map<string, () => void>();
 
 /**
  * Stop all file watchers for paths under the given directory
  */
 export async function stopWatchersInDirectory(dirPath: string): Promise<void> {
   if (isRemoteVirtualPath(dirPath)) {
-    const stopRemoteWatcher = remoteWatcherStopHandlers.get(dirPath);
-    if (stopRemoteWatcher) {
-      await stopRemoteWatcher();
-      remoteWatcherStopHandlers.delete(dirPath);
+    const registration = remoteWatchers.get(dirPath);
+    if (registration) {
+      await stopRemoteWatcher(registration);
     }
     return;
   }
@@ -98,9 +107,46 @@ export async function stopWatchersInDirectory(dirPath: string): Promise<void> {
   }
 }
 
-async function startRemoteWatcher(window: BrowserWindow, dirPath: string): Promise<void> {
-  const { connectionId, remotePath } = parseRemoteVirtualPath(dirPath);
-  const watcherId = `remote-watch:${connectionId}:${remotePath}`;
+async function ensureRemoteWatcherConnectionSubscription(connectionId: string): Promise<void> {
+  if (remoteWatcherConnectionSubscriptions.has(connectionId)) {
+    return;
+  }
+
+  const offStatus = remoteConnectionManager.onDidStatusChange(connectionId, (status) => {
+    const registrations = [...remoteWatchers.values()].filter(
+      (item) => item.connectionId === connectionId
+    );
+    if (registrations.length === 0) {
+      return;
+    }
+
+    if (status.connected) {
+      void Promise.allSettled(registrations.map((item) => startRemoteWatcherRegistration(item)));
+      return;
+    }
+
+    for (const registration of registrations) {
+      registration.removeListener?.();
+      registration.removeListener = undefined;
+    }
+  });
+
+  remoteWatcherConnectionSubscriptions.set(connectionId, offStatus);
+}
+
+async function startRemoteWatcherRegistration(
+  registration: RemoteWatcherRegistration
+): Promise<void> {
+  const window = BrowserWindow.fromId(registration.windowId);
+  if (!window || window.isDestroyed()) {
+    remoteWatchers.delete(registration.dirPath);
+    return;
+  }
+
+  if (registration.removeListener) {
+    registration.removeListener();
+    registration.removeListener = undefined;
+  }
 
   const handleRemoteEvent = (payload: unknown) => {
     if (window.isDestroyed()) return;
@@ -109,34 +155,59 @@ async function startRemoteWatcher(window: BrowserWindow, dirPath: string): Promi
       type?: 'create' | 'update' | 'delete';
       path?: string;
     };
-    if (event.watcherId !== watcherId || !event.type || !event.path) return;
+    if (event.watcherId !== registration.watcherId || !event.type || !event.path) return;
     window.webContents.send(IPC_CHANNELS.FILE_CHANGE, {
       type: event.type,
-      path: toRemoteVirtualPath(connectionId, event.path),
+      path: toRemoteVirtualPath(registration.connectionId, event.path),
     });
   };
 
   const removeListener = await remoteConnectionManager.addEventListener(
-    connectionId,
+    registration.connectionId,
     'remote:file:change',
     handleRemoteEvent
   );
-  await remoteConnectionManager.call(connectionId, 'fs:watchStart', {
-    id: watcherId,
-    path: remotePath,
+  registration.removeListener = removeListener;
+  await remoteConnectionManager.call(registration.connectionId, 'fs:watchStart', {
+    id: registration.watcherId,
+    path: registration.remotePath,
   });
+}
 
-  remoteWatcherStopHandlers.set(dirPath, async () => {
-    remoteWatcherStopHandlers.delete(dirPath);
-    removeListener();
-    try {
-      await remoteConnectionManager.call(connectionId, 'fs:watchStop', {
-        id: watcherId,
-      });
-    } catch {
-      // Helper may already be gone. Cleanup should stay best-effort.
-    }
-  });
+async function startRemoteWatcher(window: BrowserWindow, dirPath: string): Promise<void> {
+  const { connectionId, remotePath } = parseRemoteVirtualPath(dirPath);
+  const registration: RemoteWatcherRegistration = {
+    connectionId,
+    dirPath,
+    remotePath,
+    watcherId: `remote-watch:${connectionId}:${remotePath}`,
+    windowId: window.id,
+  };
+
+  remoteWatchers.set(dirPath, registration);
+  await ensureRemoteWatcherConnectionSubscription(connectionId);
+  await startRemoteWatcherRegistration(registration);
+}
+
+async function stopRemoteWatcher(registration: RemoteWatcherRegistration): Promise<void> {
+  remoteWatchers.delete(registration.dirPath);
+  registration.removeListener?.();
+  registration.removeListener = undefined;
+  const hasRemainingForConnection = [...remoteWatchers.values()].some(
+    (item) => item.connectionId === registration.connectionId
+  );
+  if (!hasRemainingForConnection) {
+    const offStatus = remoteWatcherConnectionSubscriptions.get(registration.connectionId);
+    offStatus?.();
+    remoteWatcherConnectionSubscriptions.delete(registration.connectionId);
+  }
+  try {
+    await remoteConnectionManager.call(registration.connectionId, 'fs:watchStop', {
+      id: registration.watcherId,
+    });
+  } catch {
+    // Helper may already be gone. Cleanup should stay best-effort.
+  }
 }
 
 export function registerFileHandlers(): void {
@@ -384,8 +455,12 @@ export function registerFileHandlers(): void {
     if (!window) return;
 
     if (isRemoteVirtualPath(dirPath)) {
-      if (remoteWatcherStopHandlers.has(dirPath)) {
+      const existing = remoteWatchers.get(dirPath);
+      if (existing && existing.windowId === window.id) {
         return;
+      }
+      if (existing) {
+        await stopRemoteWatcher(existing);
       }
       await startRemoteWatcher(window, dirPath);
       return;
@@ -462,10 +537,9 @@ export function registerFileHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.FILE_WATCH_STOP, async (_, dirPath: string) => {
     if (isRemoteVirtualPath(dirPath)) {
-      const stopRemoteWatcher = remoteWatcherStopHandlers.get(dirPath);
-      if (stopRemoteWatcher) {
-        await stopRemoteWatcher();
-        remoteWatcherStopHandlers.delete(dirPath);
+      const registration = remoteWatchers.get(dirPath);
+      if (registration) {
+        await stopRemoteWatcher(registration);
       }
       return;
     }
@@ -722,8 +796,8 @@ export async function stopAllFileWatchers(): Promise<void> {
   for (const watcher of watchers.values()) {
     stopPromises.push(watcher.stop());
   }
-  for (const stopRemoteWatcher of remoteWatcherStopHandlers.values()) {
-    stopPromises.push(stopRemoteWatcher());
+  for (const registration of remoteWatchers.values()) {
+    stopPromises.push(stopRemoteWatcher(registration));
   }
   await Promise.allSettled(stopPromises);
   watchers.clear();
@@ -731,7 +805,11 @@ export async function stopAllFileWatchers(): Promise<void> {
     cleanup();
   }
   watcherCleanups.clear();
-  remoteWatcherStopHandlers.clear();
+  remoteWatchers.clear();
+  for (const offStatus of remoteWatcherConnectionSubscriptions.values()) {
+    offStatus();
+  }
+  remoteWatcherConnectionSubscriptions.clear();
 }
 
 /**
@@ -747,7 +825,15 @@ export function stopAllFileWatchersSync(): void {
     cleanup();
   }
   watcherCleanups.clear();
-  remoteWatcherStopHandlers.clear();
+  for (const registration of remoteWatchers.values()) {
+    registration.removeListener?.();
+    registration.removeListener = undefined;
+  }
+  remoteWatchers.clear();
+  for (const offStatus of remoteWatcherConnectionSubscriptions.values()) {
+    offStatus();
+  }
+  remoteWatcherConnectionSubscriptions.clear();
 }
 
 /**

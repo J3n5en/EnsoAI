@@ -1,5 +1,6 @@
 import type {
   GitWorktree,
+  RemoteConnectionStatus,
   WorktreeCreateOptions,
   WorktreeMergeOptions,
   WorktreeMergeResult,
@@ -198,11 +199,21 @@ export default function App() {
   );
 
   const [activatedRemoteRepos, setActivatedRemoteRepos] = useState<Set<string>>(() => new Set());
+  const [remoteStatuses, setRemoteStatuses] = useState<Record<string, RemoteConnectionStatus>>({});
 
   const repositoryByPath = useMemo(
     () => new Map(repositories.map((repo) => [repo.path, repo])),
     [repositories]
   );
+
+  useEffect(() => {
+    return window.electronAPI.remote.onStatusChange(({ connectionId, status }) => {
+      setRemoteStatuses((prev) => ({
+        ...prev,
+        [connectionId]: status,
+      }));
+    });
+  }, []);
 
   const isRemoteRepoPath = useCallback(
     (repoPath: string | null | undefined) => {
@@ -222,6 +233,13 @@ export default function App() {
         return;
       }
 
+      const repo = repositoryByPath.get(repoPath);
+      if (repo?.connectionId) {
+        window.electronAPI.remote.connect(repo.connectionId).catch((error) => {
+          console.warn('[remote] Failed to activate remote repository:', error);
+        });
+      }
+
       setActivatedRemoteRepos((prev) => {
         if (prev.has(repoPath)) {
           return prev;
@@ -231,7 +249,7 @@ export default function App() {
         return next;
       });
     },
-    [isRemoteRepoPath]
+    [isRemoteRepoPath, repositoryByPath]
   );
 
   const canLoadRepo = useCallback(
@@ -426,9 +444,20 @@ export default function App() {
   const isTempRepo = selectedRepo === TEMP_REPO_ID;
   const worktreeRepoPath = isTempRepo ? null : selectedRepo;
   const selectedRepoCanLoad = canLoadRepo(worktreeRepoPath);
+  const selectedRepository = worktreeRepoPath ? repositoryByPath.get(worktreeRepoPath) : null;
+  const selectedRemoteStatus = selectedRepository?.connectionId
+    ? (remoteStatuses[selectedRepository.connectionId] ?? null)
+    : null;
+  const selectedRemoteReady =
+    !selectedRepository?.connectionId ||
+    !isRemoteRepoPath(worktreeRepoPath) ||
+    selectedRemoteStatus?.connected !== false ||
+    selectedRemoteStatus == null;
   const worktreeQueryEnabled = Boolean(worktreeRepoPath && selectedRepoCanLoad);
   const inactiveSelectedRemoteRepo = Boolean(
-    worktreeRepoPath && isRemoteRepoPath(worktreeRepoPath) && !selectedRepoCanLoad
+    worktreeRepoPath &&
+      isRemoteRepoPath(worktreeRepoPath) &&
+      (!selectedRepoCanLoad || !selectedRemoteReady)
   );
 
   // Get worktrees for selected repo (used in columns mode)
@@ -1302,6 +1331,7 @@ export default function App() {
                       branches={branches}
                       projectName={selectedRepo ? getDisplayPathBasename(selectedRepo) : ''}
                       inactiveRemote={inactiveSelectedRemoteRepo}
+                      remoteStatus={selectedRemoteStatus}
                       isLoading={worktreesLoading}
                       isCreating={createWorktreeMutation.isPending}
                       error={inactiveSelectedRemoteRepo ? null : worktreeError}

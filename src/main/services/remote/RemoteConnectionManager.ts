@@ -1,22 +1,23 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type {
-  ConnectionProfile,
-  ConnectionTestResult,
-  FileEntry,
-  RemoteArchitecture,
-  RemoteAuthResponse,
-  RemoteConnectionDiagnosticStep,
-  RemoteConnectionDiagnostics,
-  RemoteConnectionPhase,
-  RemoteConnectionStatus,
-  RemoteHelperStatus,
-  RemoteHostFingerprint,
-  RemotePlatform,
-  RemoteRuntimeStatus,
+import {
+  type ConnectionProfile,
+  type ConnectionTestResult,
+  type FileEntry,
+  IPC_CHANNELS,
+  type RemoteArchitecture,
+  type RemoteAuthResponse,
+  type RemoteConnectionDiagnosticStep,
+  type RemoteConnectionDiagnostics,
+  type RemoteConnectionPhase,
+  type RemoteConnectionStatus,
+  type RemoteHelperStatus,
+  type RemoteHostFingerprint,
+  type RemotePlatform,
+  type RemoteRuntimeStatus,
 } from '@shared/types';
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import * as pty from 'node-pty';
 import { killProcessTree } from '../../utils/processUtils';
 import { getEnvForCommand } from '../../utils/shell';
@@ -175,6 +176,7 @@ const REMOTE_SHARED_SETTINGS_FILENAME = 'settings.json';
 const REMOTE_SHARED_SESSION_STATE_FILENAME = 'session-state.json';
 const REMOTE_SHARED_STATE_SYNC_TIMEOUT_MS = 5_000;
 const REMOTE_RPC_TIMEOUT_MS = 15_000;
+const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000];
 
 type RemoteServerLaunchMode = 'bridge' | 'ensure-daemon' | 'self-test' | 'stop-daemon';
 
@@ -457,6 +459,11 @@ export class RemoteConnectionManager {
   private volatileStatuses = new Map<string, RemoteConnectionStatus>();
   private diagnostics = new Map<string, RemoteConnectionDiagnostics>();
   private disconnectListeners = new Map<string, Set<() => void>>();
+  private localStatusListeners = new Map<string, Set<(status: RemoteConnectionStatus) => void>>();
+  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private reconnectPromises = new Map<string, Promise<RemoteConnectionStatus>>();
+  private reconnectAttempts = new Map<string, number>();
+  private intentionalDisconnects = new Set<string>();
   private readonly authBroker = new RemoteAuthBroker();
   private loaded = false;
 
@@ -679,6 +686,7 @@ export class RemoteConnectionManager {
 
   async connect(profileOrId: string | ConnectionProfile): Promise<RemoteConnectionStatus> {
     const profile = await this.resolveProfile(profileOrId);
+    this.intentionalDisconnects.delete(profile.id);
     const existing = this.servers.get(profile.id);
     if (existing) {
       return existing.status;
@@ -701,8 +709,26 @@ export class RemoteConnectionManager {
   }
 
   async disconnect(connectionId: string): Promise<void> {
+    this.intentionalDisconnects.add(connectionId);
+    this.clearReconnectTimer(connectionId);
+    this.reconnectPromises.delete(connectionId);
+    this.reconnectAttempts.delete(connectionId);
     const server = this.servers.get(connectionId);
-    if (!server) return;
+    if (!server) {
+      const status = this.getStatus(connectionId);
+      this.emitStatusChange(connectionId, {
+        ...status,
+        connected: false,
+        phase: 'idle',
+        phaseLabel: phaseLabelFor('idle'),
+        error: undefined,
+        recoverable: false,
+        reconnectAttempt: undefined,
+        nextRetryAt: undefined,
+      });
+      this.intentionalDisconnects.delete(connectionId);
+      return;
+    }
     this.finalizeServerShutdown(server);
     server.proc.kill('SIGTERM');
   }
@@ -786,7 +812,36 @@ export class RemoteConnectionManager {
     };
   }
 
+  onDidStatusChange(
+    connectionId: string,
+    listener: (status: RemoteConnectionStatus) => void
+  ): () => void {
+    const listeners =
+      this.localStatusListeners.get(connectionId) ??
+      new Set<(status: RemoteConnectionStatus) => void>();
+    listeners.add(listener);
+    this.localStatusListeners.set(connectionId, listeners);
+    listener(this.getStatus(connectionId));
+    return () => {
+      const current = this.localStatusListeners.get(connectionId);
+      if (!current) {
+        return;
+      }
+      current.delete(listener);
+      if (current.size === 0) {
+        this.localStatusListeners.delete(connectionId);
+      }
+    };
+  }
+
   async cleanup(): Promise<void> {
+    for (const timer of this.reconnectTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.reconnectTimers.clear();
+    this.reconnectPromises.clear();
+    this.reconnectAttempts.clear();
+    this.intentionalDisconnects.clear();
     const ids = [...this.servers.keys()];
     await Promise.allSettled(ids.map((id) => this.disconnect(id)));
     await this.authBroker.dispose();
@@ -829,7 +884,33 @@ export class RemoteConnectionManager {
       this.volatileStatuses.set(connectionId, next);
     }
 
+    this.emitStatusChange(connectionId, next);
+
     return next;
+  }
+
+  private emitStatusChange(connectionId: string, status: RemoteConnectionStatus): void {
+    this.volatileStatuses.set(connectionId, status);
+    const payload = { connectionId, status };
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed()) {
+        continue;
+      }
+      window.webContents.send(IPC_CHANNELS.REMOTE_STATUS_CHANGED, payload);
+    }
+
+    const listeners = this.localStatusListeners.get(connectionId);
+    if (!listeners) {
+      return;
+    }
+
+    for (const listener of [...listeners]) {
+      try {
+        listener(status);
+      } catch (error) {
+        console.warn('[remote] Status listener failed:', error);
+      }
+    }
   }
 
   private resetDiagnostics(connectionId: string): void {
@@ -906,6 +987,10 @@ export class RemoteConnectionManager {
   }
 
   private async ensureConnected(connectionId: string): Promise<RemoteServerProcess> {
+    const reconnecting = this.reconnectPromises.get(connectionId);
+    if (reconnecting) {
+      await reconnecting;
+    }
     await this.connect(connectionId);
     const server = this.servers.get(connectionId);
     if (!server) {
@@ -919,12 +1004,16 @@ export class RemoteConnectionManager {
   private async establishManagedRuntimeConnection(
     profile: ConnectionProfile
   ): Promise<RemoteConnectionStatus> {
+    this.clearReconnectTimer(profile.id);
     this.setStatus(profile.id, (current) => ({
       ...current,
       connected: false,
       phase: 'probing-host',
       phaseLabel: phaseLabelFor('probing-host'),
       error: undefined,
+      recoverable: false,
+      reconnectAttempt: undefined,
+      nextRetryAt: undefined,
       runtimeVersion: MANAGED_REMOTE_NODE_VERSION,
       serverVersion: REMOTE_SERVER_VERSION,
       helperVersion: REMOTE_SERVER_VERSION,
@@ -1514,6 +1603,10 @@ export class RemoteConnectionManager {
         phase: 'connected',
         phaseLabel: phaseLabelFor('connected'),
         error: undefined,
+        recoverable: false,
+        reconnectAttempt: undefined,
+        nextRetryAt: undefined,
+        lastDisconnectReason: undefined,
         platform: verification.platform,
         arch: verification.arch,
         runtimeVersion: verification.nodeVersion,
@@ -1531,6 +1624,7 @@ export class RemoteConnectionManager {
       };
       this.servers.set(profile.id, server);
       this.volatileStatuses.delete(profile.id);
+      this.emitStatusChange(profile.id, server.status);
       this.syncRemoteSharedStateInBackground(profile.id, server, runtime);
       void this.cleanupOldRuntimeVersions(server, paths).catch((error) => {
         console.warn(
@@ -1682,18 +1776,27 @@ export class RemoteConnectionManager {
 
     const detail = getRemoteErrorDetail(error);
     const timestamp = now();
+    const intentional = this.intentionalDisconnects.delete(server.connectionId);
     server.closed = true;
     server.status = {
       ...server.status,
       connected: false,
-      phase: detail ? 'failed' : 'idle',
-      phaseLabel: detail ? phaseLabelFor('failed') : phaseLabelFor('idle'),
+      phase: intentional ? 'idle' : detail ? 'failed' : 'idle',
+      phaseLabel: intentional
+        ? phaseLabelFor('idle')
+        : detail
+          ? phaseLabelFor('failed')
+          : phaseLabelFor('idle'),
       error: detail,
+      recoverable: !intentional && this.shouldAutoReconnect(detail),
+      reconnectAttempt: undefined,
+      nextRetryAt: undefined,
+      lastDisconnectReason: detail,
       lastCheckedAt: timestamp,
       diagnostics: this.updateDiagnostics(
         server.connectionId,
         server.status.phase,
-        detail ? 'failed' : 'idle',
+        intentional ? 'idle' : detail ? 'failed' : 'idle',
         timestamp
       ),
     };
@@ -1709,6 +1812,7 @@ export class RemoteConnectionManager {
       this.servers.delete(server.connectionId);
     }
     this.volatileStatuses.set(server.connectionId, server.status);
+    this.emitStatusChange(server.connectionId, server.status);
 
     const disconnectListeners = this.disconnectListeners.get(server.connectionId);
     if (disconnectListeners) {
@@ -1719,6 +1823,109 @@ export class RemoteConnectionManager {
           console.warn('[remote] Disconnect listener failed:', listenerError);
         }
       }
+    }
+
+    if (!intentional && server.status.recoverable) {
+      this.scheduleReconnect(server.connectionId, detail);
+    } else {
+      this.clearReconnectTimer(server.connectionId);
+      this.reconnectPromises.delete(server.connectionId);
+      this.reconnectAttempts.delete(server.connectionId);
+    }
+  }
+
+  private shouldAutoReconnect(detail: string | undefined): boolean {
+    if (!detail) {
+      return true;
+    }
+    if (isAuthenticationFailure(detail)) {
+      return false;
+    }
+    return !detail.toLowerCase().includes('host verification');
+  }
+
+  private clearReconnectTimer(connectionId: string): void {
+    const timer = this.reconnectTimers.get(connectionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(connectionId);
+    }
+  }
+
+  private scheduleReconnect(connectionId: string, reason?: string): void {
+    if (this.reconnectPromises.has(connectionId) || this.reconnectTimers.has(connectionId)) {
+      return;
+    }
+
+    const attempt = (this.reconnectAttempts.get(connectionId) ?? 0) + 1;
+    if (attempt > RECONNECT_DELAYS_MS.length) {
+      this.reconnectAttempts.delete(connectionId);
+      this.setStatus(connectionId, (current) => ({
+        ...current,
+        connected: false,
+        phase: 'failed',
+        phaseLabel: phaseLabelFor('failed'),
+        error: reason || current.error,
+        recoverable: false,
+        reconnectAttempt: attempt - 1,
+        nextRetryAt: undefined,
+        lastDisconnectReason: reason || current.lastDisconnectReason,
+      }));
+      return;
+    }
+
+    const delay =
+      RECONNECT_DELAYS_MS[attempt - 1] ?? RECONNECT_DELAYS_MS[RECONNECT_DELAYS_MS.length - 1];
+    const nextRetryAt = now() + delay;
+    this.reconnectAttempts.set(connectionId, attempt);
+    this.setStatus(connectionId, (current) => ({
+      ...current,
+      connected: false,
+      phase: 'reconnecting',
+      phaseLabel: translateRemote('Reconnecting remote connection...'),
+      recoverable: true,
+      reconnectAttempt: attempt,
+      nextRetryAt,
+      lastDisconnectReason: reason || current.lastDisconnectReason,
+      error: reason || current.error,
+    }));
+
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(connectionId);
+      const reconnectPromise = this.performReconnect(connectionId, attempt);
+      this.reconnectPromises.set(connectionId, reconnectPromise);
+      void reconnectPromise.finally(() => {
+        if (this.reconnectPromises.get(connectionId) === reconnectPromise) {
+          this.reconnectPromises.delete(connectionId);
+        }
+      });
+    }, delay);
+    this.reconnectTimers.set(connectionId, timer);
+  }
+
+  private async performReconnect(
+    connectionId: string,
+    attempt: number
+  ): Promise<RemoteConnectionStatus> {
+    try {
+      const status = await this.connect(connectionId);
+      this.reconnectAttempts.delete(connectionId);
+      return status;
+    } catch (error) {
+      const detail = getRemoteErrorDetail(error);
+      this.setStatus(connectionId, (current) => ({
+        ...current,
+        connected: false,
+        phase: 'reconnecting',
+        phaseLabel: translateRemote('Reconnecting remote connection...'),
+        recoverable: true,
+        reconnectAttempt: attempt,
+        nextRetryAt: undefined,
+        error: detail || current.error,
+        lastDisconnectReason: detail || current.lastDisconnectReason,
+      }));
+      this.scheduleReconnect(connectionId, detail);
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 

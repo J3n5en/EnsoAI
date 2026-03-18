@@ -40,6 +40,7 @@ import type {
   RemoteAuthPrompt,
   RemoteAuthResponse,
   RemoteConnectionStatus,
+  RemoteConnectionStatusEvent,
   RemoteHelperStatus,
   RemoteRuntimeStatus,
   RepositoryRuntimeContext,
@@ -51,6 +52,7 @@ import type {
   SessionExitEvent,
   SessionOpenResult,
   SessionResizeOptions,
+  SessionStateEvent,
   ShellConfig,
   ShellInfo,
   TempWorkspaceCheckResult,
@@ -431,6 +433,11 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.SESSION_EXIT, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.SESSION_EXIT, handler);
     },
+    onState: (callback: (event: SessionStateEvent) => void): (() => void) => {
+      const handler = (_: unknown, event: SessionStateEvent) => callback(event);
+      ipcRenderer.on(IPC_CHANNELS.SESSION_STATE, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_STATE, handler);
+    },
   },
 
   // Agent
@@ -542,6 +549,11 @@ const electronAPI = {
       const handler = (_: unknown, prompt: RemoteAuthPrompt) => callback(prompt);
       ipcRenderer.on(IPC_CHANNELS.REMOTE_AUTH_PROMPT, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.REMOTE_AUTH_PROMPT, handler);
+    },
+    onStatusChange: (callback: (event: RemoteConnectionStatusEvent) => void): (() => void) => {
+      const handler = (_: unknown, event: RemoteConnectionStatusEvent) => callback(event);
+      ipcRenderer.on(IPC_CHANNELS.REMOTE_STATUS_CHANGED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.REMOTE_STATUS_CHANGED, handler);
     },
     respondAuthPrompt: (response: RemoteAuthResponse): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.REMOTE_AUTH_RESPONSE, response),

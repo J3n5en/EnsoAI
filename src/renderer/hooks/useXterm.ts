@@ -1,4 +1,4 @@
-import type { SessionKind } from '@shared/types';
+import type { SessionKind, SessionRuntimeState } from '@shared/types';
 import { isRemoteVirtualPath } from '@shared/utils/remotePath';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -55,6 +55,7 @@ export interface UseXtermOptions {
 export interface UseXtermResult {
   containerRef: React.RefObject<HTMLDivElement | null>;
   isLoading: boolean;
+  runtimeState: SessionRuntimeState;
   settings: ReturnType<typeof useTerminalSettings>;
   /** Write data to pty */
   write: (data: string) => void;
@@ -147,6 +148,7 @@ export function useXterm({
   const ptyIdRef = useRef<string | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const exitCleanupRef = useRef<(() => void) | null>(null);
+  const stateCleanupRef = useRef<(() => void) | null>(null);
   const linkProviderDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const rendererAddonRef = useRef<{ dispose: () => void } | null>(null);
   const copyOnSelectionHandlerRef = useRef<(() => void) | null>(null);
@@ -172,6 +174,9 @@ export function useXterm({
   copyOnSelectionRef.current = copyOnSelection;
   const hasBeenActivatedRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [runtimeState, setRuntimeState] = useState<SessionRuntimeState>('live');
+  const runtimeStateRef = useRef<SessionRuntimeState>('live');
+  runtimeStateRef.current = runtimeState;
   const initialCommandRef = useRef(initialCommand);
   initialCommandRef.current = initialCommand;
   // Track if this terminal should respond to global shortcuts
@@ -190,13 +195,18 @@ export function useXterm({
   const isFlushPendingRef = useRef(false);
 
   const write = useCallback((data: string) => {
-    if (ptyIdRef.current) {
+    if (ptyIdRef.current && runtimeStateRef.current === 'live') {
       window.electronAPI.session.write(ptyIdRef.current, data);
     }
   }, []);
 
   const fit = useCallback(() => {
-    if (fitAddonRef.current && terminalRef.current && ptyIdRef.current) {
+    if (
+      fitAddonRef.current &&
+      terminalRef.current &&
+      ptyIdRef.current &&
+      runtimeStateRef.current === 'live'
+    ) {
       fitAddonRef.current.fit();
       window.electronAPI.session.resize(ptyIdRef.current, {
         cols: terminalRef.current.cols,
@@ -532,35 +542,35 @@ export function useXterm({
       }
 
       // macOS-style navigation shortcuts (only on keydown to avoid double-firing)
-      if (event.type === 'keydown' && ptyIdRef.current) {
+      if (event.type === 'keydown' && ptyIdRef.current && runtimeStateRef.current === 'live') {
         // Cmd+Left: jump to line start (Ctrl+A)
         if (event.metaKey && !event.altKey && event.key === 'ArrowLeft') {
-          window.electronAPI.session.write(ptyIdRef.current, '\x01');
+          write('\x01');
           return false;
         }
         // Cmd+Right: jump to line end (Ctrl+E)
         if (event.metaKey && !event.altKey && event.key === 'ArrowRight') {
-          window.electronAPI.session.write(ptyIdRef.current, '\x05');
+          write('\x05');
           return false;
         }
         // Option+Left: jump word backward (ESC+b)
         if (event.altKey && !event.metaKey && event.key === 'ArrowLeft') {
-          window.electronAPI.session.write(ptyIdRef.current, '\x1bb');
+          write('\x1bb');
           return false;
         }
         // Option+Right: jump word forward (ESC+f)
         if (event.altKey && !event.metaKey && event.key === 'ArrowRight') {
-          window.electronAPI.session.write(ptyIdRef.current, '\x1bf');
+          write('\x1bf');
           return false;
         }
         // Option+Backspace: delete word backward (Ctrl+W)
         if (event.altKey && !event.metaKey && event.key === 'Backspace') {
-          window.electronAPI.session.write(ptyIdRef.current, '\x17');
+          write('\x17');
           return false;
         }
         // Cmd+Backspace: delete to line start (Ctrl+U)
         if (event.metaKey && !event.altKey && event.key === 'Backspace') {
-          window.electronAPI.session.write(ptyIdRef.current, '\x15');
+          write('\x15');
           return false;
         }
       }
@@ -616,6 +626,7 @@ export function useXterm({
       // then flush remaining buffer before calling onExit
       const exitCleanup = window.electronAPI.session.onExit((event) => {
         if (event.sessionId === ptyIdRef.current) {
+          setRuntimeState('dead');
           // Wait for any pending data events to arrive (IPC race condition)
           setTimeout(() => {
             // Flush any remaining buffered data
@@ -630,6 +641,13 @@ export function useXterm({
         }
       });
       exitCleanupRef.current = exitCleanup;
+
+      const stateCleanup = window.electronAPI.session.onState((event) => {
+        if (event.sessionId === ptyIdRef.current) {
+          setRuntimeState(event.state);
+        }
+      });
+      stateCleanupRef.current = stateCleanup;
 
       const createOptions = {
         cwd: cwd || window.electronAPI.env.HOME,
@@ -646,6 +664,7 @@ export function useXterm({
 
       const setCurrentSessionId = (sessionId: string) => {
         ptyIdRef.current = sessionId;
+        setRuntimeState('live');
         onInitRef.current?.(sessionId);
         onSessionIdChangeRef.current?.(sessionId);
       };
@@ -696,7 +715,7 @@ export function useXterm({
 
       // Handle input
       terminal.onData((data) => {
-        if (ptyIdRef.current) {
+        if (ptyIdRef.current && runtimeStateRef.current === 'live') {
           window.electronAPI.session.write(ptyIdRef.current, data);
         }
       });
@@ -707,6 +726,8 @@ export function useXterm({
       cleanupRef.current = null;
       exitCleanupRef.current?.();
       exitCleanupRef.current = null;
+      stateCleanupRef.current?.();
+      stateCleanupRef.current = null;
       ptyIdRef.current = null;
       setIsLoading(false);
       terminal.writeln(`\x1b[31mFailed to start terminal.\x1b[0m`);
@@ -721,6 +742,7 @@ export function useXterm({
     terminalRenderer,
     kind,
     persistOnDisconnect,
+    write,
   ]);
 
   useEffect(() => {
@@ -747,6 +769,7 @@ export function useXterm({
     return () => {
       cleanupRef.current?.();
       exitCleanupRef.current?.();
+      stateCleanupRef.current?.();
       if (ptyIdRef.current) {
         window.electronAPI.session.detach(ptyIdRef.current).catch(() => {});
       }
@@ -765,6 +788,7 @@ export function useXterm({
       rendererAddonRef.current = null;
       terminalRef.current?.dispose();
       terminalRef.current = null;
+      stateCleanupRef.current = null;
     };
   }, []);
 
@@ -920,6 +944,7 @@ export function useXterm({
   return {
     containerRef,
     isLoading,
+    runtimeState,
     settings,
     write,
     fit,

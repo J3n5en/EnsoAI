@@ -55,3 +55,10 @@ export interface SessionExitEvent {
   exitCode: number;
   signal?: number;
 }
+
+export type SessionRuntimeState = 'live' | 'reconnecting' | 'dead';
+
+export interface SessionStateEvent {
+  sessionId: string;
+  state: SessionRuntimeState;
+}

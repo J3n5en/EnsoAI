@@ -118,6 +118,7 @@ export const IPC_CHANNELS = {
   SESSION_GET_ACTIVITY: 'session:getActivity',
   SESSION_DATA: 'session:data',
   SESSION_EXIT: 'session:exit',
+  SESSION_STATE: 'session:state',
 
   // Agent
   AGENT_LIST: 'agent:list',
@@ -175,6 +176,7 @@ export const IPC_CHANNELS = {
   REMOTE_BROWSE_ROOTS: 'remote:browseRoots',
   REMOTE_AUTH_PROMPT: 'remote:auth:prompt',
   REMOTE_AUTH_RESPONSE: 'remote:auth:response',
+  REMOTE_STATUS_CHANGED: 'remote:statusChanged',
 
   // Context Menu
   CONTEXT_MENU_SHOW: 'contextMenu:show',

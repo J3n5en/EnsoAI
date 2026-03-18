@@ -1,4 +1,9 @@
-import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
+import type {
+  GitBranch as GitBranchType,
+  GitWorktree,
+  RemoteConnectionStatus,
+  WorktreeCreateOptions,
+} from '@shared/types';
 import { getDisplayPath, getDisplayPathBasename, isWslUncPath } from '@shared/utils/path';
 import { LayoutGroup, motion } from 'framer-motion';
 import {
@@ -51,6 +56,7 @@ interface WorktreePanelProps {
   branches: GitBranchType[];
   projectName: string;
   inactiveRemote?: boolean;
+  remoteStatus?: RemoteConnectionStatus | null;
   isLoading?: boolean;
   isCreating?: boolean;
   error?: string | null;
@@ -77,6 +83,7 @@ export function WorktreePanel({
   branches,
   projectName,
   inactiveRemote = false,
+  remoteStatus = null,
   isLoading,
   isCreating,
   error,
@@ -182,6 +189,13 @@ export function WorktreePanel({
   const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
   const activities = useWorktreeActivityStore((s) => s.activities);
   const shouldPoll = useShouldPoll();
+  const isRemoteReconnecting = remoteStatus?.phase === 'reconnecting';
+  const isRemoteFailed = Boolean(
+    inactiveRemote &&
+      remoteStatus &&
+      remoteStatus.phase === 'failed' &&
+      remoteStatus.recoverable === false
+  );
 
   useEffect(() => {
     if (worktrees.length === 0 || !shouldPoll) return;
@@ -267,10 +281,18 @@ export function WorktreePanel({
             </EmptyMedia>
             <EmptyHeader>
               <EmptyTitle className="text-base">
-                {t('Remote repository is not connected yet')}
+                {isRemoteReconnecting
+                  ? t('Remote connection lost. Attempting to reconnect...')
+                  : isRemoteFailed
+                    ? t('Remote connection lost')
+                    : t('Remote repository is not connected yet')}
               </EmptyTitle>
               <EmptyDescription>
-                {t('Click the selected repository again to connect and load worktrees.')}
+                {isRemoteReconnecting
+                  ? t('Reconnecting remote connection...')
+                  : isRemoteFailed
+                    ? remoteStatus?.error || t('Remote connection lost')
+                    : t('Click the selected repository again to connect and load worktrees.')}
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
