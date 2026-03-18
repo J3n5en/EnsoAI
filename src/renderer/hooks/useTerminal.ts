@@ -1,4 +1,5 @@
 import type { TerminalCreateOptions } from '@shared/types';
+import { isRemoteVirtualPath } from '@shared/utils/remotePath';
 import { useCallback, useEffect } from 'react';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalStore } from '@/stores/terminal';
@@ -27,10 +28,12 @@ export function useTerminal() {
         kind: 'terminal',
       });
       const id = session.session.sessionId;
-      await window.electronAPI.session.attach({
-        sessionId: id,
-        cwd: createOptions.cwd,
-      });
+      if (!createOptions.cwd || !isRemoteVirtualPath(createOptions.cwd)) {
+        await window.electronAPI.session.attach({
+          sessionId: id,
+          cwd: createOptions.cwd,
+        });
+      }
       addSession({
         id,
         title: 'Terminal',

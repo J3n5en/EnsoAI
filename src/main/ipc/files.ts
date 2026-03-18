@@ -481,8 +481,14 @@ export function registerFileHandlers(): void {
 
   // FILE_COPY: Copy a single file/directory
   ipcMain.handle(IPC_CHANNELS.FILE_COPY, async (_, sourcePath: string, targetPath: string) => {
-    if (isRemoteVirtualPath(sourcePath) || isRemoteVirtualPath(targetPath)) {
-      throw createRemoteError('Remote copy is not supported yet');
+    const sourceIsRemote = isRemoteVirtualPath(sourcePath);
+    const targetIsRemote = isRemoteVirtualPath(targetPath);
+    if (sourceIsRemote || targetIsRemote) {
+      if (sourceIsRemote && targetIsRemote) {
+        await remoteRepositoryBackend.copy(sourcePath, targetPath);
+        return;
+      }
+      throw createRemoteError('Copying between local and remote files is not supported');
     }
 
     const sourceStats = await stat(sourcePath);
@@ -514,8 +520,15 @@ export function registerFileHandlers(): void {
         targetModified: number;
       }>
     > => {
-      if (sources.some(isRemoteVirtualPath) || isRemoteVirtualPath(targetDir)) {
-        throw createRemoteError('Remote conflict detection is not supported yet');
+      const hasRemoteSources = sources.some(isRemoteVirtualPath);
+      const targetIsRemote = isRemoteVirtualPath(targetDir);
+      if (hasRemoteSources || targetIsRemote) {
+        if (hasRemoteSources && targetIsRemote && sources.every(isRemoteVirtualPath)) {
+          return remoteRepositoryBackend.checkConflicts(sources, targetDir);
+        }
+        throw createRemoteError(
+          'Conflict detection between local and remote files is not supported'
+        );
       }
 
       const conflicts = [];
@@ -553,8 +566,13 @@ export function registerFileHandlers(): void {
       targetDir: string,
       conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
     ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> => {
-      if (sources.some(isRemoteVirtualPath) || isRemoteVirtualPath(targetDir)) {
-        throw createRemoteError('Remote batch copy is not supported yet');
+      const hasRemoteSources = sources.some(isRemoteVirtualPath);
+      const targetIsRemote = isRemoteVirtualPath(targetDir);
+      if (hasRemoteSources || targetIsRemote) {
+        if (hasRemoteSources && targetIsRemote && sources.every(isRemoteVirtualPath)) {
+          return remoteRepositoryBackend.batchCopy(sources, targetDir, conflicts);
+        }
+        throw createRemoteError('Batch copy between local and remote files is not supported');
       }
 
       const success: string[] = [];
@@ -610,8 +628,13 @@ export function registerFileHandlers(): void {
       targetDir: string,
       conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
     ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> => {
-      if (sources.some(isRemoteVirtualPath) || isRemoteVirtualPath(targetDir)) {
-        throw createRemoteError('Remote batch move is not supported yet');
+      const hasRemoteSources = sources.some(isRemoteVirtualPath);
+      const targetIsRemote = isRemoteVirtualPath(targetDir);
+      if (hasRemoteSources || targetIsRemote) {
+        if (hasRemoteSources && targetIsRemote && sources.every(isRemoteVirtualPath)) {
+          return remoteRepositoryBackend.batchMove(sources, targetDir, conflicts);
+        }
+        throw createRemoteError('Batch move between local and remote files is not supported');
       }
 
       const success: string[] = [];

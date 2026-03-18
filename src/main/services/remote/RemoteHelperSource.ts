@@ -1,4 +1,4 @@
-export const REMOTE_SERVER_VERSION = '0.3.2';
+export const REMOTE_SERVER_VERSION = '0.4.0';
 export const REMOTE_HELPER_VERSION = REMOTE_SERVER_VERSION;
 
 export function getRemoteServerSource(): string {
@@ -22,6 +22,7 @@ const DAEMON_INFO_FILE = 'enso-remote-daemon.json';
 const MAX_SESSION_REPLAY_CHARS = 65536;
 const REMOTE_PTY_UNAVAILABLE = 'REMOTE_PTY_UNAVAILABLE';
 const REMOTE_SETTINGS_PATH = '.ensoai/settings.json';
+const REMOTE_SESSION_STATE_PATH = '.ensoai/session-state.json';
 const RUNTIME_MANIFEST_FILENAME = 'enso-remote-runtime-manifest.json';
 const GLOBAL_STATUS_CACHE_TTL = 300000;
 let cachedNodePty = undefined;
@@ -290,6 +291,7 @@ async function createDirectory(dirPath) {
 }
 
 async function renamePath(fromPath, toPath) {
+  await fsp.mkdir(path.dirname(toPath), { recursive: true });
   await fsp.rename(fromPath, toPath);
   return { success: true };
 }
@@ -299,13 +301,128 @@ async function removePath(targetPath, recursive = true) {
   return { success: true };
 }
 
-async function fileExists(filePath) {
+async function pathExists(filePath) {
   try {
-    const stats = await fsp.stat(filePath);
-    return stats.isFile();
+    await fsp.stat(filePath);
+    return true;
   } catch {
     return false;
   }
+}
+
+async function statPath(targetPath) {
+  const stats = await fsp.stat(targetPath);
+  return {
+    path: normalize(targetPath),
+    isDirectory: stats.isDirectory(),
+    size: stats.size,
+    modifiedAt: stats.mtimeMs,
+  };
+}
+
+async function copyDirectory(sourcePath, targetPath) {
+  await fsp.mkdir(targetPath, { recursive: true });
+  const entries = await fsp.readdir(sourcePath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const nextSource = path.join(sourcePath, entry.name);
+    const nextTarget = path.join(targetPath, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirectory(nextSource, nextTarget);
+    } else {
+      await fsp.mkdir(path.dirname(nextTarget), { recursive: true });
+      await fsp.copyFile(nextSource, nextTarget);
+    }
+  }
+}
+
+async function copyPath(sourcePath, targetPath) {
+  const sourceStats = await fsp.stat(sourcePath);
+  if (sourceStats.isDirectory()) {
+    await copyDirectory(sourcePath, targetPath);
+  } else {
+    await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+    await fsp.copyFile(sourcePath, targetPath);
+  }
+  return { success: true };
+}
+
+async function movePath(sourcePath, targetPath) {
+  await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+  try {
+    await fsp.rename(sourcePath, targetPath);
+  } catch {
+    await copyPath(sourcePath, targetPath);
+    await fsp.rm(sourcePath, { recursive: true, force: true });
+  }
+  return { success: true };
+}
+
+async function checkPathConflicts(sources, targetDir) {
+  const conflicts = [];
+
+  for (const sourcePath of sources) {
+    const sourceStats = await fsp.stat(sourcePath);
+    const fileName = path.basename(sourcePath);
+    const targetPath = path.join(targetDir, fileName);
+
+    try {
+      const targetStats = await fsp.stat(targetPath);
+      conflicts.push({
+        path: normalize(sourcePath),
+        name: fileName,
+        sourceSize: sourceStats.size,
+        targetSize: targetStats.size,
+        sourceModified: sourceStats.mtimeMs,
+        targetModified: targetStats.mtimeMs,
+      });
+    } catch {
+      // no conflict
+    }
+  }
+
+  return conflicts;
+}
+
+async function batchTransferPaths(sources, targetDir, conflicts = [], operation = 'copy') {
+  const success = [];
+  const failed = [];
+  const conflictMap = new Map((Array.isArray(conflicts) ? conflicts : []).map((item) => [item.path, item]));
+
+  for (const sourcePath of sources) {
+    try {
+      const fileName = path.basename(sourcePath);
+      let targetPath = path.join(targetDir, fileName);
+      const conflict = conflictMap.get(sourcePath) || conflictMap.get(normalize(sourcePath));
+
+      if (conflict) {
+        if (conflict.action === 'skip') {
+          continue;
+        }
+        if (conflict.action === 'rename' && conflict.newName) {
+          targetPath = path.join(targetDir, conflict.newName);
+        }
+        if (conflict.action === 'replace') {
+          await fsp.rm(targetPath, { recursive: true, force: true }).catch(() => {});
+        }
+      }
+
+      if (operation === 'move') {
+        await movePath(sourcePath, targetPath);
+      } else {
+        await copyPath(sourcePath, targetPath);
+      }
+
+      success.push(normalize(sourcePath));
+    } catch (error) {
+      failed.push({
+        path: normalize(sourcePath),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { success, failed };
 }
 
 async function testEnvironment(options = {}) {
@@ -578,6 +695,35 @@ function parseDiffStats(stdout) {
   };
 }
 
+function getGitDirPath(workdir) {
+  const dotGitPath = path.join(workdir, '.git');
+  try {
+    const stats = fs.statSync(dotGitPath);
+    if (stats.isDirectory()) {
+      return dotGitPath;
+    }
+  } catch {}
+
+  try {
+    const content = fs.readFileSync(dotGitPath, 'utf8');
+    const match = content.match(/^gitdir:\s*(.+)\s*$/im);
+    if (match?.[1]) {
+      return path.resolve(workdir, match[1].trim());
+    }
+  } catch {}
+
+  return dotGitPath;
+}
+
+async function gitShowFile(workdir, spec) {
+  try {
+    const { stdout } = await execCommand('git', ['show', spec], { cwd: workdir });
+    return stdout;
+  } catch {
+    return '';
+  }
+}
+
 async function gitStatus(rootPath) {
   const { stdout } = await execCommand('git', ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'], { cwd: rootPath });
   return parsePorcelainStatus(stdout);
@@ -760,6 +906,414 @@ async function worktreeRemove(rootPath, options) {
     await execCommand('git', ['branch', '-D', options.branch], { cwd: rootPath }).catch(() => {});
   }
   return { success: true };
+}
+
+async function getMainWorktreePath(rootPath) {
+  const worktrees = await worktreeList(rootPath);
+  const main = worktrees.find((item) => item.isMainWorktree);
+  if (!main) {
+    throw new Error('No main worktree found');
+  }
+  return main.path;
+}
+
+async function getWorktreeBranch(rootPath, worktreePath) {
+  const worktrees = await worktreeList(rootPath);
+  const worktree = worktrees.find((item) => normalize(item.path) === normalize(worktreePath));
+  if (!worktree || !worktree.branch) {
+    throw new Error('No branch found for worktree: ' + worktreePath);
+  }
+  return worktree.branch;
+}
+
+async function deleteBranchSafely(rootPath, branchName) {
+  try {
+    await execCommand('git', ['branch', '-D', branchName], { cwd: rootPath });
+    return null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return "Failed to delete branch '" + branchName + "': " + message;
+  }
+}
+
+async function deleteWorktreeSafely(rootPath, worktreePath, options = {}) {
+  const warnings = [];
+  try {
+    await execCommand('git', ['worktree', 'prune'], { cwd: rootPath });
+    await execCommand('git', ['worktree', 'remove', '--force', worktreePath], { cwd: rootPath });
+    if (options.deleteBranch && options.branchName) {
+      const warning = await deleteBranchSafely(rootPath, options.branchName);
+      if (warning) warnings.push(warning);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnings.push('Failed to delete worktree: ' + message);
+    if (options.deleteBranch && options.branchName) {
+      const warning = await deleteBranchSafely(rootPath, options.branchName);
+      if (warning) warnings.push(warning);
+    }
+  }
+  return warnings;
+}
+
+async function gitGetCurrentBranch(workdir) {
+  try {
+    const { stdout } = await execCommand('git', ['branch', '--show-current'], { cwd: workdir });
+    return stdout.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function gitHasUncommittedChanges(workdir) {
+  const status = await gitStatus(workdir);
+  return !status.isClean;
+}
+
+async function gitStashPush(workdir, message) {
+  await execCommand('git', ['stash', 'push', '-m', message], { cwd: workdir });
+}
+
+async function gitStashPop(workdir) {
+  await execCommand('git', ['stash', 'pop'], { cwd: workdir });
+}
+
+async function worktreeMerge(rootPath, options) {
+  const mainWorktreePath = await getMainWorktreePath(rootPath);
+  const sourceBranch = await getWorktreeBranch(rootPath, options.worktreePath);
+  let worktreeStashed = false;
+  let mainStashed = false;
+  const autoStash = options.autoStash !== false;
+
+  const restoreStashes = async () => {
+    let mainStashStatus = 'none';
+    let worktreeStashStatus = 'none';
+
+    if (mainStashed) {
+      try {
+        await gitStashPop(mainWorktreePath);
+        mainStashStatus = 'applied';
+      } catch {
+        mainStashStatus = 'conflict';
+        if (worktreeStashed) {
+          worktreeStashStatus = 'stashed';
+        }
+        return { mainStashStatus, worktreeStashStatus };
+      }
+    }
+
+    if (worktreeStashed) {
+      try {
+        await gitStashPop(options.worktreePath);
+        worktreeStashStatus = 'applied';
+      } catch {
+        worktreeStashStatus = 'conflict';
+      }
+    }
+
+    return { mainStashStatus, worktreeStashStatus };
+  };
+
+  const getStashedStatus = () => ({
+    mainStashStatus: mainStashed ? 'stashed' : 'none',
+    worktreeStashStatus: worktreeStashed ? 'stashed' : 'none',
+  });
+
+  const getStashPaths = () => ({
+    mainWorktreePath: mainStashed ? mainWorktreePath : undefined,
+    worktreePath: worktreeStashed ? options.worktreePath : undefined,
+  });
+
+  if (await gitHasUncommittedChanges(options.worktreePath)) {
+    if (!autoStash) {
+      return {
+        success: false,
+        merged: false,
+        error: 'Worktree has uncommitted changes. Please commit or stash them first.',
+      };
+    }
+    try {
+      await gitStashPush(options.worktreePath, 'Auto stash before merge');
+      worktreeStashed = true;
+    } catch (error) {
+      return {
+        success: false,
+        merged: false,
+        error:
+          'Failed to stash worktree changes: ' +
+          (error instanceof Error ? error.message : String(error)),
+      };
+    }
+  }
+
+  if (await gitHasUncommittedChanges(mainWorktreePath)) {
+    if (!autoStash) {
+      const stashResult = await restoreStashes();
+      return {
+        success: false,
+        merged: false,
+        error: 'Main worktree has uncommitted changes. Please commit or stash them first.',
+        ...stashResult,
+      };
+    }
+    try {
+      await gitStashPush(mainWorktreePath, 'Auto stash before merge');
+      mainStashed = true;
+    } catch (error) {
+      const stashResult = await restoreStashes();
+      return {
+        success: false,
+        merged: false,
+        error:
+          'Failed to stash main worktree changes: ' +
+          (error instanceof Error ? error.message : String(error)),
+        ...stashResult,
+      };
+    }
+  }
+
+  const originalBranch = await gitGetCurrentBranch(mainWorktreePath);
+
+  try {
+    await gitCheckout(mainWorktreePath, options.targetBranch);
+    const mergeArgs = [];
+
+    if (options.strategy === 'squash') {
+      mergeArgs.push('--squash');
+    } else if (options.strategy === 'merge' && options.noFf !== false) {
+      mergeArgs.push('--no-ff');
+    }
+
+    if (options.message) {
+      mergeArgs.push('-m', options.message);
+    }
+
+    if (options.strategy === 'rebase') {
+      try {
+        await execCommand('git', ['rebase', sourceBranch], { cwd: mainWorktreePath });
+        const { stdout } = await execCommand('git', ['rev-parse', 'HEAD'], { cwd: mainWorktreePath });
+        const stashResult = await restoreStashes();
+        return {
+          success: true,
+          merged: true,
+          commitHash: stdout.trim(),
+          ...stashResult,
+        };
+      } catch (error) {
+        const conflicts = await worktreeGetConflicts(mainWorktreePath);
+        if (conflicts.length > 0) {
+          return {
+            success: false,
+            merged: false,
+            conflicts,
+            ...getStashedStatus(),
+            ...getStashPaths(),
+          };
+        }
+        await execCommand('git', ['rebase', '--abort'], { cwd: mainWorktreePath }).catch(() => {});
+        const stashResult = await restoreStashes();
+        return {
+          success: false,
+          merged: false,
+          error: 'Rebase failed: ' + (error instanceof Error ? error.message : String(error)),
+          ...stashResult,
+        };
+      }
+    }
+
+    try {
+      await execCommand('git', ['merge', ...mergeArgs, sourceBranch], { cwd: mainWorktreePath });
+
+      if (options.strategy === 'squash') {
+        await execCommand(
+          'git',
+          ['commit', '-m', options.message || "Squash merge branch '" + sourceBranch + "'"],
+          { cwd: mainWorktreePath }
+        );
+      }
+
+      const { stdout } = await execCommand('git', ['rev-parse', 'HEAD'], { cwd: mainWorktreePath });
+      let warnings = [];
+      if (options.deleteWorktreeAfterMerge) {
+        warnings = await deleteWorktreeSafely(mainWorktreePath, options.worktreePath, {
+          deleteBranch: options.deleteBranchAfterMerge,
+          branchName: sourceBranch,
+        });
+      } else if (options.deleteBranchAfterMerge) {
+        const warning = await deleteBranchSafely(mainWorktreePath, sourceBranch);
+        if (warning) warnings.push(warning);
+      }
+
+      const stashResult = await restoreStashes();
+      if (stashResult.mainStashStatus === 'conflict') {
+        warnings.push('Stash pop conflict in main worktree: ' + mainWorktreePath);
+      }
+      if (stashResult.worktreeStashStatus === 'conflict') {
+        warnings.push('Stash pop conflict in worktree: ' + options.worktreePath);
+      }
+      if (
+        stashResult.mainStashStatus === 'conflict' &&
+        stashResult.worktreeStashStatus === 'stashed'
+      ) {
+        warnings.push(
+          'Worktree stash pending - resolve main conflict first, then run "git stash pop" in: ' +
+            options.worktreePath
+        );
+      }
+
+      return {
+        success: true,
+        merged: true,
+        commitHash: stdout.trim(),
+        warnings: warnings.length > 0 ? warnings : undefined,
+        ...stashResult,
+      };
+    } catch (error) {
+      const conflicts = await worktreeGetConflicts(mainWorktreePath);
+      if (conflicts.length > 0) {
+        return {
+          success: false,
+          merged: false,
+          conflicts,
+          ...getStashedStatus(),
+          ...getStashPaths(),
+        };
+      }
+      throw error;
+    }
+  } catch (error) {
+    if (originalBranch) {
+      await gitCheckout(mainWorktreePath, originalBranch).catch(() => {});
+    }
+    const stashResult = await restoreStashes();
+    return {
+      success: false,
+      merged: false,
+      error: error instanceof Error ? error.message : String(error),
+      ...stashResult,
+    };
+  }
+}
+
+async function worktreeGetMergeState(workdir) {
+  const gitDir = getGitDirPath(workdir);
+  const mergeHeadPath = path.join(gitDir, 'MERGE_HEAD');
+  try {
+    await fsp.access(mergeHeadPath);
+  } catch {
+    return { inProgress: false };
+  }
+
+  const conflicts = await worktreeGetConflicts(workdir);
+  let targetBranch;
+  let sourceBranch;
+
+  try {
+    targetBranch = await gitGetCurrentBranch(workdir);
+    const mergeHead = (await fsp.readFile(mergeHeadPath, 'utf8')).trim();
+    const { stdout } = await execCommand('git', ['branch', '-a', '--contains', mergeHead], {
+      cwd: workdir,
+    });
+    const branch = stdout
+      .split('\n')
+      .map((line) => line.replace(/^[* ]+/, '').trim())
+      .find(Boolean);
+    if (branch) {
+      sourceBranch = branch.replace('remotes/origin/', '');
+    }
+  } catch {}
+
+  return {
+    inProgress: true,
+    targetBranch,
+    sourceBranch,
+    conflicts,
+  };
+}
+
+async function worktreeGetConflicts(workdir) {
+  const status = await gitStatus(workdir);
+  return status.conflicted.map((file) => ({
+    file,
+    type: 'content',
+  }));
+}
+
+async function worktreeGetConflictContent(workdir, filePath) {
+  const [ours, theirs, base] = await Promise.all([
+    gitShowFile(workdir, ':2:' + filePath),
+    gitShowFile(workdir, ':3:' + filePath),
+    gitShowFile(workdir, ':1:' + filePath),
+  ]);
+
+  return { file: filePath, ours, theirs, base };
+}
+
+async function worktreeResolveConflict(workdir, resolution) {
+  const fullPath = path.join(workdir, resolution.file);
+  await fsp.writeFile(fullPath, resolution.content, 'utf8');
+  await execCommand('git', ['add', resolution.file], { cwd: workdir });
+  return { success: true };
+}
+
+async function worktreeAbortMerge(workdir) {
+  const gitDir = getGitDirPath(workdir);
+  if (fs.existsSync(path.join(gitDir, 'rebase-merge')) || fs.existsSync(path.join(gitDir, 'rebase-apply'))) {
+    await execCommand('git', ['rebase', '--abort'], { cwd: workdir });
+    return { success: true };
+  }
+
+  if (fs.existsSync(path.join(gitDir, 'MERGE_HEAD'))) {
+    await execCommand('git', ['merge', '--abort'], { cwd: workdir });
+    return { success: true };
+  }
+
+  await execCommand('git', ['reset', '--hard', 'HEAD'], { cwd: workdir });
+  return { success: true };
+}
+
+async function worktreeContinueMerge(workdir, message, cleanupOptions) {
+  const conflicts = await worktreeGetConflicts(workdir);
+  if (conflicts.length > 0) {
+    return {
+      success: false,
+      merged: false,
+      conflicts,
+      error: 'There are still unresolved conflicts',
+    };
+  }
+
+  try {
+    await execCommand('git', ['commit', '-m', message || 'Merge commit'], { cwd: workdir });
+    const { stdout } = await execCommand('git', ['rev-parse', 'HEAD'], { cwd: workdir });
+    let warnings = [];
+    if (cleanupOptions?.deleteWorktreeAfterMerge && cleanupOptions.worktreePath) {
+      const cleanupRoot =
+        normalize(workdir) === normalize(cleanupOptions.worktreePath)
+          ? await getMainWorktreePath(workdir)
+          : workdir;
+      warnings = await deleteWorktreeSafely(cleanupRoot, cleanupOptions.worktreePath, {
+        deleteBranch: cleanupOptions.deleteBranchAfterMerge,
+        branchName: cleanupOptions.sourceBranch,
+      });
+    } else if (cleanupOptions?.deleteBranchAfterMerge && cleanupOptions.sourceBranch) {
+      const warning = await deleteBranchSafely(workdir, cleanupOptions.sourceBranch);
+      if (warning) warnings.push(warning);
+    }
+
+    return {
+      success: true,
+      merged: true,
+      commitHash: stdout.trim(),
+      warnings: warnings.length > 0 ? warnings : undefined,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      merged: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function searchFiles(rootPath, query, maxResults = 100) {
@@ -1427,6 +1981,198 @@ async function killTmuxSession({ name }) {
   return { success: true };
 }
 
+function getClaudeDir() {
+  return path.join(os.homedir(), '.claude');
+}
+
+function getPluginsDir() {
+  return path.join(getClaudeDir(), 'plugins');
+}
+
+function getClaudeSettingsPath() {
+  return path.join(getClaudeDir(), 'settings.json');
+}
+
+function getInstalledPluginsPath() {
+  return path.join(getPluginsDir(), 'installed_plugins.json');
+}
+
+function getKnownMarketplacesPath() {
+  return path.join(getPluginsDir(), 'known_marketplaces.json');
+}
+
+async function readJsonFile(targetPath, fallback) {
+  try {
+    const content = await fsp.readFile(targetPath, 'utf8');
+    return JSON.parse(content);
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeJsonFile(targetPath, data) {
+  await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+  await fsp.writeFile(targetPath, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 });
+  return true;
+}
+
+async function readInstalledPlugins() {
+  return readJsonFile(getInstalledPluginsPath(), { version: 2, plugins: {} });
+}
+
+async function readClaudeSettings() {
+  return readJsonFile(getClaudeSettingsPath(), {});
+}
+
+async function writeClaudeSettings(data) {
+  return writeJsonFile(getClaudeSettingsPath(), data);
+}
+
+async function readKnownMarketplaces() {
+  return readJsonFile(getKnownMarketplacesPath(), {});
+}
+
+async function listClaudePlugins() {
+  const installed = await readInstalledPlugins();
+  const settings = await readClaudeSettings();
+  const enabledPlugins = settings.enabledPlugins || {};
+  const plugins = [];
+
+  for (const [pluginId, installations] of Object.entries(installed.plugins || {})) {
+    const installation = Array.isArray(installations) ? installations[0] : null;
+    if (!installation) continue;
+    const [name, marketplace] = pluginId.split('@');
+    plugins.push({
+      id: pluginId,
+      name: name || pluginId,
+      marketplace: marketplace || 'unknown',
+      version: installation.version,
+      installPath: installation.installPath,
+      enabled: enabledPlugins[pluginId] ?? false,
+      installedAt: installation.installedAt,
+      lastUpdated: installation.lastUpdated,
+    });
+  }
+
+  return plugins;
+}
+
+async function setClaudePluginEnabled(pluginId, enabled) {
+  const settings = await readClaudeSettings();
+  if (!settings.enabledPlugins || typeof settings.enabledPlugins !== 'object') {
+    settings.enabledPlugins = {};
+  }
+  settings.enabledPlugins[pluginId] = enabled;
+  await writeClaudeSettings(settings);
+  return true;
+}
+
+async function listClaudeMarketplaces() {
+  const known = await readKnownMarketplaces();
+  return Object.entries(known).map(([name, data]) => ({
+    name,
+    repo: data.source?.repo,
+    installLocation: data.installLocation,
+    lastUpdated: data.lastUpdated,
+  }));
+}
+
+async function listAvailableClaudePlugins(marketplaceName) {
+  const marketplaces = await readKnownMarketplaces();
+  const installed = await readInstalledPlugins();
+  const installedIds = new Set(Object.keys(installed.plugins || {}));
+  const plugins = [];
+  const entries = marketplaceName
+    ? Object.entries(marketplaces).filter(([name]) => name === marketplaceName)
+    : Object.entries(marketplaces);
+
+  for (const [mpName, mpData] of entries) {
+    const marketplaceJsonPath = path.join(mpData.installLocation, '.claude-plugin', 'marketplace.json');
+    if (await pathExists(marketplaceJsonPath)) {
+      try {
+        const marketplaceJson = await readJsonFile(marketplaceJsonPath, {});
+        for (const plugin of marketplaceJson.plugins || []) {
+          const pluginId = plugin.name + '@' + mpName;
+          plugins.push({
+            name: plugin.name,
+            description: plugin.description,
+            author: plugin.author,
+            marketplace: mpName,
+            installed: installedIds.has(pluginId),
+          });
+        }
+        continue;
+      } catch {}
+    }
+
+    const rootPluginJsonPath = path.join(mpData.installLocation, '.claude-plugin', 'plugin.json');
+    if (await pathExists(rootPluginJsonPath)) {
+      try {
+        const pluginJson = await readJsonFile(rootPluginJsonPath, {});
+        const pluginId = pluginJson.name + '@' + mpName;
+        plugins.push({
+          name: pluginJson.name,
+          description: pluginJson.description,
+          author: pluginJson.author,
+          marketplace: mpName,
+          installed: installedIds.has(pluginId),
+        });
+        continue;
+      } catch {}
+    }
+
+    try {
+      const dirs = await fsp.readdir(mpData.installLocation, { withFileTypes: true });
+      for (const dir of dirs) {
+        if (!dir.isDirectory() || dir.name.startsWith('.')) continue;
+        const pluginJsonPath = path.join(mpData.installLocation, dir.name, 'plugin.json');
+        if (!(await pathExists(pluginJsonPath))) continue;
+        try {
+          const pluginJson = await readJsonFile(pluginJsonPath, {});
+          const pluginId = pluginJson.name + '@' + mpName;
+          plugins.push({
+            name: pluginJson.name,
+            description: pluginJson.description,
+            author: pluginJson.author,
+            marketplace: mpName,
+            installed: installedIds.has(pluginId),
+          });
+        } catch {}
+      }
+    } catch {}
+  }
+
+  return plugins;
+}
+
+async function runClaudePluginCommand(command) {
+  await execInConfiguredShell(command, { timeout: 30000 });
+  return true;
+}
+
+async function addClaudeMarketplace(source) {
+  return runClaudePluginCommand('claude plugin marketplace add "' + source + '"');
+}
+
+async function removeClaudeMarketplace(name) {
+  return runClaudePluginCommand('claude plugin marketplace remove "' + name + '"');
+}
+
+async function refreshClaudeMarketplaces(name) {
+  return runClaudePluginCommand(
+    name ? 'claude plugin marketplace update "' + name + '"' : 'claude plugin marketplace update'
+  );
+}
+
+async function installClaudePlugin(pluginName, marketplace) {
+  const pluginSpec = marketplace ? pluginName + '@' + marketplace : pluginName;
+  return runClaudePluginCommand('claude plugin install "' + pluginSpec + '"');
+}
+
+async function uninstallClaudePlugin(pluginId) {
+  return runClaudePluginCommand('claude plugin uninstall "' + pluginId + '"');
+}
+
 function createSessionDescriptor(session) {
   return {
     sessionId: session.sessionId,
@@ -1665,6 +2411,15 @@ async function createSession(options = {}) {
   state.sessions.set(session.sessionId, session);
   return {
     session: createSessionDescriptor(session),
+  };
+}
+
+async function createAndAttachSession(options = {}) {
+  const created = await createSession(options);
+  const attached = await attachSession(created.session.sessionId);
+  return {
+    session: attached.session,
+    replay: attached.replay,
   };
 }
 
@@ -2102,9 +2857,16 @@ const handlers = {
   'fs:createFile': ({ path, content, overwrite }) => createFile(path, content, overwrite),
   'fs:createDirectory': ({ path }) => createDirectory(path),
   'fs:rename': ({ fromPath, toPath }) => renamePath(fromPath, toPath),
-  'fs:move': ({ fromPath, toPath }) => renamePath(fromPath, toPath),
+  'fs:move': ({ fromPath, toPath }) => movePath(fromPath, toPath),
+  'fs:copy': ({ sourcePath, targetPath }) => copyPath(sourcePath, targetPath),
+  'fs:stat': ({ path }) => statPath(path),
+  'fs:checkConflicts': ({ sources, targetDir }) => checkPathConflicts(sources, targetDir),
+  'fs:batchCopy': ({ sources, targetDir, conflicts }) =>
+    batchTransferPaths(sources, targetDir, conflicts, 'copy'),
+  'fs:batchMove': ({ sources, targetDir, conflicts }) =>
+    batchTransferPaths(sources, targetDir, conflicts, 'move'),
   'fs:delete': ({ path, recursive }) => removePath(path, recursive),
-  'fs:exists': ({ path }) => fileExists(path),
+  'fs:exists': ({ path }) => pathExists(path),
   'fs:watchStart': ({ id, path }) => watchStart(id, path),
   'fs:watchStop': ({ id }) => watchStop(id),
   'git:status': ({ rootPath }) => gitStatus(rootPath),
@@ -2131,6 +2893,16 @@ const handlers = {
   'worktree:list': ({ rootPath }) => worktreeList(rootPath),
   'worktree:add': ({ rootPath, options }) => worktreeAdd(rootPath, options),
   'worktree:remove': ({ rootPath, options }) => worktreeRemove(rootPath, options),
+  'worktree:merge': ({ rootPath, options }) => worktreeMerge(rootPath, options),
+  'worktree:mergeState': ({ rootPath }) => worktreeGetMergeState(rootPath),
+  'worktree:conflicts': ({ rootPath }) => worktreeGetConflicts(rootPath),
+  'worktree:conflictContent': ({ rootPath, filePath }) =>
+    worktreeGetConflictContent(rootPath, filePath),
+  'worktree:resolveConflict': ({ rootPath, resolution }) =>
+    worktreeResolveConflict(rootPath, resolution),
+  'worktree:abortMerge': ({ rootPath }) => worktreeAbortMerge(rootPath),
+  'worktree:continueMerge': ({ rootPath, message, cleanupOptions }) =>
+    worktreeContinueMerge(rootPath, message, cleanupOptions),
   'search:files': ({ rootPath, query, maxResults }) => searchFiles(rootPath, query, maxResults),
   'search:content': ({
     rootPath,
@@ -2155,7 +2927,18 @@ const handlers = {
   'happy:checkGlobal': ({ forceRefresh }) => checkHappyGlobal({ forceRefresh }),
   'tmux:check': ({ forceRefresh }) => checkTmux({ forceRefresh }),
   'tmux:killSession': ({ name }) => killTmuxSession({ name }),
+  'claude:plugins:list': () => listClaudePlugins(),
+  'claude:plugins:setEnabled': ({ pluginId, enabled }) => setClaudePluginEnabled(pluginId, enabled),
+  'claude:plugins:available': ({ marketplace }) => listAvailableClaudePlugins(marketplace),
+  'claude:plugins:install': ({ pluginName, marketplace }) =>
+    installClaudePlugin(pluginName, marketplace),
+  'claude:plugins:uninstall': ({ pluginId }) => uninstallClaudePlugin(pluginId),
+  'claude:plugins:marketplaces:list': () => listClaudeMarketplaces(),
+  'claude:plugins:marketplaces:add': ({ repo }) => addClaudeMarketplace(repo),
+  'claude:plugins:marketplaces:remove': ({ name }) => removeClaudeMarketplace(name),
+  'claude:plugins:marketplaces:refresh': ({ name }) => refreshClaudeMarketplaces(name),
   'session:create': ({ options }) => createSession(options),
+  'session:createAndAttach': ({ options }) => createAndAttachSession(options),
   'session:attach': ({ sessionId }) => attachSession(sessionId),
   'session:detach': ({ sessionId }) => detachSession(sessionId),
   'session:kill': ({ sessionId }) => killSession(sessionId),

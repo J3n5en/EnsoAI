@@ -1,5 +1,6 @@
 import type {
   CommitFileChange,
+  ConflictResolution,
   ContentSearchParams,
   ContentSearchResult,
   FileChangesResult,
@@ -11,7 +12,13 @@ import type {
   GitLogEntry,
   GitStatus,
   GitWorktree,
+  MergeConflict,
+  MergeConflictContent,
+  MergeState,
   WorktreeCreateOptions,
+  WorktreeMergeCleanupOptions,
+  WorktreeMergeOptions,
+  WorktreeMergeResult,
   WorktreeRemoveOptions,
 } from '@shared/types';
 import { remoteConnectionManager } from './RemoteConnectionManager';
@@ -41,6 +48,27 @@ export class RemoteRepositoryBackend {
       return remotePath.slice(prefix.length);
     }
     return remotePath;
+  }
+
+  private ensureSameConnection(...paths: string[]): string | null {
+    const remoteTargets = paths
+      .filter((item) => isRemoteVirtualPath(item))
+      .map((item) => toRemotePath(item));
+    if (remoteTargets.length === 0) {
+      return null;
+    }
+    const connectionId = remoteTargets[0]?.connectionId;
+    if (!connectionId) {
+      return null;
+    }
+    const mixedLocal = paths.some((item) => item && !isRemoteVirtualPath(item));
+    if (mixedLocal) {
+      return null;
+    }
+    if (remoteTargets.some((item) => item.connectionId !== connectionId)) {
+      return null;
+    }
+    return connectionId;
   }
 
   async listFiles(dirPath: string): Promise<FileEntry[]> {
@@ -100,7 +128,15 @@ export class RemoteRepositoryBackend {
   }
 
   async move(fromPath: string, toPath: string): Promise<void> {
-    await this.rename(fromPath, toPath);
+    const fromTarget = toRemotePath(fromPath);
+    const toTarget = toRemotePath(toPath);
+    if (fromTarget.connectionId !== toTarget.connectionId) {
+      throw createRemoteError('Moving across remote connections is not supported');
+    }
+    await remoteConnectionManager.call(fromTarget.connectionId, 'fs:move', {
+      fromPath: fromTarget.remotePath,
+      toPath: toTarget.remotePath,
+    });
   }
 
   async delete(targetPath: string, options?: { recursive?: boolean }): Promise<void> {
@@ -116,6 +152,119 @@ export class RemoteRepositoryBackend {
     return remoteConnectionManager.call<boolean>(connectionId, 'fs:exists', {
       path: remotePath,
     });
+  }
+
+  async copy(sourcePath: string, targetPath: string): Promise<void> {
+    const sourceTarget = toRemotePath(sourcePath);
+    const targetTarget = toRemotePath(targetPath);
+    if (sourceTarget.connectionId !== targetTarget.connectionId) {
+      throw createRemoteError('Copying across remote connections is not supported');
+    }
+    await remoteConnectionManager.call(sourceTarget.connectionId, 'fs:copy', {
+      sourcePath: sourceTarget.remotePath,
+      targetPath: targetTarget.remotePath,
+    });
+  }
+
+  async checkConflicts(
+    sources: string[],
+    targetDir: string
+  ): Promise<
+    Array<{
+      path: string;
+      name: string;
+      sourceSize: number;
+      targetSize: number;
+      sourceModified: number;
+      targetModified: number;
+    }>
+  > {
+    const connectionId = this.ensureSameConnection(...sources, targetDir);
+    if (!connectionId) {
+      throw createRemoteError('Conflict detection across remote connections is not supported');
+    }
+    const targetRemote = toRemotePath(targetDir);
+    const sourceRemotes = sources.map((item) => toRemotePath(item));
+    const conflicts = await remoteConnectionManager.call<
+      Array<{
+        path: string;
+        name: string;
+        sourceSize: number;
+        targetSize: number;
+        sourceModified: number;
+        targetModified: number;
+      }>
+    >(connectionId, 'fs:checkConflicts', {
+      sources: sourceRemotes.map((item) => item.remotePath),
+      targetDir: targetRemote.remotePath,
+    });
+
+    return conflicts.map((item) => ({
+      ...item,
+      path: this.toVirtualPath(connectionId, item.path),
+    }));
+  }
+
+  async batchCopy(
+    sources: string[],
+    targetDir: string,
+    conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
+  ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> {
+    const connectionId = this.ensureSameConnection(...sources, targetDir);
+    if (!connectionId) {
+      throw createRemoteError('Batch copy across remote connections is not supported');
+    }
+    const targetRemote = toRemotePath(targetDir);
+    const result = await remoteConnectionManager.call<{
+      success: string[];
+      failed: Array<{ path: string; error: string }>;
+    }>(connectionId, 'fs:batchCopy', {
+      sources: sources.map((item) => toRemotePath(item).remotePath),
+      targetDir: targetRemote.remotePath,
+      conflicts: conflicts.map((item) => ({
+        ...item,
+        path: isRemoteVirtualPath(item.path) ? toRemotePath(item.path).remotePath : item.path,
+      })),
+    });
+
+    return {
+      success: result.success.map((item) => this.toVirtualPath(connectionId, item)),
+      failed: result.failed.map((item) => ({
+        ...item,
+        path: this.toVirtualPath(connectionId, item.path),
+      })),
+    };
+  }
+
+  async batchMove(
+    sources: string[],
+    targetDir: string,
+    conflicts: Array<{ path: string; action: 'replace' | 'skip' | 'rename'; newName?: string }>
+  ): Promise<{ success: string[]; failed: Array<{ path: string; error: string }> }> {
+    const connectionId = this.ensureSameConnection(...sources, targetDir);
+    if (!connectionId) {
+      throw createRemoteError('Batch move across remote connections is not supported');
+    }
+    const targetRemote = toRemotePath(targetDir);
+    const result = await remoteConnectionManager.call<{
+      success: string[];
+      failed: Array<{ path: string; error: string }>;
+    }>(connectionId, 'fs:batchMove', {
+      sources: sources.map((item) => toRemotePath(item).remotePath),
+      targetDir: targetRemote.remotePath,
+      conflicts: conflicts.map((item) => ({
+        ...item,
+        path: isRemoteVirtualPath(item.path) ? toRemotePath(item.path).remotePath : item.path,
+      })),
+    });
+
+    return {
+      success: result.success.map((item) => this.toVirtualPath(connectionId, item)),
+      failed: result.failed.map((item) => ({
+        ...item,
+        path: this.toVirtualPath(connectionId, item.path),
+      })),
+    };
   }
 
   async getStatus(workdir: string): Promise<GitStatus> {
@@ -266,6 +415,87 @@ export class RemoteRepositoryBackend {
       rootPath: remotePath,
       options: remoteOptions,
     });
+  }
+
+  async mergeWorktree(
+    workdir: string,
+    options: WorktreeMergeOptions
+  ): Promise<WorktreeMergeResult> {
+    const { connectionId, remotePath } = toRemotePath(workdir);
+    const remoteOptions: WorktreeMergeOptions = {
+      ...options,
+      worktreePath: this.toRemoteRelativePath(options.worktreePath, remotePath),
+    };
+    return remoteConnectionManager.call<WorktreeMergeResult>(connectionId, 'worktree:merge', {
+      rootPath: remotePath,
+      options: remoteOptions,
+    });
+  }
+
+  async getMergeState(workdir: string): Promise<MergeState> {
+    const { connectionId, remotePath } = toRemotePath(workdir);
+    return remoteConnectionManager.call<MergeState>(connectionId, 'worktree:mergeState', {
+      rootPath: remotePath,
+    });
+  }
+
+  async getConflicts(workdir: string): Promise<MergeConflict[]> {
+    const { connectionId, remotePath } = toRemotePath(workdir);
+    return remoteConnectionManager.call<MergeConflict[]>(connectionId, 'worktree:conflicts', {
+      rootPath: remotePath,
+    });
+  }
+
+  async getConflictContent(workdir: string, filePath: string): Promise<MergeConflictContent> {
+    const { connectionId, remotePath } = toRemotePath(workdir);
+    return remoteConnectionManager.call<MergeConflictContent>(
+      connectionId,
+      'worktree:conflictContent',
+      {
+        rootPath: remotePath,
+        filePath,
+      }
+    );
+  }
+
+  async resolveConflict(workdir: string, resolution: ConflictResolution): Promise<void> {
+    const { connectionId, remotePath } = toRemotePath(workdir);
+    await remoteConnectionManager.call(connectionId, 'worktree:resolveConflict', {
+      rootPath: remotePath,
+      resolution,
+    });
+  }
+
+  async abortMerge(workdir: string): Promise<void> {
+    const { connectionId, remotePath } = toRemotePath(workdir);
+    await remoteConnectionManager.call(connectionId, 'worktree:abortMerge', {
+      rootPath: remotePath,
+    });
+  }
+
+  async continueMerge(
+    workdir: string,
+    message?: string,
+    cleanupOptions?: WorktreeMergeCleanupOptions
+  ): Promise<WorktreeMergeResult> {
+    const { connectionId, remotePath } = toRemotePath(workdir);
+    const remoteCleanupOptions = cleanupOptions
+      ? {
+          ...cleanupOptions,
+          worktreePath: cleanupOptions.worktreePath
+            ? this.toRemoteRelativePath(cleanupOptions.worktreePath, remotePath)
+            : cleanupOptions.worktreePath,
+        }
+      : undefined;
+    return remoteConnectionManager.call<WorktreeMergeResult>(
+      connectionId,
+      'worktree:continueMerge',
+      {
+        rootPath: remotePath,
+        message,
+        cleanupOptions: remoteCleanupOptions,
+      }
+    );
   }
 
   async searchFiles(

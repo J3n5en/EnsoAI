@@ -20,6 +20,7 @@ import { app } from 'electron';
 import * as pty from 'node-pty';
 import { killProcessTree } from '../../utils/processUtils';
 import { getEnvForCommand } from '../../utils/shell';
+import { readSharedSessionState, readSharedSettings } from '../SharedSessionState';
 import { RemoteAuthBroker } from './RemoteAuthBroker';
 import { getRemoteServerSource, REMOTE_SERVER_VERSION } from './RemoteHelperSource';
 import { parseHostVerificationPrompt } from './RemoteHostVerification';
@@ -68,6 +69,7 @@ interface ConnectionRuntime {
   arch: RemoteArchitecture;
   homeDir: string;
   gitVersion?: string;
+  libc?: 'glibc';
   resolvedHost: ResolvedHostConfig;
 }
 
@@ -93,6 +95,7 @@ export interface RemoteConnectionRuntimeInfo {
   homeDir: string;
   nodeVersion: string;
   gitVersion?: string;
+  libc?: 'glibc';
   resolvedHost: {
     host: string;
     port: number;
@@ -127,6 +130,7 @@ interface RemoteRuntimeSelfTestResult {
   arch?: RemoteArchitecture;
   homeDir: string;
   nodeVersion: string;
+  libc?: 'glibc' | 'musl' | null;
   ptySupported?: boolean;
   ptyError?: string | null;
   helperSourceSha256?: string;
@@ -166,7 +170,11 @@ const REMOTE_PTY_UNAVAILABLE_PREFIX = 'REMOTE_PTY_UNAVAILABLE:';
 const RUNTIME_MANIFEST_FILENAME = 'enso-remote-runtime-manifest.json';
 const REMOTE_SERVER_SOURCE = normalizeLineEndings(getRemoteServerSource());
 const REMOTE_SERVER_SOURCE_SHA256 = createHash('sha256').update(REMOTE_SERVER_SOURCE).digest('hex');
-const LINUX_ONLY_REMOTE_ERROR = 'Only Linux x64 and arm64 remote hosts are supported';
+const LINUX_ONLY_REMOTE_ERROR = 'Only glibc-based Linux x64 and arm64 remote hosts are supported';
+const REMOTE_SHARED_SETTINGS_FILENAME = 'settings.json';
+const REMOTE_SHARED_SESSION_STATE_FILENAME = 'session-state.json';
+const REMOTE_SHARED_STATE_SYNC_TIMEOUT_MS = 5_000;
+const REMOTE_RPC_TIMEOUT_MS = 15_000;
 
 type RemoteServerLaunchMode = 'bridge' | 'ensure-daemon' | 'self-test' | 'stop-daemon';
 
@@ -544,6 +552,7 @@ export class RemoteConnectionManager {
         homeDir: runtime.homeDir,
         nodeVersion: MANAGED_REMOTE_NODE_VERSION,
         gitVersion: runtime.gitVersion,
+        libc: runtime.libc,
       };
     } catch (error) {
       return {
@@ -727,6 +736,7 @@ export class RemoteConnectionManager {
       homeDir: runtime.homeDir,
       nodeVersion: MANAGED_REMOTE_NODE_VERSION,
       gitVersion: runtime.gitVersion,
+      libc: runtime.libc,
       resolvedHost: {
         host: runtime.resolvedHost.host,
         port: runtime.resolvedHost.port,
@@ -741,10 +751,11 @@ export class RemoteConnectionManager {
   async call<T = unknown>(
     connectionId: string,
     method: string,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
+    timeoutMs = REMOTE_RPC_TIMEOUT_MS
   ): Promise<T> {
     const server = this.servers.get(connectionId) ?? (await this.ensureConnected(connectionId));
-    return this.callServer<T>(server, method, params);
+    return this.callServer<T>(server, method, params, timeoutMs);
   }
 
   async addEventListener(
@@ -1034,6 +1045,71 @@ export class RemoteConnectionManager {
     await this.syncRemoteRuntimeManifest(profile, runtime, paths, runtimeAsset.asset);
   }
 
+  private getRemoteSharedStatePaths(runtime: ConnectionRuntime): {
+    rootDir: string;
+    settingsPath: string;
+    sessionStatePath: string;
+  } {
+    const rootDir = normalizeRemotePath(`${runtime.homeDir}/.ensoai`);
+    return {
+      rootDir,
+      settingsPath: normalizeRemotePath(`${rootDir}/${REMOTE_SHARED_SETTINGS_FILENAME}`),
+      sessionStatePath: normalizeRemotePath(`${rootDir}/${REMOTE_SHARED_SESSION_STATE_FILENAME}`),
+    };
+  }
+
+  private async syncRemoteSharedState(
+    connectionId: string,
+    server: RemoteServerProcess,
+    runtime: ConnectionRuntime
+  ): Promise<void> {
+    const sharedStatePaths = this.getRemoteSharedStatePaths(runtime);
+    await this.callServer(
+      server,
+      'fs:createDirectory',
+      { path: sharedStatePaths.rootDir },
+      REMOTE_SHARED_STATE_SYNC_TIMEOUT_MS
+    );
+
+    await this.measureDiagnosticStep(connectionId, 'sync-settings', async () => {
+      await this.callServer(
+        server,
+        'fs:write',
+        {
+          path: sharedStatePaths.settingsPath,
+          content: JSON.stringify(readSharedSettings(), null, 2),
+        },
+        REMOTE_SHARED_STATE_SYNC_TIMEOUT_MS
+      );
+    });
+
+    await this.measureDiagnosticStep(connectionId, 'sync-session-state', async () => {
+      await this.callServer(
+        server,
+        'fs:write',
+        {
+          path: sharedStatePaths.sessionStatePath,
+          content: JSON.stringify(readSharedSessionState(), null, 2),
+        },
+        REMOTE_SHARED_STATE_SYNC_TIMEOUT_MS
+      );
+    });
+  }
+
+  private syncRemoteSharedStateInBackground(
+    connectionId: string,
+    server: RemoteServerProcess,
+    runtime: ConnectionRuntime
+  ): void {
+    void this.syncRemoteSharedState(connectionId, server, runtime).catch((error) => {
+      console.warn(
+        `[remote:${server.profile.name}] Failed to sync shared state: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    });
+  }
+
   private async extractManagedRuntime(
     profile: ConnectionProfile,
     runtime: ConnectionRuntime,
@@ -1181,6 +1257,39 @@ export class RemoteConnectionManager {
   private buildRemoteServerCommandWithArgs(paths: RuntimeInstallPaths, args: string[]): string {
     const quotedArgs = args.map((arg) => `--${arg}`).join(' ');
     return `${shellQuote(paths.nodePath)} ${shellQuote(paths.serverPath)} ${quotedArgs}`;
+  }
+
+  private buildRemoteShCommand(script: string | string[], args: string[] = []): string {
+    // Keep compound shell syntax on separate lines. Joining blocks with ";" breaks POSIX sh.
+    const source = normalizeLineEndings(Array.isArray(script) ? script.join('\n') : script);
+    const quotedArgs = args.map((arg) => shellQuote(arg)).join(' ');
+    return quotedArgs
+      ? `sh -lc ${shellQuote(source)} sh ${quotedArgs}`
+      : `sh -lc ${shellQuote(source)}`;
+  }
+
+  private runRemoteShScript(
+    profile: ConnectionProfile,
+    resolvedHost: ResolvedHostConfig,
+    script: string | string[],
+    args: string[] = []
+  ): Promise<LocalCommandResult> {
+    return this.runSshCommand(profile, [this.buildRemoteShCommand(script, args)], resolvedHost);
+  }
+
+  private execRemoteShScript(
+    profile: ConnectionProfile,
+    resolvedHost: ResolvedHostConfig,
+    script: string | string[],
+    args: string[] = [],
+    strictExit = true
+  ): Promise<string> {
+    return this.execSsh(
+      profile,
+      [this.buildRemoteShCommand(script, args)],
+      resolvedHost,
+      strictExit
+    );
   }
 
   private formatCommandResultDetail(result: LocalCommandResult): string | undefined {
@@ -1345,6 +1454,16 @@ export class RemoteConnectionManager {
       );
     }
 
+    if (runtime.libc === 'glibc' && selfTestInfo.libc && selfTestInfo.libc !== 'glibc') {
+      throw createRemoteError(
+        'Managed remote runtime verification failed during {{step}}',
+        {
+          step: translateRemote('Managed remote server self-test'),
+        },
+        `Unexpected libc: ${selfTestInfo.libc}`
+      );
+    }
+
     return {
       platform: selfTestInfo.platform,
       arch: reportedArch,
@@ -1412,6 +1531,7 @@ export class RemoteConnectionManager {
       };
       this.servers.set(profile.id, server);
       this.volatileStatuses.delete(profile.id);
+      this.syncRemoteSharedStateInBackground(profile.id, server, runtime);
       void this.cleanupOldRuntimeVersions(server, paths).catch((error) => {
         console.warn(
           `[remote:${profile.name}] Failed to clean up old remote runtime versions: ${
@@ -1640,7 +1760,9 @@ export class RemoteConnectionManager {
 
       if (timeoutMs) {
         timeout = setTimeout(() => {
-          finish(() => reject(new Error(translateRemote('Remote server bootstrap timed out'))));
+          finish(() =>
+            reject(createRemoteError('Remote request timed out', undefined, `method=${method}`))
+          );
         }, timeoutMs);
       }
     });
@@ -1743,22 +1865,21 @@ export class RemoteConnectionManager {
     runtime: ConnectionRuntime,
     dirPath: string
   ): Promise<RemoteDirectoryEntry[]> {
-    const command = [
-      `sh -lc ${shellQuote(
-        [
-          'dir=$1',
-          '[ -d "$dir" ] || exit 0',
-          'for entry in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do',
-          '  [ -e "$entry" ] || continue',
-          '  name=$(basename "$entry")',
-          '  if [ -d "$entry" ]; then is_directory=true; else is_directory=false; fi',
-          '  printf "%s\\t%s\\t%s\\n" "$name" "$entry" "$is_directory"',
-          'done',
-        ].join('; ')
-      )} sh ${shellQuote(dirPath)}`,
-    ];
-
-    const output = await this.execSsh(profile, command, runtime.resolvedHost);
+    const output = await this.execRemoteShScript(
+      profile,
+      runtime.resolvedHost,
+      [
+        'dir=$1',
+        '[ -d "$dir" ] || exit 0',
+        'for entry in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do',
+        '  [ -e "$entry" ] || continue',
+        '  name=$(basename "$entry")',
+        '  if [ -d "$entry" ]; then is_directory=true; else is_directory=false; fi',
+        '  printf "%s\\t%s\\t%s\\n" "$name" "$entry" "$is_directory"',
+        'done',
+      ],
+      [dirPath]
+    );
     const trimmed = output.trim();
     if (!trimmed) {
       return [];
@@ -1814,38 +1935,71 @@ export class RemoteConnectionManager {
     }));
 
     const resolvedHost = await this.ensureHostTrusted(profile);
-    const envInfoRaw = await this.execSsh(
-      profile,
-      [
-        `sh -lc ${shellQuote(
-          [
-            'platform=$(uname -s 2>/dev/null | tr "[:upper:]" "[:lower:]" || printf "")',
-            'arch=$(uname -m 2>/dev/null || printf "")',
-            'home=$(printf %s "$HOME")',
-            'printf \'{"platform":"%s","arch":"%s","homeDir":"%s"}\' "$platform" "$arch" "$home"',
-          ].join('; ')
-        )}`,
-      ],
-      resolvedHost
-    ).catch((error) => {
-      throw createRemoteError(LINUX_ONLY_REMOTE_ERROR, undefined, error);
-    });
+    const envInfoResult = await this.runRemoteShScript(profile, resolvedHost, [
+      'platform=$(uname -s 2>/dev/null | tr "[:upper:]" "[:lower:]" || printf "")',
+      'arch=$(uname -m 2>/dev/null || printf "")',
+      'home=$(printf %s "$HOME")',
+      'libc=""',
+      'if command -v getconf >/dev/null 2>&1 && getconf GNU_LIBC_VERSION >/dev/null 2>&1; then',
+      '  libc="glibc"',
+      'elif command -v ldd >/dev/null 2>&1; then',
+      '  ldd_output=$(ldd --version 2>&1 || true)',
+      '  case "$ldd_output" in',
+      '    *musl*) libc="musl" ;;',
+      '    *glibc*|*GNU\\ libc*) libc="glibc" ;;',
+      '  esac',
+      'fi',
+      'printf \'{"platform":"%s","arch":"%s","homeDir":"%s","libc":"%s"}\' "$platform" "$arch" "$home" "$libc"',
+    ]);
+
+    if (envInfoResult.code !== 0) {
+      throw createRemoteError(
+        'Failed to detect remote platform',
+        undefined,
+        this.formatCommandResultDetail(envInfoResult)
+      );
+    }
+
+    const envInfoRaw = envInfoResult.stdout.trim();
 
     const envInfo = parseJsonLine<{
-      platform: RemotePlatform;
-      arch: string;
-      homeDir: string;
-    }>(envInfoRaw.trim());
+      platform?: string;
+      arch?: string;
+      homeDir?: string;
+      libc?: string;
+    }>(envInfoRaw);
 
-    if (!envInfo || envInfo.platform !== 'linux') {
-      throw createRemoteError(LINUX_ONLY_REMOTE_ERROR);
+    if (!envInfo) {
+      throw createRemoteError(
+        'Failed to parse remote platform information',
+        undefined,
+        [envInfoRaw, envInfoResult.stderr.trim()].filter(Boolean).join('\n') ||
+          translateRemote('Remote platform probe returned no JSON payload')
+      );
+    }
+
+    if (envInfo.platform !== 'linux') {
+      throw createRemoteError(
+        LINUX_ONLY_REMOTE_ERROR,
+        undefined,
+        `Unsupported platform: ${envInfo.platform || '<unknown>'}`
+      );
+    }
+
+    if (envInfo.libc !== 'glibc') {
+      throw createRemoteError(
+        LINUX_ONLY_REMOTE_ERROR,
+        undefined,
+        `Unsupported libc: ${envInfo.libc || '<unknown>'}`
+      );
     }
 
     const runtime: ConnectionRuntime = {
-      platform: envInfo.platform,
+      platform: 'linux',
       arch: this.normalizeArchitecture(envInfo.arch),
-      homeDir: normalizeRemotePath(envInfo.homeDir),
+      homeDir: normalizeRemotePath(envInfo.homeDir || '/'),
       gitVersion: (await this.getRemoteGitVersion(profile, resolvedHost)).trim() || undefined,
+      libc: 'glibc',
       resolvedHost,
     };
 

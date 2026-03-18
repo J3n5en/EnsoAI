@@ -22,8 +22,8 @@ export type RemoteConnectionDiagnosticStep =
   | 'install-runtime'
   | 'spawn-bridge'
   | 'bridge-handshake'
-  | 'load-session-storage'
-  | 'load-session-settings';
+  | 'sync-settings'
+  | 'sync-session-state';
 
 export interface RemoteConnectionDiagnostics {
   attemptStartedAt?: number;
@@ -84,6 +84,7 @@ export interface ConnectionTestResult {
   homeDir?: string;
   nodeVersion?: string;
   gitVersion?: string;
+  libc?: 'glibc';
   error?: string;
 }
 

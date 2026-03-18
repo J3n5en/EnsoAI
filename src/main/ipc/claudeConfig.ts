@@ -21,9 +21,18 @@ import {
 } from '../services/claude/PluginsManager';
 import { backupClaudeMd, readClaudeMd, writeClaudeMd } from '../services/claude/PromptsManager';
 import {
+  addRepositoryRemoteMarketplace,
   backupRepositoryClaudePrompt,
+  installRepositoryRemotePlugin,
+  listRepositoryRemoteAvailablePlugins,
+  listRepositoryRemoteMarketplaces,
+  listRepositoryRemotePlugins,
   readRepositoryClaudePrompt,
   readRepositoryRemoteMcpServers,
+  refreshRepositoryRemoteMarketplaces,
+  removeRepositoryRemoteMarketplace,
+  setRepositoryRemotePluginEnabled,
+  uninstallRepositoryRemotePlugin,
   writeRepositoryClaudePrompt,
   writeRepositoryRemoteMcpServers,
 } from '../services/remote/RemoteEnvironmentService';
@@ -124,7 +133,7 @@ export function registerClaudeConfigHandlers(): void {
   // Plugins Management
   ipcMain.handle(IPC_CHANNELS.CLAUDE_PLUGINS_LIST, (_, repoPath?: string) => {
     if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-      return [];
+      return listRepositoryRemotePlugins(repoPath);
     }
     return getPlugins();
   });
@@ -133,7 +142,7 @@ export function registerClaudeConfigHandlers(): void {
     IPC_CHANNELS.CLAUDE_PLUGINS_SET_ENABLED,
     (_, repoPath: string | undefined, pluginId: string, enabled: boolean) => {
       if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-        return false;
+        return setRepositoryRemotePluginEnabled(repoPath, pluginId, enabled);
       }
       return setPluginEnabled(pluginId, enabled);
     }
@@ -143,7 +152,7 @@ export function registerClaudeConfigHandlers(): void {
     IPC_CHANNELS.CLAUDE_PLUGINS_AVAILABLE,
     (_, repoPath: string | undefined, marketplace?: string) => {
       if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-        return [];
+        return listRepositoryRemoteAvailablePlugins(repoPath, marketplace);
       }
       return getAvailablePlugins(marketplace);
     }
@@ -153,7 +162,7 @@ export function registerClaudeConfigHandlers(): void {
     IPC_CHANNELS.CLAUDE_PLUGINS_INSTALL,
     (_, repoPath: string | undefined, pluginName: string, marketplace?: string) => {
       if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-        return false;
+        return installRepositoryRemotePlugin(repoPath, pluginName, marketplace);
       }
       return installPlugin(pluginName, marketplace);
     }
@@ -163,7 +172,7 @@ export function registerClaudeConfigHandlers(): void {
     IPC_CHANNELS.CLAUDE_PLUGINS_UNINSTALL,
     (_, repoPath: string | undefined, pluginId: string) => {
       if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-        return false;
+        return uninstallRepositoryRemotePlugin(repoPath, pluginId);
       }
       return uninstallPlugin(pluginId);
     }
@@ -172,7 +181,7 @@ export function registerClaudeConfigHandlers(): void {
   // Marketplaces Management
   ipcMain.handle(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_LIST, (_, repoPath?: string) => {
     if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-      return [];
+      return listRepositoryRemoteMarketplaces(repoPath);
     }
     return getMarketplaces();
   });
@@ -181,7 +190,7 @@ export function registerClaudeConfigHandlers(): void {
     IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_ADD,
     (_, repoPath: string | undefined, repo: string) => {
       if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-        return false;
+        return addRepositoryRemoteMarketplace(repoPath, repo);
       }
       return addMarketplace(repo);
     }
@@ -191,7 +200,7 @@ export function registerClaudeConfigHandlers(): void {
     IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_REMOVE,
     (_, repoPath: string | undefined, name: string) => {
       if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-        return false;
+        return removeRepositoryRemoteMarketplace(repoPath, name);
       }
       return removeMarketplace(name);
     }
@@ -201,7 +210,7 @@ export function registerClaudeConfigHandlers(): void {
     IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_REFRESH,
     (_, repoPath: string | undefined, name?: string) => {
       if (resolveRepositoryRuntimeContext(repoPath).kind === 'remote') {
-        return false;
+        return refreshRepositoryRemoteMarketplaces(repoPath, name);
       }
       return refreshMarketplaces(name);
     }

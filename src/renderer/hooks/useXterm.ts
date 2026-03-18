@@ -1,5 +1,5 @@
 import type { SessionKind } from '@shared/types';
-import { isRemoteVirtualPath, parseRemoteVirtualPath } from '@shared/utils/remotePath';
+import { isRemoteVirtualPath } from '@shared/utils/remotePath';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -656,53 +656,14 @@ export function useXterm({
           cwd: createOptions.cwd,
         });
 
-      const remoteConnectionId =
-        typeof createOptions.cwd === 'string' && isRemoteVirtualPath(createOptions.cwd)
-          ? parseRemoteVirtualPath(createOptions.cwd).connectionId
-          : null;
-      const isAttachSessionMissingError = (error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        return message.includes('远程会话不存在') || message.includes('Session not found');
-      };
-      let hasRetriedRemoteAttach = false;
-
       const createAndAttachSession = async () => {
         const created = await window.electronAPI.session.create(createOptions);
         const createdSessionId = created.session.sessionId;
         setCurrentSessionId(createdSessionId);
-
-        try {
-          return await attachToSession(createdSessionId);
-        } catch (attachError) {
-          await window.electronAPI.session.kill(createdSessionId).catch(() => {});
-
-          if (
-            remoteConnectionId &&
-            !hasRetriedRemoteAttach &&
-            isAttachSessionMissingError(attachError)
-          ) {
-            hasRetriedRemoteAttach = true;
-            console.warn(
-              '[xterm] Remote session disappeared before attach completed, reconnecting once:',
-              attachError
-            );
-            await window.electronAPI.remote.disconnect(remoteConnectionId).catch(() => {});
-            await window.electronAPI.remote.connect(remoteConnectionId);
-
-            const recreated = await window.electronAPI.session.create(createOptions);
-            const recreatedSessionId = recreated.session.sessionId;
-            setCurrentSessionId(recreatedSessionId);
-
-            try {
-              return await attachToSession(recreatedSessionId);
-            } catch (retryAttachError) {
-              await window.electronAPI.session.kill(recreatedSessionId).catch(() => {});
-              throw retryAttachError;
-            }
-          }
-
-          throw attachError;
+        if (isRemoteVirtualPath(createOptions.cwd)) {
+          return created;
         }
+        return await attachToSession(createdSessionId);
       };
 
       let session = null;

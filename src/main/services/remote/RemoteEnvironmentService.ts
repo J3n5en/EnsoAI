@@ -1,4 +1,11 @@
-import type { ClaudeSettings, ConnectionProfile, McpServerConfig } from '@shared/types';
+import type {
+  AvailablePlugin,
+  ClaudeSettings,
+  ConnectionProfile,
+  McpServerConfig,
+  Plugin,
+  PluginMarketplace,
+} from '@shared/types';
 import { resolveRepositoryRuntimeContext } from '../repository/RepositoryContextResolver';
 import { remoteConnectionManager } from './RemoteConnectionManager';
 
@@ -239,4 +246,93 @@ export async function getRepositoryRemoteProfile(
   }
   const runtime = await remoteConnectionManager.getRuntimeInfo(connectionId);
   return runtime.profile;
+}
+
+async function callRepositoryRemote<T>(
+  repoPath: string | undefined,
+  method: string,
+  params: Record<string, unknown> = {}
+): Promise<T> {
+  const context = await getRepositoryEnvironmentContext(repoPath);
+  if (context.kind === 'local') {
+    throw new Error('Repository is not remote');
+  }
+  return remoteConnectionManager.call<T>(context.connectionId, method, params);
+}
+
+export async function listRepositoryRemotePlugins(repoPath?: string): Promise<Plugin[]> {
+  return callRepositoryRemote<Plugin[]>(repoPath, 'claude:plugins:list');
+}
+
+export async function setRepositoryRemotePluginEnabled(
+  repoPath: string | undefined,
+  pluginId: string,
+  enabled: boolean
+): Promise<boolean> {
+  return callRepositoryRemote<boolean>(repoPath, 'claude:plugins:setEnabled', {
+    pluginId,
+    enabled,
+  });
+}
+
+export async function listRepositoryRemoteAvailablePlugins(
+  repoPath: string | undefined,
+  marketplace?: string
+): Promise<AvailablePlugin[]> {
+  return callRepositoryRemote<AvailablePlugin[]>(repoPath, 'claude:plugins:available', {
+    marketplace,
+  });
+}
+
+export async function installRepositoryRemotePlugin(
+  repoPath: string | undefined,
+  pluginName: string,
+  marketplace?: string
+): Promise<boolean> {
+  return callRepositoryRemote<boolean>(repoPath, 'claude:plugins:install', {
+    pluginName,
+    marketplace,
+  });
+}
+
+export async function uninstallRepositoryRemotePlugin(
+  repoPath: string | undefined,
+  pluginId: string
+): Promise<boolean> {
+  return callRepositoryRemote<boolean>(repoPath, 'claude:plugins:uninstall', {
+    pluginId,
+  });
+}
+
+export async function listRepositoryRemoteMarketplaces(
+  repoPath?: string
+): Promise<PluginMarketplace[]> {
+  return callRepositoryRemote<PluginMarketplace[]>(repoPath, 'claude:plugins:marketplaces:list');
+}
+
+export async function addRepositoryRemoteMarketplace(
+  repoPath: string | undefined,
+  repo: string
+): Promise<boolean> {
+  return callRepositoryRemote<boolean>(repoPath, 'claude:plugins:marketplaces:add', {
+    repo,
+  });
+}
+
+export async function removeRepositoryRemoteMarketplace(
+  repoPath: string | undefined,
+  name: string
+): Promise<boolean> {
+  return callRepositoryRemote<boolean>(repoPath, 'claude:plugins:marketplaces:remove', {
+    name,
+  });
+}
+
+export async function refreshRepositoryRemoteMarketplaces(
+  repoPath: string | undefined,
+  name?: string
+): Promise<boolean> {
+  return callRepositoryRemote<boolean>(repoPath, 'claude:plugins:marketplaces:refresh', {
+    name,
+  });
 }

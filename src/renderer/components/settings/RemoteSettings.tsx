@@ -419,11 +419,11 @@ export function RemoteSettings() {
         <h2 className="font-semibold text-xl">{t('Remote Connection')}</h2>
         <p className="text-muted-foreground text-sm">
           {t(
-            'Save SSH profiles here, then use the Remote Host entry in the sidebar to open a full remote window.'
+            'Save SSH profiles here, then use the Remote Host entry in the sidebar to attach remote repositories into this window.'
           )}
         </p>
         <p className="text-muted-foreground text-sm">
-          {t('Remote connections currently support Linux x64 and arm64 hosts only.')}
+          {t('Remote connections currently support Linux x64 and arm64 glibc hosts only.')}
         </p>
       </div>
 

@@ -303,7 +303,7 @@ export class SessionManager {
     await this.ensureRemoteSubscriptions(connectionId);
     const result = await remoteConnectionManager.call<SessionOpenResult>(
       connectionId,
-      'session:create',
+      'session:createAndAttach',
       {
         options: {
           ...options,

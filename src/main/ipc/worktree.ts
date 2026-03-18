@@ -10,7 +10,6 @@ import { ipcMain } from 'electron';
 import { updateClaudeWorkspaceFolders } from '../services/claude/ClaudeIdeBridge';
 import { gitAutoFetchService } from '../services/git/GitAutoFetchService';
 import { WorktreeService } from '../services/git/WorktreeService';
-import { createRemoteError } from '../services/remote/RemoteI18n';
 import { isRemoteVirtualPath } from '../services/remote/RemotePath';
 import { remoteRepositoryBackend } from '../services/remote/RemoteRepositoryBackend';
 import { sessionManager } from '../services/session/SessionManager';
@@ -95,7 +94,7 @@ export function registerWorktreeHandlers(): void {
     IPC_CHANNELS.WORKTREE_MERGE,
     async (_, workdir: string, options: WorktreeMergeOptions) => {
       if (isRemoteVirtualPath(workdir)) {
-        throw createRemoteError('Remote worktree merge is not supported yet');
+        return remoteRepositoryBackend.mergeWorktree(workdir, options);
       }
       const service = getWorktreeService(workdir);
       return service.merge(options);
@@ -104,7 +103,7 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_STATE, async (_, workdir: string) => {
     if (isRemoteVirtualPath(workdir)) {
-      throw createRemoteError('Remote worktree merge state is not supported yet');
+      return remoteRepositoryBackend.getMergeState(workdir);
     }
     const service = getWorktreeService(workdir);
     return service.getMergeState(workdir);
@@ -112,7 +111,7 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_CONFLICTS, async (_, workdir: string) => {
     if (isRemoteVirtualPath(workdir)) {
-      throw createRemoteError('Remote worktree conflicts are not supported yet');
+      return remoteRepositoryBackend.getConflicts(workdir);
     }
     const service = getWorktreeService(workdir);
     return service.getConflicts(workdir);
@@ -122,7 +121,7 @@ export function registerWorktreeHandlers(): void {
     IPC_CHANNELS.WORKTREE_MERGE_CONFLICT_CONTENT,
     async (_, workdir: string, filePath: string) => {
       if (isRemoteVirtualPath(workdir)) {
-        throw createRemoteError('Remote conflict content is not supported yet');
+        return remoteRepositoryBackend.getConflictContent(workdir, filePath);
       }
       const service = getWorktreeService(workdir);
       return service.getConflictContent(workdir, filePath);
@@ -133,7 +132,8 @@ export function registerWorktreeHandlers(): void {
     IPC_CHANNELS.WORKTREE_MERGE_RESOLVE,
     async (_, workdir: string, resolution: ConflictResolution) => {
       if (isRemoteVirtualPath(workdir)) {
-        throw createRemoteError('Remote conflict resolution is not supported yet');
+        await remoteRepositoryBackend.resolveConflict(workdir, resolution);
+        return;
       }
       const service = getWorktreeService(workdir);
       await service.resolveConflict(workdir, resolution);
@@ -142,7 +142,8 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_ABORT, async (_, workdir: string) => {
     if (isRemoteVirtualPath(workdir)) {
-      throw createRemoteError('Remote merge abort is not supported yet');
+      await remoteRepositoryBackend.abortMerge(workdir);
+      return;
     }
     const service = getWorktreeService(workdir);
     await service.abortMerge(workdir);
@@ -152,7 +153,7 @@ export function registerWorktreeHandlers(): void {
     IPC_CHANNELS.WORKTREE_MERGE_CONTINUE,
     async (_, workdir: string, message?: string, cleanupOptions?: WorktreeMergeCleanupOptions) => {
       if (isRemoteVirtualPath(workdir)) {
-        throw createRemoteError('Remote merge continue is not supported yet');
+        return remoteRepositoryBackend.continueMerge(workdir, message, cleanupOptions);
       }
       const service = getWorktreeService(workdir);
       return service.continueMerge(workdir, message, cleanupOptions);

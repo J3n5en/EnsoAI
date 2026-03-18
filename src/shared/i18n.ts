@@ -995,8 +995,8 @@ export const zhTranslations: Record<string, string> = {
   'Use .gitignore': '使用 .gitignore',
   // Remote Connection
   'Remote Connection': '远程连接',
-  'Save SSH profiles here, then use the Remote Host entry in the sidebar to open a full remote window.':
-    '在这里保存 SSH 配置，然后通过侧边栏中的“远程主机”入口打开完整远程窗口。',
+  'Save SSH profiles here, then use the Remote Host entry in the sidebar to attach remote repositories into this window.':
+    '在这里保存 SSH 配置，然后通过侧边栏中的“远程主机”入口把远程仓库挂到当前窗口。',
   'SSH Profiles': 'SSH 配置',
   'These profiles reuse your existing SSH configuration and credentials.':
     '这些配置会复用你现有的 SSH 配置和凭据。',
@@ -1062,8 +1062,8 @@ export const zhTranslations: Record<string, string> = {
   'The current remote helper version was reinstalled successfully.':
     '当前远程助手版本已成功重新安装。',
   'The managed remote runtime was reinstalled successfully.': '托管远程运行时已成功重新安装。',
-  'Remote connections currently support Linux x64 and arm64 hosts only.':
-    '远程连接目前仅支持 Linux x64 和 arm64 主机。',
+  'Remote connections currently support Linux x64 and arm64 glibc hosts only.':
+    '远程连接目前仅支持 Linux x64 和 arm64 的 glibc 主机。',
   'Helper deleted': '助手已删除',
   'Runtime deleted': '运行时已删除',
   'All installed helper versions for this profile were removed.':
@@ -1121,8 +1121,8 @@ export const zhTranslations: Record<string, string> = {
   'Failed to verify remote host with SSH handshake': '通过 SSH 握手验证远程主机失败',
   'SSH handshake ended before host verification': 'SSH 握手在主机验证完成前就结束了',
   'SSH handshake timed out before host verification': 'SSH 握手在主机验证完成前超时',
-  'Add a local Git repository, clone from a remote URL, or attach a remote workspace over SSH.':
-    '添加本地 Git 仓库、从远程 URL 克隆，或通过 SSH 打开完整远程主机窗口。',
+  'Add a local Git repository, clone from a remote URL, or attach a remote repository over SSH.':
+    '添加本地 Git 仓库、从远程 URL 克隆，或通过 SSH 把远程仓库挂到当前窗口。',
   'Failed to browse remote roots': '读取远程根目录失败',
   'Failed to browse remote host directories': '读取远程主机目录失败',
   'Please choose an SSH profile first': '请先选择一个 SSH 配置',
@@ -1134,20 +1134,21 @@ export const zhTranslations: Record<string, string> = {
   Disconnect: '断开连接',
   'Disconnect Remote Host': '断开远程主机',
   'Connect to Remote Host': '连接远程主机',
-  'This whole window is attached to the current remote host.': '整个窗口已经附着到当前远程主机。',
+  'This window already has repositories attached from the current remote host.':
+    '当前窗口已经挂载了这个远程主机上的仓库。',
   'This window is already attached to the selected remote host.':
     '这个窗口已经连接到选中的远程主机。',
-  'Open a full remote host window over SSH. This window will switch completely to that host.':
-    '通过 SSH 打开完整远程主机窗口。连接后当前窗口会完整切换到该主机。',
-  'Connecting will open a full remote host window, not a single folder.':
-    '连接后会打开完整远程主机窗口，而不是挂载单个文件夹。',
-  'After connecting, the whole window switches to that remote host.':
-    '连接后整个窗口都会切换到那个远程主机。',
+  'Connect to a remote host over SSH, then attach one or more repositories from that host into this window.':
+    '先通过 SSH 连接远程主机，再把该主机上的一个或多个仓库挂到当前窗口。',
+  'Connecting will prepare this host for attaching repositories into the current window.':
+    '连接会为当前窗口挂载该主机上的仓库做好准备。',
+  'After connecting, choose repositories from that host to attach into this window.':
+    '连接完成后，选择该主机上的仓库挂到当前窗口。',
   'Add a project folder from the current remote host into this window.':
-    '在当前窗口中添加一个仓库。',
+    '把当前远程主机上的仓库目录挂到这个窗口。',
   'Add a project folder from the current remote host to get started.':
-    '从当前窗口添加一个仓库开始使用。',
-  'Choose a project folder on the current remote host.': '选择当前窗口中的仓库目录。',
+    '先把当前远程主机上的仓库目录挂到这个窗口。',
+  'Choose a project folder on the current remote host.': '选择当前远程主机上的仓库目录。',
   'Current location': '当前位置',
   'No folder selected': '尚未选择文件夹',
   'Go to parent folder': '返回上级文件夹',
@@ -1172,7 +1173,9 @@ export const zhTranslations: Record<string, string> = {
     '请先到“设置 > 远程连接”中创建 SSH 配置，然后通过“远程主机”入口连接。',
   'The same SSH credentials and config you already use will be reused here.':
     '这里会复用你当前已经在用的 SSH 凭据和配置。',
+  'Bind this repository to a specific SSH connection.': '把这个仓库绑定到一个指定的 SSH 连接。',
   'Remote repository path': '远程仓库路径',
+  'Remote path': '远程路径',
   '/srv/project or ~/workspace/project': '/srv/project 或 ~/workspace/project',
   'Resolving remote roots...': '正在解析远程根目录...',
   'Resolving directories on this host...': '正在解析目录...',
@@ -1181,6 +1184,8 @@ export const zhTranslations: Record<string, string> = {
   'Choose a project directory on the current remote host.': '选择当前窗口中的仓库目录。',
   'The selected directory will be added as a project from this remote host in the current window.':
     '选中的目录会作为仓库添加到当前窗口中。',
+  'Choose the repository directory on the selected SSH host.': '选择所选 SSH 主机上的仓库目录。',
+  'Choose a project directory on the selected SSH host.': '选择所选 SSH 主机上的仓库目录。',
   SSH: 'SSH',
   Node: 'Node',
   Connect: '连接',
@@ -1213,25 +1218,31 @@ export const zhTranslations: Record<string, string> = {
   'Unsupported remote server mode': '不支持的远程服务模式',
   'Remote connection failed': '远程连接失败',
   'Connection stage': '连接阶段',
-  'The remote host window could not be opened. Review the failure details below.':
-    '无法打开远程主机窗口。请查看下面的失败详情。',
+  'The remote host could not be prepared for repository attachment. Review the failure details below.':
+    '无法为挂载远程仓库准备该主机。请查看下面的失败详情。',
   'Error details': '错误详情',
   'Unknown remote profile: {{connectionId}}': '未知的远程配置：{{connectionId}}',
   'Remote platform unavailable for {{connectionId}}':
     '无法获取连接 {{connectionId}} 的远程平台信息',
   'Reveal in file manager is not supported for remote files': '远程文件暂不支持在文件管理器中定位',
-  'Remote copy is not supported yet': '暂不支持远程复制',
-  'Remote conflict detection is not supported yet': '暂不支持远程冲突检测',
-  'Remote batch copy is not supported yet': '暂不支持远程批量复制',
-  'Remote batch move is not supported yet': '暂不支持远程批量移动',
-  'Remote worktree merge is not supported yet': '暂不支持远程工作树合并',
-  'Remote worktree merge state is not supported yet': '暂不支持远程工作树合并状态查询',
-  'Remote worktree conflicts are not supported yet': '暂不支持远程工作树冲突列表',
-  'Remote conflict content is not supported yet': '暂不支持远程冲突内容读取',
-  'Remote conflict resolution is not supported yet': '暂不支持远程冲突解决',
-  'Remote merge abort is not supported yet': '暂不支持远程中止合并',
-  'Remote merge continue is not supported yet': '暂不支持远程继续合并',
+  'Copying between local and remote files is not supported': '暂不支持本地与远程之间直接复制',
+  'Copying across remote connections is not supported': '暂不支持跨远程连接复制',
+  'Conflict detection between local and remote files is not supported':
+    '暂不支持本地与远程之间的冲突检测',
+  'Conflict detection across remote connections is not supported': '暂不支持跨远程连接的冲突检测',
+  'Batch copy between local and remote files is not supported': '暂不支持本地与远程之间批量复制',
+  'Batch copy across remote connections is not supported': '暂不支持跨远程连接批量复制',
+  'Batch move between local and remote files is not supported': '暂不支持本地与远程之间批量移动',
+  'Batch move across remote connections is not supported': '暂不支持跨远程连接批量移动',
   'Renaming across remote connections is not supported': '暂不支持跨远程连接重命名',
+  'Moving between local and remote files is not supported': '暂不支持本地与远程之间直接移动',
+  'Moving across remote connections is not supported': '暂不支持跨远程连接移动',
+  'Failed to detect remote platform': '探测远程平台失败',
+  'Failed to parse remote platform information': '解析远程平台信息失败',
+  'Remote platform probe returned no JSON payload': '远程平台探测未返回 JSON 数据',
+  'Only glibc-based Linux x64 and arm64 remote hosts are supported':
+    '仅支持基于 glibc 的 Linux x64 和 arm64 远程主机',
+  'Remote request timed out': '远程请求超时',
   'Not a remote virtual path: {{path}}': '不是有效的远程虚拟路径：{{path}}',
   'Malformed remote virtual path: {{path}}': '远程虚拟路径格式错误：{{path}}',
   'SSH command exited with code {{code}}': 'SSH 命令已退出，退出码 {{code}}',
