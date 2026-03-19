@@ -347,6 +347,7 @@ export interface SettingsState {
   defaultWorktreePath: string; // Default path for creating worktrees
   proxySettings: ProxySettings;
   autoCreateSessionOnActivate: boolean; // Auto-create agent/terminal session when worktree becomes active
+  gitAutoFetchEnabled: boolean;
 
   // Git Clone Settings
   gitClone: GitCloneSettings;
@@ -475,6 +476,7 @@ export interface SettingsState {
   setDefaultWorktreePath: (path: string) => void;
   setProxySettings: (settings: Partial<ProxySettings>) => void;
   setAutoCreateSessionOnActivate: (enabled: boolean) => void;
+  setGitAutoFetchEnabled: (enabled: boolean) => void;
 
   // Setters - Git Clone
   setGitClone: (settings: Partial<GitCloneSettings>) => void;

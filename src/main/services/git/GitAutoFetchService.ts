@@ -41,7 +41,9 @@ class GitAutoFetchService {
     };
     window.on('focus', this.onFocusHandler);
 
-    this.start();
+    if (this.enabled) {
+      this.start();
+    }
   }
 
   cleanup(): void {

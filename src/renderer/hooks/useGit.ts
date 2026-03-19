@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { normalizePath } from '@/App/storage';
 import { useRepositoryStore } from '@/stores/repository';
+import { useSettingsStore } from '@/stores/settings';
 import { useShouldPoll } from './useWindowFocus';
 
 export function useGitStatus(workdir: string | null, isActive = true) {
   const setStatus = useRepositoryStore((s) => s.setStatus);
   const shouldPoll = useShouldPoll();
+  const gitAutoFetchEnabled = useSettingsStore((s) => s.gitAutoFetchEnabled);
   const normalizedWorkdir = workdir ? normalizePath(workdir) : null;
 
   return useQuery({
@@ -19,7 +21,7 @@ export function useGitStatus(workdir: string | null, isActive = true) {
     },
     enabled: !!workdir,
     refetchInterval: (query) => {
-      if (!isActive || !shouldPoll) return false;
+      if (!isActive || !shouldPoll || !gitAutoFetchEnabled) return false;
       return query.state.data?.truncated ? 60000 : 5000;
     },
     refetchIntervalInBackground: false,
