@@ -238,7 +238,17 @@ export function TreeSidebar({
     }))
   );
   const allRepoPaths = useMemo(() => repositories.map((repo) => repo.path), [repositories]);
-  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(allRepoPaths);
+  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(
+    useMemo(
+      () =>
+        allRepoPaths.map((repoPath) => ({
+          repoPath,
+          // Keep startup passive for unopened remote repos; otherwise search can trigger SSH auth.
+          enabled: canLoadRepo(repoPath),
+        })),
+      [allRepoPaths, canLoadRepo]
+    )
+  );
 
   // Repository context menu
   const [repoMenuOpen, setRepoMenuOpen] = useState(false);

@@ -1272,6 +1272,7 @@ export default function App() {
                     repositories={repositories}
                     selectedRepo={selectedRepo}
                     onSelectRepo={handleSelectRepo}
+                    canLoadRepo={canLoadRepo}
                     onAddRepository={handleOpenRepositoryDialog}
                     onRemoveRepository={handleRemoveRepository}
                     onReorderRepositories={handleReorderRepositories}
