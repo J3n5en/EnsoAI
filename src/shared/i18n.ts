@@ -1104,6 +1104,8 @@ export const zhTranslations: Record<string, string> = {
   optional: '可选',
   // Worktree settings
   'Git worktree save location settings': 'Git Worktree 保存位置设置',
+  'Git auto refresh': 'Git 自动刷新',
+  'Automatically fetch and refresh git status': '自动拉取远程更新并刷新 Git 状态',
   'Default directory for new worktrees. Leave empty to use ~/ensoai/workspaces':
     '新建 Worktree 的默认目录，留空则使用 ~/ensoai/workspaces',
   // Claude Provider

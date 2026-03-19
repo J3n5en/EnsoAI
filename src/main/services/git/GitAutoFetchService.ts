@@ -107,40 +107,42 @@ class GitAutoFetchService {
     if (!this.enabled || this.worktreePaths.size === 0 || this.fetching) return;
     this.fetching = true;
 
-    this.lastFetchTime = Date.now();
+    try {
+      this.lastFetchTime = Date.now();
 
-    // 串行执行，避免网络拥堵
-    for (const path of this.worktreePaths) {
-      if (!this.enabled) break;
-      try {
-        const git = new GitService(path);
-        await Promise.race([
-          git.fetch(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('fetch timeout')), 30000)),
-        ]);
-
+      // 串行执行，避免网络拥堵
+      for (const path of this.worktreePaths) {
         if (!this.enabled) break;
+        try {
+          const git = new GitService(path);
+          await Promise.race([
+            git.fetch(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('fetch timeout')), 30000)),
+          ]);
 
-        // 并行 fetch 已初始化的子模块（带超时控制）
-        const submodules = await git.listSubmodules();
-        const submodulePromises = submodules
-          .filter((s) => s.initialized)
-          .map((s) =>
-            Promise.race([
-              git.fetchSubmodule(s.path),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000)),
-            ]).catch((err) => {
-              console.debug(`Auto fetch submodule failed for ${s.path}:`, err);
-            })
-          );
-        await Promise.all(submodulePromises);
-      } catch (error) {
-        // 静默失败，不打扰用户
-        console.debug(`Auto fetch failed for ${path}:`, error);
+          if (!this.enabled) break;
+
+          // 并行 fetch 已初始化的子模块（带超时控制）
+          const submodules = await git.listSubmodules();
+          const submodulePromises = submodules
+            .filter((s) => s.initialized)
+            .map((s) =>
+              Promise.race([
+                git.fetchSubmodule(s.path),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000)),
+              ]).catch((err) => {
+                console.debug(`Auto fetch submodule failed for ${s.path}:`, err);
+              })
+            );
+          await Promise.all(submodulePromises);
+        } catch (error) {
+          // 静默失败，不打扰用户
+          console.debug(`Auto fetch failed for ${path}:`, error);
+        }
       }
+    } finally {
+      this.fetching = false;
     }
-
-    this.fetching = false;
 
     // 通知渲染进程刷新状态
     this.notifyCompleted();
