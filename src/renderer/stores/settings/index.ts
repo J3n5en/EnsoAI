@@ -153,7 +153,7 @@ function getInitialState() {
     autoCreateSessionOnActivate: false,
 
     // Git Auto Operations
-    gitAutoFetchEnabled: false,
+    gitAutoFetchEnabled: true,
 
     // Git Clone Settings
     gitClone: defaultGitCloneSettings,
