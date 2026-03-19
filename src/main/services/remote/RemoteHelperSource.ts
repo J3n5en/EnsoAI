@@ -194,6 +194,10 @@ function normalize(p) {
   return replaced || '/';
 }
 
+function shellQuote(value) {
+  return "'" + String(value).replace(/'/g, "'\\\\''") + "'";
+}
+
 function execCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -780,12 +784,12 @@ async function gitCommit(rootPath, message) {
 }
 
 async function gitStage(rootPath, paths) {
-  await execCommand('git', ['add', ...paths], { cwd: rootPath });
+  await execCommand('git', ['add', '--', ...paths], { cwd: rootPath });
   return { success: true };
 }
 
 async function gitUnstage(rootPath, paths) {
-  await execCommand('git', ['restore', '--staged', ...paths], { cwd: rootPath });
+  await execCommand('git', ['restore', '--staged', '--', ...paths], { cwd: rootPath });
   return { success: true };
 }
 
@@ -822,16 +826,32 @@ async function gitFileChanges(rootPath) {
   return parseFileChanges(stdout);
 }
 
-async function gitFileDiff(rootPath, filePath, staged) {
-  const args = staged ? ['show', 'HEAD:' + filePath] : ['show', 'HEAD:' + filePath];
-  let original = '';
+async function gitShowOrEmpty(rootPath, spec) {
   try {
-    const result = await execCommand('git', args, { cwd: rootPath });
-    original = result.stdout;
+    const result = await execCommand('git', ['show', spec], { cwd: rootPath });
+    return result.stdout;
   } catch {
-    original = '';
+    return '';
   }
-  const modified = await fsp.readFile(path.join(rootPath, filePath), 'utf8').catch(() => '');
+}
+
+async function gitFileDiff(rootPath, filePath, staged) {
+  let original = '';
+  let modified = '';
+
+  if (staged) {
+    [original, modified] = await Promise.all([
+      gitShowOrEmpty(rootPath, 'HEAD:' + filePath),
+      gitShowOrEmpty(rootPath, ':' + filePath),
+    ]);
+  } else {
+    original = await gitShowOrEmpty(rootPath, ':' + filePath);
+    if (!original) {
+      original = await gitShowOrEmpty(rootPath, 'HEAD:' + filePath);
+    }
+    modified = await fsp.readFile(path.join(rootPath, filePath), 'utf8').catch(() => '');
+  }
+
   return {
     path: filePath,
     original,
@@ -1973,7 +1993,9 @@ async function checkTmux({ forceRefresh }) {
 
 async function killTmuxSession({ name }) {
   try {
-    await execInConfiguredShell('tmux -L enso kill-session -t ' + name, { timeout: 5000 });
+    await execInConfiguredShell('tmux -L enso kill-session -t ' + shellQuote(name), {
+      timeout: 5000,
+    });
   } catch {
     // Session may already be gone.
   }
@@ -2151,26 +2173,26 @@ async function runClaudePluginCommand(command) {
 }
 
 async function addClaudeMarketplace(source) {
-  return runClaudePluginCommand('claude plugin marketplace add "' + source + '"');
+  return runClaudePluginCommand('claude plugin marketplace add ' + shellQuote(source));
 }
 
 async function removeClaudeMarketplace(name) {
-  return runClaudePluginCommand('claude plugin marketplace remove "' + name + '"');
+  return runClaudePluginCommand('claude plugin marketplace remove ' + shellQuote(name));
 }
 
 async function refreshClaudeMarketplaces(name) {
   return runClaudePluginCommand(
-    name ? 'claude plugin marketplace update "' + name + '"' : 'claude plugin marketplace update'
+    name ? 'claude plugin marketplace update ' + shellQuote(name) : 'claude plugin marketplace update'
   );
 }
 
 async function installClaudePlugin(pluginName, marketplace) {
   const pluginSpec = marketplace ? pluginName + '@' + marketplace : pluginName;
-  return runClaudePluginCommand('claude plugin install "' + pluginSpec + '"');
+  return runClaudePluginCommand('claude plugin install ' + shellQuote(pluginSpec));
 }
 
 async function uninstallClaudePlugin(pluginId) {
-  return runClaudePluginCommand('claude plugin uninstall "' + pluginId + '"');
+  return runClaudePluginCommand('claude plugin uninstall ' + shellQuote(pluginId));
 }
 
 function createSessionDescriptor(session) {

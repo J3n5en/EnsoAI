@@ -283,7 +283,7 @@ export function TreeSidebar({
 
   // Wait for branches to update before opening dialog
   useEffect(() => {
-    if (waitingForBranchRefresh && branches.length >= 0) {
+    if (waitingForBranchRefresh && branches.length > 0) {
       // Small delay to ensure branches state is fully updated
       const timer = setTimeout(() => {
         setCreateWorktreeDialogOpen(true);

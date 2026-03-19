@@ -415,6 +415,8 @@ function phaseLabelFor(phase: RemoteConnectionPhase | undefined): string | undef
       return translateRemote('Starting remote server...');
     case 'handshake':
       return translateRemote('Waiting for remote server handshake...');
+    case 'reconnecting':
+      return translateRemote('Reconnecting remote connection...');
     case 'connected':
       return translateRemote('Connected');
     case 'failed':
@@ -532,6 +534,8 @@ export class RemoteConnectionManager {
     this.runtimes.delete(profileId);
     this.volatileStatuses.delete(profileId);
     this.diagnostics.delete(profileId);
+    this.disconnectListeners.delete(profileId);
+    this.localStatusListeners.delete(profileId);
     this.authBroker.clearSecrets(profileId);
     await this.flush();
   }
@@ -687,6 +691,8 @@ export class RemoteConnectionManager {
   async connect(profileOrId: string | ConnectionProfile): Promise<RemoteConnectionStatus> {
     const profile = await this.resolveProfile(profileOrId);
     this.intentionalDisconnects.delete(profile.id);
+    this.clearReconnectTimer(profile.id);
+    this.reconnectAttempts.delete(profile.id);
     const existing = this.servers.get(profile.id);
     if (existing) {
       return existing.status;
@@ -1882,7 +1888,7 @@ export class RemoteConnectionManager {
       ...current,
       connected: false,
       phase: 'reconnecting',
-      phaseLabel: translateRemote('Reconnecting remote connection...'),
+      phaseLabel: phaseLabelFor('reconnecting'),
       recoverable: true,
       reconnectAttempt: attempt,
       nextRetryAt,
