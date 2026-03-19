@@ -2595,7 +2595,19 @@ async function authenticateDaemon(token) {
 }
 
 async function pingDaemon() {
-  return { ok: true, pid: process.pid };
+  const env = await testEnvironment();
+  return {
+    ok: true,
+    pid: process.pid,
+    serverVersion: REMOTE_SERVER_VERSION,
+    platform: env.platform,
+    arch: process.arch,
+    nodeVersion: env.nodeVersion,
+    homeDir: env.homeDir,
+    gitVersion: env.gitVersion,
+    ptySupported: env.ptySupported,
+    ptyError: env.ptyError,
+  };
 }
 
 function createJsonLineDispatcher(stream, onMessage) {

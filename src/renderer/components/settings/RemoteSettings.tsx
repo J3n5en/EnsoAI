@@ -269,11 +269,19 @@ export function RemoteSettings() {
       const result = await window.electronAPI.remote.testConnection(draftProfile);
       setTestResult(result);
       if (result.success) {
-        setFeedback({
-          variant: 'success',
-          title: t('Connection succeeded'),
-          description: t('The remote host is reachable and ready for managed runtime setup.'),
-        });
+        if (result.runtimeError) {
+          setFeedback({
+            variant: 'error',
+            title: t('Connection failed'),
+            description: result.runtimeError,
+          });
+        } else {
+          setFeedback({
+            variant: 'success',
+            title: t('Connection succeeded'),
+            description: t('The remote host is reachable and ready for managed runtime setup.'),
+          });
+        }
       } else {
         setFeedback({
           variant: 'error',
@@ -372,10 +380,31 @@ export function RemoteSettings() {
             { label: t('Home directory'), value: testResult.homeDir || '-' },
             { label: t('Node'), value: testResult.nodeVersion || '-' },
             { label: t('Git'), value: testResult.gitVersion || '-' },
+            {
+              label: t('Runtime verification'),
+              value: testResult.runtimeVerified
+                ? t('Verified')
+                : testResult.runtimeError
+                  ? `${t('Failed')}: ${testResult.runtimeError}`
+                  : t('Summary only'),
+            },
           ]
         : [],
     [t, testResult]
   );
+
+  const runtimeVerificationLabel = React.useMemo(() => {
+    switch (runtimeStatus?.verificationState) {
+      case 'verified':
+        return t('Verified');
+      case 'pending':
+        return t('Verification pending');
+      case 'failed':
+        return t('Verification failed');
+      default:
+        return t('Summary only');
+    }
+  }, [runtimeStatus?.verificationState, t]);
 
   const runtimeInfoItems = React.useMemo(
     () =>
@@ -398,9 +427,13 @@ export function RemoteSettings() {
               label: t('Connection'),
               value: runtimeStatus.connected ? t('Connected') : t('Disconnected'),
             },
+            {
+              label: t('Verification'),
+              value: runtimeVerificationLabel,
+            },
           ]
         : [],
-    [runtimeStatus, t]
+    [runtimeStatus, runtimeVerificationLabel, t]
   );
 
   const runtimeBusy =

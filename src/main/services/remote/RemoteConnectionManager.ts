@@ -16,6 +16,7 @@ import {
   type RemoteHostFingerprint,
   type RemotePlatform,
   type RemoteRuntimeStatus,
+  type RemoteVerificationState,
 } from '@shared/types';
 import { app, BrowserWindow } from 'electron';
 import * as pty from 'node-pty';
@@ -87,6 +88,27 @@ interface LocalCommandResult {
 
 interface HostTrustProbeResult extends LocalCommandResult {
   promptShown: boolean;
+}
+
+interface RemoteDaemonPingResult {
+  ok?: boolean;
+  pid?: number;
+  serverVersion?: string;
+  platform?: string;
+  arch?: string;
+  nodeVersion?: string;
+  homeDir?: string;
+  gitVersion?: string | null;
+  ptySupported?: boolean;
+  ptyError?: string | null;
+}
+
+interface CachedRuntimeVerification {
+  version: string;
+  installDir: string;
+  verifiedAt: number;
+  result?: RemoteRuntimeVerificationResult;
+  error?: string;
 }
 
 export interface RemoteConnectionRuntimeInfo {
@@ -457,7 +479,10 @@ export class RemoteConnectionManager {
   private profiles = new Map<string, ConnectionProfile>();
   private servers = new Map<string, RemoteServerProcess>();
   private pendingConnections = new Map<string, Promise<RemoteConnectionStatus>>();
+  private resolvedHosts = new Map<string, ResolvedHostConfig>();
   private runtimes = new Map<string, ConnectionRuntime>();
+  private runtimeVerifications = new Map<string, CachedRuntimeVerification>();
+  private pendingRuntimeVerifications = new Map<string, Promise<void>>();
   private volatileStatuses = new Map<string, RemoteConnectionStatus>();
   private diagnostics = new Map<string, RemoteConnectionDiagnostics>();
   private disconnectListeners = new Map<string, Set<() => void>>();
@@ -521,7 +546,10 @@ export class RemoteConnectionManager {
     };
 
     this.profiles.set(profile.id, profile);
+    this.resolvedHosts.delete(profile.id);
     this.runtimes.delete(profile.id);
+    this.runtimeVerifications.delete(profile.id);
+    this.pendingRuntimeVerifications.delete(profile.id);
     this.authBroker.clearSecrets(profile.id);
     await this.flush();
     return profile;
@@ -531,7 +559,10 @@ export class RemoteConnectionManager {
     await this.loadProfiles();
     await this.disconnect(profileId).catch(() => {});
     this.profiles.delete(profileId);
+    this.resolvedHosts.delete(profileId);
     this.runtimes.delete(profileId);
+    this.runtimeVerifications.delete(profileId);
+    this.pendingRuntimeVerifications.delete(profileId);
     this.volatileStatuses.delete(profileId);
     this.diagnostics.delete(profileId);
     this.disconnectListeners.delete(profileId);
@@ -555,7 +586,23 @@ export class RemoteConnectionManager {
   async testConnection(profileOrId: string | ConnectionProfile): Promise<ConnectionTestResult> {
     const profile = await this.resolveProfile(profileOrId);
     try {
-      const runtime = await this.resolveRuntime(profile, true);
+      const runtime = await this.resolveRuntime(profile, true, { includeGitVersion: true });
+      const paths = this.getRuntimeInstallPaths(profile, runtime);
+      let runtimeVerified = false;
+      let runtimeError: string | undefined;
+      if (await this.isExpectedRuntimeInstalled(profile, runtime, paths)) {
+        try {
+          const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
+            this.verifyManagedRuntime(profile, runtime, paths)
+          );
+          this.cacheRuntimeVerification(profile.id, paths.installDir, verification);
+          runtimeVerified = true;
+        } catch (error) {
+          runtimeError =
+            getRemoteErrorDetail(error) || translateRemote('Remote server bootstrap timed out');
+          this.cacheRuntimeVerificationFailure(profile.id, paths.installDir, runtimeError);
+        }
+      }
       return {
         success: true,
         platform: runtime.platform,
@@ -564,6 +611,8 @@ export class RemoteConnectionManager {
         nodeVersion: MANAGED_REMOTE_NODE_VERSION,
         gitVersion: runtime.gitVersion,
         libc: runtime.libc,
+        runtimeVerified,
+        runtimeError,
       };
     } catch (error) {
       return {
@@ -579,26 +628,32 @@ export class RemoteConnectionManager {
     const connected = connectionStatus.connected;
     let ptySupported = connectionStatus.ptySupported;
     let ptyError = connectionStatus.ptyError;
+    let verificationState: RemoteVerificationState =
+      connectionStatus.verificationState ?? (connected ? 'pending' : 'summary');
 
     try {
       const runtime = await this.resolveRuntime(profile, false);
       const paths = this.getRuntimeInstallPaths(profile, runtime);
       const installedVersions = await this.listInstalledRuntimeVersions(profile, runtime, paths);
+      const cachedVerification = this.getCachedRuntimeVerification(profile.id, paths.installDir);
       let error: string | undefined;
-      if (installedVersions.includes(REMOTE_SERVER_VERSION)) {
-        try {
-          const verification = await this.verifyManagedRuntime(profile, runtime, paths);
-          ptySupported = verification.ptySupported ?? ptySupported;
-          ptyError =
-            verification.ptySupported === true ? undefined : (verification.ptyError ?? ptyError);
-        } catch (verificationError) {
-          error = getRemoteErrorDetail(verificationError);
-          const verificationPtyError = extractRemotePtyError(error);
-          if (verificationPtyError) {
-            ptySupported = false;
-            ptyError = verificationPtyError;
-          }
+      if (cachedVerification?.result) {
+        verificationState = 'verified';
+        ptySupported = cachedVerification.result.ptySupported ?? ptySupported;
+        ptyError =
+          cachedVerification.result.ptySupported === true
+            ? undefined
+            : (cachedVerification.result.ptyError ?? ptyError);
+      } else if (cachedVerification?.error) {
+        verificationState = 'failed';
+        error = cachedVerification.error;
+        const verificationPtyError = extractRemotePtyError(error);
+        if (verificationPtyError) {
+          ptySupported = false;
+          ptyError = verificationPtyError;
         }
+      } else if (installedVersions.includes(REMOTE_SERVER_VERSION)) {
+        verificationState = connected ? 'pending' : 'summary';
       }
 
       return {
@@ -612,6 +667,7 @@ export class RemoteConnectionManager {
         connected,
         ptySupported,
         ptyError,
+        verificationState,
         error,
         lastCheckedAt: now(),
       };
@@ -633,6 +689,7 @@ export class RemoteConnectionManager {
         connected,
         ptySupported,
         ptyError,
+        verificationState: 'failed',
         error: error instanceof Error ? error.message : String(error),
         lastCheckedAt: now(),
       };
@@ -648,8 +705,13 @@ export class RemoteConnectionManager {
     await this.disconnect(profile.id).catch(() => {});
     const runtime = await this.resolveRuntime(profile, false);
     const paths = this.getRuntimeInstallPaths(profile, runtime);
+    this.invalidateRuntimeVerification(profile.id);
     await this.stopRemoteDaemon(profile, runtime, paths).catch(() => {});
     await this.installManagedRuntime(profile, runtime, paths);
+    const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
+      this.verifyManagedRuntime(profile, runtime, paths)
+    );
+    this.cacheRuntimeVerification(profile.id, paths.installDir, verification);
     return this.getRuntimeStatus(profile);
   }
 
@@ -664,8 +726,13 @@ export class RemoteConnectionManager {
     await this.disconnect(profile.id).catch(() => {});
     const runtime = await this.resolveRuntime(profile, false);
     const paths = this.getRuntimeInstallPaths(profile, runtime);
+    this.invalidateRuntimeVerification(profile.id);
     await this.stopRemoteDaemon(profile, runtime, paths).catch(() => {});
     await this.installManagedRuntime(profile, runtime, paths);
+    const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
+      this.verifyManagedRuntime(profile, runtime, paths)
+    );
+    this.cacheRuntimeVerification(profile.id, paths.installDir, verification);
     await this.cleanupOldRuntimeVersionsOnHost(profile, runtime, paths);
     return this.getRuntimeStatus(profile);
   }
@@ -679,6 +746,7 @@ export class RemoteConnectionManager {
     await this.disconnect(profile.id).catch(() => {});
     const runtime = await this.resolveRuntime(profile, false);
     const paths = this.getRuntimeInstallPaths(profile, runtime);
+    this.invalidateRuntimeVerification(profile.id);
     await this.stopRemoteDaemon(profile, runtime, paths).catch(() => {});
     await this.deleteInstalledRuntimeVersions(profile, runtime, paths);
     return this.getRuntimeStatus(profile);
@@ -1031,14 +1099,11 @@ export class RemoteConnectionManager {
     const paths = this.getRuntimeInstallPaths(profile, runtime);
 
     try {
-      const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
-        this.verifyManagedRuntime(profile, runtime, paths)
-      );
-      return await this.startConnectedServer(profile, runtime, paths, verification);
-    } catch (reuseError) {
-      const detail = reuseError instanceof Error ? reuseError.message : String(reuseError);
+      return await this.startConnectedServer(profile, runtime, paths);
+    } catch (fastPathError) {
+      const detail = fastPathError instanceof Error ? fastPathError.message : String(fastPathError);
       console.warn(
-        `[remote:${profile.name}] Failed to reuse remote runtime server, reinstalling: ${detail}`
+        `[remote:${profile.name}] Fast remote connection path failed, reinstalling: ${detail}`
       );
     }
 
@@ -1059,7 +1124,8 @@ export class RemoteConnectionManager {
     const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
       this.verifyManagedRuntime(profile, runtime, paths)
     );
-    return this.startConnectedServer(profile, runtime, paths, verification);
+    this.cacheRuntimeVerification(profile.id, paths.installDir, verification);
+    return this.startConnectedServer(profile, runtime, paths);
   }
 
   private getRuntimeInstallPaths(
@@ -1573,18 +1639,23 @@ export class RemoteConnectionManager {
   private async startConnectedServer(
     profile: ConnectionProfile,
     runtime: ConnectionRuntime,
-    paths: RuntimeInstallPaths,
-    verification: RemoteRuntimeVerificationResult
+    paths: RuntimeInstallPaths
   ): Promise<RemoteConnectionStatus> {
+    const cachedVerification = this.getCachedRuntimeVerification(profile.id, paths.installDir);
     this.setStatus(profile.id, (current) => ({
       ...current,
       phase: 'starting-server',
       phaseLabel: phaseLabelFor('starting-server'),
       platform: runtime.platform,
       arch: runtime.arch,
-      runtimeVersion: verification.nodeVersion,
+      runtimeVersion: cachedVerification?.result?.nodeVersion ?? `v${MANAGED_REMOTE_NODE_VERSION}`,
       serverVersion: REMOTE_SERVER_VERSION,
       helperVersion: REMOTE_SERVER_VERSION,
+      verificationState: cachedVerification?.result
+        ? 'verified'
+        : cachedVerification?.error
+          ? 'failed'
+          : 'pending',
     }));
 
     const server = await this.measureDiagnosticStep(profile.id, 'spawn-bridge', () =>
@@ -1598,9 +1669,11 @@ export class RemoteConnectionManager {
       }));
       server.status = this.getStatus(profile.id);
 
-      await this.measureDiagnosticStep(profile.id, 'bridge-handshake', () =>
-        this.callServer(server, 'daemon:ping', {}, BOOTSTRAP_TIMEOUT_MS)
+      const handshake = await this.measureDiagnosticStep(profile.id, 'bridge-handshake', () =>
+        this.callServer<RemoteDaemonPingResult>(server, 'daemon:ping', {}, BOOTSTRAP_TIMEOUT_MS)
       );
+      const handshakeRuntime = this.applyHandshakeRuntime(profile.id, runtime, handshake);
+      const currentVerification = this.getCachedRuntimeVerification(profile.id, paths.installDir);
 
       const timestamp = now();
       server.status = {
@@ -1613,13 +1686,29 @@ export class RemoteConnectionManager {
         reconnectAttempt: undefined,
         nextRetryAt: undefined,
         lastDisconnectReason: undefined,
-        platform: verification.platform,
-        arch: verification.arch,
-        runtimeVersion: verification.nodeVersion,
-        serverVersion: REMOTE_SERVER_VERSION,
+        platform: handshakeRuntime.platform,
+        arch: handshakeRuntime.arch,
+        runtimeVersion:
+          handshake.nodeVersion?.trim() ||
+          currentVerification?.result?.nodeVersion ||
+          `v${MANAGED_REMOTE_NODE_VERSION}`,
+        serverVersion: handshake.serverVersion?.trim() || REMOTE_SERVER_VERSION,
         helperVersion: REMOTE_SERVER_VERSION,
-        ptySupported: verification.ptySupported,
-        ptyError: verification.ptyError || undefined,
+        ptySupported:
+          handshake.ptySupported ??
+          currentVerification?.result?.ptySupported ??
+          server.status.ptySupported,
+        ptyError:
+          handshake.ptySupported === true
+            ? undefined
+            : handshake.ptyError?.trim() ||
+              currentVerification?.result?.ptyError ||
+              server.status.ptyError,
+        verificationState: currentVerification?.result
+          ? 'verified'
+          : currentVerification?.error
+            ? 'failed'
+            : 'pending',
         lastCheckedAt: timestamp,
         diagnostics: this.updateDiagnostics(
           profile.id,
@@ -1631,7 +1720,13 @@ export class RemoteConnectionManager {
       this.servers.set(profile.id, server);
       this.volatileStatuses.delete(profile.id);
       this.emitStatusChange(profile.id, server.status);
-      this.syncRemoteSharedStateInBackground(profile.id, server, runtime);
+      this.syncRemoteSharedStateInBackground(profile.id, server, handshakeRuntime);
+      this.scheduleBackgroundRuntimeVerification(
+        profile,
+        handshakeRuntime,
+        paths,
+        server.status.verificationState
+      );
       void this.cleanupOldRuntimeVersions(server, paths).catch((error) => {
         console.warn(
           `[remote:${profile.name}] Failed to clean up old remote runtime versions: ${
@@ -1799,6 +1894,7 @@ export class RemoteConnectionManager {
       nextRetryAt: undefined,
       lastDisconnectReason: detail,
       lastCheckedAt: timestamp,
+      verificationState: intentional ? 'summary' : server.status.verificationState,
       diagnostics: this.updateDiagnostics(
         server.connectionId,
         server.status.phase,
@@ -2010,6 +2106,128 @@ export class RemoteConnectionManager {
     }
   }
 
+  private getCachedRuntimeVerification(
+    connectionId: string,
+    installDir: string
+  ): CachedRuntimeVerification | null {
+    const cached = this.runtimeVerifications.get(connectionId);
+    if (!cached || cached.version !== REMOTE_SERVER_VERSION || cached.installDir !== installDir) {
+      return null;
+    }
+    return cached;
+  }
+
+  private cacheRuntimeVerification(
+    connectionId: string,
+    installDir: string,
+    result: RemoteRuntimeVerificationResult
+  ): void {
+    this.runtimeVerifications.set(connectionId, {
+      version: REMOTE_SERVER_VERSION,
+      installDir,
+      verifiedAt: now(),
+      result,
+    });
+  }
+
+  private cacheRuntimeVerificationFailure(
+    connectionId: string,
+    installDir: string,
+    error: string
+  ): void {
+    this.runtimeVerifications.set(connectionId, {
+      version: REMOTE_SERVER_VERSION,
+      installDir,
+      verifiedAt: now(),
+      error,
+    });
+  }
+
+  private invalidateRuntimeVerification(connectionId: string): void {
+    this.runtimeVerifications.delete(connectionId);
+    this.pendingRuntimeVerifications.delete(connectionId);
+  }
+
+  private async isExpectedRuntimeInstalled(
+    profile: ConnectionProfile,
+    runtime: ConnectionRuntime,
+    paths: RuntimeInstallPaths
+  ): Promise<boolean> {
+    return this.remoteFileExists(profile, runtime, paths.serverPath);
+  }
+
+  private applyHandshakeRuntime(
+    connectionId: string,
+    runtime: ConnectionRuntime,
+    handshake: RemoteDaemonPingResult
+  ): ConnectionRuntime {
+    const nextRuntime: ConnectionRuntime = {
+      ...runtime,
+      platform: handshake.platform === 'linux' ? 'linux' : runtime.platform,
+      arch:
+        typeof handshake.arch === 'string'
+          ? this.normalizeArchitecture(handshake.arch)
+          : runtime.arch,
+      homeDir: handshake.homeDir ? normalizeRemotePath(handshake.homeDir) : runtime.homeDir,
+      gitVersion: handshake.gitVersion?.trim() || runtime.gitVersion,
+    };
+    this.runtimes.set(connectionId, nextRuntime);
+    return nextRuntime;
+  }
+
+  private scheduleBackgroundRuntimeVerification(
+    profile: ConnectionProfile,
+    runtime: ConnectionRuntime,
+    paths: RuntimeInstallPaths,
+    currentState: RemoteVerificationState | undefined
+  ): void {
+    if (currentState === 'verified') {
+      return;
+    }
+    if (this.pendingRuntimeVerifications.has(profile.id)) {
+      return;
+    }
+    if (!this.servers.has(profile.id) && currentState !== 'failed') {
+      return;
+    }
+
+    const verificationTask = (async () => {
+      try {
+        if (!(await this.isExpectedRuntimeInstalled(profile, runtime, paths))) {
+          return;
+        }
+        const verification = await this.measureDiagnosticStep(profile.id, 'verify-runtime', () =>
+          this.verifyManagedRuntime(profile, runtime, paths)
+        );
+        this.cacheRuntimeVerification(profile.id, paths.installDir, verification);
+        this.setStatus(profile.id, (status) => ({
+          ...status,
+          verificationState: 'verified',
+          ptySupported: verification.ptySupported ?? status.ptySupported,
+          ptyError:
+            verification.ptySupported === true
+              ? undefined
+              : (verification.ptyError ?? status.ptyError),
+        }));
+      } catch (error) {
+        const detail =
+          getRemoteErrorDetail(error) || translateRemote('Remote server bootstrap timed out');
+        this.cacheRuntimeVerificationFailure(profile.id, paths.installDir, detail);
+        const verificationPtyError = extractRemotePtyError(detail);
+        this.setStatus(profile.id, (status) => ({
+          ...status,
+          verificationState: 'failed',
+          ptySupported: verificationPtyError ? false : status.ptySupported,
+          ptyError: verificationPtyError ?? status.ptyError,
+        }));
+      } finally {
+        this.pendingRuntimeVerifications.delete(profile.id);
+      }
+    })();
+
+    this.pendingRuntimeVerifications.set(profile.id, verificationTask);
+  }
+
   private async listInstalledRuntimeVersions(
     profile: ConnectionProfile,
     runtime: ConnectionRuntime,
@@ -2139,10 +2357,15 @@ export class RemoteConnectionManager {
 
   private async resolveRuntime(
     profile: ConnectionProfile,
-    refresh: boolean
+    refresh: boolean,
+    options: { includeGitVersion?: boolean } = {}
   ): Promise<ConnectionRuntime> {
     const cached = this.runtimes.get(profile.id);
-    if (cached && !refresh) {
+    if (
+      cached &&
+      !refresh &&
+      (options.includeGitVersion !== true || cached.gitVersion !== undefined)
+    ) {
       return cached;
     }
 
@@ -2217,7 +2440,10 @@ export class RemoteConnectionManager {
       platform: 'linux',
       arch: this.normalizeArchitecture(envInfo.arch),
       homeDir: normalizeRemotePath(envInfo.homeDir || '/'),
-      gitVersion: (await this.getRemoteGitVersion(profile, resolvedHost)).trim() || undefined,
+      gitVersion:
+        options.includeGitVersion === true
+          ? (await this.getRemoteGitVersion(profile, resolvedHost)).trim() || undefined
+          : cached?.gitVersion,
       libc: 'glibc',
       resolvedHost,
     };
@@ -2304,6 +2530,11 @@ export class RemoteConnectionManager {
   }
 
   private async resolveHostConfig(profile: ConnectionProfile): Promise<ResolvedHostConfig> {
+    const cached = this.resolvedHosts.get(profile.id);
+    if (cached) {
+      return cached;
+    }
+
     const result = await runLocalCommand('ssh', ['-G', profile.sshTarget]);
     if (result.code !== 0) {
       throw createRemoteError('Failed to resolve SSH configuration', undefined, result.stderr);
@@ -2326,13 +2557,15 @@ export class RemoteConnectionManager {
     }
 
     const knownHost = config.get('hostkeyalias')?.[0] || host;
-    return {
+    const resolved = {
       host,
       port,
       knownHost,
       userKnownHostsFiles,
       globalKnownHostsFiles,
     };
+    this.resolvedHosts.set(profile.id, resolved);
+    return resolved;
   }
 
   private async isKnownHost(host: string, port: number, files: string[]): Promise<boolean> {
@@ -2726,7 +2959,9 @@ export class RemoteConnectionManager {
         const detail = this.formatCommandResultDetail(result);
         if (detail && isAuthenticationFailure(detail)) {
           this.authBroker.clearSecrets(profile.id);
+          this.resolvedHosts.delete(profile.id);
           this.runtimes.delete(profile.id);
+          this.invalidateRuntimeVerification(profile.id);
         }
         resolve(result);
       });

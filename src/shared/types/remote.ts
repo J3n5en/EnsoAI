@@ -17,6 +17,8 @@ export type RemoteConnectionPhase =
   | 'connected'
   | 'failed';
 
+export type RemoteVerificationState = 'summary' | 'pending' | 'verified' | 'failed';
+
 export type RemoteConnectionDiagnosticStep =
   | 'resolve-runtime'
   | 'verify-runtime'
@@ -56,6 +58,7 @@ export interface RemoteConnectionStatus {
   arch?: RemoteArchitecture;
   ptySupported?: boolean;
   ptyError?: string;
+  verificationState?: RemoteVerificationState;
   error?: string;
   recoverable?: boolean;
   reconnectAttempt?: number;
@@ -81,6 +84,7 @@ export interface RemoteRuntimeStatus {
   connected: boolean;
   ptySupported?: boolean;
   ptyError?: string;
+  verificationState?: RemoteVerificationState;
   error?: string;
   lastCheckedAt?: number;
 }
@@ -95,6 +99,8 @@ export interface ConnectionTestResult {
   nodeVersion?: string;
   gitVersion?: string;
   libc?: 'glibc';
+  runtimeVerified?: boolean;
+  runtimeError?: string;
   error?: string;
 }
 
