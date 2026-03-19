@@ -218,7 +218,7 @@ monaco.languages.registerDocumentSymbolProvider('java', {
     // from being misread as the return type when the modifiers group matches zero times.
     // Without this, `public VerifySymbols()` would be parsed as: returnType=public, name=VerifySymbols.
     const methodRe =
-      /^\s*((?:(?:public|private|protected|static|final|abstract|synchronized|native)\s+)*)(<[^>]+>\s+)?(?!(?:public|private|protected|static|final|abstract|synchronized|native)\b)(\w+(?:\[\])*(?:<[^>]*>)?(?:\[\])*)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+\w+(?:\s*,\s*\w+)*)?\s*(?:\{|;)/gm;
+      /^\s*((?:(?:public|private|protected|static|final|abstract|synchronized|native)\s+)*)(<[^>]+>\s+)?(?!(?:public|private|protected|static|final|abstract|synchronized|native)\b)(\w+(?:\[\])*(?:<(?:[^<>]|<[^<>]*>)*>)?(?:\[\])*)\s+(\w+)\s*\(((?:[^)(]|\([^)]*\))*)\)\s*(?:throws\s+\w+(?:\s*,\s*\w+)*)?\s*(?:\{|;)/gm;
     let methodMatch: RegExpExecArray | null = methodRe.exec(text);
     while (methodMatch !== null) {
       const modifiers = methodMatch[1].trim();
