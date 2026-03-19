@@ -8,24 +8,28 @@ import { TerminalSearchBar, type TerminalSearchBarRef } from './TerminalSearchBa
 
 interface ShellTerminalProps {
   cwd?: string;
+  backendSessionId?: string;
   isActive?: boolean;
   canMerge?: boolean;
   initialCommand?: string;
   onExit?: () => void;
   onTitleChange?: (title: string) => void;
   onInit?: (ptyId: string) => void;
+  onSessionIdChange?: (sessionId: string) => void;
   onSplit?: () => void;
   onMerge?: () => void;
 }
 
 export function ShellTerminal({
   cwd,
+  backendSessionId,
   isActive = false,
   canMerge = false,
   initialCommand,
   onExit,
   onTitleChange,
   onInit,
+  onSessionIdChange,
   onSplit,
   onMerge,
 }: ShellTerminalProps) {
@@ -55,12 +59,14 @@ export function ShellTerminal({
     clear,
     refreshRenderer,
   } = useXterm({
+    backendSessionId,
     cwd,
     isActive,
     initialCommand,
     onExit,
     onTitleChange,
     onInit,
+    onSessionIdChange,
     onSplit,
     onMerge,
     canMerge,

@@ -198,6 +198,24 @@ function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\\\''") + "'";
 }
 
+function resolvePathWithinRoot(rootPath, filePath) {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    throw new Error('Invalid file path');
+  }
+
+  const absoluteRoot = path.resolve(rootPath);
+  const absolutePath = path.resolve(absoluteRoot, filePath);
+  const relativePath = path.relative(absoluteRoot, absolutePath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error('Path traversal detected');
+  }
+
+  return {
+    absolutePath,
+    relativePath: relativePath.replace(/\\\\/g, '/'),
+  };
+}
+
 function execCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -1260,19 +1278,20 @@ async function worktreeGetConflicts(workdir) {
 }
 
 async function worktreeGetConflictContent(workdir, filePath) {
+  const safePath = resolvePathWithinRoot(workdir, filePath);
   const [ours, theirs, base] = await Promise.all([
-    gitShowFile(workdir, ':2:' + filePath),
-    gitShowFile(workdir, ':3:' + filePath),
-    gitShowFile(workdir, ':1:' + filePath),
+    gitShowFile(workdir, ':2:' + safePath.relativePath),
+    gitShowFile(workdir, ':3:' + safePath.relativePath),
+    gitShowFile(workdir, ':1:' + safePath.relativePath),
   ]);
 
-  return { file: filePath, ours, theirs, base };
+  return { file: safePath.relativePath, ours, theirs, base };
 }
 
 async function worktreeResolveConflict(workdir, resolution) {
-  const fullPath = path.join(workdir, resolution.file);
-  await fsp.writeFile(fullPath, resolution.content, 'utf8');
-  await execCommand('git', ['add', resolution.file], { cwd: workdir });
+  const safePath = resolvePathWithinRoot(workdir, resolution.file);
+  await fsp.writeFile(safePath.absolutePath, resolution.content, 'utf8');
+  await execCommand('git', ['add', '--', safePath.relativePath], { cwd: workdir });
   return { success: true };
 }
 
@@ -2293,6 +2312,19 @@ function activateSessionAfterAttach(sessionId, replayLength) {
   }
 }
 
+function pauseAttachedSessions() {
+  if (state.clients.size > 0) {
+    return;
+  }
+
+  for (const session of state.sessions.values()) {
+    if (session.exited || session.attachCount <= 0) {
+      continue;
+    }
+    session.streamState = 'buffering';
+  }
+}
+
 function killChildTree(session) {
   if (!session) return;
 
@@ -2459,6 +2491,30 @@ async function attachSession(sessionId) {
   };
 
   if (session.streamState === 'buffering') {
+    session.streamState = 'attaching';
+    result.__postReply = {
+      type: 'activate-session',
+      sessionId,
+      replayLength: replay.length,
+    };
+  }
+
+  return result;
+}
+
+async function resumeSession(sessionId) {
+  const session = state.sessions.get(sessionId);
+  if (!session) {
+    throw new Error('远程会话不存在: ' + sessionId);
+  }
+
+  const replay = session.replay;
+  const result = {
+    session: createSessionDescriptor(session),
+    replay,
+  };
+
+  if (session.attachCount > 0 && session.streamState === 'buffering') {
     session.streamState = 'attaching';
     result.__postReply = {
       type: 'activate-session',
@@ -2821,6 +2877,7 @@ async function startDaemon() {
     socket.on('close', () => {
       if (authState.subscribed) {
         state.clients.delete(socket);
+        pauseAttachedSessions();
       }
     });
   });
@@ -2962,6 +3019,7 @@ const handlers = {
   'session:create': ({ options }) => createSession(options),
   'session:createAndAttach': ({ options }) => createAndAttachSession(options),
   'session:attach': ({ sessionId }) => attachSession(sessionId),
+  'session:resume': ({ sessionId }) => resumeSession(sessionId),
   'session:detach': ({ sessionId }) => detachSession(sessionId),
   'session:kill': ({ sessionId }) => killSession(sessionId),
   'session:write': ({ sessionId, data }) => writeSession(sessionId, data),

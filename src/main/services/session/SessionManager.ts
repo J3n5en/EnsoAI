@@ -57,8 +57,11 @@ export class SessionManager {
       offExit: () => void;
     }
   >();
+  private readonly remoteSubscriptionPromises = new Map<string, Promise<void>>();
+  private readonly remoteSubscriptionVersions = new Map<string, number>();
   private readonly remoteDisconnectSubscriptions = new Map<string, () => void>();
   private readonly remoteStatusSubscriptions = new Map<string, () => void>();
+  private readonly remoteRecoveryPromises = new Map<string, Promise<void>>();
 
   async create(
     target: BrowserWindow | WebContents | number,
@@ -91,20 +94,59 @@ export class SessionManager {
     }
 
     if (existing?.backend === 'remote' && existing.connectionId) {
-      await this.ensureRemoteSubscriptions(existing.connectionId);
-      const result = await remoteConnectionManager.call<SessionAttachResult>(
-        existing.connectionId,
-        'session:attach',
-        {
-          sessionId: options.sessionId,
+      existing.attachedWindowIds.add(windowId);
+      const status = remoteConnectionManager.getStatus(existing.connectionId);
+      if (!status.connected) {
+        const runtimeState = status.recoverable ? 'reconnecting' : 'dead';
+        this.setSessionRuntimeState(existing.sessionId, runtimeState);
+        this.emitState(
+          {
+            sessionId: existing.sessionId,
+            state: existing.runtimeState ?? runtimeState,
+          },
+          new Set([windowId])
+        );
+        return {
+          session: this.toDescriptor(existing),
+          replay: existing.replayBuffer || undefined,
+        };
+      }
+
+      try {
+        await this.ensureRemoteSubscriptions(existing.connectionId);
+        const result = await remoteConnectionManager.call<SessionAttachResult>(
+          existing.connectionId,
+          'session:attach',
+          {
+            sessionId: options.sessionId,
+          }
+        );
+        const record = this.registerRemoteSession(windowId, existing.connectionId, result.session);
+        this.setSessionRuntimeState(record.sessionId, 'live');
+        record.replayBuffer = result.replay ?? '';
+        return {
+          session: this.toDescriptor(record),
+          replay: result.replay,
+        };
+      } catch (error) {
+        const nextStatus = remoteConnectionManager.getStatus(existing.connectionId);
+        if (!nextStatus.connected) {
+          const runtimeState = nextStatus.recoverable ? 'reconnecting' : 'dead';
+          this.setSessionRuntimeState(existing.sessionId, runtimeState);
+          this.emitState(
+            {
+              sessionId: existing.sessionId,
+              state: existing.runtimeState ?? runtimeState,
+            },
+            new Set([windowId])
+          );
+          return {
+            session: this.toDescriptor(existing),
+            replay: existing.replayBuffer || undefined,
+          };
         }
-      );
-      const record = this.registerRemoteSession(windowId, existing.connectionId, result.session);
-      this.setSessionRuntimeState(record.sessionId, 'live');
-      return {
-        session: this.toDescriptor(record),
-        replay: result.replay,
-      };
+        throw error;
+      }
     }
 
     if (!options.cwd || !isRemoteVirtualPath(options.cwd)) {
@@ -122,6 +164,7 @@ export class SessionManager {
     );
     const record = this.registerRemoteSession(windowId, connectionId, result.session);
     this.setSessionRuntimeState(record.sessionId, 'live');
+    record.replayBuffer = result.replay ?? '';
     return {
       session: this.toDescriptor(record),
       replay: result.replay,
@@ -337,6 +380,7 @@ export class SessionManager {
       }
     );
     const record = this.registerRemoteSession(windowId, connectionId, result.session);
+    record.replayBuffer = result.replay ?? '';
     return {
       session: this.toDescriptor(record),
       replay: result.replay,
@@ -403,8 +447,7 @@ export class SessionManager {
       return;
     }
 
-    const replay = `${session.replayBuffer || ''}${data}`;
-    session.replayBuffer = replay.slice(-MAX_SESSION_REPLAY_CHARS);
+    this.appendReplayBuffer(session, data);
 
     if (session.streamState === 'live') {
       this.emitData(sessionId, data, new Set(session.attachedWindowIds));
@@ -439,49 +482,116 @@ export class SessionManager {
   }
 
   private async ensureRemoteSubscriptions(connectionId: string): Promise<void> {
-    if (!this.remoteDisconnectSubscriptions.has(connectionId)) {
-      const offDisconnect = remoteConnectionManager.onDidDisconnect(connectionId, () => {
-        const subscription = this.remoteSubscriptions.get(connectionId);
-        subscription?.offData();
-        subscription?.offExit();
-        this.remoteSubscriptions.delete(connectionId);
-      });
-      this.remoteDisconnectSubscriptions.set(connectionId, offDisconnect);
-    }
-
-    if (!this.remoteStatusSubscriptions.has(connectionId)) {
-      const offStatus = remoteConnectionManager.onDidStatusChange(connectionId, (status) => {
-        void this.handleRemoteStatusChange(connectionId, status);
-      });
-      this.remoteStatusSubscriptions.set(connectionId, offStatus);
-    }
-
+    this.ensureRemoteLifecycleSubscriptions(connectionId);
     if (this.remoteSubscriptions.has(connectionId)) {
       return;
     }
 
-    const [offData, offExit] = await Promise.all([
-      remoteConnectionManager.addEventListener(connectionId, 'remote:session:data', (payload) => {
-        const event = payload as SessionDataEvent;
-        this.emitData(event.sessionId, event.data);
-      }),
-      remoteConnectionManager.addEventListener(connectionId, 'remote:session:exit', (payload) => {
-        const event = payload as SessionExitEvent;
-        const session = this.sessions.get(event.sessionId);
-        const attachedWindowIds = session ? new Set(session.attachedWindowIds) : new Set<number>();
-        this.sessions.delete(event.sessionId);
-        this.emitState({
-          sessionId: event.sessionId,
-          state: 'dead',
-        });
-        this.emitExit(event, attachedWindowIds);
-      }),
-    ]);
+    const pending = this.remoteSubscriptionPromises.get(connectionId);
+    if (pending) {
+      await pending;
+      return;
+    }
 
-    this.remoteSubscriptions.set(connectionId, { offData, offExit });
+    const subscriptionPromise = (async () => {
+      const version = this.remoteSubscriptionVersions.get(connectionId) ?? 0;
+      const offData = await remoteConnectionManager.addEventListener(
+        connectionId,
+        'remote:session:data',
+        (payload) => {
+          const event = payload as SessionDataEvent;
+          const session = this.sessions.get(event.sessionId);
+          if (session?.backend === 'remote') {
+            this.appendReplayBuffer(session, event.data);
+          }
+          this.emitData(event.sessionId, event.data);
+        }
+      );
+
+      let offExit: (() => void) | null = null;
+      try {
+        offExit = await remoteConnectionManager.addEventListener(
+          connectionId,
+          'remote:session:exit',
+          (payload) => {
+            const event = payload as SessionExitEvent;
+            const session = this.sessions.get(event.sessionId);
+            const attachedWindowIds = session
+              ? new Set(session.attachedWindowIds)
+              : new Set<number>();
+            this.sessions.delete(event.sessionId);
+            this.emitState(
+              {
+                sessionId: event.sessionId,
+                state: 'dead',
+              },
+              attachedWindowIds
+            );
+            this.emitExit(event, attachedWindowIds);
+          }
+        );
+      } catch (error) {
+        try {
+          offData();
+        } catch {
+          // Ignore
+        }
+        throw error;
+      }
+
+      if (
+        (this.remoteSubscriptionVersions.get(connectionId) ?? 0) !== version ||
+        this.remoteSubscriptions.has(connectionId) ||
+        !remoteConnectionManager.getStatus(connectionId).connected
+      ) {
+        try {
+          offData();
+        } catch {
+          // Ignore
+        }
+        try {
+          offExit();
+        } catch {
+          // Ignore
+        }
+        return;
+      }
+
+      this.remoteSubscriptions.set(connectionId, {
+        offData,
+        offExit,
+      });
+    })().finally(() => {
+      if (this.remoteSubscriptionPromises.get(connectionId) === subscriptionPromise) {
+        this.remoteSubscriptionPromises.delete(connectionId);
+      }
+    });
+
+    this.remoteSubscriptionPromises.set(connectionId, subscriptionPromise);
+    await subscriptionPromise;
   }
 
   private async handleRemoteStatusChange(
+    connectionId: string,
+    status: { connected: boolean; phase?: string; recoverable?: boolean }
+  ): Promise<void> {
+    const previous = this.remoteRecoveryPromises.get(connectionId) ?? Promise.resolve();
+    const current = previous
+      .catch(() => {})
+      .then(() => this.processRemoteStatusChange(connectionId, status))
+      .catch((error) => {
+        console.warn('[session] Failed to recover remote sessions:', error);
+      })
+      .finally(() => {
+        if (this.remoteRecoveryPromises.get(connectionId) === current) {
+          this.remoteRecoveryPromises.delete(connectionId);
+        }
+      });
+    this.remoteRecoveryPromises.set(connectionId, current);
+    await current;
+  }
+
+  private async processRemoteStatusChange(
     connectionId: string,
     status: { connected: boolean; phase?: string; recoverable?: boolean }
   ): Promise<void> {
@@ -496,7 +606,7 @@ export class SessionManager {
       await this.ensureRemoteSubscriptions(connectionId);
       const remoteSessions = await remoteConnectionManager
         .call<SessionDescriptor[]>(connectionId, 'session:list', {})
-        .then((items) => new Set(items.map((item) => item.sessionId)))
+        .then((items) => new Map(items.map((item) => [item.sessionId, item])))
         .catch(() => null);
       if (!remoteSessions) {
         for (const session of sessions) {
@@ -506,20 +616,47 @@ export class SessionManager {
       }
       await Promise.allSettled(
         sessions.map(async (session) => {
-          if (remoteSessions.has(session.sessionId)) {
-            this.setSessionRuntimeState(session.sessionId, 'live');
+          if (this.sessions.get(session.sessionId) !== session) {
             return;
           }
-          const attachedWindowIds = new Set(session.attachedWindowIds);
-          this.sessions.delete(session.sessionId);
-          this.emitState({ sessionId: session.sessionId, state: 'dead' }, attachedWindowIds);
-          this.emitExit(
-            {
-              sessionId: session.sessionId,
-              exitCode: 1,
-            },
-            attachedWindowIds
-          );
+          const remoteSession = remoteSessions.get(session.sessionId);
+          if (remoteSession) {
+            try {
+              const restored = await remoteConnectionManager.call<SessionAttachResult>(
+                connectionId,
+                'session:resume',
+                {
+                  sessionId: session.sessionId,
+                }
+              );
+              if (this.sessions.get(session.sessionId) !== session) {
+                return;
+              }
+              const mergedDescriptor = restored.session ?? remoteSession;
+              session.connectionId = connectionId;
+              session.cwd = mergedDescriptor.cwd;
+              session.kind = mergedDescriptor.kind;
+              session.persistOnDisconnect = mergedDescriptor.persistOnDisconnect;
+              session.metadata = mergedDescriptor.metadata;
+              const replay = restored.replay ?? '';
+              const delta = this.getReplayDelta(session.replayBuffer, replay);
+              session.replayBuffer = replay;
+              if (delta) {
+                this.emitData(session.sessionId, delta, new Set(session.attachedWindowIds));
+              }
+              this.setSessionRuntimeState(session.sessionId, 'live');
+              return;
+            } catch {
+              if (this.sessions.get(session.sessionId) !== session) {
+                return;
+              }
+              if (!remoteConnectionManager.getStatus(connectionId).connected) {
+                this.setSessionRuntimeState(session.sessionId, 'reconnecting');
+                return;
+              }
+            }
+          }
+          this.markRemoteSessionDead(session);
         })
       );
       return;
@@ -527,26 +664,143 @@ export class SessionManager {
 
     const nextState: SessionRuntimeState = status.recoverable ? 'reconnecting' : 'dead';
     for (const session of sessions) {
-      this.setSessionRuntimeState(session.sessionId, nextState);
+      if (this.sessions.get(session.sessionId) !== session) {
+        continue;
+      }
       if (nextState === 'dead') {
-        const attachedWindowIds = new Set(session.attachedWindowIds);
-        this.sessions.delete(session.sessionId);
-        this.emitState(
-          {
-            sessionId: session.sessionId,
-            state: 'dead',
-          },
-          attachedWindowIds
-        );
-        this.emitExit(
-          {
-            sessionId: session.sessionId,
-            exitCode: 1,
-          },
-          attachedWindowIds
-        );
+        this.markRemoteSessionDead(session);
+        continue;
+      }
+      this.setSessionRuntimeState(session.sessionId, nextState);
+    }
+  }
+
+  private ensureRemoteLifecycleSubscriptions(connectionId: string): void {
+    if (!this.remoteDisconnectSubscriptions.has(connectionId)) {
+      const offDisconnect = remoteConnectionManager.onDidDisconnect(connectionId, () => {
+        this.cleanupRemoteSubscription(connectionId);
+      });
+      this.remoteDisconnectSubscriptions.set(connectionId, offDisconnect);
+    }
+
+    if (!this.remoteStatusSubscriptions.has(connectionId)) {
+      const offStatus = remoteConnectionManager.onDidStatusChange(connectionId, (status) => {
+        void this.handleRemoteStatusChange(connectionId, status);
+      });
+      this.remoteStatusSubscriptions.set(connectionId, offStatus);
+    }
+  }
+
+  private cleanupRemoteSubscription(connectionId: string): void {
+    this.remoteSubscriptionVersions.set(
+      connectionId,
+      (this.remoteSubscriptionVersions.get(connectionId) ?? 0) + 1
+    );
+    const subscription = this.remoteSubscriptions.get(connectionId);
+    this.remoteSubscriptions.delete(connectionId);
+    if (!subscription) {
+      return;
+    }
+
+    try {
+      subscription.offData();
+    } catch (error) {
+      console.warn('[session] Failed to dispose remote data listener:', error);
+    }
+
+    try {
+      subscription.offExit();
+    } catch (error) {
+      console.warn('[session] Failed to dispose remote exit listener:', error);
+    }
+  }
+
+  private appendReplayBuffer(session: ManagedSessionRecord, data: string): void {
+    if (!data) {
+      return;
+    }
+
+    const replay = `${session.replayBuffer || ''}${data}`;
+    session.replayBuffer = replay.slice(-MAX_SESSION_REPLAY_CHARS);
+  }
+
+  private getReplayDelta(previousReplay: string | undefined, nextReplay: string): string {
+    if (!nextReplay) {
+      return '';
+    }
+
+    if (!previousReplay) {
+      return nextReplay;
+    }
+
+    const overlap = this.getReplayOverlap(previousReplay, nextReplay);
+    return nextReplay.slice(overlap);
+  }
+
+  private getReplayOverlap(previousReplay: string, nextReplay: string): number {
+    const previousTail = previousReplay.slice(-nextReplay.length);
+    if (previousTail.length === 0 || nextReplay.length === 0) {
+      return 0;
+    }
+
+    const prefixTable = new Array<number>(nextReplay.length).fill(0);
+    for (let index = 1, matched = 0; index < nextReplay.length; ) {
+      if (nextReplay[index] === nextReplay[matched]) {
+        matched += 1;
+        prefixTable[index] = matched;
+        index += 1;
+        continue;
+      }
+
+      if (matched > 0) {
+        matched = prefixTable[matched - 1] ?? 0;
+        continue;
+      }
+
+      prefixTable[index] = 0;
+      index += 1;
+    }
+
+    let matched = 0;
+    for (let index = 0; index < previousTail.length; index += 1) {
+      const char = previousTail[index];
+      while (matched > 0 && nextReplay[matched] !== char) {
+        matched = prefixTable[matched - 1] ?? 0;
+      }
+      if (nextReplay[matched] !== char) {
+        continue;
+      }
+
+      matched += 1;
+      if (matched === nextReplay.length && index < previousTail.length - 1) {
+        matched = prefixTable[matched - 1] ?? 0;
       }
     }
+
+    return matched;
+  }
+
+  private markRemoteSessionDead(session: ManagedSessionRecord): void {
+    if (this.sessions.get(session.sessionId) !== session) {
+      return;
+    }
+
+    const attachedWindowIds = new Set(session.attachedWindowIds);
+    this.sessions.delete(session.sessionId);
+    this.emitState(
+      {
+        sessionId: session.sessionId,
+        state: 'dead',
+      },
+      attachedWindowIds
+    );
+    this.emitExit(
+      {
+        sessionId: session.sessionId,
+        exitCode: 1,
+      },
+      attachedWindowIds
+    );
   }
 
   private setSessionRuntimeState(sessionId: string, state: SessionRuntimeState): void {

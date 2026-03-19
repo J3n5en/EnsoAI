@@ -1974,7 +1974,13 @@ export class RemoteConnectionManager {
       if (timeoutMs) {
         timeout = setTimeout(() => {
           finish(() =>
-            reject(createRemoteError('Remote request timed out', undefined, `method=${method}`))
+            reject(
+              createRemoteError(
+                'Remote request timed out',
+                undefined,
+                `method=${method}; connectionId=${server.connectionId}`
+              )
+            )
           );
         }, timeoutMs);
       }
@@ -2517,23 +2523,39 @@ export class RemoteConnectionManager {
       let promptShown = false;
       let settled = false;
       let pendingPrompt: Promise<void> | null = null;
+      let dataDisposable: { dispose(): void } | null = null;
+      let exitDisposable: { dispose(): void } | null = null;
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        const disposables = [dataDisposable, exitDisposable];
+        dataDisposable = null;
+        exitDisposable = null;
+
+        for (const disposable of disposables) {
+          if (!disposable) {
+            continue;
+          }
+          try {
+            disposable.dispose();
+          } catch {
+            // Ignore
+          }
+        }
+
+        try {
+          killProcessTree(proc, 'SIGTERM');
+        } catch {
+          // Ignore
+        }
+      };
 
       const finish = (result: HostTrustProbeResult) => {
         if (settled) {
           return;
         }
         settled = true;
-        clearTimeout(timer);
-        try {
-          dataDisposable.dispose();
-        } catch {
-          // Ignore
-        }
-        try {
-          exitDisposable.dispose();
-        } catch {
-          // Ignore
-        }
+        cleanup();
         resolve(result);
       };
 
@@ -2542,22 +2564,7 @@ export class RemoteConnectionManager {
           return;
         }
         settled = true;
-        clearTimeout(timer);
-        try {
-          dataDisposable.dispose();
-        } catch {
-          // Ignore
-        }
-        try {
-          exitDisposable.dispose();
-        } catch {
-          // Ignore
-        }
-        try {
-          killProcessTree(proc, 'SIGTERM');
-        } catch {
-          // Ignore
-        }
+        cleanup();
         reject(error);
       };
 
@@ -2585,11 +2592,6 @@ export class RemoteConnectionManager {
           .catch((error) => {
             if (!settled) {
               proc.write('no\n');
-              try {
-                killProcessTree(proc, 'SIGTERM');
-              } catch {
-                // Ignore
-              }
             }
             abort(error);
           })
@@ -2605,18 +2607,13 @@ export class RemoteConnectionManager {
           code: null,
           promptShown,
         });
-        try {
-          killProcessTree(proc, 'SIGTERM');
-        } catch {
-          // Ignore
-        }
       }, SSH_HOST_VERIFICATION_PROMPT_TIMEOUT_MS);
 
-      const dataDisposable = proc.onData((chunk) => {
+      dataDisposable = proc.onData((chunk) => {
         output += chunk;
         maybeHandlePrompt();
       });
-      const exitDisposable = proc.onExit(({ exitCode }) => {
+      exitDisposable = proc.onExit(({ exitCode }) => {
         if (settled) {
           return;
         }

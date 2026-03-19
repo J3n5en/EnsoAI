@@ -2,6 +2,7 @@ export interface TerminalSession {
   id: string;
   title: string;
   cwd: string;
+  backendSessionId?: string;
 }
 
 export interface TerminalCreateOptions {
