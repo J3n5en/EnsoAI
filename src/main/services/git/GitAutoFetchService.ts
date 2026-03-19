@@ -16,7 +16,8 @@ class GitAutoFetchService {
   private intervalId: NodeJS.Timeout | null = null;
   private lastFetchTime = 0;
   private worktreePaths: Set<string> = new Set();
-  private enabled = true;
+  private enabled = false;
+  private fetching = false;
   private onFocusHandler: (() => void) | null = null;
   private headWatchers: Map<string, FSWatcher> = new Map();
   private headDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -79,6 +80,7 @@ class GitAutoFetchService {
       this.start();
     } else {
       this.stop();
+      this.fetching = false;
     }
   }
 
@@ -100,15 +102,22 @@ class GitAutoFetchService {
   }
 
   private async fetchAll(): Promise<void> {
-    if (!this.enabled || this.worktreePaths.size === 0) return;
+    if (!this.enabled || this.worktreePaths.size === 0 || this.fetching) return;
+    this.fetching = true;
 
     this.lastFetchTime = Date.now();
 
     // 串行执行，避免网络拥堵
     for (const path of this.worktreePaths) {
+      if (!this.enabled) break;
       try {
         const git = new GitService(path);
-        await git.fetch();
+        await Promise.race([
+          git.fetch(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('fetch timeout')), 30000)),
+        ]);
+
+        if (!this.enabled) break;
 
         // 并行 fetch 已初始化的子模块（带超时控制）
         const submodules = await git.listSubmodules();
@@ -128,6 +137,8 @@ class GitAutoFetchService {
         console.debug(`Auto fetch failed for ${path}:`, error);
       }
     }
+
+    this.fetching = false;
 
     // 通知渲染进程刷新状态
     this.notifyCompleted();

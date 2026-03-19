@@ -120,6 +120,8 @@ export function createSimpleGit(
   const resolvedOptions: Partial<SimpleGitOptions> = {
     ...options,
     baseDir: options.baseDir ?? workdir,
+    timeout: options.timeout ?? { block: 30_000 },
+    maxConcurrentProcesses: options.maxConcurrentProcesses ?? 3,
   };
   const baseDir = typeof resolvedOptions.baseDir === 'string' ? resolvedOptions.baseDir : workdir;
 

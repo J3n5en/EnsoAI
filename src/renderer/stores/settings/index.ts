@@ -152,6 +152,10 @@ function getInitialState() {
     proxySettings: defaultProxySettings,
     autoCreateSessionOnActivate: false,
 
+    // Git Auto Operations
+    gitAutoFetchEnabled: false,
+    gitStatusPollingEnabled: false,
+
     // Git Clone Settings
     gitClone: defaultGitCloneSettings,
 
