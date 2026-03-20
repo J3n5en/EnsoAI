@@ -1,4 +1,5 @@
-import { type AgentStopNotificationData, TASK_COMPLETION_MARKER } from '@shared/types/agent';
+import type { AgentStopNotificationData } from '@shared/types/agent';
+import { TASK_COMPLETION_MARKER } from '@shared/types/agent';
 import { useCallback, useEffect, useRef } from 'react';
 import type { ResolvedAgent } from '@/components/todo/useEnabledAgents';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
@@ -14,9 +15,6 @@ function findUISessionId(cliSessionId: string): string | undefined {
     .sessions.find((s) => s.sessionId === cliSessionId || s.id === cliSessionId);
   return session?.id;
 }
-
-// Re-export for convenience
-export { TASK_COMPLETION_MARKER };
 
 /**
  * Build prompt with auto-execute rules
@@ -68,7 +66,13 @@ export function useAutoExecuteTask(
       const tasks = useTodoStore.getState().tasks[repoPath] ?? [];
       const task = tasks.find((t) => t.id === taskId);
       if (!task) {
-        stopAutoExecute(repoPath);
+        // Task was deleted - skip to next in queue
+        const nextTaskId = advanceQueue(repoPath);
+        if (nextTaskId) {
+          executeTaskRef.current(nextTaskId);
+        } else {
+          stopAutoExecute(repoPath);
+        }
         return;
       }
 
@@ -80,45 +84,21 @@ export function useAutoExecuteTask(
 
       const sessionId = crypto.randomUUID();
 
-      // Create session with pending command
-      useAgentSessionsStore.setState((state) => {
-        const worktreeSessions = state.sessions.filter(
-          (s) => s.repoPath === repoPath && s.cwd === worktreePath
-        );
-        const maxOrder = worktreeSessions.reduce(
-          (max, s) => Math.max(max, s.displayOrder ?? 0),
-          -1
-        );
-
-        return {
-          sessions: [
-            ...state.sessions,
-            {
-              id: sessionId,
-              sessionId,
-              name: `Task: ${task.title}`,
-              userRenamed: true,
-              agentId: agent.agentId,
-              agentCommand: agent.command,
-              customPath: agent.customPath,
-              customArgs: agent.customArgs,
-              initialized: false,
-              repoPath,
-              cwd: worktreePath,
-              environment: agent.environment,
-              displayOrder: maxOrder + 1,
-              pendingCommand: taskContext,
-            },
-          ],
-          activeIds: {
-            ...state.activeIds,
-            [worktreePath.replace(/\\/g, '/')]: sessionId,
-          },
-          enhancedInputStates: {
-            ...state.enhancedInputStates,
-            [sessionId]: { open: false, content: '', imagePaths: [] },
-          },
-        };
+      // Create session via store action (handles displayOrder, activeIds, enhancedInputStates)
+      useAgentSessionsStore.getState().addSession({
+        id: sessionId,
+        sessionId,
+        name: `Task: ${task.title}`,
+        userRenamed: true,
+        agentId: agent.agentId,
+        agentCommand: agent.command,
+        customPath: agent.customPath,
+        customArgs: agent.customArgs,
+        initialized: false,
+        repoPath,
+        cwd: worktreePath,
+        environment: agent.environment,
+        pendingCommand: taskContext,
       });
 
       // Update task status and link session
@@ -135,11 +115,14 @@ export function useAutoExecuteTask(
       setCurrentExecution,
       onSwitchToAgent,
       stopAutoExecute,
+      advanceQueue,
     ]
   );
 
   // Keep ref in sync to avoid circular dependency in handleAgentStop
-  executeTaskRef.current = executeTask;
+  useEffect(() => {
+    executeTaskRef.current = executeTask;
+  }, [executeTask]);
 
   // Handle task completion based on stop notification
   const handleAgentStop = useCallback(
@@ -157,15 +140,8 @@ export function useAutoExecuteTask(
       const currentTaskId = currentAutoExecute.currentTaskId;
       if (!currentTaskId) return;
 
-      // Agent stopped - treat as done unless explicitly failed.
+      // Agent stopped - mark done and advance.
       // 'unknown' means we couldn't detect the marker, but the agent did finish.
-      if (data.taskCompletionStatus === 'failed') {
-        updateTask(repoPath, currentTaskId, { status: 'todo', sessionId: undefined });
-        stopAutoExecute(repoPath);
-        return;
-      }
-
-      // completed or unknown - mark done and advance
       updateTask(repoPath, currentTaskId, { status: 'done', sessionId: undefined });
 
       const nextTaskId = advanceQueue(repoPath);
@@ -180,7 +156,9 @@ export function useAutoExecuteTask(
 
   // Use ref for handler to avoid re-subscription on every callback change
   const handleAgentStopRef = useRef(handleAgentStop);
-  handleAgentStopRef.current = handleAgentStop;
+  useEffect(() => {
+    handleAgentStopRef.current = handleAgentStop;
+  }, [handleAgentStop]);
 
   // Start auto-execute with a list of tasks
   const startAutoExecute = useCallback(

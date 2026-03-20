@@ -3,9 +3,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TASK_COMPLETION_MARKER } from '@shared/types/agent';
 
-// Re-export for convenience
-export { TASK_COMPLETION_MARKER };
-
 /**
  * Get the Claude projects directory path
  */

@@ -47,7 +47,5 @@ export interface AgentStopNotificationData {
   sessionId: string;
   cwd?: string;
   /** Task completion status from session log analysis */
-  taskCompletionStatus?: 'completed' | 'failed' | 'unknown';
-  /** Failure reason if status is 'failed' */
-  taskFailedReason?: string;
+  taskCompletionStatus?: 'completed' | 'unknown';
 }
