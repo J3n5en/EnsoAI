@@ -341,6 +341,21 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function isValidSshTarget(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.startsWith('-') || /\s/.test(trimmed)) {
+    return false;
+  }
+
+  const atIndex = trimmed.lastIndexOf('@');
+  const host = atIndex >= 0 ? trimmed.slice(atIndex + 1) : trimmed;
+  if (!host || host.startsWith('-') || host.includes('/') || host.includes('\\')) {
+    return false;
+  }
+
+  return true;
+}
+
 function isVersionDirectoryName(name: string): boolean {
   return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(name);
 }
@@ -590,10 +605,14 @@ export class RemoteConnectionManager {
   ): Promise<ConnectionProfile> {
     await this.loadProfiles();
     const existing = input.id ? this.profiles.get(input.id) : null;
+    const sshTarget = input.sshTarget.trim();
+    if (!isValidSshTarget(sshTarget)) {
+      throw createRemoteError('Invalid SSH target');
+    }
     const profile: ConnectionProfile = {
       id: input.id ?? randomUUID(),
       name: input.name.trim(),
-      sshTarget: input.sshTarget.trim(),
+      sshTarget,
       runtimeInstallDir:
         input.runtimeInstallDir?.trim() || input.helperInstallDir?.trim() || undefined,
       helperInstallDir: input.helperInstallDir?.trim() || undefined,
