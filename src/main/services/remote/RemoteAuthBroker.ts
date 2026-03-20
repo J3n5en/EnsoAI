@@ -36,6 +36,7 @@ interface AskpassArtifacts {
 
 const MAX_PROMPT_MESSAGE_CHARS = 64 * 1024;
 const AUTH_SOCKET_TIMEOUT_MS = 30_000;
+const AUTH_PROMPT_SCRIPT_TIMEOUT_MS = AUTH_SOCKET_TIMEOUT_MS + 5_000;
 
 function tokensEqual(left: string | undefined, right: string): boolean {
   if (typeof left !== 'string') {
@@ -164,7 +165,7 @@ socket.on('data', (chunk) => {
 
 socket.on('error', () => fail(1));
 socket.on('close', () => finish(1));
-setTimeout(() => fail(1), 120000);
+setTimeout(() => fail(1), ${AUTH_PROMPT_SCRIPT_TIMEOUT_MS});
 `;
 }
 

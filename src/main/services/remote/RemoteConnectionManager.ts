@@ -200,6 +200,7 @@ const REMOTE_SHARED_STATE_SYNC_TIMEOUT_MS = 5_000;
 const REMOTE_RPC_TIMEOUT_MS = 15_000;
 const LOCAL_COMMAND_TIMEOUT_MS = 15_000;
 const SSH_COMMAND_TIMEOUT_MS = 10 * 60_000;
+const SERVER_SHUTDOWN_GRACE_MS = 5_000;
 const REMOTE_ENV_INFO_PREFIX = '__ENSO_REMOTE_ENV__';
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000];
 const SCP_CONNECT_TIMEOUT_SECONDS = 30;
@@ -924,7 +925,7 @@ export class RemoteConnectionManager {
       return;
     }
     this.finalizeServerShutdown(server);
-    server.proc.kill('SIGTERM');
+    this.terminateServerProcess(server.proc);
   }
 
   async browseRoots(profileOrId: string | ConnectionProfile): Promise<string[]> {
@@ -1861,9 +1862,23 @@ export class RemoteConnectionManager {
         getRemoteErrorDetail(error) || translateRemote('Failed to start remote server');
       const failure = this.buildServerFailureError(baseMessage, server);
       this.finalizeServerShutdown(server, failure);
-      server.proc.kill('SIGTERM');
+      this.terminateServerProcess(server.proc);
       throw failure;
     }
+  }
+
+  private terminateServerProcess(
+    proc: import('node:child_process').ChildProcessWithoutNullStreams
+  ): void {
+    const clearForceKillTimer = () => {
+      clearTimeout(forceKillTimer);
+    };
+    const forceKillTimer = setTimeout(() => {
+      killProcessTree(proc);
+    }, SERVER_SHUTDOWN_GRACE_MS);
+    proc.once('exit', clearForceKillTimer);
+    proc.once('close', clearForceKillTimer);
+    killProcessTree(proc, 'SIGTERM');
   }
 
   private async spawnServerProcess(

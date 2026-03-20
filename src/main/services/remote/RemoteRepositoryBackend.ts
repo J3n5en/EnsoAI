@@ -34,20 +34,29 @@ export class RemoteRepositoryBackend {
     return toRemoteVirtualPath(connectionId, remotePath);
   }
 
-  private toRemoteRelativePath(targetPath: string, remoteRootPath: string): string {
+  private toRemoteRelativePath(
+    targetPath: string,
+    remoteRootPath: string,
+    options?: { allowOutsideRoot?: boolean }
+  ): string {
     if (!targetPath || !isRemoteVirtualPath(targetPath)) {
       return targetPath;
     }
 
     const { remotePath } = toRemotePath(targetPath);
-    if (remotePath === remoteRootPath) {
+    const normalizedRoot = remoteRootPath.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+    const normalizedTarget = remotePath.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+    if (normalizedTarget === normalizedRoot) {
       return '.';
     }
-    const prefix = remoteRootPath.endsWith('/') ? remoteRootPath : `${remoteRootPath}/`;
-    if (remotePath.startsWith(prefix)) {
-      return remotePath.slice(prefix.length);
+    const prefix = normalizedRoot.endsWith('/') ? normalizedRoot : `${normalizedRoot}/`;
+    if (normalizedTarget.startsWith(prefix)) {
+      return normalizedTarget.slice(prefix.length);
     }
-    return remotePath;
+    if (options?.allowOutsideRoot) {
+      return normalizedTarget;
+    }
+    throw createRemoteError('Remote path escapes repository root', undefined, normalizedTarget);
   }
 
   private ensureSameConnection(...paths: string[]): string | null {
@@ -397,7 +406,7 @@ export class RemoteRepositoryBackend {
     const { connectionId, remotePath } = toRemotePath(workdir);
     const remoteOptions: WorktreeCreateOptions = {
       ...options,
-      path: this.toRemoteRelativePath(options.path, remotePath),
+      path: this.toRemoteRelativePath(options.path, remotePath, { allowOutsideRoot: true }),
     };
     await remoteConnectionManager.call(connectionId, 'worktree:add', {
       rootPath: remotePath,
@@ -409,7 +418,7 @@ export class RemoteRepositoryBackend {
     const { connectionId, remotePath } = toRemotePath(workdir);
     const remoteOptions: WorktreeRemoveOptions = {
       ...options,
-      path: this.toRemoteRelativePath(options.path, remotePath),
+      path: this.toRemoteRelativePath(options.path, remotePath, { allowOutsideRoot: true }),
     };
     await remoteConnectionManager.call(connectionId, 'worktree:remove', {
       rootPath: remotePath,
@@ -424,7 +433,9 @@ export class RemoteRepositoryBackend {
     const { connectionId, remotePath } = toRemotePath(workdir);
     const remoteOptions: WorktreeMergeOptions = {
       ...options,
-      worktreePath: this.toRemoteRelativePath(options.worktreePath, remotePath),
+      worktreePath: this.toRemoteRelativePath(options.worktreePath, remotePath, {
+        allowOutsideRoot: true,
+      }),
     };
     return remoteConnectionManager.call<WorktreeMergeResult>(connectionId, 'worktree:merge', {
       rootPath: remotePath,
@@ -483,7 +494,9 @@ export class RemoteRepositoryBackend {
       ? {
           ...cleanupOptions,
           worktreePath: cleanupOptions.worktreePath
-            ? this.toRemoteRelativePath(cleanupOptions.worktreePath, remotePath)
+            ? this.toRemoteRelativePath(cleanupOptions.worktreePath, remotePath, {
+                allowOutsideRoot: true,
+              })
             : cleanupOptions.worktreePath,
         }
       : undefined;
