@@ -449,8 +449,23 @@ export class RemoteAuthBroker {
       return;
     }
 
+    let delivered = false;
     for (const window of windows) {
-      window.webContents.send('remote:auth:prompt', prompt);
+      if (window.isDestroyed() || window.webContents.isDestroyed()) {
+        continue;
+      }
+      try {
+        window.webContents.send('remote:auth:prompt', prompt);
+        delivered = true;
+      } catch {
+        // Window may be tearing down between enumeration and send.
+      }
+    }
+
+    if (!delivered) {
+      const pending = this.pendingPrompts.get(prompt.id);
+      pending?.reject(createRemoteError('No window available for SSH authentication prompt'));
+      this.pendingPrompts.delete(prompt.id);
     }
   }
 }

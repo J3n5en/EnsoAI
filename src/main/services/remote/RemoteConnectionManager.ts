@@ -969,6 +969,7 @@ export class RemoteConnectionManager {
       clearTimeout(timer);
     }
     this.reconnectTimers.clear();
+    this.pendingConnections.clear();
     this.reconnectPromises.clear();
     this.reconnectAttempts.clear();
     this.intentionalDisconnects.clear();

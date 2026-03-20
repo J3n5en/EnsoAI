@@ -101,6 +101,31 @@ const fileResourceOwners = new Set<number>();
 const remoteWatchers = new Map<string, RemoteWatcherRegistration>();
 const remoteWatcherConnectionSubscriptions = new Map<string, () => void>();
 
+function resolveBatchConflictTargetPath(
+  targetDir: string,
+  fallbackName: string,
+  newName?: string
+): string {
+  const candidate = newName?.trim() || fallbackName;
+  if (!candidate || candidate === '.' || candidate === '..' || /[\\/]/.test(candidate)) {
+    throw new Error('Invalid conflict rename target');
+  }
+
+  const resolvedTargetDir = resolve(targetDir);
+  const resolvedTargetPath = resolve(resolvedTargetDir, candidate);
+  const relativePath = relative(resolvedTargetDir, resolvedTargetPath);
+  if (
+    relativePath === '' ||
+    relativePath === '.' ||
+    relativePath.startsWith(`..${sep}`) ||
+    relativePath === '..'
+  ) {
+    throw new Error('Conflict rename target escapes destination directory');
+  }
+
+  return resolvedTargetPath;
+}
+
 function normalizeWatchedPath(inputPath: string): string {
   const normalizedPath = inputPath.replace(/\\/g, '/');
   if (process.platform === 'win32' || process.platform === 'darwin') {
@@ -808,7 +833,7 @@ export function registerFileHandlers(): void {
       for (const sourcePath of sources) {
         try {
           const fileName = basename(sourcePath);
-          let targetPath = join(targetDir, fileName);
+          let targetPath = resolveBatchConflictTargetPath(targetDir, fileName);
           const conflict = conflictMap.get(sourcePath);
 
           if (conflict) {
@@ -816,7 +841,7 @@ export function registerFileHandlers(): void {
               continue;
             }
             if (conflict.action === 'rename' && conflict.newName) {
-              targetPath = join(targetDir, conflict.newName);
+              targetPath = resolveBatchConflictTargetPath(targetDir, fileName, conflict.newName);
             }
             // 'replace' action: just overwrite
           }
@@ -869,7 +894,7 @@ export function registerFileHandlers(): void {
       for (const sourcePath of sources) {
         try {
           const fileName = basename(sourcePath);
-          let targetPath = join(targetDir, fileName);
+          let targetPath = resolveBatchConflictTargetPath(targetDir, fileName);
           const conflict = conflictMap.get(sourcePath);
 
           if (conflict) {
@@ -877,7 +902,7 @@ export function registerFileHandlers(): void {
               continue;
             }
             if (conflict.action === 'rename' && conflict.newName) {
-              targetPath = join(targetDir, conflict.newName);
+              targetPath = resolveBatchConflictTargetPath(targetDir, fileName, conflict.newName);
             }
             // 'replace' action: delete existing first
             if (conflict.action === 'replace') {
