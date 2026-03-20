@@ -97,6 +97,7 @@ const port = Number(process.env.ENSO_REMOTE_PROMPT_PORT || '');
 const token = process.env.ENSO_REMOTE_PROMPT_TOKEN || '';
 const profileId = process.env.ENSO_REMOTE_PROFILE_ID || '';
 const sessionId = process.env.ENSO_REMOTE_PROMPT_SESSION_ID || '';
+const hostPort = Number(process.env.ENSO_REMOTE_HOST_PORT || '');
 const prompt = process.argv.slice(2).join(' ');
 
 if (!port || !token || !profileId) {
@@ -116,7 +117,15 @@ function finish(code) {
 }
 
 socket.on('connect', () => {
-  socket.write(JSON.stringify({ token, profileId, sessionId: sessionId || undefined, prompt }) + '\n');
+  socket.write(
+    JSON.stringify({
+      token,
+      profileId,
+      sessionId: sessionId || undefined,
+      hostPort: Number.isFinite(hostPort) && hostPort > 0 ? hostPort : undefined,
+      prompt,
+    }) + '\n'
+  );
 });
 
 socket.on('data', (chunk) => {
@@ -169,7 +178,8 @@ export class RemoteAuthBroker {
 
   async getAskpassEnv(
     profile: ConnectionProfile,
-    sessionId?: string
+    sessionId?: string,
+    hostPort?: number
   ): Promise<Record<string, string>> {
     await this.ensureServer();
     const artifacts = await this.ensureArtifacts();
@@ -185,6 +195,9 @@ export class RemoteAuthBroker {
 
     if (sessionId) {
       env.ENSO_REMOTE_PROMPT_SESSION_ID = sessionId;
+    }
+    if (hostPort && Number.isFinite(hostPort) && hostPort > 0) {
+      env.ENSO_REMOTE_HOST_PORT = String(hostPort);
     }
 
     if (process.platform !== 'win32' && !process.env.DISPLAY) {
@@ -410,6 +423,7 @@ export class RemoteAuthBroker {
             token?: string;
             profileId?: string;
             sessionId?: string;
+            hostPort?: number;
             prompt?: string;
           };
           if (payload.token !== this.token || !payload.profileId || !payload.prompt) {
@@ -426,8 +440,14 @@ export class RemoteAuthBroker {
             return;
           }
 
+          const promptHostPort =
+            typeof payload.hostPort === 'number' && payload.hostPort > 0 ? payload.hostPort : 22;
           const promptText = normalizePromptText(payload.prompt);
-          const hostPrompt = parseHostVerificationPrompt(promptText, profile.sshTarget, 22);
+          const hostPrompt = parseHostVerificationPrompt(
+            promptText,
+            profile.sshTarget,
+            promptHostPort
+          );
           let secret: string;
           if (hostPrompt) {
             await this.requestHostVerification(profile, hostPrompt, promptText);

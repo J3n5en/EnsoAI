@@ -2761,7 +2761,7 @@ export class RemoteConnectionManager {
     resolvedHost: ResolvedHostConfig
   ): Promise<SshContext> {
     await mkdir(getRemoteStateRoot(), { recursive: true });
-    const askpassEnv = await this.authBroker.getAskpassEnv(profile);
+    const askpassEnv = await this.authBroker.getAskpassEnv(profile, undefined, resolvedHost.port);
     const env = {
       ...getEnvForCommand(),
       ...askpassEnv,
