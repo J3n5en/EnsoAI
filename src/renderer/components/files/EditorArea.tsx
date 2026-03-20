@@ -652,6 +652,15 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         editor.focus();
       }
 
+      // Enable foldingImportsByDefault only for Java — avoids auto-collapsing TS/JS imports
+      const syncFoldingImports = () => {
+        const lang = editor.getModel()?.getLanguageId();
+        editor.updateOptions({ foldingImportsByDefault: lang === 'java' });
+      };
+      syncFoldingImports();
+      const foldingImportsDisposable = editor.onDidChangeModel(() => syncFoldingImports());
+      editor.onDidDispose(() => foldingImportsDisposable.dispose());
+
       // Sync scroll from editor to preview (for markdown files)
       editor.onDidScrollChange((e) => {
         if (!previewRef.current || isSyncingScrollRef.current) return;

@@ -15,6 +15,7 @@ import themeVitesseDark from 'shiki/themes/vitesse-dark.mjs';
 import themeVitesseLight from 'shiki/themes/vitesse-light.mjs';
 // Import ini language for .env file syntax highlighting
 import 'monaco-editor/esm/vs/basic-languages/ini/ini.contribution';
+import { computeJavaFoldingRanges } from './javaFoldingUtils';
 
 // Configure Monaco workers for Electron environment
 self.MonacoEnvironment = {
@@ -592,6 +593,15 @@ monaco.languages.registerDocumentSymbolProvider('vue', {
     }
 
     return symbols;
+  },
+});
+
+// Java FoldingRangeProvider: covers braces, block comments, imports, line-comment groups, and regions.
+// Must be comprehensive because registering ANY FoldingRangeProvider fully replaces IndentRangeProvider.
+monaco.languages.registerFoldingRangeProvider('java', {
+  provideFoldingRanges(model) {
+    const lines = model.getLinesContent();
+    return computeJavaFoldingRanges(lines) as monaco.languages.FoldingRange[];
   },
 });
 
