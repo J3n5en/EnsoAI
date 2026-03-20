@@ -1344,6 +1344,12 @@ export const zhTranslations: Record<string, string> = {
   'Launch Agent': '启动 Agent',
   'No tasks yet': '暂无任务',
   'Create your first task to get started': '创建第一个任务开始使用',
+  // Auto Execute
+  'Auto Execute': '自动执行',
+  'Executing...': '执行中...',
+  'Queue: {count}': '队列: {count}',
+  Queue: '队列',
+  '{count} more': '还有 {count} 个',
   // Git Clone Settings
   'Git Clone': 'Git 克隆',
   'Base directory': '基础目录',

@@ -50,6 +50,7 @@ import type {
   WorktreeRemoveOptions,
 } from '@shared/types';
 import { IPC_CHANNELS } from '@shared/types';
+import type { AgentStopNotificationData } from '@shared/types/agent';
 import type { InspectPayload, WebInspectorStatus } from '@shared/types/webInspector';
 import { contextBridge, ipcRenderer, shell, webUtils } from 'electron';
 import pkg from '../../package.json';
@@ -635,8 +636,8 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_CLICK, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.NOTIFICATION_CLICK, handler);
     },
-    onAgentStop: (callback: (data: { sessionId: string; cwd?: string }) => void): (() => void) => {
-      const handler = (_: unknown, data: { sessionId: string; cwd?: string }) => callback(data);
+    onAgentStop: (callback: (data: AgentStopNotificationData) => void): (() => void) => {
+      const handler = (_: unknown, data: AgentStopNotificationData) => callback(data);
       ipcRenderer.on(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.AGENT_STOP_NOTIFICATION, handler);
     },

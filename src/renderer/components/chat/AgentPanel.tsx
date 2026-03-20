@@ -23,7 +23,6 @@ import { initAgentStatusListener } from '@/stores/agentStatus';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
 import { useTerminalStore } from '@/stores/terminal';
-import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
@@ -937,32 +936,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   const handleInitialized = useCallback(
     (id: string) => {
-      const session = allSessions.find((s) => s.id === id);
+      // Read session from store directly to avoid stale closure
+      const session = useAgentSessionsStore.getState().sessions.find((s) => s.id === id);
       if (!session) return;
 
-      // Update initialized state
-      updateSession(id, { initialized: true });
-
-      // Send pending command if exists (from todo task launch)
-      if (session.pendingCommand) {
-        const write = useTerminalWriteStore.getState().write;
-        if (write) {
-          const command = session.pendingCommand;
-          // Use bracketed paste mode for multi-line content
-          if (command.includes('\n')) {
-            write(id, `\x1b[200~${command}\x1b[201~`);
-          } else {
-            write(id, command);
-          }
-          // Send Enter after a short delay
-          setTimeout(() => write(id, '\r'), 100);
-
-          // Clear pending command after sending
-          updateSession(id, { pendingCommand: undefined });
-        }
-      }
+      // Update initialized state and clear pendingCommand (prompt is passed via CLI arg)
+      updateSession(id, { initialized: true, pendingCommand: undefined });
     },
-    [allSessions, updateSession]
+    [updateSession]
   );
 
   const handleActivated = useCallback(
@@ -1325,13 +1306,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
     const normalizedCwd = normalizePath(cwd);
     const currentState = worktreeGroupStates[normalizedCwd];
+    const storeActiveId = useAgentSessionsStore.getState().activeIds[normalizedCwd];
 
     // If no groups exist but sessions do, create a group with all sessions
     if (!currentState || currentState.groups.length === 0) {
       const sessionIds = currentWorktreeSessions.map((s) => s.id);
 
       // Get the active session ID from store (if set) or fallback to first session
-      const storeActiveId = useAgentSessionsStore.getState().activeIds[normalizedCwd];
       const validActiveId = sessionIds.includes(storeActiveId || '')
         ? storeActiveId
         : sessionIds[0];
@@ -1346,6 +1327,30 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         activeGroupId: newGroup.id,
         flexPercents: [100],
       });
+    } else {
+      // Add orphaned sessions (e.g. created by auto-execute) to the active group
+      const allGroupSessionIds = new Set(currentState.groups.flatMap((g) => g.sessionIds));
+      const orphanedSessionIds = currentWorktreeSessions
+        .filter((s) => !allGroupSessionIds.has(s.id))
+        .map((s) => s.id);
+
+      if (orphanedSessionIds.length > 0) {
+        const targetGroupId = currentState.activeGroupId || currentState.groups[0]?.id;
+        if (targetGroupId) {
+          setGroupState(cwd, {
+            ...currentState,
+            groups: currentState.groups.map((g) =>
+              g.id === targetGroupId
+                ? {
+                    ...g,
+                    sessionIds: [...g.sessionIds, ...orphanedSessionIds],
+                    activeSessionId: storeActiveId ?? g.activeSessionId,
+                  }
+                : g
+            ),
+          });
+        }
+      }
     }
   }, [cwd, currentWorktreeSessions, worktreeGroupStates, setGroupState]);
 
@@ -1690,6 +1695,8 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 initialized={session.initialized}
                 activated={session.activated}
                 isActive={isTerminalActive}
+                hasPendingCommand={!!session.pendingCommand}
+                initialPrompt={session.pendingCommand}
                 onInitialized={() => handleInitialized(sessionId)}
                 onActivated={() => handleActivated(sessionId)}
                 onActivatedWithFirstLine={(line) => handleActivatedWithFirstLine(sessionId, line)}

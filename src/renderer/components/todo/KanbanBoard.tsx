@@ -12,15 +12,17 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import { Plus } from 'lucide-react';
+import { ListOrdered, Plus, Square } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useAutoExecuteTask } from '@/hooks/useAutoExecuteTask';
 import { useI18n } from '@/i18n';
 import { selectTasks, useTodoStore } from '@/stores/todo';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskCard } from './TaskCard';
 import { TaskDialog } from './TaskDialog';
 import { TASK_STATUS_LIST, type TaskStatus, type TodoTask } from './types';
+import { useEnabledAgents } from './useEnabledAgents';
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'To Do',
@@ -40,6 +42,15 @@ export function KanbanBoard({ repoPath, worktreePath, onSwitchToAgent }: KanbanB
   const moveTask = useTodoStore((s) => s.moveTask);
   const reorderTasks = useTodoStore((s) => s.reorderTasks);
   const loadTasks = useTodoStore((s) => s.loadTasks);
+  const enabledAgents = useEnabledAgents();
+
+  // Auto-execute hook
+  const { autoExecute, startAutoExecute, stop } = useAutoExecuteTask(
+    repoPath,
+    worktreePath,
+    onSwitchToAgent,
+    enabledAgents
+  );
 
   // Load tasks from SQLite on mount / repoPath change
   useEffect(() => {
@@ -210,21 +221,88 @@ export function KanbanBoard({ repoPath, worktreePath, onSwitchToAgent }: KanbanB
     setDialogOpen(true);
   }, []);
 
+  // Get todo tasks for auto-execute
+  const todoTasks = useMemo(() => tasksByStatus.todo, [tasksByStatus]);
+
+  // Handle start auto-execute
+  const handleStartAutoExecute = useCallback(() => {
+    if (todoTasks.length === 0) return;
+    const taskIds = todoTasks.map((t) => t.id);
+    startAutoExecute(taskIds);
+  }, [todoTasks, startAutoExecute]);
+
   return (
     <div className="flex h-full flex-col">
       {/* Board header */}
       <div className="flex items-center justify-between border-b px-4 py-2">
         <h2 className="text-sm font-medium text-foreground">{t('Todo')}</h2>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 text-xs"
-          onClick={() => handleAddTask('todo')}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t('New Task')}
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Auto-execute controls */}
+          {autoExecute.running ? (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">
+                {autoExecute.currentTaskId
+                  ? t('Executing...')
+                  : t('Queue: {count}', { count: autoExecute.queue.length })}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                onClick={stop}
+              >
+                <Square className="h-3.5 w-3.5" />
+                {t('Stop')}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              onClick={handleStartAutoExecute}
+              disabled={todoTasks.length === 0 || enabledAgents.length === 0}
+              title={enabledAgents.length === 0 ? t('No enabled agents') : undefined}
+            >
+              <ListOrdered className="h-3.5 w-3.5" />
+              {t('Auto Execute')}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-xs"
+            onClick={() => handleAddTask('todo')}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t('New Task')}
+          </Button>
+        </div>
       </div>
+
+      {/* Auto-execute queue display */}
+      {autoExecute.running && autoExecute.queue.length > 0 && (
+        <div className="border-b bg-muted/30 px-4 py-1.5">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{t('Queue')}:</span>
+            <div className="flex flex-wrap gap-1">
+              {autoExecute.queue.slice(0, 5).map((taskId, index) => {
+                const task = tasks.find((t) => t.id === taskId);
+                return (
+                  <span key={taskId} className="rounded bg-background px-1.5 py-0.5 text-[10px]">
+                    {index + 1}. {task?.title ?? taskId.slice(0, 8)}
+                  </span>
+                );
+              })}
+              {autoExecute.queue.length > 5 && (
+                <span className="text-muted-foreground">
+                  +{t('{count} more', { count: autoExecute.queue.length - 5 })}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Kanban columns */}
       <DndContext

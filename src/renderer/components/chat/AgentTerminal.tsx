@@ -25,6 +25,8 @@ interface AgentTerminalProps {
   initialized?: boolean;
   activated?: boolean;
   isActive?: boolean;
+  hasPendingCommand?: boolean; // Force terminal activation even when not visible
+  initialPrompt?: string; // Initial prompt to pass as CLI argument (auto-execute)
   canMerge?: boolean; // whether merge option should be enabled (has multiple groups)
   /**
    * When provided, Enhanced Input open state is controlled by parent (e.g. AgentPanel store).
@@ -67,6 +69,8 @@ export function AgentTerminal({
   initialized,
   activated,
   isActive = false,
+  hasPendingCommand = false,
+  initialPrompt,
   canMerge = false,
   enhancedInputOpen: externalEnhancedInputOpen,
   onEnhancedInputOpenChange,
@@ -314,6 +318,19 @@ export function AgentTerminal({
       agentArgs.push(customArgs);
     }
 
+    // Append initial prompt as CLI positional argument (for auto-execute)
+    // Most CLI agents (claude, codex, gemini, etc.) accept a prompt as trailing argument
+    if (initialPrompt) {
+      // Shell-safe quoting using $'...' ANSI-C quoting syntax (bash/zsh compatible)
+      // This handles: backslashes, single quotes, and newlines
+      // Note: $'...' is bash/zsh specific; for sh/ash compatibility, consider a shell-escape library
+      const escaped = initialPrompt
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, '\\n');
+      agentArgs.push(`$'${escaped}'`);
+    }
+
     const isWindows = window.electronAPI?.env?.platform === 'win32';
     let envVars: Record<string, string> | undefined;
 
@@ -418,6 +435,7 @@ export function AgentTerminal({
     agentCommand,
     customPath,
     customArgs,
+    initialPrompt,
     resumeSessionId,
     initialized,
     environment,
@@ -686,8 +704,9 @@ export function AgentTerminal({
     if (environment === 'hapi' && hapiGlobalInstalled === null) {
       return false;
     }
-    return isActive;
-  }, [environment, hapiGlobalInstalled, isActive, resolvedShell]);
+    // Force activation when there's a pending command (auto-execute)
+    return isActive || hasPendingCommand;
+  }, [environment, hapiGlobalInstalled, isActive, resolvedShell, hasPendingCommand]);
 
   const {
     containerRef,
