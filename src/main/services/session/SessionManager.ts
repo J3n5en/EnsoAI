@@ -212,20 +212,39 @@ export class SessionManager {
     }
 
     if (session.backend === 'remote' && session.connectionId) {
+      const attachedWindowIds = new Set(session.attachedWindowIds);
       await this.ensureRemoteSubscriptions(session.connectionId);
       await remoteConnectionManager
         .call(session.connectionId, 'session:kill', { sessionId })
         .catch(() => {});
       this.sessions.delete(sessionId);
-      this.emitState({
-        sessionId,
-        state: 'dead',
-      });
+      this.emitState(
+        {
+          sessionId,
+          state: 'dead',
+        },
+        attachedWindowIds
+      );
+      this.emitExit(
+        {
+          sessionId,
+          exitCode: 0,
+        },
+        attachedWindowIds
+      );
       return;
     }
 
+    const attachedWindowIds = new Set(session.attachedWindowIds);
     this.localPtyManager.destroy(sessionId);
     this.sessions.delete(sessionId);
+    this.emitExit(
+      {
+        sessionId,
+        exitCode: 0,
+      },
+      attachedWindowIds
+    );
   }
 
   write(sessionId: string, data: string): void {
@@ -475,8 +494,9 @@ export class SessionManager {
 
       if (session.pendingExit) {
         const pendingExit = session.pendingExit;
+        const attachedWindowIds = new Set(session.attachedWindowIds);
         this.sessions.delete(sessionId);
-        this.emitExit(pendingExit, new Set(session.attachedWindowIds));
+        this.emitExit(pendingExit, attachedWindowIds);
       }
     }, 0);
   }

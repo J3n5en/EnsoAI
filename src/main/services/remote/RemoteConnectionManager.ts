@@ -198,6 +198,7 @@ const REMOTE_SHARED_SETTINGS_FILENAME = 'settings.json';
 const REMOTE_SHARED_SESSION_STATE_FILENAME = 'session-state.json';
 const REMOTE_SHARED_STATE_SYNC_TIMEOUT_MS = 5_000;
 const REMOTE_RPC_TIMEOUT_MS = 15_000;
+const LOCAL_COMMAND_TIMEOUT_MS = 15_000;
 const REMOTE_ENV_INFO_PREFIX = '__ENSO_REMOTE_ENV__';
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000];
 const SCP_CONNECT_TIMEOUT_SECONDS = 30;
@@ -525,7 +526,8 @@ function phaseLabelFor(phase: RemoteConnectionPhase | undefined): string | undef
 async function runLocalCommand(
   command: string,
   args: string[],
-  env?: Record<string, string>
+  env?: Record<string, string>,
+  timeoutMs = LOCAL_COMMAND_TIMEOUT_MS
 ): Promise<LocalCommandResult> {
   const { spawn } = await import('node:child_process');
   return new Promise((resolve, reject) => {
@@ -536,16 +538,39 @@ async function runLocalCommand(
     });
     let stdout = '';
     let stderr = '';
+    let settled = false;
+
+    const finish = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
+
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
     });
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
     });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      resolve({ stdout, stderr, code });
+    child.on('error', (error) => {
+      finish(() => reject(error));
     });
+    child.on('close', (code) => {
+      finish(() => resolve({ stdout, stderr, code }));
+    });
+
+    const timeout = setTimeout(() => {
+      const detail = [stderr.trim(), stdout.trim(), `${command} ${args.join(' ')}`]
+        .filter(Boolean)
+        .join('\n');
+      finish(() => {
+        killProcessTree(child);
+        reject(createRemoteError('Local command timed out', undefined, detail));
+      });
+    }, timeoutMs);
   });
 }
 
@@ -567,35 +592,46 @@ export class RemoteConnectionManager {
   private intentionalDisconnects = new Set<string>();
   private readonly authBroker = new RemoteAuthBroker();
   private loaded = false;
+  private loadingProfiles: Promise<ConnectionProfile[]> | null = null;
 
   async loadProfiles(): Promise<ConnectionProfile[]> {
     if (this.loaded) {
       return this.listProfiles();
     }
 
-    const path = getRemoteSettingsPath();
-    let shouldFlush = false;
-    if (await pathExists(path)) {
-      try {
-        const content = await readFile(path, 'utf8');
-        const parsed = JSON.parse(content) as StoredConnectionProfile[];
-        for (const profile of parsed) {
-          const sanitized = sanitizeConnectionProfile(profile);
-          if ('platformHint' in profile) {
-            shouldFlush = true;
-          }
-          this.profiles.set(sanitized.id, sanitized);
-        }
-      } catch (error) {
-        console.warn('[remote] Failed to read profiles:', error);
-      }
+    if (this.loadingProfiles) {
+      return this.loadingProfiles;
     }
 
-    this.loaded = true;
-    if (shouldFlush) {
-      await this.flush();
-    }
-    return this.listProfiles();
+    this.loadingProfiles = (async () => {
+      const path = getRemoteSettingsPath();
+      let shouldFlush = false;
+      if (await pathExists(path)) {
+        try {
+          const content = await readFile(path, 'utf8');
+          const parsed = JSON.parse(content) as StoredConnectionProfile[];
+          for (const profile of parsed) {
+            const sanitized = sanitizeConnectionProfile(profile);
+            if ('platformHint' in profile) {
+              shouldFlush = true;
+            }
+            this.profiles.set(sanitized.id, sanitized);
+          }
+        } catch (error) {
+          console.warn('[remote] Failed to read profiles:', error);
+        }
+      }
+
+      this.loaded = true;
+      if (shouldFlush) {
+        await this.flush();
+      }
+      return this.listProfiles();
+    })().finally(() => {
+      this.loadingProfiles = null;
+    });
+
+    return this.loadingProfiles;
   }
 
   listProfiles(): ConnectionProfile[] {

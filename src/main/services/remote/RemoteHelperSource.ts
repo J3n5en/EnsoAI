@@ -25,6 +25,7 @@ const REMOTE_SETTINGS_PATH = '.ensoai/settings.json';
 const REMOTE_SESSION_STATE_PATH = '.ensoai/session-state.json';
 const RUNTIME_MANIFEST_FILENAME = 'enso-remote-runtime-manifest.json';
 const GLOBAL_STATUS_CACHE_TTL = 300000;
+const AUTH_TOKEN_BYTES = 36;
 let cachedNodePty = undefined;
 let cachedNodePtyLoadError = null;
 let cachedHapiGlobalStatus = null;
@@ -2283,6 +2284,11 @@ function finalizeSessionExit(session, exitCode, signal) {
   if (session.streamState === 'live' && session.attachCount > 0) {
     emitSessionExit(session, session.pendingExit.exitCode, session.pendingExit.signal);
     removeSession(session.sessionId);
+    return;
+  }
+
+  if (session.attachCount <= 0) {
+    removeSession(session.sessionId);
   }
 }
 
@@ -2591,7 +2597,17 @@ async function getSessionActivity(sessionId) {
 
 async function authenticateDaemon(token) {
   const info = await readDaemonInfo();
-  return Boolean(info && token && info.token === token);
+  if (!info || typeof token !== 'string') {
+    return false;
+  }
+
+  const provided = Buffer.from(token, 'utf8');
+  const expected = Buffer.from(info.token, 'utf8');
+  if (provided.length !== AUTH_TOKEN_BYTES || expected.length !== AUTH_TOKEN_BYTES) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(provided, expected);
 }
 
 async function pingDaemon() {

@@ -75,6 +75,10 @@ function assertRemoteUnsupported(feature: RemoteUnsupportedFeature): never {
   throw createUnsupportedRemoteFeatureError(feature);
 }
 
+function assertRemoteGitMutationUnsupported(): never {
+  throw new Error('Git blame, revert, and reset are not supported for remote repositories yet');
+}
+
 export function registerGitHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_, workdir: string) => {
     if (isRemoteWorkdir(workdir)) {
@@ -501,12 +505,18 @@ export function registerGitHandlers(): void {
 
   // Git Blame
   ipcMain.handle(IPC_CHANNELS.GIT_BLAME, async (_, workdir: string, filePath: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      assertRemoteGitMutationUnsupported();
+    }
     const git = getGitService(workdir);
     return git.blame(filePath);
   });
 
   // Git Revert
   ipcMain.handle(IPC_CHANNELS.GIT_REVERT, async (_, workdir: string, commitHash: string) => {
+    if (isRemoteWorkdir(workdir)) {
+      assertRemoteGitMutationUnsupported();
+    }
     const git = getGitService(workdir);
     await git.revert(commitHash);
   });
@@ -515,6 +525,9 @@ export function registerGitHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GIT_RESET,
     async (_, workdir: string, commitHash: string, mode?: 'soft' | 'mixed' | 'hard') => {
+      if (isRemoteWorkdir(workdir)) {
+        assertRemoteGitMutationUnsupported();
+      }
       const git = getGitService(workdir);
       await git.reset(commitHash, mode);
     }
