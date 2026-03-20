@@ -769,6 +769,30 @@ function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRang
     });
   }
 
+  // --- Pass 4: line-level scan for region markers ---
+  // Matches: // region / // endregion, // #region / // #endregion, // <editor-fold> / // </editor-fold>
+  const regionStartRe = /^\s*\/\/\s*(?:#?region\b|<editor-fold\b)/;
+  const regionEndRe = /^\s*\/\/\s*(?:#?endregion\b|<\/editor-fold>)/;
+  const regionStack: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const lineNum = i + 1;
+    const line = lines[i];
+    if (regionStartRe.test(line)) {
+      regionStack.push(lineNum);
+    } else if (regionEndRe.test(line)) {
+      if (regionStack.length > 0) {
+        const startLine = regionStack.pop()!;
+        if (lineNum > startLine) {
+          ranges.push({
+            start: startLine,
+            end: lineNum,
+            kind: monaco.languages.FoldingRangeKind.Region,
+          });
+        }
+      }
+    }
+  }
+
   return ranges;
 }
 
