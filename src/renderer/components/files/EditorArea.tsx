@@ -87,6 +87,7 @@ function bindingToMonacoChord(binding: TerminalKeybinding, m: Monaco): number {
   if (binding.alt) chord |= m.KeyMod.Alt;
 
   const key = binding.key.toLowerCase();
+  if (!key) return 0;
   let keyCode: number | undefined;
 
   if (/^[a-z]$/.test(key)) {
@@ -239,9 +240,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const isPdf = isPdfFile(activeTabPath);
   const [previewMode, setPreviewMode] = useState<MarkdownPreviewMode>('off');
   const previewModeRef = useRef<MarkdownPreviewMode>('off');
-  useEffect(() => {
-    previewModeRef.current = previewMode;
-  }, [previewMode]);
+  previewModeRef.current = previewMode;
   const [editorReady, setEditorReady] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(50); // percentage
 
@@ -565,16 +564,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         }
       });
 
-      // Add goto-symbol shortcut: show file structure (go to symbol in file)
-      // Uses editor.action.quickOutline — the correct standalone Monaco action ID
-      // Keybinding is configurable from Settings > Keybindings (default: Cmd/Ctrl+O)
-      const gotoSymbolChord = bindingToMonacoChord(editorKeybindings.gotoSymbol, m);
-      if (gotoSymbolChord !== 0) {
-        editor.addCommand(gotoSymbolChord, () => {
-          editor.getAction('editor.action.quickOutline')?.run();
-        });
-      }
-
       editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
         const selection = editor.getSelection();
         const selectedText =
@@ -681,7 +670,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     [
       activeTab?.viewState,
       activeTabPath,
-      editorKeybindings.gotoSymbol,
       handleSaveWithBlameRefresh,
       onGlobalSearch,
       onClearPendingCursor,
@@ -690,6 +678,22 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       t,
     ]
   );
+
+  // Re-register goto-symbol keybinding whenever the user changes it in Settings.
+  // Runs after mount (editorReady=true) and on every keybinding change so the
+  // new chord takes effect immediately without requiring a tab switch.
+  useEffect(() => {
+    const editor = editorRef.current;
+    const m = monacoRef.current;
+    if (!editor || !m || !editorReady) return;
+
+    const chord = bindingToMonacoChord(editorKeybindings.gotoSymbol, m);
+    if (chord !== 0) {
+      editor.addCommand(chord, () => {
+        editor.getAction('editor.action.quickOutline')?.run();
+      });
+    }
+  }, [editorReady, editorKeybindings.gotoSymbol]);
 
   // Selection comment widget and cursor tracking
   useEffect(() => {
