@@ -37,6 +37,7 @@ import { BreadcrumbTreeMenu } from './BreadcrumbTreeMenu';
 import { CommentForm, useEditorLineComment } from './EditorLineComment';
 import { EditorTabs } from './EditorTabs';
 import { ExternalModificationBanner } from './ExternalModificationBanner';
+import { setupDefinitionNavigation } from './editorDefinitionProvider';
 import { setupDoubleClickScope } from './editorScopeSelection';
 import { isImageFile, isPdfFile } from './fileIcons';
 import { ImagePreview } from './ImagePreview';
@@ -273,6 +274,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   const sessionIdRef = useRef<string | null>(null);
   const pendingCursorRef = useRef<PendingCursor | null>(null);
   const editorForPathRef = useRef<string | null>(null);
+  const rootPathRef = useRef<string | undefined>(rootPath);
+  const definitionNavDisposableRef = useRef<{ dispose: () => void } | null>(null);
   // Flag to suppress onChange events triggered by programmatic setValue calls (not user input)
   const isProgrammaticUpdateRef = useRef(false);
 
@@ -354,6 +357,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   useEffect(() => {
     sessionIdRef.current = sessionId ?? null;
   }, [sessionId]);
+
+  // Sync rootPath ref immediately during render so the definition provider
+  // always sees the latest value without being a useCallback dependency.
+  rootPathRef.current = rootPath;
 
   // Sync ref immediately during render (not in useEffect) to ensure
   // it's available when Monaco's onMount callback fires
@@ -616,6 +623,16 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       // Double-click: select innermost scope (brackets, quotes, indentation)
       setupDoubleClickScope(editor);
 
+      // Cmd/Ctrl+Click and F12: go-to-definition via ripgrep declaration search.
+      // Dispose the previous instance first to avoid accumulating listeners across
+      // file switches (editor is remounted with a new instance on every key change).
+      definitionNavDisposableRef.current?.dispose();
+      definitionNavDisposableRef.current = setupDefinitionNavigation(
+        editor,
+        m,
+        () => rootPathRef.current
+      );
+
       // Restore view state if available
       if (activeTab?.viewState) {
         editor.restoreViewState(activeTab.viewState as monaco.editor.ICodeEditorViewState);
@@ -645,11 +662,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
           editor.focus();
         }, 100);
         onClearPendingCursor();
-      } else if (previewModeRef.current !== 'fullscreen') {
-        // Focus editor when opening a file without pending cursor navigation.
-        // Skip when markdown fullscreen preview is active to avoid stealing keyboard focus
-        // from the preview pane.
-        editor.focus();
       }
 
       // Sync scroll from editor to preview (for markdown files)
@@ -684,20 +696,35 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   );
 
   // Re-register goto-symbol keybinding whenever the user changes it in Settings.
-  // Runs after mount (editorReady=true) and on every keybinding change so the
-  // new chord takes effect immediately without requiring a tab switch.
+  // Uses onKeyDown instead of addCommand: addCommand leaks into the shared Monaco
+  // command registry and cannot be disposed, causing stale handlers from previous
+  // editor instances to fire on every keypress even after the editor is unmounted.
   useEffect(() => {
-    const editor = editorRef.current;
-    const m = monacoRef.current;
-    if (!editor || !m || !editorReady) return;
+    if (!editorInstance || !monacoInstance || !editorReady) return;
 
-    const chord = bindingToMonacoChord(editorKeybindings.gotoSymbol, m);
-    if (chord !== 0) {
-      editor.addCommand(chord, () => {
-        editor.getAction('editor.action.quickOutline')?.run();
-      });
-    }
-  }, [editorReady, editorKeybindings.gotoSymbol]);
+    const chord = bindingToMonacoChord(editorKeybindings.gotoSymbol, monacoInstance);
+    if (chord === 0) return;
+
+    // Extract individual key parts from the chord number
+    const keyCode = chord & 0xff;
+    const needsMeta = (chord & monacoInstance.KeyMod.CtrlCmd) !== 0;
+    const needsCtrl = (chord & monacoInstance.KeyMod.WinCtrl) !== 0;
+    const needsShift = (chord & monacoInstance.KeyMod.Shift) !== 0;
+    const needsAlt = (chord & monacoInstance.KeyMod.Alt) !== 0;
+
+    const disposable = editorInstance.onKeyDown((e) => {
+      if (e.keyCode !== keyCode) return;
+      if (needsMeta && !e.metaKey && !e.ctrlKey) return;
+      if (needsCtrl && !e.ctrlKey) return;
+      if (needsShift && !e.shiftKey) return;
+      if (needsAlt && !e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      editorInstance.getAction('editor.action.quickOutline')?.run();
+    });
+
+    return () => disposable.dispose();
+  }, [editorInstance, monacoInstance, editorReady, editorKeybindings.gotoSymbol]);
 
   // Selection comment widget and cursor tracking
   useEffect(() => {
