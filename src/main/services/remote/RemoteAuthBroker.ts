@@ -34,6 +34,8 @@ interface AskpassArtifacts {
   wrapperPath: string;
 }
 
+const MAX_PROMPT_MESSAGE_CHARS = 64 * 1024;
+
 function classifyPrompt(promptText: string): RemoteAuthPromptKind {
   const normalized = promptText.toLowerCase();
   if (normalized.includes('passphrase')) {
@@ -371,16 +373,37 @@ export class RemoteAuthBroker {
     this.server = net.createServer((socket) => {
       socket.setEncoding('utf8');
       let buffer = '';
+      let settled = false;
+
+      const finish = (payload: { ok: boolean; secret?: string; error?: string }): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        socket.end(`${JSON.stringify(payload)}\n`);
+      };
 
       socket.on('data', async (chunk: string) => {
+        if (settled) {
+          return;
+        }
+
         buffer += chunk;
+        if (buffer.length > MAX_PROMPT_MESSAGE_CHARS) {
+          finish({
+            ok: false,
+            error: translateRemote('SSH authentication prompt payload is too large'),
+          });
+          return;
+        }
+
         const newlineIndex = buffer.indexOf('\n');
         if (newlineIndex === -1) {
           return;
         }
 
         const line = buffer.slice(0, newlineIndex);
-        buffer = '';
+        buffer = buffer.slice(newlineIndex + 1);
 
         try {
           const payload = JSON.parse(line) as {
@@ -390,18 +413,16 @@ export class RemoteAuthBroker {
             prompt?: string;
           };
           if (payload.token !== this.token || !payload.profileId || !payload.prompt) {
-            socket.end(`${JSON.stringify({ ok: false })}\n`);
+            finish({ ok: false });
             return;
           }
 
           const profile = this.profiles.get(payload.profileId);
           if (!profile) {
-            socket.end(
-              `${JSON.stringify({
-                ok: false,
-                error: translateRemote('SSH authentication was cancelled'),
-              })}\n`
-            );
+            finish({
+              ok: false,
+              error: translateRemote('SSH authentication was cancelled'),
+            });
             return;
           }
 
@@ -414,14 +435,12 @@ export class RemoteAuthBroker {
           } else {
             secret = await this.requestSecret(profile, promptText);
           }
-          socket.end(`${JSON.stringify({ ok: true, secret })}\n`);
+          finish({ ok: true, secret });
         } catch (error) {
-          socket.end(
-            `${JSON.stringify({
-              ok: false,
-              error: error instanceof Error ? error.message : String(error),
-            })}\n`
-          );
+          finish({
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       });
     });
