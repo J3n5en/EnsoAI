@@ -1307,6 +1307,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                     renderWhitespace: editorSettings.renderWhitespace,
                     renderLineHighlight: editorSettings.renderLineHighlight,
                     folding: editorSettings.folding,
+                    foldingImportsByDefault: true,
                     links: editorSettings.links,
                     smoothScrolling: editorSettings.smoothScrolling,
                     // Font
