@@ -20,6 +20,8 @@ const state = {
 const REMOTE_SERVER_VERSION = ${JSON.stringify(REMOTE_SERVER_VERSION)};
 const DAEMON_INFO_FILE = 'enso-remote-daemon.json';
 const MAX_SESSION_REPLAY_CHARS = 65536;
+const EXEC_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+const EXEC_COMMAND_OUTPUT_LIMIT_CHARS = 2 * 1024 * 1024;
 const REMOTE_PTY_UNAVAILABLE = 'REMOTE_PTY_UNAVAILABLE';
 const REMOTE_SETTINGS_PATH = '.ensoai/settings.json';
 const REMOTE_SESSION_STATE_PATH = '.ensoai/session-state.json';
@@ -196,7 +198,18 @@ function normalize(p) {
 }
 
 function shellQuote(value) {
-  return "'" + String(value).replace(/'/g, "'\\\\''") + "'";
+  return "'" + String(value).replace(/'/g, "'\\''") + "'";
+}
+
+function appendOutputTail(current, chunk, limit) {
+  if (limit <= 0) {
+    return '';
+  }
+  if (chunk.length >= limit) {
+    return chunk.slice(-limit);
+  }
+  const combined = current + chunk;
+  return combined.length > limit ? combined.slice(-limit) : combined;
 }
 
 function resolvePathWithinRoot(rootPath, filePath) {
@@ -219,6 +232,14 @@ function resolvePathWithinRoot(rootPath, filePath) {
 
 function execCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
+    const timeout =
+      Number.isFinite(options.timeout) && options.timeout > 0
+        ? options.timeout
+        : EXEC_COMMAND_TIMEOUT_MS;
+    const outputLimit =
+      Number.isFinite(options.outputLimit) && options.outputLimit > 0
+        ? options.outputLimit
+        : EXEC_COMMAND_OUTPUT_LIMIT_CHARS;
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env || {}) },
@@ -226,14 +247,40 @@ function execCommand(command, args, options = {}) {
     });
     let stdout = '';
     let stderr = '';
+    let settled = false;
+
+    const finishError = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    };
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {}
+      const details = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n');
+      finishError(new Error(details || (command + ' timed out')));
+    }, timeout);
+
     child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
+      stdout = appendOutputTail(stdout, chunk.toString(), outputLimit);
     });
     child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
+      stderr = appendOutputTail(stderr, chunk.toString(), outputLimit);
     });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      finishError(error);
+    });
     child.on('close', (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
       if (code === 0) {
         resolve({ stdout, stderr });
       } else {

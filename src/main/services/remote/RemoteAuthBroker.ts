@@ -188,6 +188,7 @@ set ELECTRON_RUN_AS_NODE=1\r
 export class RemoteAuthBroker {
   private readonly token = randomUUID();
   private server: net.Server | null = null;
+  private serverPromise: Promise<void> | null = null;
   private port: number | null = null;
   private artifacts: AskpassArtifacts | null = null;
   private pendingPrompts = new Map<string, PromptResolver>();
@@ -375,6 +376,7 @@ export class RemoteAuthBroker {
     await new Promise<void>((resolve) => {
       this.server?.close(() => resolve());
       this.server = null;
+      this.serverPromise = null;
       this.port = null;
     });
   }
@@ -420,115 +422,148 @@ export class RemoteAuthBroker {
       return;
     }
 
-    await mkdir(getBrokerRoot(), { recursive: true });
-    this.server = net.createServer((socket) => {
-      socket.setEncoding('utf8');
-      socket.setTimeout(AUTH_SOCKET_TIMEOUT_MS);
-      let buffer = '';
-      let settled = false;
+    if (this.serverPromise) {
+      await this.serverPromise;
+      return;
+    }
 
-      const finish = (payload: { ok: boolean; secret?: string; error?: string }): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        try {
-          if (!socket.destroyed) {
-            socket.end(`${JSON.stringify(payload)}\n`);
+    this.serverPromise = (async () => {
+      await mkdir(getBrokerRoot(), { recursive: true });
+      const server = net.createServer((socket) => {
+        socket.setEncoding('utf8');
+        socket.setTimeout(AUTH_SOCKET_TIMEOUT_MS);
+        let buffer = '';
+        let settled = false;
+
+        const finish = (payload: { ok: boolean; secret?: string; error?: string }): void => {
+          if (settled) {
+            return;
           }
-        } catch {
-          // Ignore disconnect races while finishing auth exchange.
-        }
-      };
+          settled = true;
+          try {
+            if (!socket.destroyed) {
+              socket.end(`${JSON.stringify(payload)}\n`);
+            }
+          } catch {
+            // Ignore disconnect races while finishing auth exchange.
+          }
+        };
 
-      socket.on('data', async (chunk: string) => {
-        if (settled) {
-          return;
-        }
-
-        buffer += chunk;
-        if (buffer.length > MAX_PROMPT_MESSAGE_CHARS) {
-          finish({
-            ok: false,
-            error: translateRemote('SSH authentication prompt payload is too large'),
-          });
-          return;
-        }
-
-        const newlineIndex = buffer.indexOf('\n');
-        if (newlineIndex === -1) {
-          return;
-        }
-
-        const line = buffer.slice(0, newlineIndex);
-        buffer = buffer.slice(newlineIndex + 1);
-
-        try {
-          const payload = JSON.parse(line) as {
-            token?: string;
-            profileId?: string;
-            sessionId?: string;
-            hostPort?: number;
-            prompt?: string;
-          };
-          if (!tokensEqual(payload.token, this.token) || !payload.profileId || !payload.prompt) {
-            finish({ ok: false });
+        socket.on('data', async (chunk: string) => {
+          if (settled) {
             return;
           }
 
-          const profile = this.profiles.get(payload.profileId);
-          if (!profile) {
+          buffer += chunk;
+          if (buffer.length > MAX_PROMPT_MESSAGE_CHARS) {
             finish({
               ok: false,
-              error: translateRemote('SSH authentication was cancelled'),
+              error: translateRemote('SSH authentication prompt payload is too large'),
             });
             return;
           }
 
-          const promptHostPort =
-            typeof payload.hostPort === 'number' && payload.hostPort > 0 ? payload.hostPort : 22;
-          const promptText = normalizePromptText(payload.prompt);
-          const hostPrompt = parseHostVerificationPrompt(
-            promptText,
-            profile.sshTarget,
-            promptHostPort
-          );
-          let secret: string;
-          if (hostPrompt) {
-            await this.requestHostVerification(profile, hostPrompt, promptText);
-            secret = 'yes';
-          } else {
-            secret = await this.requestSecret(profile, promptText);
+          const newlineIndex = buffer.indexOf('\n');
+          if (newlineIndex === -1) {
+            return;
           }
-          finish({ ok: true, secret });
-        } catch (error) {
+
+          const line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+
+          try {
+            const payload = JSON.parse(line) as {
+              token?: string;
+              profileId?: string;
+              sessionId?: string;
+              hostPort?: number;
+              prompt?: string;
+            };
+            if (!tokensEqual(payload.token, this.token) || !payload.profileId || !payload.prompt) {
+              finish({ ok: false });
+              return;
+            }
+
+            const profile = this.profiles.get(payload.profileId);
+            if (!profile) {
+              finish({
+                ok: false,
+                error: translateRemote('SSH authentication was cancelled'),
+              });
+              return;
+            }
+
+            const promptHostPort =
+              typeof payload.hostPort === 'number' && payload.hostPort > 0 ? payload.hostPort : 22;
+            const promptText = normalizePromptText(payload.prompt);
+            const hostPrompt = parseHostVerificationPrompt(
+              promptText,
+              profile.sshTarget,
+              promptHostPort
+            );
+            let secret: string;
+            if (hostPrompt) {
+              await this.requestHostVerification(profile, hostPrompt, promptText);
+              secret = 'yes';
+            } else {
+              secret = await this.requestSecret(profile, promptText);
+            }
+            finish({ ok: true, secret });
+          } catch (error) {
+            finish({
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        });
+
+        socket.on('timeout', () => {
           finish({
             ok: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: translateRemote('SSH authentication request timed out'),
           });
-        }
-      });
-
-      socket.on('timeout', () => {
-        finish({
-          ok: false,
-          error: translateRemote('SSH authentication request timed out'),
         });
       });
+
+      this.server = server;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const handleError = (error: Error) => {
+            server.off('listening', handleListening);
+            reject(error);
+          };
+          const handleListening = () => {
+            server.off('error', handleError);
+            const address = server.address();
+            if (!address || typeof address === 'string') {
+              reject(new Error('Failed to start remote auth broker'));
+              return;
+            }
+            this.port = address.port;
+            resolve();
+          };
+
+          server.once('error', handleError);
+          server.once('listening', handleListening);
+          server.listen(0, '127.0.0.1');
+        });
+      } catch (error) {
+        if (this.server === server) {
+          this.server = null;
+          this.port = null;
+        }
+        try {
+          server.close();
+        } catch {
+          // Ignore cleanup races if the server never started.
+        }
+        throw error;
+      }
+    })().finally(() => {
+      this.serverPromise = null;
     });
 
-    await new Promise<void>((resolve, reject) => {
-      this.server?.once('error', reject);
-      this.server?.listen(0, '127.0.0.1', () => {
-        const address = this.server?.address();
-        if (!address || typeof address === 'string') {
-          reject(new Error('Failed to start remote auth broker'));
-          return;
-        }
-        this.port = address.port;
-        resolve();
-      });
-    });
+    await this.serverPromise;
   }
 
   private broadcastPrompt(prompt: RemoteAuthPrompt): void {

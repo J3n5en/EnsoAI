@@ -143,6 +143,7 @@ export function AddRepositoryDialog({
   const [remoteProfiles, setProfiles] = React.useState<ConnectionProfile[]>([]);
   const [sshProfileId, setSshProfileId] = React.useState('');
   const [sshRepoPath, setSshRepoPath] = React.useState('');
+  const sshRepoPathRef = React.useRef(sshRepoPath);
   const [sshRoots, setSshRoots] = React.useState<string[]>([]);
   const [sshEntries, setSshEntries] = React.useState<FileEntry[]>([]);
   const [sshBrowserPath, setSshBrowserPath] = React.useState('');
@@ -247,6 +248,10 @@ export function AddRepositoryDialog({
   }, [open, setRemoteProfiles]);
 
   React.useEffect(() => {
+    sshRepoPathRef.current = sshRepoPath;
+  }, [sshRepoPath]);
+
+  React.useEffect(() => {
     if (!open || !sshProfileId || mode !== 'ssh') {
       setSshRoots([]);
       setSshEntries([]);
@@ -260,7 +265,10 @@ export function AddRepositoryDialog({
       .then((roots) => {
         setSshRoots(roots);
         const initialPath =
-          normalizeRemotePathInput(sshRepoPath) || roots[roots.length - 1] || roots[0] || '';
+          normalizeRemotePathInput(sshRepoPathRef.current) ||
+          roots[roots.length - 1] ||
+          roots[0] ||
+          '';
         setSshBrowserPath(normalizeRemotePathInput(initialPath));
         setError(null);
       })
@@ -275,7 +283,7 @@ export function AddRepositoryDialog({
       .finally(() => {
         setIsLoadingRoots(false);
       });
-  }, [mode, open, sshProfileId, sshRepoPath, t]);
+  }, [mode, open, sshProfileId, t]);
 
   const loadSshDirectory = React.useCallback(
     async (profileId: string, remotePath: string) => {
