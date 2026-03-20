@@ -389,14 +389,21 @@ export class RemoteAuthBroker {
     const scriptPath = join(root, 'ssh-askpass.cjs');
     const wrapperPath =
       process.platform === 'win32' ? join(root, 'ssh-askpass.cmd') : join(root, 'ssh-askpass.sh');
+    const unixMode = process.platform === 'win32' ? undefined : 0o700;
 
-    await writeFile(scriptPath, getAskpassScriptContent(), 'utf8');
+    await writeFile(scriptPath, getAskpassScriptContent(), {
+      encoding: 'utf8',
+      mode: unixMode,
+    });
     await writeFile(
       wrapperPath,
       process.platform === 'win32'
         ? getWindowsWrapperContent(scriptPath)
         : getUnixWrapperContent(scriptPath),
-      'utf8'
+      {
+        encoding: 'utf8',
+        mode: unixMode,
+      }
     );
 
     if (process.platform !== 'win32') {

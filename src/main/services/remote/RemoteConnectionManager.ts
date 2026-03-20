@@ -202,6 +202,7 @@ const LOCAL_COMMAND_TIMEOUT_MS = 15_000;
 const SSH_COMMAND_TIMEOUT_MS = 10 * 60_000;
 const SERVER_SHUTDOWN_GRACE_MS = 5_000;
 const REMOTE_SERVER_BUFFER_LIMIT_CHARS = 10 * 1024 * 1024;
+const COMMAND_OUTPUT_LIMIT_CHARS = 2 * 1024 * 1024;
 const REMOTE_ENV_INFO_PREFIX = '__ENSO_REMOTE_ENV__';
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000];
 const SCP_CONNECT_TIMEOUT_SECONDS = 30;
@@ -252,6 +253,14 @@ function appendDiagnosticLines(target: string[], chunk: string): void {
   while (target.length > 1 && target.join('\n').length > MAX_REMOTE_DIAGNOSTIC_CHARS) {
     target.shift();
   }
+}
+
+function appendCommandOutput(current: string, chunk: string): string {
+  const next = current + chunk;
+  if (next.length <= COMMAND_OUTPUT_LIMIT_CHARS) {
+    return next;
+  }
+  return next.slice(-COMMAND_OUTPUT_LIMIT_CHARS);
 }
 
 function normalizeRemotePath(input: string): string {
@@ -553,10 +562,10 @@ async function runLocalCommand(
     };
 
     child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
+      stdout = appendCommandOutput(stdout, chunk.toString());
     });
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
+      stderr = appendCommandOutput(stderr, chunk.toString());
     });
     child.on('error', (error) => {
       finish(() => reject(error));
@@ -3121,10 +3130,10 @@ export class RemoteConnectionManager {
       };
 
       child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
+        stdout = appendCommandOutput(stdout, chunk.toString());
       });
       child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        stderr = appendCommandOutput(stderr, chunk.toString());
       });
       child.on('error', (error) => {
         finish(() => reject(error));
@@ -3182,10 +3191,10 @@ export class RemoteConnectionManager {
       };
 
       child.stdout.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
+        stdout = appendCommandOutput(stdout, chunk.toString());
       });
       child.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
+        stderr = appendCommandOutput(stderr, chunk.toString());
       });
       child.on('error', (error) => {
         finish(() => reject(error));
