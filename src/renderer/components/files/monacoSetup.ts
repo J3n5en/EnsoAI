@@ -607,31 +607,30 @@ monaco.languages.registerFoldingRangeProvider('java', {
 function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRange[] {
   const ranges: monaco.languages.FoldingRange[] = [];
 
+  // Region marker patterns defined once and reused in Pass 3 and Pass 4.
+  const regionStartRe = /^\s*\/\/\s*(?:#?region\b|<editor-fold\b)/;
+  const regionEndRe = /^\s*\/\/\s*(?:#?endregion\b|<\/editor-fold>)/;
+
   // --- Pass 1: character-level scan for brace blocks and block comments ---
   let inBlockComment = false;
   let inString = false;
   let inCharLiteral = false;
+  let inTextBlock = false; // Java 15+ text block: """..."""
   const braceStack: number[] = [];
   let blockCommentStartLine = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNum = i + 1;
-    let inLineComment = false;
     let j = 0;
 
     while (j < line.length) {
       const ch = line[j];
       const next = line[j + 1];
 
-      if (inLineComment) {
-        j++;
-        continue;
-      }
-
       if (inBlockComment) {
         if (ch === '*' && next === '/') {
-          if (blockCommentStartLine !== -1 && lineNum > blockCommentStartLine) {
+          if (lineNum > blockCommentStartLine) {
             ranges.push({
               start: blockCommentStartLine,
               end: lineNum,
@@ -641,6 +640,16 @@ function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRang
           inBlockComment = false;
           blockCommentStartLine = -1;
           j += 2;
+        } else {
+          j++;
+        }
+        continue;
+      }
+
+      if (inTextBlock) {
+        if (ch === '"' && next === '"' && line[j + 2] === '"') {
+          inTextBlock = false;
+          j += 3;
         } else {
           j++;
         }
@@ -667,17 +676,25 @@ function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRang
         continue;
       }
 
+      // Line comment: skip the rest of the line entirely
       if (ch === '/' && next === '/') {
-        inLineComment = true;
-        j += 2;
-        continue;
+        break;
       }
+
       if (ch === '/' && next === '*') {
         inBlockComment = true;
         blockCommentStartLine = lineNum;
         j += 2;
         continue;
       }
+
+      // Text block must be checked before regular string (both start with ")
+      if (ch === '"' && next === '"' && line[j + 2] === '"') {
+        inTextBlock = true;
+        j += 3;
+        continue;
+      }
+
       if (ch === '"') {
         inString = true;
         j++;
@@ -708,42 +725,48 @@ function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRang
   }
 
   // --- Pass 2: line-level scan for import blocks ---
+  // Blank lines between import groups are tolerated and treated as part of the block.
   let importStart = -1;
+  let importLastLine = -1;
   for (let i = 0; i < lines.length; i++) {
     const lineNum = i + 1;
     const trimmed = lines[i].trimStart();
-    const isImport = trimmed.startsWith('import ') || trimmed === 'import';
-    if (isImport) {
+    if (trimmed.startsWith('import ')) {
       if (importStart === -1) importStart = lineNum;
-    } else {
+      importLastLine = lineNum;
+    } else if (trimmed.length > 0) {
+      // Non-blank, non-import line: close the block
       if (importStart !== -1) {
-        const importEnd = lineNum - 1;
-        if (importEnd > importStart) {
+        if (importLastLine > importStart) {
           ranges.push({
             start: importStart,
-            end: importEnd,
+            end: importLastLine,
             kind: monaco.languages.FoldingRangeKind.Imports,
           });
         }
         importStart = -1;
+        importLastLine = -1;
       }
     }
+    // Blank lines are skipped silently, keeping the current import block open
   }
-  // Handle import block at end of file
-  if (importStart !== -1 && lines.length > importStart) {
+  if (importStart !== -1 && importLastLine > importStart) {
     ranges.push({
       start: importStart,
-      end: lines.length,
+      end: importLastLine,
       kind: monaco.languages.FoldingRangeKind.Imports,
     });
   }
 
   // --- Pass 3: line-level scan for consecutive single-line comment blocks ---
+  // Region marker lines are excluded to avoid conflicting with Pass 4.
   let lineCommentStart = -1;
   for (let i = 0; i < lines.length; i++) {
     const lineNum = i + 1;
-    const trimmed = lines[i].trimStart();
-    const isLineComment = trimmed.startsWith('//');
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    const isLineComment =
+      trimmed.startsWith('//') && !regionStartRe.test(line) && !regionEndRe.test(line);
     if (isLineComment) {
       if (lineCommentStart === -1) lineCommentStart = lineNum;
     } else {
@@ -760,7 +783,6 @@ function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRang
       }
     }
   }
-  // Handle comment block at end of file
   if (lineCommentStart !== -1 && lines.length > lineCommentStart) {
     ranges.push({
       start: lineCommentStart,
@@ -771,8 +793,6 @@ function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRang
 
   // --- Pass 4: line-level scan for region markers ---
   // Matches: // region / // endregion, // #region / // #endregion, // <editor-fold> / // </editor-fold>
-  const regionStartRe = /^\s*\/\/\s*(?:#?region\b|<editor-fold\b)/;
-  const regionEndRe = /^\s*\/\/\s*(?:#?endregion\b|<\/editor-fold>)/;
   const regionStack: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     const lineNum = i + 1;
