@@ -394,6 +394,8 @@ function DefinitionPickerWidget({
   onDismiss: () => void;
 }): ReactElement {
   const [query, setQuery] = useState('');
+  // -1 means the filter input has focus; >= 0 is the highlighted list index
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   // Sort base list by file name (case-insensitive ascending), preserving display names
   const sorted = [...items].sort((a, b) =>
@@ -406,14 +408,32 @@ function DefinitionPickerWidget({
     ? sorted.filter((item) => fileName(item.location.path).toLowerCase().includes(q))
     : sorted;
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onDismiss();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((prev) =>
+        visible.length === 0 ? -1 : prev < visible.length - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((prev) =>
+        visible.length === 0 ? -1 : prev > 0 ? prev - 1 : visible.length - 1
+      );
+    } else if (e.key === 'Enter' && activeIndex >= 0) {
+      e.preventDefault();
+      const item = visible[activeIndex];
+      if (item) onSelect(item.location);
+    }
+  };
+
   return h(
     'div',
     {
       className:
         'z-50 min-w-[280px] max-w-[440px] overflow-hidden rounded-md border bg-popover shadow-md',
-      onKeyDown: (e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') onDismiss();
-      },
+      onKeyDown: handleKeyDown,
     },
     // Search input
     h(
@@ -425,7 +445,10 @@ function DefinitionPickerWidget({
         value: query,
         placeholder: 'Filter definitions…',
         className: 'w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground',
-        onChange: (e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value),
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+          setQuery(e.target.value);
+          setActiveIndex(-1); // Reset selection when filter changes
+        },
       })
     ),
     // Header
@@ -451,13 +474,12 @@ function DefinitionPickerWidget({
         : visible.map((item, idx) =>
             h(
               'li',
-              { key: idx },
+              { key: `${item.location.path}:${item.location.line}` },
               h(
                 'button',
                 {
                   type: 'button',
-                  className:
-                    'flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none',
+                  className: `flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none${idx === activeIndex ? ' bg-accent text-accent-foreground' : ''}`,
                   onClick: () => onSelect(item.location),
                 },
                 // File name (bold, original case)
@@ -547,6 +569,10 @@ export function setupDefinitionNavigation(
     }
   };
 
+  // Sequence counter: each invocation captures the current ID before awaiting;
+  // if the ID has advanced by the time results arrive, the request is stale and discarded.
+  let currentRequestId = 0;
+
   const handleDefinitionAt = async (position: monaco.IPosition) => {
     const model = editor.getModel();
     const rootPath = getRootPath();
@@ -563,7 +589,9 @@ export function setupDefinitionNavigation(
       return;
     }
 
+    const requestId = ++currentRequestId;
     const results = await findDefinitions(word.word, langId, rootPath);
+    if (requestId !== currentRequestId) return;
 
     if (results.length === 0) {
       // No ripgrep matches — try Monaco's built-in (handles in-file TS/JS).
