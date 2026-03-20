@@ -21,12 +21,14 @@ type PromptResolver =
       reject: (error: Error) => void;
       profileId: string;
       cacheKey?: string;
+      timeout: ReturnType<typeof setTimeout>;
     }
   | {
       kind: 'confirm';
       resolve: (value: boolean) => void;
       reject: (error: Error) => void;
       profileId: string;
+      timeout: ReturnType<typeof setTimeout>;
     };
 
 interface AskpassArtifacts {
@@ -37,6 +39,7 @@ interface AskpassArtifacts {
 const MAX_PROMPT_MESSAGE_CHARS = 64 * 1024;
 const AUTH_SOCKET_TIMEOUT_MS = 30_000;
 const AUTH_PROMPT_SCRIPT_TIMEOUT_MS = AUTH_SOCKET_TIMEOUT_MS + 5_000;
+const AUTH_PROMPT_RESPONSE_TIMEOUT_MS = 120_000;
 
 function tokensEqual(left: string | undefined, right: string): boolean {
   if (typeof left !== 'string') {
@@ -254,12 +257,17 @@ export class RemoteAuthBroker {
     };
 
     const promise = new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingPrompts.delete(prompt.id);
+        reject(createRemoteError('SSH authentication prompt timed out'));
+      }, AUTH_PROMPT_RESPONSE_TIMEOUT_MS);
       this.pendingPrompts.set(prompt.id, {
         kind: 'secret',
         resolve,
         reject,
         profileId: profile.id,
         cacheKey,
+        timeout,
       });
       this.broadcastPrompt(prompt);
     })
@@ -304,11 +312,16 @@ export class RemoteAuthBroker {
     };
 
     return new Promise<boolean>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingPrompts.delete(prompt.id);
+        reject(createRemoteError('SSH authentication prompt timed out'));
+      }, AUTH_PROMPT_RESPONSE_TIMEOUT_MS);
       this.pendingPrompts.set(prompt.id, {
         kind: 'confirm',
         resolve: () => resolve(true),
         reject,
         profileId: profile.id,
+        timeout,
       });
       this.broadcastPrompt(prompt);
     });
@@ -321,6 +334,7 @@ export class RemoteAuthBroker {
     }
 
     this.pendingPrompts.delete(response.promptId);
+    clearTimeout(pending.timeout);
     if (!response.accepted) {
       pending.reject(createRemoteError('SSH authentication was cancelled'));
       return true;
@@ -346,6 +360,7 @@ export class RemoteAuthBroker {
 
   async dispose(): Promise<void> {
     for (const pending of this.pendingPrompts.values()) {
+      clearTimeout(pending.timeout);
       pending.reject(createRemoteError('SSH authentication was cancelled'));
     }
     this.pendingPrompts.clear();
@@ -513,6 +528,9 @@ export class RemoteAuthBroker {
     const windows = BrowserWindow.getAllWindows().filter((window) => !window.isDestroyed());
     if (windows.length === 0) {
       const pending = this.pendingPrompts.get(prompt.id);
+      if (pending) {
+        clearTimeout(pending.timeout);
+      }
       pending?.reject(createRemoteError('No window available for SSH authentication prompt'));
       this.pendingPrompts.delete(prompt.id);
       return;
@@ -533,6 +551,9 @@ export class RemoteAuthBroker {
 
     if (!delivered) {
       const pending = this.pendingPrompts.get(prompt.id);
+      if (pending) {
+        clearTimeout(pending.timeout);
+      }
       pending?.reject(createRemoteError('No window available for SSH authentication prompt'));
       this.pendingPrompts.delete(prompt.id);
     }

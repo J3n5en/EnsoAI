@@ -201,6 +201,7 @@ const REMOTE_RPC_TIMEOUT_MS = 15_000;
 const LOCAL_COMMAND_TIMEOUT_MS = 15_000;
 const SSH_COMMAND_TIMEOUT_MS = 10 * 60_000;
 const SERVER_SHUTDOWN_GRACE_MS = 5_000;
+const REMOTE_SERVER_BUFFER_LIMIT_CHARS = 10 * 1024 * 1024;
 const REMOTE_ENV_INFO_PREFIX = '__ENSO_REMOTE_ENV__';
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 8_000];
 const SCP_CONNECT_TIMEOUT_SECONDS = 30;
@@ -1922,6 +1923,16 @@ export class RemoteConnectionManager {
     proc.stdout.setEncoding('utf8');
     proc.stdout.on('data', (chunk: string) => {
       server.buffer += chunk;
+      if (server.buffer.length > REMOTE_SERVER_BUFFER_LIMIT_CHARS) {
+        const detail = createRemoteError(
+          'Remote server protocol buffer exceeded limit',
+          undefined,
+          `connectionId=${server.connectionId}`
+        );
+        this.finalizeServerShutdown(server, detail);
+        this.terminateServerProcess(proc);
+        return;
+      }
       const lines = server.buffer.split('\n');
       server.buffer = lines.pop() ?? '';
       for (const line of lines) {
