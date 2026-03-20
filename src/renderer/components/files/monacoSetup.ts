@@ -707,6 +707,37 @@ function computeJavaFoldingRanges(lines: string[]): monaco.languages.FoldingRang
     }
   }
 
+  // --- Pass 2: line-level scan for import blocks ---
+  let importStart = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const lineNum = i + 1;
+    const trimmed = lines[i].trimStart();
+    const isImport = trimmed.startsWith('import ') || trimmed === 'import';
+    if (isImport) {
+      if (importStart === -1) importStart = lineNum;
+    } else {
+      if (importStart !== -1) {
+        const importEnd = lineNum - 1;
+        if (importEnd > importStart) {
+          ranges.push({
+            start: importStart,
+            end: importEnd,
+            kind: monaco.languages.FoldingRangeKind.Imports,
+          });
+        }
+        importStart = -1;
+      }
+    }
+  }
+  // Handle import block at end of file
+  if (importStart !== -1 && lines.length > importStart) {
+    ranges.push({
+      start: importStart,
+      end: lines.length,
+      kind: monaco.languages.FoldingRangeKind.Imports,
+    });
+  }
+
   return ranges;
 }
 
