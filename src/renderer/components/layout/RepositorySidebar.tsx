@@ -1,4 +1,4 @@
-import { isWslUncPath, trimTrailingPathSeparators } from '@shared/utils/path';
+import { getDisplayPath, isWslUncPath } from '@shared/utils/path';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
   ChevronRight,
@@ -66,7 +66,8 @@ interface Repository {
 interface RepositorySidebarProps {
   repositories: Repository[];
   selectedRepo: string | null;
-  onSelectRepo: (repoPath: string) => void;
+  onSelectRepo: (repoPath: string, options?: { activateRemote?: boolean }) => void;
+  canLoadRepo: (repoPath: string) => boolean;
   onAddRepository: () => void;
   onRemoveRepository?: (repoPath: string) => void;
   onReorderRepositories?: (fromIndex: number, toIndex: number) => void;
@@ -94,6 +95,7 @@ export function RepositorySidebar({
   repositories,
   selectedRepo,
   onSelectRepo,
+  canLoadRepo,
   onAddRepository,
   onRemoveRepository,
   onReorderRepositories,
@@ -254,7 +256,17 @@ export function RepositorySidebar({
   };
 
   const allRepoPaths = useMemo(() => repositories.map((repo) => repo.path), [repositories]);
-  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(allRepoPaths);
+  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(
+    useMemo(
+      () =>
+        allRepoPaths.map((repoPath) => ({
+          repoPath,
+          // Do not query unopened remote repos during startup/search; that would trigger SSH auth.
+          enabled: canLoadRepo(repoPath),
+        })),
+      [allRepoPaths, canLoadRepo]
+    )
+  );
   const activities = useWorktreeActivityStore((s) => s.activities);
   const activePathSet = useMemo(
     () =>
@@ -364,8 +376,8 @@ export function RepositorySidebar({
 
   const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
     const isSelected = selectedRepo === repo.path;
-    const displayRepoPath = trimTrailingPathSeparators(repo.path);
-    const useLtrPathDisplay = isWslUncPath(repo.path);
+    const displayRepoPath = getDisplayPath(repo.path);
+    const useLtrPathDisplay = isWslUncPath(displayRepoPath);
     return (
       <RepoItemWithGlow key={repo.path} repoPath={repo.path}>
         {/* Drop indicator - top */}
@@ -382,7 +394,7 @@ export function RepositorySidebar({
           onDragOver={(e) => handleDragOver(e, originalIndex, sectionGroupId)}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e, originalIndex, sectionGroupId)}
-          onClick={() => onSelectRepo(repo.path)}
+          onClick={() => onSelectRepo(repo.path, { activateRemote: true })}
           onContextMenu={(e) => handleContextMenu(e, repo)}
           className={cn(
             'group relative flex w-full flex-col items-start gap-1 rounded-lg p-3 text-left transition-colors',
@@ -460,23 +472,25 @@ export function RepositorySidebar({
       )}
     >
       {/* Header */}
-      <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
-        {onSwitchWorktreeByPath && (
-          <RunningProjectsPopover
-            onSelectWorktreeByPath={onSwitchWorktreeByPath}
-            onSwitchTab={onSwitchTab}
-          />
-        )}
-        {onCollapse && (
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-            onClick={onCollapse}
-            title={t('Collapse')}
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </button>
-        )}
+      <div className="flex h-12 items-center justify-end gap-2 border-b px-3 drag-region">
+        <div className="flex items-center gap-1">
+          {onSwitchWorktreeByPath && (
+            <RunningProjectsPopover
+              onSelectWorktreeByPath={onSwitchWorktreeByPath}
+              onSwitchTab={onSwitchTab}
+            />
+          )}
+          {onCollapse && (
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+              onClick={onCollapse}
+              title={t('Collapse')}
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Group Selector - only show when groups are not hidden */}
@@ -521,7 +535,7 @@ export function RepositorySidebar({
       </div>
 
       {/* Repository List */}
-      <div className="flex-1 overflow-auto p-2">
+      <div className="flex-1 overflow-auto px-2 pb-2">
         {temporaryWorkspaceEnabled && (
           <div className="mb-2">
             <RepoItemWithGlow repoPath={TEMP_REPO_ID}>
@@ -568,9 +582,7 @@ export function RepositorySidebar({
             </EmptyMedia>
             <EmptyHeader>
               <EmptyTitle className="text-base">{t('Add Repository')}</EmptyTitle>
-              <EmptyDescription>
-                {t('Add a Git repository from a local folder to get started')}
-              </EmptyDescription>
+              <EmptyDescription>{t('Add a repository to get started.')}</EmptyDescription>
             </EmptyHeader>
             <Button
               onClick={(e) => {

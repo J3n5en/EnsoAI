@@ -33,7 +33,7 @@ interface CloudflaredStatus {
   error?: string;
 }
 
-export function HapiSettings() {
+export function HapiSettings({ repoPath }: { repoPath?: string }) {
   const { t } = useI18n();
   const { hapiSettings, setHapiSettings } = useSettingsStore();
   const [status, setStatus] = React.useState<HapiStatus>({ running: false });
@@ -72,12 +72,12 @@ export function HapiSettings() {
   // Fetch initial status
   React.useEffect(() => {
     // Check hapi global installation
-    window.electronAPI.hapi.checkGlobal(false).then((result) => {
+    window.electronAPI.hapi.checkGlobal(repoPath, false).then((result) => {
       setHapiGlobal(result);
     });
 
     // Check happy global installation
-    window.electronAPI.happy.checkGlobal(false).then((result) => {
+    window.electronAPI.happy.checkGlobal(repoPath, false).then((result) => {
       setHappyGlobal(result);
     });
 
@@ -110,7 +110,7 @@ export function HapiSettings() {
       cleanupHapi();
       cleanupCf();
     };
-  }, [setHapiSettings]);
+  }, [repoPath, setHapiSettings]);
 
   const getConfig = React.useCallback(() => {
     return {
@@ -308,8 +308,9 @@ export function HapiSettings() {
               <div className="space-y-0.5">
                 <span className="text-sm font-medium">{t('Enable Remote Spawn (Runner)')}</span>
                 <p className="text-xs text-muted-foreground">
-                  {t('Automatically start Hapi Runner with Hapi service for remote session spawning')}
-                  {' '}
+                  {t(
+                    'Automatically start Hapi Runner with Hapi service for remote session spawning'
+                  )}{' '}
                   {t('(Changes apply after service restart)')}
                 </p>
               </div>

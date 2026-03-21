@@ -10,8 +10,10 @@ import { ipcMain } from 'electron';
 import { updateClaudeWorkspaceFolders } from '../services/claude/ClaudeIdeBridge';
 import { gitAutoFetchService } from '../services/git/GitAutoFetchService';
 import { WorktreeService } from '../services/git/WorktreeService';
+import { isRemoteVirtualPath } from '../services/remote/RemotePath';
+import { remoteRepositoryBackend } from '../services/remote/RemoteRepositoryBackend';
+import { sessionManager } from '../services/session/SessionManager';
 import { stopWatchersInDirectory } from './files';
-import { ptyManager } from './terminal';
 
 const worktreeServices = new Map<string, WorktreeService>();
 
@@ -32,6 +34,10 @@ export function clearAllWorktreeServices(): void {
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.WORKTREE_LIST, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      return remoteRepositoryBackend.listWorktrees(workdir);
+    }
+
     const service = getWorktreeService(workdir);
     const worktrees = await service.list();
 
@@ -47,6 +53,10 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_ADD,
     async (_, workdir: string, options: WorktreeCreateOptions) => {
+      if (isRemoteVirtualPath(workdir)) {
+        await remoteRepositoryBackend.addWorktree(workdir, options);
+        return;
+      }
       const service = getWorktreeService(workdir);
       await service.add(options);
     }
@@ -57,7 +67,12 @@ export function registerWorktreeHandlers(): void {
     async (_, workdir: string, options: WorktreeRemoveOptions) => {
       // Stop all resources using the worktree directory before removal
       await stopWatchersInDirectory(options.path);
-      ptyManager.destroyByWorkdir(options.path);
+      await sessionManager.killByWorkdir(options.path);
+
+      if (isRemoteVirtualPath(workdir)) {
+        await remoteRepositoryBackend.removeWorktree(workdir, options);
+        return;
+      }
 
       // Unregister from auto-fetch service
       gitAutoFetchService.unregisterWorktree(options.path);
@@ -71,24 +86,33 @@ export function registerWorktreeHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_ACTIVATE, async (_, worktreePaths: string[]) => {
-    updateClaudeWorkspaceFolders(worktreePaths);
+    updateClaudeWorkspaceFolders(worktreePaths.filter((item) => !isRemoteVirtualPath(item)));
   });
 
   // Merge handlers
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE,
     async (_, workdir: string, options: WorktreeMergeOptions) => {
+      if (isRemoteVirtualPath(workdir)) {
+        return remoteRepositoryBackend.mergeWorktree(workdir, options);
+      }
       const service = getWorktreeService(workdir);
       return service.merge(options);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_STATE, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      return remoteRepositoryBackend.getMergeState(workdir);
+    }
     const service = getWorktreeService(workdir);
     return service.getMergeState(workdir);
   });
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_CONFLICTS, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      return remoteRepositoryBackend.getConflicts(workdir);
+    }
     const service = getWorktreeService(workdir);
     return service.getConflicts(workdir);
   });
@@ -96,6 +120,9 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE_CONFLICT_CONTENT,
     async (_, workdir: string, filePath: string) => {
+      if (isRemoteVirtualPath(workdir)) {
+        return remoteRepositoryBackend.getConflictContent(workdir, filePath);
+      }
       const service = getWorktreeService(workdir);
       return service.getConflictContent(workdir, filePath);
     }
@@ -104,12 +131,20 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE_RESOLVE,
     async (_, workdir: string, resolution: ConflictResolution) => {
+      if (isRemoteVirtualPath(workdir)) {
+        await remoteRepositoryBackend.resolveConflict(workdir, resolution);
+        return;
+      }
       const service = getWorktreeService(workdir);
       await service.resolveConflict(workdir, resolution);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.WORKTREE_MERGE_ABORT, async (_, workdir: string) => {
+    if (isRemoteVirtualPath(workdir)) {
+      await remoteRepositoryBackend.abortMerge(workdir);
+      return;
+    }
     const service = getWorktreeService(workdir);
     await service.abortMerge(workdir);
   });
@@ -117,6 +152,9 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKTREE_MERGE_CONTINUE,
     async (_, workdir: string, message?: string, cleanupOptions?: WorktreeMergeCleanupOptions) => {
+      if (isRemoteVirtualPath(workdir)) {
+        return remoteRepositoryBackend.continueMerge(workdir, message, cleanupOptions);
+      }
       const service = getWorktreeService(workdir);
       return service.continueMerge(workdir, message, cleanupOptions);
     }

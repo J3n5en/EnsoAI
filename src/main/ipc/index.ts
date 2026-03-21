@@ -25,17 +25,20 @@ import { autoStartHapi, cleanupHapi, cleanupHapiSync, registerHapiHandlers } fro
 
 export { autoStartHapi };
 
+import { remoteConnectionManager } from '../services/remote/RemoteConnectionManager';
 import { registerLogHandlers } from './log';
 import { registerNotificationHandlers } from './notification';
+import { registerRemoteHandlers } from './remote';
 import { registerSearchHandlers } from './search';
-import { registerSettingsHandlers } from './settings';
-import { registerShellHandlers } from './shell';
-import { registerTempWorkspaceHandlers } from './tempWorkspace';
 import {
   destroyAllTerminals,
   destroyAllTerminalsAndWait,
-  registerTerminalHandlers,
-} from './terminal';
+  registerSessionHandlers,
+} from './session';
+import { registerSessionStorageHandlers } from './sessionStorage';
+import { registerSettingsHandlers } from './settings';
+import { registerShellHandlers } from './shell';
+import { registerTempWorkspaceHandlers } from './tempWorkspace';
 import { cleanupTmuxSync, registerTmuxHandlers } from './tmux';
 import { cleanupTodo, cleanupTodoSync, registerTodoHandlers } from './todo';
 import { registerUpdaterHandlers } from './updater';
@@ -46,7 +49,8 @@ export function registerIpcHandlers(): void {
   registerGitHandlers();
   registerWorktreeHandlers();
   registerFileHandlers();
-  registerTerminalHandlers();
+  registerSessionHandlers();
+  registerSessionStorageHandlers();
   registerAgentHandlers();
   registerDialogHandlers();
   registerAppHandlers();
@@ -55,6 +59,7 @@ export function registerIpcHandlers(): void {
   registerSettingsHandlers();
   registerLogHandlers();
   registerNotificationHandlers();
+  registerRemoteHandlers();
   registerUpdaterHandlers();
   registerSearchHandlers();
   registerHapiHandlers();
@@ -122,6 +127,7 @@ export async function cleanupAllResources(): Promise<void> {
   clearAllWorktreeServices();
   autoUpdaterService.cleanup();
   disposeClaudeIdeBridge();
+  await remoteConnectionManager.cleanup();
   await cleanupTodo();
 }
 
@@ -162,6 +168,8 @@ export function cleanupAllResourcesSync(): void {
 
   // Dispose Claude IDE Bridge (sync)
   disposeClaudeIdeBridge();
+
+  void remoteConnectionManager.cleanup();
 
   // Close Todo database (sync — just nulls the reference, no async callback)
   cleanupTodoSync();

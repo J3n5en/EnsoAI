@@ -4,11 +4,74 @@
  * electron-vite doesn't properly forward SIGINT to Electron subprocess.
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
+
+function readConstant(relativePath, pattern) {
+  const filePath = join(root, relativePath);
+  const content = readFileSync(filePath, 'utf8');
+  const match = content.match(pattern);
+  if (!match?.[1]) {
+    throw new Error(`Failed to resolve constant from ${relativePath}`);
+  }
+  return match[1];
+}
+
+function getHostLinuxRuntimeArch() {
+  if (process.platform !== 'linux') {
+    return null;
+  }
+
+  if (process.arch === 'x64' || process.arch === 'arm64') {
+    return process.arch;
+  }
+
+  return null;
+}
+
+function ensureLocalLinuxRuntimeBundle() {
+  const arch = getHostLinuxRuntimeArch();
+  if (!arch) {
+    return;
+  }
+
+  const serverVersion = readConstant(
+    'src/main/services/remote/RemoteHelperSource.ts',
+    /REMOTE_SERVER_VERSION = '([^']+)'/
+  );
+  const nodeVersion = readConstant(
+    'src/main/services/remote/RemoteRuntimeAssets.ts',
+    /MANAGED_REMOTE_NODE_VERSION = '([^']+)'/
+  );
+
+  const archiveName = `enso-remote-runtime-v${serverVersion}-node-v${nodeVersion}-linux-${arch}.tar.gz`;
+  const checksumName = `${archiveName}.sha256`;
+  const distRuntimeDir = join(root, 'dist', 'remote-runtime');
+  const archivePath = join(distRuntimeDir, archiveName);
+  const checksumPath = join(distRuntimeDir, checksumName);
+  if (existsSync(archivePath) && existsSync(checksumPath)) {
+    return;
+  }
+
+  const buildScriptPath = join(root, 'scripts', 'build-remote-runtime-bundle.mjs');
+  const nodeExecutable = process.env.npm_node_execpath || process.env.NODE || 'node';
+
+  console.log(`[dev] building Linux remote runtime bundle for ${arch}...`);
+  const result = spawnSync(nodeExecutable, [buildScriptPath, `--arch=${arch}`], {
+    cwd: root,
+    stdio: 'inherit',
+  });
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+ensureLocalLinuxRuntimeBundle();
 
 // Start electron-vite in a new process group so we can kill the entire tree
 // On Linux, --no-sandbox is needed when unprivileged user namespaces are disabled

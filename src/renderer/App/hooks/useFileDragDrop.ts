@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 export function useFileDragDrop(
+  enabled: boolean,
   setInitialLocalPath: (path: string | null) => void,
-  setAddRepoDialogOpen: (open: boolean) => void
+  openAddRepositoryDialog: () => void
 ) {
   const [isFileDragOver, setIsFileDragOver] = useState(false);
   const repositorySidebarRef = useRef<HTMLDivElement>(null);
@@ -14,6 +15,11 @@ export function useFileDragDrop(
   }, [isFileDragOver]);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsFileDragOver(false);
+      return;
+    }
+
     const handleDragOver = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes('Files')) return;
       e.preventDefault();
@@ -47,7 +53,7 @@ export function useFileDragDrop(
         const path = window.electronAPI.utils.getPathForFile(file);
         if (path) {
           setInitialLocalPath(path);
-          setAddRepoDialogOpen(true);
+          openAddRepositoryDialog();
         }
       }
     };
@@ -60,7 +66,7 @@ export function useFileDragDrop(
       document.removeEventListener('dragleave', handleDragLeave);
       document.removeEventListener('drop', handleDrop);
     };
-  }, [setInitialLocalPath, setAddRepoDialogOpen]);
+  }, [enabled, openAddRepositoryDialog, setInitialLocalPath]);
 
   return {
     isFileDragOver,

@@ -1,7 +1,7 @@
 import { exec } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type {
   ConflictResolution,
@@ -33,6 +33,22 @@ const execAsync = promisify(exec);
  */
 function createGit(workdir: string): SimpleGit {
   return createSimpleGit(workdir);
+}
+
+function resolvePathWithinWorkdir(
+  workdir: string,
+  filePath: string
+): { absolutePath: string; relativePath: string } {
+  const absoluteWorkdir = resolve(workdir);
+  const absolutePath = resolve(absoluteWorkdir, filePath);
+  const relativePath = relative(absoluteWorkdir, absolutePath);
+  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+    throw new Error('Invalid file path: path traversal detected');
+  }
+  return {
+    absolutePath,
+    relativePath,
+  };
 }
 
 /**
@@ -634,17 +650,19 @@ export class WorktreeService {
   }
 
   async getConflictContent(workdir: string, filePath: string): Promise<MergeConflictContent> {
+    const safePath = resolvePathWithinWorkdir(workdir, filePath);
     const [ours, theirs, base] = await Promise.all([
-      gitShow(workdir, `:2:${filePath}`),
-      gitShow(workdir, `:3:${filePath}`),
-      gitShow(workdir, `:1:${filePath}`),
+      gitShow(workdir, `:2:${safePath.relativePath}`),
+      gitShow(workdir, `:3:${safePath.relativePath}`),
+      gitShow(workdir, `:1:${safePath.relativePath}`),
     ]);
 
-    return { file: filePath, ours, theirs, base };
+    return { file: safePath.relativePath, ours, theirs, base };
   }
 
   async resolveConflict(workdir: string, resolution: ConflictResolution): Promise<void> {
-    const filePath = join(workdir, resolution.file);
+    const safePath = resolvePathWithinWorkdir(workdir, resolution.file);
+    const filePath = safePath.absolutePath;
 
     let encoding = 'utf-8';
     try {
@@ -659,7 +677,7 @@ export class WorktreeService {
     await writeFile(filePath, buffer);
 
     const git = createGit(workdir);
-    await git.add(resolution.file);
+    await git.raw(['add', '--', safePath.relativePath]);
   }
 
   /**

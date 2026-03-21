@@ -228,7 +228,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     if (!quickTerminalEnabled && prevQuickTerminalEnabled.current) {
       // 功能从启用变为禁用，清理 session
       if (currentQuickTerminalSession) {
-        window.electronAPI.terminal.destroy(currentQuickTerminalSession).catch(console.error);
+        window.electronAPI.session.kill(currentQuickTerminalSession).catch(console.error);
       }
       removeQuickTerminalSession(cwd);
       setQuickTerminalOpen(false);
@@ -382,10 +382,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   );
 
   const handleCloseQuickTerminal = useCallback(() => {
+    if (currentQuickTerminalSession) {
+      window.electronAPI.session.kill(currentQuickTerminalSession).catch(console.error);
+    }
+
     // 关闭 modal
     setQuickTerminalOpen(false);
 
-    // 清除 session 记录（PTY 由 ShellTerminal 组件卸载时的 cleanup 销毁，这里不要重复调用 destroy）
+    // 清除 session 记录
     if (currentQuickTerminalSession) {
       removeQuickTerminalSession(cwd);
     }
@@ -430,6 +434,19 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       .filter((s) => s.repoPath === repoPath && pathsEqual(s.cwd, cwd))
       .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
   }, [allSessions, repoPath, cwd]);
+
+  const killBackendSession = useCallback((session?: Session) => {
+    if (!session?.backendSessionId) {
+      return;
+    }
+
+    window.electronAPI.session.kill(session.backendSessionId).catch((error) => {
+      console.error(
+        `[AgentPanel] Failed to kill backend session ${session.backendSessionId}`,
+        error
+      );
+    });
+  }, []);
 
   // Sync activeIds from store to group state when changed externally (e.g., from RunningProjectsPopover)
   useEffect(() => {
@@ -612,6 +629,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       if (worktreeSessions.length === 0) return;
 
       for (const session of worktreeSessions) {
+        if (session.initialized) {
+          killBackendSession(session);
+        }
         removeSession(session.id);
       }
 
@@ -623,7 +643,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     };
 
     return registerAgentCloseHandler(handleCloseAll);
-  }, [registerAgentCloseHandler, setAgentCount, allSessions, removeSession, removeGroupState]);
+  }, [
+    registerAgentCloseHandler,
+    setAgentCount,
+    allSessions,
+    killBackendSession,
+    removeSession,
+    removeGroupState,
+  ]);
 
   // Handle new session in active group
   const handleNewSession = useCallback(
@@ -687,16 +714,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     ]
   );
 
-  // Handle close session
-  const handleCloseSession = useCallback(
+  const removeSessionFromUi = useCallback(
     (id: string, groupId?: string) => {
-      const session = allSessions.find((s) => s.id === id);
-      if (!session) return;
-
-      // Remove the session from Zustand store
       removeSession(id);
 
-      // Update group state
       updateCurrentGroupState((state) => {
         const targetGroupId = groupId || state.groups.find((g) => g.sessionIds.includes(id))?.id;
         if (!targetGroupId) return state;
@@ -706,19 +727,15 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
         const newSessionIds = group.sessionIds.filter((sid) => sid !== id);
 
-        // If group becomes empty, remove the group
         if (newSessionIds.length === 0) {
           const newGroups = state.groups.filter((g) => g.id !== targetGroupId);
 
           if (newGroups.length === 0) {
-            // All groups empty - reset state
             return createInitialGroupState();
           }
 
-          // Recalculate flex percentages
           const newFlexPercents = newGroups.map(() => 100 / newGroups.length);
 
-          // Update active group if needed
           let newActiveGroupId = state.activeGroupId;
           if (state.activeGroupId === targetGroupId) {
             const removedIndex = state.groups.findIndex((g) => g.id === targetGroupId);
@@ -733,7 +750,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           };
         }
 
-        // Update active session in group if needed
         let newActiveSessionId = group.activeSessionId;
         if (group.activeSessionId === id) {
           const closedIndex = group.sessionIds.indexOf(id);
@@ -751,7 +767,25 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         };
       });
     },
-    [allSessions, removeSession, updateCurrentGroupState]
+    [removeSession, updateCurrentGroupState]
+  );
+
+  const handleCloseSession = useCallback(
+    (id: string, groupId?: string) => {
+      const session = allSessions.find((s) => s.id === id);
+      if (!session) return;
+
+      killBackendSession(session);
+      removeSessionFromUi(id, groupId);
+    },
+    [allSessions, killBackendSession, removeSessionFromUi]
+  );
+
+  const handleSessionExit = useCallback(
+    (id: string, groupId?: string) => {
+      removeSessionFromUi(id, groupId);
+    },
+    [removeSessionFromUi]
   );
 
   // Handle session selection
@@ -1687,6 +1721,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 id={session.id}
                 cwd={session.cwd}
                 sessionId={session.sessionId || session.id}
+                backendSessionId={session.backendSessionId}
                 agentId={session.agentId}
                 agentCommand={session.agentCommand || 'claude'}
                 customPath={session.customPath}
@@ -1700,7 +1735,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 onInitialized={() => handleInitialized(sessionId)}
                 onActivated={() => handleActivated(sessionId)}
                 onActivatedWithFirstLine={(line) => handleActivatedWithFirstLine(sessionId, line)}
-                onExit={() => handleCloseSession(sessionId, groupId || undefined)}
+                onExit={() => handleSessionExit(sessionId, groupId || undefined)}
                 onTerminalTitleChange={(title) => {
                   if (session.userRenamed) return;
                   const syncName =
@@ -1711,6 +1746,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                     terminalTitle: title,
                     ...(syncName ? { name: title } : {}),
                   });
+                }}
+                onBackendSessionIdChange={(backendSessionId) => {
+                  if (session.backendSessionId === backendSessionId) return;
+                  updateSession(sessionId, { backendSessionId });
                 }}
                 onSplit={() => groupId && handleSplit(groupId)}
                 canMerge={info ? info.groupIndex > 0 : false}
@@ -1800,6 +1839,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           onOpenChange={handleQuickTerminalOpenChange}
           onClose={handleCloseQuickTerminal}
           cwd={cwd}
+          backendSessionId={currentQuickTerminalSession}
           onSessionInit={handleQuickTerminalSessionInit}
         />
       )}

@@ -5,7 +5,7 @@
  * Maintained for backward compatibility - all existing imports continue to work.
  */
 
-// Re-export everything from the modularized settings store
-export * from './settings/types';
 export * from './settings/defaults';
 export { useSettingsStore } from './settings/index';
+// Re-export everything from the modularized settings store
+export * from './settings/types';

@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { PromptEditorDialog } from './PromptEditorDialog';
 
-export function PromptsSection() {
+export function PromptsSection({ repoPath }: { repoPath?: string }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = React.useState(false);
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -37,9 +37,9 @@ export function PromptsSection() {
   // 读取当前 CLAUDE.md 内容
   React.useEffect(() => {
     if (expanded) {
-      window.electronAPI.claudeConfig.prompts.read().then(setCurrentContent);
+      window.electronAPI.claudeConfig.prompts.read(repoPath).then(setCurrentContent);
     }
-  }, [expanded]);
+  }, [expanded, repoPath]);
 
   // 检查当前内容是否未保存
   const hasUnsavedConfig = React.useMemo(() => {
@@ -76,7 +76,7 @@ export function PromptsSection() {
     if (!preset) return;
 
     // 写入到 CLAUDE.md
-    const success = await window.electronAPI.claudeConfig.prompts.write(preset.content);
+    const success = await window.electronAPI.claudeConfig.prompts.write(repoPath, preset.content);
     if (success) {
       setPromptPresetEnabled(id);
       setCurrentContent(preset.content);
@@ -91,7 +91,7 @@ export function PromptsSection() {
       updatePromptPreset(preset.id, preset);
       // 如果是激活的预设，同步到文件
       if (preset.enabled) {
-        await window.electronAPI.claudeConfig.prompts.write(preset.content);
+        await window.electronAPI.claudeConfig.prompts.write(repoPath, preset.content);
         setCurrentContent(preset.content);
       }
     } else {

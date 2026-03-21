@@ -5,6 +5,7 @@ import {
   type TerminalSearchBarRef,
 } from '@/components/terminal/TerminalSearchBar';
 import { useFileDrop } from '@/hooks/useFileDrop';
+import { useRepositoryRuntimeContext } from '@/hooks/useRepositoryRuntimeContext';
 import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
@@ -17,6 +18,7 @@ interface AgentTerminalProps {
   id?: string; // Terminal session ID (UI key)
   cwd?: string;
   sessionId?: string; // Claude session ID for --session-id/--resume (falls back to id)
+  backendSessionId?: string; // Unified backend session ID for attach/resume
   agentId?: string; // Agent ID (e.g., 'claude', 'codex', 'gemini')
   agentCommand?: string;
   customPath?: string; // custom absolute path to the agent CLI
@@ -48,6 +50,7 @@ interface AgentTerminalProps {
     sender: (content: string, imagePaths: string[]) => void
   ) => void;
   onUnregisterEnhancedInputSender?: (sessionId: string) => void;
+  onBackendSessionIdChange?: (sessionId: string) => void;
 }
 
 const MIN_RUNTIME_FOR_AUTO_CLOSE = 10000; // 10 seconds
@@ -61,6 +64,7 @@ export function AgentTerminal({
   id,
   cwd,
   sessionId,
+  backendSessionId,
   agentId = 'claude',
   agentCommand = 'claude',
   customPath,
@@ -84,6 +88,7 @@ export function AgentTerminal({
   onFocus,
   onRegisterEnhancedInputSender,
   onUnregisterEnhancedInputSender,
+  onBackendSessionIdChange,
 }: AgentTerminalProps) {
   const { t } = useI18n();
   const {
@@ -95,6 +100,9 @@ export function AgentTerminal({
     claudeCodeIntegration,
     glowEffectEnabled,
   } = useSettingsStore();
+  const { data: runtimeContext } = useRepositoryRuntimeContext(cwd);
+  const isRemoteExecution = runtimeContext?.kind === 'remote';
+  const executionPlatform = window.electronAPI?.env?.platform;
 
   // Track if hapi is globally installed (cached in main process)
   const [hapiGlobalInstalled, setHapiGlobalInstalled] = useState<boolean | null>(null);
@@ -107,17 +115,21 @@ export function AgentTerminal({
 
   // Resolve shell configuration on mount and when shellConfig changes
   useEffect(() => {
-    window.electronAPI.shell.resolveForCommand(shellConfig).then(setResolvedShell);
-  }, [shellConfig]);
+    if (isRemoteExecution) {
+      setResolvedShell(null);
+      return;
+    }
+    window.electronAPI.shell.resolveForCommand(cwd, shellConfig).then(setResolvedShell);
+  }, [cwd, isRemoteExecution, shellConfig]);
 
   // Check hapi global installation on mount (only for hapi environment)
   useEffect(() => {
     if (environment === 'hapi') {
-      window.electronAPI.hapi.checkGlobal(false).then((status) => {
+      window.electronAPI.hapi.checkGlobal(cwd, false).then((status) => {
         setHapiGlobalInstalled(status.installed);
       });
     }
-  }, [environment]);
+  }, [cwd, environment]);
   const outputBufferRef = useRef('');
   const startTimeRef = useRef<number | null>(null);
   const hasInitializedRef = useRef(false);
@@ -129,6 +141,7 @@ export function AgentTerminal({
   const dataSinceEnterRef = useRef(0); // Track output volume since last Enter.
   const currentTitleRef = useRef<string>(''); // Terminal title from OSC escape sequence.
   const tmuxSessionNameRef = useRef<string | null>(null); // Tmux session name for cleanup.
+  const runtimeStateRef = useRef<'live' | 'reconnecting' | 'dead'>('live');
 
   // Output state tracking for global store
   const outputStateRef = useRef<OutputState>('idle');
@@ -222,7 +235,7 @@ export function AgentTerminal({
       }
 
       try {
-        const hasProcessActivity = await window.electronAPI.terminal.getActivity(ptyIdRef.current);
+        const hasProcessActivity = await window.electronAPI.session.getActivity(ptyIdRef.current);
         const now = Date.now();
         const hasRecentOutput = now - lastOutputTimeRef.current < RECENT_OUTPUT_TIMEOUT_MS;
 
@@ -279,16 +292,15 @@ export function AgentTerminal({
   useEffect(() => {
     return () => {
       if (tmuxSessionNameRef.current) {
-        window.electronAPI.tmux.killSession(tmuxSessionNameRef.current);
+        window.electronAPI.tmux.killSession(cwd, tmuxSessionNameRef.current);
       }
     };
-  }, []);
+  }, [cwd]);
 
   // Build command with session args
-  const { command, env } = useMemo(() => {
-    // Wait for shell config to be resolved
-    if (!resolvedShell) {
-      return { command: undefined, env: undefined };
+  const { command, env, initialCommand } = useMemo(() => {
+    if (!isRemoteExecution && !resolvedShell) {
+      return { command: undefined, env: undefined, initialCommand: undefined };
     }
 
     // Use custom path if provided, otherwise use agentCommand
@@ -318,11 +330,11 @@ export function AgentTerminal({
       agentArgs.push(customArgs);
     }
 
+    const isWindows = executionPlatform === 'win32';
+
     // Append initial prompt as CLI positional argument (for auto-execute)
     // Most CLI agents (claude, codex, gemini, etc.) accept a prompt as trailing argument
     if (initialPrompt) {
-      const isWindows = window.electronAPI?.env?.platform === 'win32';
-
       if (isWindows) {
         // Windows: use double quotes with PowerShell/cmd compatible escaping
         // Escape: backslashes (double them), double quotes (backslash), backticks (PowerShell)
@@ -344,15 +356,13 @@ export function AgentTerminal({
         agentArgs.push(`$'${escaped}'`);
       }
     }
-
-    const isWindows = window.electronAPI?.env?.platform === 'win32';
     let envVars: Record<string, string> | undefined;
 
     // Hapi environment: run through hapi (global) or npx @twsxtd/hapi with CLI_API_TOKEN
     if (environment === 'hapi') {
       // Wait for hapi global check to complete - return undefined to delay terminal init
       if (hapiGlobalInstalled === null) {
-        return { command: undefined, env: undefined };
+        return { command: undefined, env: undefined, initialCommand: undefined };
       }
 
       // Use global 'hapi' command if installed, otherwise use npx
@@ -366,12 +376,21 @@ export function AgentTerminal({
         envVars = { CLI_API_TOKEN: hapiSettings.cliApiToken };
       }
 
+      if (isRemoteExecution) {
+        return {
+          command: undefined,
+          env: envVars,
+          initialCommand: hapiCommand,
+        };
+      }
+
       return {
         command: {
-          shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, hapiCommand],
+          shell: resolvedShell!.shell,
+          args: [...resolvedShell!.execArgs, hapiCommand],
         },
         env: envVars,
+        initialCommand: undefined,
       };
     }
 
@@ -381,19 +400,27 @@ export function AgentTerminal({
       const happyArgs = agentCommand?.startsWith('claude') ? '' : effectiveCommand;
       const happyCommand = `happy ${happyArgs} ${agentArgs.join(' ')}`.trim();
 
+      if (isRemoteExecution) {
+        return {
+          command: undefined,
+          env: envVars,
+          initialCommand: happyCommand,
+        };
+      }
+
       return {
         command: {
-          shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, happyCommand],
+          shell: resolvedShell!.shell,
+          args: [...resolvedShell!.execArgs, happyCommand],
         },
         env: envVars,
+        initialCommand: undefined,
       };
     }
 
     // Safe: all interpolated values (effectiveCommand, agentArgs, tmuxSessionName) are
     // derived from internal app config / controlled constants, not from arbitrary user input.
     const fullCommand = `${effectiveCommand} ${agentArgs.join(' ')}`.trim();
-    const shellName = resolvedShell.shell.toLowerCase();
 
     // Determine if tmux wrapping should be applied
     const isClaude = agentCommand?.startsWith('claude') ?? false;
@@ -413,6 +440,16 @@ export function AgentTerminal({
       finalCommand = `env -u TMUX tmux -L enso -f /dev/null new-session -A -s ${tmuxSessionName} '${escaped}'`;
     }
 
+    if (isRemoteExecution) {
+      return {
+        command: undefined,
+        env: envVars,
+        initialCommand: finalCommand,
+      };
+    }
+
+    const shellName = resolvedShell!.shell.toLowerCase();
+
     // WSL: detect from shell name (wsl.exe)
     if (shellName.includes('wsl') && isWindows) {
       // Use -e to run command directly, sh -lc loads login profile
@@ -424,6 +461,7 @@ export function AgentTerminal({
           args: ['-e', 'sh', '-lc', `exec "$SHELL" -ilc "${escapedCommand}"`],
         },
         env: envVars,
+        initialCommand: undefined,
       };
     }
 
@@ -432,20 +470,22 @@ export function AgentTerminal({
     if (shellName.includes('powershell') || shellName.includes('pwsh')) {
       return {
         command: {
-          shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, `& { ${finalCommand} }`],
+          shell: resolvedShell!.shell,
+          args: [...resolvedShell!.execArgs, `& { ${finalCommand} }`],
         },
         env: envVars,
+        initialCommand: undefined,
       };
     }
 
     // Native environment: use user's configured shell
     return {
       command: {
-        shell: resolvedShell.shell,
-        args: [...resolvedShell.execArgs, finalCommand],
+        shell: resolvedShell!.shell,
+        args: [...resolvedShell!.execArgs, finalCommand],
       },
       env: envVars,
+      initialCommand: undefined,
     };
   }, [
     agentCommand,
@@ -457,6 +497,8 @@ export function AgentTerminal({
     environment,
     hapiSettings.cliApiToken,
     hapiGlobalInstalled,
+    isRemoteExecution,
+    executionPlatform,
     resolvedShell,
     claudeCodeIntegration.tmuxEnabled,
     terminalSessionId,
@@ -582,8 +624,8 @@ export function AgentTerminal({
     (event: KeyboardEvent, ptyId: string, getCurrentLine?: () => string | null) => {
       // Handle Shift+Enter for newline - must be before keydown check to block both keydown and keypress
       if (event.key === 'Enter' && event.shiftKey) {
-        if (event.type === 'keydown') {
-          window.electronAPI.terminal.write(ptyId, '\x0a');
+        if (event.type === 'keydown' && runtimeStateRef.current === 'live') {
+          window.electronAPI.session.write(ptyId, '\x0a');
         }
         return false;
       }
@@ -714,7 +756,7 @@ export function AgentTerminal({
 
   // Wait for shell config and hapi check to complete before activating terminal
   const effectiveIsActive = useMemo(() => {
-    if (!resolvedShell) {
+    if (!isRemoteExecution && !resolvedShell) {
       return false;
     }
     if (environment === 'hapi' && hapiGlobalInstalled === null) {
@@ -722,11 +764,19 @@ export function AgentTerminal({
     }
     // Force activation when there's a pending command (auto-execute)
     return isActive || hasPendingCommand;
-  }, [environment, hapiGlobalInstalled, isActive, resolvedShell, hasPendingCommand]);
+  }, [
+    environment,
+    hapiGlobalInstalled,
+    isActive,
+    isRemoteExecution,
+    resolvedShell,
+    hasPendingCommand,
+  ]);
 
   const {
     containerRef,
     isLoading,
+    runtimeState,
     settings,
     findNext,
     findPrevious,
@@ -737,17 +787,23 @@ export function AgentTerminal({
     write,
   } = useXterm({
     cwd,
+    backendSessionId,
     command,
     env,
+    initialCommand,
     isActive: effectiveIsActive,
+    kind: 'agent',
+    persistOnDisconnect: true,
     onExit: handleExit,
     onData: handleData,
     onCustomKey: handleCustomKey,
     onTitleChange: handleTitleChange,
+    onSessionIdChange: onBackendSessionIdChange,
     onSplit,
     onMerge,
     canMerge,
   });
+  runtimeStateRef.current = runtimeState;
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
 
@@ -907,6 +963,7 @@ export function AgentTerminal({
   const handleEnhancedInputSend = useCallback(
     async (content: string, imagePaths: string[]) => {
       if (!write || !terminalSessionId) return;
+      if (runtimeStateRef.current !== 'live') return;
 
       let message = content;
 
@@ -975,7 +1032,7 @@ export function AgentTerminal({
         </button>
       )}
       {(isLoading ||
-        !resolvedShell ||
+        (!isRemoteExecution && !resolvedShell) ||
         (environment === 'hapi' && hapiGlobalInstalled === null)) && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
@@ -986,6 +1043,22 @@ export function AgentTerminal({
             <span style={{ color: settings.theme.foreground, opacity: 0.5 }} className="text-sm">
               {t('Loading {{agent}}...', { agent: agentCommand })}
             </span>
+          </div>
+        </div>
+      )}
+      {runtimeState !== 'live' && !isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="rounded-lg border bg-background/90 px-4 py-3 text-center shadow-sm">
+            <div className="text-sm font-medium">
+              {runtimeState === 'reconnecting'
+                ? t('Remote terminal reconnecting...')
+                : t('Remote terminal disconnected')}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {runtimeState === 'reconnecting'
+                ? t('Remote terminal input is temporarily disabled while reconnecting.')
+                : t('Remote terminal has disconnected. Reconnect the remote host to continue.')}
+            </div>
           </div>
         </div>
       )}

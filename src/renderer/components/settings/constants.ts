@@ -10,6 +10,7 @@ export type SettingsCategory =
   | 'ai'
   | 'integration'
   | 'hapi'
+  | 'remote'
   | 'webInspector';
 
 export const fontWeightOptions: { value: FontWeight; label: string }[] = [

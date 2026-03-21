@@ -1,3 +1,5 @@
+import type { SessionKind, SessionRuntimeState } from '@shared/types';
+import { isRemoteVirtualPath } from '@shared/utils/remotePath';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -17,21 +19,14 @@ import '@xterm/xterm/css/xterm.css';
 const FILE_PATH_REGEX =
   /(?:^|[\s'"({[@])((?:\.{1,2}\/|\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:tsx|ts|jsx|json|mjs|cjs|js|scss|css|less|html|vue|svelte|md|yaml|yml|toml|py|go|rs|java|cpp|hpp|c|h|rb|php|bash|zsh|sh))(?::(\d+))?(?::(\d+))?/g;
 
-// Check if data contains visible characters (not just ANSI control sequences)
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
 const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;?]*[a-zA-Z]/g;
 
 // Maximum length for session name derived from terminal current line
 const SESSION_NAME_MAX_LENGTH = 36;
 
-function hasVisibleContent(data: string): boolean {
-  // Remove all ANSI escape sequences
-  const stripped = data.replace(ANSI_ESCAPE_REGEX, '');
-  // Check if there are any non-whitespace visible characters
-  return stripped.trim().length > 0;
-}
-
 export interface UseXtermOptions {
+  backendSessionId?: string;
   cwd?: string;
   command?: {
     shell: string;
@@ -40,6 +35,8 @@ export interface UseXtermOptions {
   env?: Record<string, string>;
   isActive?: boolean;
   initialCommand?: string;
+  kind?: SessionKind;
+  persistOnDisconnect?: boolean;
   onExit?: () => void;
   onData?: (data: string) => void;
   onCustomKey?: (
@@ -49,6 +46,7 @@ export interface UseXtermOptions {
   ) => boolean;
   onTitleChange?: (title: string) => void;
   onInit?: (ptyId: string) => void;
+  onSessionIdChange?: (sessionId: string) => void;
   onSplit?: () => void;
   onMerge?: () => void;
   canMerge?: boolean;
@@ -57,6 +55,7 @@ export interface UseXtermOptions {
 export interface UseXtermResult {
   containerRef: React.RefObject<HTMLDivElement | null>;
   isLoading: boolean;
+  runtimeState: SessionRuntimeState;
   settings: ReturnType<typeof useTerminalSettings>;
   /** Write data to pty */
   write: (data: string) => void;
@@ -117,16 +116,20 @@ function useTerminalSettings() {
 }
 
 export function useXterm({
+  backendSessionId,
   cwd,
   command,
   env,
   isActive = true,
   initialCommand,
+  kind = 'terminal',
+  persistOnDisconnect = false,
   onExit,
   onData,
   onCustomKey,
   onTitleChange,
   onInit,
+  onSessionIdChange,
   onSplit,
   onMerge,
   canMerge = false,
@@ -145,6 +148,7 @@ export function useXterm({
   const ptyIdRef = useRef<string | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const exitCleanupRef = useRef<(() => void) | null>(null);
+  const stateCleanupRef = useRef<(() => void) | null>(null);
   const linkProviderDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const rendererAddonRef = useRef<{ dispose: () => void } | null>(null);
   const copyOnSelectionHandlerRef = useRef<(() => void) | null>(null);
@@ -160,6 +164,8 @@ export function useXterm({
   onTitleChangeRef.current = onTitleChange;
   const onInitRef = useRef(onInit);
   onInitRef.current = onInit;
+  const onSessionIdChangeRef = useRef(onSessionIdChange);
+  onSessionIdChangeRef.current = onSessionIdChange;
   const onSplitRef = useRef(onSplit);
   onSplitRef.current = onSplit;
   const onMergeRef = useRef(onMerge);
@@ -169,9 +175,13 @@ export function useXterm({
   const copyOnSelectionRef = useRef(copyOnSelection);
   copyOnSelectionRef.current = copyOnSelection;
   const hasBeenActivatedRef = useRef(false);
-  const [isLoading, setIsLoading] = useState(false);
   const hasReceivedDataRef = useRef(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [runtimeState, setRuntimeState] = useState<SessionRuntimeState>('live');
+  const runtimeStateRef = useRef<SessionRuntimeState>('live');
+  runtimeStateRef.current = runtimeState;
   const initialCommandRef = useRef(initialCommand);
+  initialCommandRef.current = initialCommand;
   // Track if this terminal should respond to global shortcuts
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
@@ -180,23 +190,28 @@ export function useXterm({
     () =>
       command
         ? `${command.shell}:${command.args.join(' ')}`
-        : `shellConfig:${shellConfig.shellType}`,
-    [command, shellConfig.shellType]
+        : `shellConfig:${JSON.stringify(shellConfig)}:initialCommand:${initialCommand || ''}`,
+    [command, shellConfig, initialCommand]
   );
   // rAF write buffer for smooth rendering
   const writeBufferRef = useRef('');
   const isFlushPendingRef = useRef(false);
 
   const write = useCallback((data: string) => {
-    if (ptyIdRef.current) {
-      window.electronAPI.terminal.write(ptyIdRef.current, data);
+    if (ptyIdRef.current && runtimeStateRef.current === 'live') {
+      window.electronAPI.session.write(ptyIdRef.current, data);
     }
   }, []);
 
   const fit = useCallback(() => {
-    if (fitAddonRef.current && terminalRef.current && ptyIdRef.current) {
+    if (
+      fitAddonRef.current &&
+      terminalRef.current &&
+      ptyIdRef.current &&
+      runtimeStateRef.current === 'live'
+    ) {
       fitAddonRef.current.fit();
-      window.electronAPI.terminal.resize(ptyIdRef.current, {
+      window.electronAPI.session.resize(ptyIdRef.current, {
         cols: terminalRef.current.cols,
         rows: terminalRef.current.rows,
       });
@@ -530,35 +545,35 @@ export function useXterm({
       }
 
       // macOS-style navigation shortcuts (only on keydown to avoid double-firing)
-      if (event.type === 'keydown' && ptyIdRef.current) {
+      if (event.type === 'keydown' && ptyIdRef.current && runtimeStateRef.current === 'live') {
         // Cmd+Left: jump to line start (Ctrl+A)
         if (event.metaKey && !event.altKey && event.key === 'ArrowLeft') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x01');
+          write('\x01');
           return false;
         }
         // Cmd+Right: jump to line end (Ctrl+E)
         if (event.metaKey && !event.altKey && event.key === 'ArrowRight') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x05');
+          write('\x05');
           return false;
         }
         // Option+Left: jump word backward (ESC+b)
         if (event.altKey && !event.metaKey && event.key === 'ArrowLeft') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x1bb');
+          write('\x1bb');
           return false;
         }
         // Option+Right: jump word forward (ESC+f)
         if (event.altKey && !event.metaKey && event.key === 'ArrowRight') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x1bf');
+          write('\x1bf');
           return false;
         }
         // Option+Backspace: delete word backward (Ctrl+W)
         if (event.altKey && !event.metaKey && event.key === 'Backspace') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x17');
+          write('\x17');
           return false;
         }
         // Cmd+Backspace: delete to line start (Ctrl+U)
         if (event.metaKey && !event.altKey && event.key === 'Backspace') {
-          window.electronAPI.terminal.write(ptyIdRef.current, '\x15');
+          write('\x15');
           return false;
         }
       }
@@ -587,31 +602,10 @@ export function useXterm({
 
     try {
       const createRequestId = ++createRequestIdRef.current;
-      const ptyId = await window.electronAPI.terminal.create({
-        cwd: cwd || window.electronAPI.env.HOME,
-        // If command is provided (e.g., for agent), use shell/args directly
-        // Otherwise, use shellConfig from settings
-        ...(command ? { shell: command.shell, args: command.args } : { shellConfig }),
-        cols: terminal.cols,
-        rows: terminal.rows,
-        env,
-        initialCommand: initialCommandRef.current,
-      });
-
-      if (isUnmountedRef.current || createRequestId !== createRequestIdRef.current) {
-        await window.electronAPI.terminal.destroy(ptyId).catch(() => {});
-        return;
-      }
-
-      ptyIdRef.current = ptyId;
-
-      // Call onInit callback with ptyId
-      onInitRef.current?.(ptyId);
-
       // Handle data from pty with debounced buffering for smooth rendering
       // 30ms delay merges fragmented TUI packets (clear + write)
-      const cleanup = window.electronAPI.terminal.onData((event) => {
-        if (event.id === ptyId) {
+      const cleanup = window.electronAPI.session.onData((event) => {
+        if (event.sessionId === ptyIdRef.current) {
           // Buffer data
           writeBufferRef.current += event.data;
 
@@ -621,11 +615,6 @@ export function useXterm({
               if (writeBufferRef.current.length > 0) {
                 const bufferedData = writeBufferRef.current;
                 terminal.write(bufferedData);
-                // Hide loading only after receiving visible content (not just control sequences)
-                if (!hasReceivedDataRef.current && hasVisibleContent(bufferedData)) {
-                  hasReceivedDataRef.current = true;
-                  setIsLoading(false);
-                }
                 // Call onData after write to avoid React re-render storm
                 onDataRef.current?.(bufferedData);
                 writeBufferRef.current = '';
@@ -639,8 +628,9 @@ export function useXterm({
 
       // Handle exit - delay to ensure pending data events are received
       // then flush remaining buffer before calling onExit
-      const exitCleanup = window.electronAPI.terminal.onExit((event) => {
-        if (event.id === ptyId) {
+      const exitCleanup = window.electronAPI.session.onExit((event) => {
+        if (event.sessionId === ptyIdRef.current) {
+          setRuntimeState('dead');
           // Wait for any pending data events to arrive (IPC race condition)
           setTimeout(() => {
             // Flush any remaining buffered data
@@ -656,16 +646,98 @@ export function useXterm({
       });
       exitCleanupRef.current = exitCleanup;
 
+      const stateCleanup = window.electronAPI.session.onState((event) => {
+        if (event.sessionId === ptyIdRef.current) {
+          setRuntimeState(event.state);
+        }
+      });
+      stateCleanupRef.current = stateCleanup;
+
+      const createOptions = {
+        cwd: cwd || window.electronAPI.env.HOME,
+        // If command is provided (e.g., for agent), use shell/args directly
+        // Otherwise, use shellConfig from settings
+        ...(command ? { shell: command.shell, args: command.args } : { shellConfig }),
+        cols: terminal.cols,
+        rows: terminal.rows,
+        env,
+        initialCommand: initialCommandRef.current,
+        kind,
+        persistOnDisconnect,
+      } as const;
+
+      const setCurrentSessionId = (sessionId: string) => {
+        ptyIdRef.current = sessionId;
+        setRuntimeState('live');
+        onInitRef.current?.(sessionId);
+        onSessionIdChangeRef.current?.(sessionId);
+      };
+
+      const attachToSession = (sessionId: string) =>
+        window.electronAPI.session.attach({
+          sessionId,
+          cwd: createOptions.cwd,
+        });
+
+      const createAndAttachSession = async () => {
+        const created = await window.electronAPI.session.create(createOptions);
+        const createdSessionId = created.session.sessionId;
+        setCurrentSessionId(createdSessionId);
+        if (isRemoteVirtualPath(createOptions.cwd)) {
+          return created;
+        }
+        return await attachToSession(createdSessionId);
+      };
+
+      let session = null;
+      let replay: string | undefined;
+      if (backendSessionId) {
+        try {
+          setCurrentSessionId(backendSessionId);
+          const result = await attachToSession(backendSessionId);
+          session = result.session;
+          replay = result.replay;
+        } catch (error) {
+          console.warn('[xterm] Failed to attach existing session, creating a new one:', error);
+          ptyIdRef.current = null;
+        }
+      }
+
+      if (!session) {
+        const attached = await createAndAttachSession();
+        session = attached.session;
+        replay = attached.replay;
+      }
+
+      if (isUnmountedRef.current || createRequestId !== createRequestIdRef.current) {
+        await window.electronAPI.session.kill(session.sessionId).catch(() => {});
+        return;
+      }
+
+      ptyIdRef.current = session.sessionId;
+      setIsLoading(false);
+
+      if (replay) {
+        terminal.write(replay);
+        onDataRef.current?.(replay);
+      }
+
       // Handle input
       terminal.onData((data) => {
-        if (ptyIdRef.current) {
-          window.electronAPI.terminal.write(ptyIdRef.current, data);
+        if (ptyIdRef.current && runtimeStateRef.current === 'live') {
+          window.electronAPI.session.write(ptyIdRef.current, data);
         }
       });
 
-      // Note: Don't focus here - wait for first data to avoid cursor on blank screen
-      // Focus is handled by the isActive effect after isLoading becomes false
+      // Focus is handled by the isActive effect after loading ends.
     } catch (error) {
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+      exitCleanupRef.current?.();
+      exitCleanupRef.current = null;
+      stateCleanupRef.current?.();
+      stateCleanupRef.current = null;
+      ptyIdRef.current = null;
       if (isUnmountedRef.current) {
         return;
       }
@@ -673,10 +745,20 @@ export function useXterm({
       terminal.writeln(`\x1b[31mFailed to start terminal.\x1b[0m`);
       terminal.writeln(`\x1b[33mError: ${error}\x1b[0m`);
     }
-  }, [cwd, command, shellConfig, commandKey, terminalRenderer]);
+  }, [
+    backendSessionId,
+    cwd,
+    command,
+    shellConfig,
+    commandKey,
+    terminalRenderer,
+    kind,
+    persistOnDisconnect,
+    write,
+  ]);
 
   useEffect(() => {
-    const shouldActivate = isActive || initialCommandRef.current;
+    const shouldActivate = isActive || Boolean(initialCommand);
     if (shouldActivate && !hasBeenActivatedRef.current) {
       hasBeenActivatedRef.current = true;
       requestAnimationFrame(() => {
@@ -685,7 +767,7 @@ export function useXterm({
         });
       });
     }
-  }, [isActive, initTerminal]);
+  }, [isActive, initialCommand, initTerminal]);
 
   // Handle dynamic renderer switching
   useEffect(() => {
@@ -708,8 +790,9 @@ export function useXterm({
       createRequestIdRef.current += 1;
       cleanupRef.current?.();
       exitCleanupRef.current?.();
+      stateCleanupRef.current?.();
       if (ptyIdRef.current) {
-        window.electronAPI.terminal.destroy(ptyIdRef.current);
+        window.electronAPI.session.detach(ptyIdRef.current).catch(() => {});
         ptyIdRef.current = null;
       }
       // Remove copy-on-selection listener before disposing terminal
@@ -727,6 +810,7 @@ export function useXterm({
       rendererAddonRef.current = null;
       terminalRef.current?.dispose();
       terminalRef.current = null;
+      stateCleanupRef.current = null;
     };
   }, []);
 
@@ -749,7 +833,7 @@ export function useXterm({
     const handleResize = () => {
       if (fitAddonRef.current && terminalRef.current && ptyIdRef.current) {
         fitAddonRef.current.fit();
-        window.electronAPI.terminal.resize(ptyIdRef.current, {
+        window.electronAPI.session.resize(ptyIdRef.current, {
           cols: terminalRef.current.cols,
           rows: terminalRef.current.rows,
         });
@@ -882,6 +966,7 @@ export function useXterm({
   return {
     containerRef,
     isLoading,
+    runtimeState,
     settings,
     write,
     fit,
