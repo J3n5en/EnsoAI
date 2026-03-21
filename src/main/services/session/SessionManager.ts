@@ -324,9 +324,15 @@ export class SessionManager {
   }
 
   async killByWorkdir(workdir: string): Promise<void> {
-    const normalized = workdir.replace(/\\/g, '/').toLowerCase();
+    const caseInsensitivePaths = process.platform === 'win32' || process.platform === 'darwin';
+    const normalizeForComparison = (value: string) => {
+      const normalized = value.replace(/\\/g, '/');
+      return caseInsensitivePaths ? normalized.toLowerCase() : normalized;
+    };
+
+    const normalized = normalizeForComparison(workdir);
     const matches = [...this.sessions.values()].filter((session) => {
-      const sessionCwd = session.cwd.replace(/\\/g, '/').toLowerCase();
+      const sessionCwd = normalizeForComparison(session.cwd);
       return sessionCwd === normalized || sessionCwd.startsWith(`${normalized}/`);
     });
 
