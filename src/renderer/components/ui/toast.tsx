@@ -94,6 +94,7 @@ function SendToSessionButton({ title, description, onClose }: SendToSessionButto
 function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
   const { toasts } = Toast.useToastManager();
   const isTop = position.startsWith('top');
+  const visibleToasts = [...new Map(toasts.map((toast) => [toast.id, toast])).values()];
 
   return (
     <Toast.Portal data-slot="toast-portal">
@@ -111,7 +112,7 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
         data-position={position}
         data-slot="toast-viewport"
       >
-        {toasts.map((toast) => {
+        {visibleToasts.map((toast) => {
           const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
           const actions = getToastActions(toast);
 
@@ -206,9 +207,9 @@ function Toasts({ position = 'bottom-right' }: { position: ToastPosition }) {
                     data-slot="toast-actions"
                   >
                     {actions.length > 0 &&
-                      actions.map((action) => (
+                      actions.map((action, index) => (
                         <Toast.Action
-                          key={action.label?.toString() ?? Math.random()}
+                          key={`${toast.id}-action-${index}`}
                           className={buttonVariants({
                             size: 'xs',
                             variant: action.variant ?? 'default',
@@ -262,11 +263,12 @@ function AnchoredToastProvider({ children, ...props }: Toast.Provider.Props) {
 
 function AnchoredToasts() {
   const { toasts } = Toast.useToastManager();
+  const visibleToasts = [...new Map(toasts.map((toast) => [toast.id, toast])).values()];
 
   return (
     <Toast.Portal data-slot="toast-portal-anchored">
       <Toast.Viewport className="outline-none" data-slot="toast-viewport-anchored">
-        {toasts.map((toast) => {
+        {visibleToasts.map((toast) => {
           const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
           const tooltipStyle = (toast.data as { tooltipStyle?: boolean })?.tooltipStyle ?? false;
           const positionerProps = toast.positionerProps;

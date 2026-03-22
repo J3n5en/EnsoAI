@@ -38,6 +38,7 @@ import { ProviderDialog } from './ProviderDialog';
 
 interface ProviderListProps {
   className?: string;
+  repoPath?: string;
 }
 
 interface ProviderItemProps {
@@ -176,7 +177,7 @@ function ProviderItem({
   );
 }
 
-export function ProviderList({ className }: ProviderListProps) {
+export function ProviderList({ className, repoPath }: ProviderListProps) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const providers = useSettingsStore((s) => s.claudeCodeIntegration.providers);
@@ -196,8 +197,8 @@ export function ProviderList({ className }: ProviderListProps) {
 
   // 读取当前 Claude settings（窗口空闲时停止轮询）
   const { data: claudeData } = useQuery({
-    queryKey: ['claude-settings'],
-    queryFn: () => window.electronAPI.claudeProvider.readSettings(),
+    queryKey: ['claude-settings', repoPath ?? null],
+    queryFn: () => window.electronAPI.claudeProvider.readSettings(repoPath),
     refetchInterval: shouldPoll ? 30000 : false,
   });
 
@@ -208,10 +209,10 @@ export function ProviderList({ className }: ProviderListProps) {
     if (!shouldPoll) return;
 
     const cleanup = window.electronAPI.claudeProvider.onSettingsChanged(() => {
-      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['claude-settings', repoPath ?? null] });
     });
     return cleanup;
-  }, [queryClient, shouldPoll]);
+  }, [queryClient, repoPath, shouldPoll]);
 
   // 计算当前激活的 Provider
   const activeProvider = React.useMemo(() => {
@@ -229,9 +230,9 @@ export function ProviderList({ className }: ProviderListProps) {
   // 切换 Provider
   const handleSwitch = async (provider: ClaudeProvider) => {
     markClaudeProviderSwitch(provider);
-    const success = await window.electronAPI.claudeProvider.apply(provider);
+    const success = await window.electronAPI.claudeProvider.apply(repoPath, provider);
     if (success) {
-      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['claude-settings', repoPath ?? null] });
       toastManager.add({
         type: 'success',
         title: t('Provider switched'),

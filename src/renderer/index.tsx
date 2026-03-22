@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import log from 'electron-log/renderer.js';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
 import { ToastProvider } from './components/ui/toast';
 import './styles/globals.css';
 
@@ -20,8 +19,13 @@ const queryClient = new QueryClient({
   },
 });
 
-const root = document.getElementById('root');
-if (root) {
+async function startApp(): Promise<void> {
+  const root = document.getElementById('root');
+  if (!root) {
+    return;
+  }
+  const { default: App } = await import('./App');
+
   createRoot(root).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
@@ -32,3 +36,7 @@ if (root) {
     </StrictMode>
   );
 }
+
+startApp().catch((error) => {
+  console.error('[renderer] Failed to bootstrap app:', error);
+});

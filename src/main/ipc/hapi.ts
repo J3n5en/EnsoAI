@@ -1,10 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { IPC_CHANNELS } from '@shared/types';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { type CloudflaredConfig, cloudflaredManager } from '../services/hapi/CloudflaredManager';
 import { hapiRunnerManager } from '../services/hapi/HapiRunnerManager';
 import { type HapiConfig, hapiServerManager } from '../services/hapi/HapiServerManager';
+import { remoteConnectionManager } from '../services/remote/RemoteConnectionManager';
+import { resolveRepositoryRuntimeContext } from '../services/repository/RepositoryContextResolver';
+import { readSharedSettings } from '../services/SharedSessionState';
 
 interface StoredHapiSettings {
   enabled: boolean;
@@ -76,14 +77,32 @@ function syncRunnerStateInBackground(runnerEnabled: boolean): void {
 
 export function registerHapiHandlers(): void {
   // Check global hapi installation (cached)
-  ipcMain.handle(IPC_CHANNELS.HAPI_CHECK_GLOBAL, async (_, forceRefresh?: boolean) => {
-    return await hapiServerManager.checkGlobalInstall(forceRefresh);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.HAPI_CHECK_GLOBAL,
+    async (_, repoPath: string | undefined, forceRefresh?: boolean) => {
+      const context = resolveRepositoryRuntimeContext(repoPath);
+      if (context.kind === 'remote' && context.connectionId) {
+        return await remoteConnectionManager.call(context.connectionId, 'hapi:checkGlobal', {
+          forceRefresh,
+        });
+      }
+      return await hapiServerManager.checkGlobalInstall(forceRefresh);
+    }
+  );
 
   // Check global happy installation (cached)
-  ipcMain.handle(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, async (_, forceRefresh?: boolean) => {
-    return await hapiServerManager.checkHappyGlobalInstall(forceRefresh);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.HAPPY_CHECK_GLOBAL,
+    async (_, repoPath: string | undefined, forceRefresh?: boolean) => {
+      const context = resolveRepositoryRuntimeContext(repoPath);
+      if (context.kind === 'remote' && context.connectionId) {
+        return await remoteConnectionManager.call(context.connectionId, 'happy:checkGlobal', {
+          forceRefresh,
+        });
+      }
+      return await hapiServerManager.checkHappyGlobalInstall(forceRefresh);
+    }
+  );
 
   // Hapi Server handlers
   ipcMain.handle(IPC_CHANNELS.HAPI_START, async (_, config: HapiControlConfig) => {
@@ -217,15 +236,13 @@ export function cleanupHapiSync(): void {
 
 export async function autoStartHapi(): Promise<void> {
   try {
-    const settingsPath = join(app.getPath('userData'), 'settings.json');
-    if (!existsSync(settingsPath)) {
-      return;
-    }
-
-    const data = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-    const hapiSettings = data?.['enso-settings']?.state?.hapiSettings as
-      | StoredHapiSettings
-      | undefined;
+    const data = readSharedSettings();
+    const persisted = data['enso-settings'];
+    const state =
+      persisted && typeof persisted === 'object'
+        ? (persisted as { state?: { hapiSettings?: StoredHapiSettings } }).state
+        : undefined;
+    const hapiSettings = state?.hapiSettings;
 
     if (hapiSettings?.enabled) {
       console.log('[hapi] Auto-starting server from saved settings...');

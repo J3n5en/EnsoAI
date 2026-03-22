@@ -447,7 +447,8 @@ export function GeneralSettings() {
     });
   }, [customArgsText, shellConfig, setShellConfig]);
 
-  const isWindows = window.electronAPI?.env.platform === 'win32';
+  const executionPlatform = window.electronAPI?.env.platform;
+  const isWindows = executionPlatform === 'win32';
   const shellPathPlaceholder = isWindows ? 'cmd.exe' : '/bin/bash';
   const shellArgsPlaceholder = isWindows
     ? '/k "C:\\Program Files\\init.bat"'

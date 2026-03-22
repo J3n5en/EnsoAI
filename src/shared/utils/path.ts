@@ -1,3 +1,5 @@
+import { isRemoteVirtualPath, parseRemoteVirtualPath } from './remotePath';
+
 /**
  * Path utility functions
  * For cross-platform path normalization
@@ -64,4 +66,35 @@ export function getPathBasename(inputPath: string): string {
   if (!trimmed) return inputPath;
   const segments = trimmed.split(/[\\/]/);
   return segments[segments.length - 1] || inputPath;
+}
+
+/**
+ * Convert an internal path into the value that should be shown to users.
+ * Remote virtual paths are unwrapped back to their real remote filesystem path.
+ * @param inputPath Original path
+ * @returns User-facing path
+ */
+export function getDisplayPath(inputPath: string): string {
+  const resolvedPath = (() => {
+    if (!isRemoteVirtualPath(inputPath)) {
+      return inputPath;
+    }
+
+    try {
+      return parseRemoteVirtualPath(inputPath).remotePath;
+    } catch {
+      return inputPath;
+    }
+  })();
+
+  return trimTrailingPathSeparators(resolvedPath);
+}
+
+/**
+ * Get the final user-facing segment from a path.
+ * @param inputPath Original path
+ * @returns Last display segment
+ */
+export function getDisplayPathBasename(inputPath: string): string {
+  return getPathBasename(getDisplayPath(inputPath));
 }

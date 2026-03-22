@@ -1,3 +1,4 @@
+import { getDisplayPath } from '@shared/utils/path';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -91,7 +92,7 @@ export function EditorTabs({
   const handleCopyPath = useCallback(async () => {
     if (!menuTabPath) return;
     try {
-      await navigator.clipboard.writeText(menuTabPath);
+      await navigator.clipboard.writeText(getDisplayPath(menuTabPath));
       toastManager.add({
         title: t('Copied'),
         description: t('Path copied to clipboard'),

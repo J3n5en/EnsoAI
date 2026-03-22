@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 
-export function useMenuActions(openSettings: () => void, setActionPanelOpen: (open: boolean) => void) {
+export function useMenuActions(
+  openSettings: () => void,
+  setActionPanelOpen: (open: boolean) => void
+) {
   useEffect(() => {
     const cleanup = window.electronAPI.menu.onAction((action) => {
       switch (action) {

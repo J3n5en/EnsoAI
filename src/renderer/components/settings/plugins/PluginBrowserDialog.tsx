@@ -26,9 +26,15 @@ interface PluginBrowserDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInstalled?: () => void;
+  repoPath?: string;
 }
 
-export function PluginBrowserDialog({ open, onOpenChange, onInstalled }: PluginBrowserDialogProps) {
+export function PluginBrowserDialog({
+  open,
+  onOpenChange,
+  onInstalled,
+  repoPath,
+}: PluginBrowserDialogProps) {
   const { t } = useI18n();
   const [marketplaces, setMarketplaces] = React.useState<PluginMarketplace[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = React.useState<string>('all');
@@ -39,25 +45,25 @@ export function PluginBrowserDialog({ open, onOpenChange, onInstalled }: PluginB
 
   const loadMarketplaces = React.useCallback(async () => {
     try {
-      const list = await window.electronAPI.claudeConfig.plugins.marketplaces.list();
+      const list = await window.electronAPI.claudeConfig.plugins.marketplaces.list(repoPath);
       setMarketplaces(list);
     } catch (error) {
       console.error('Failed to load marketplaces:', error);
     }
-  }, []);
+  }, [repoPath]);
 
   const loadPlugins = React.useCallback(async () => {
     setLoading(true);
     try {
       const marketplace = selectedMarketplace === 'all' ? undefined : selectedMarketplace;
-      const list = await window.electronAPI.claudeConfig.plugins.available(marketplace);
+      const list = await window.electronAPI.claudeConfig.plugins.available(repoPath, marketplace);
       setPlugins(list);
     } catch (err) {
       console.error('Failed to load available plugins:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedMarketplace]);
+  }, [repoPath, selectedMarketplace]);
 
   React.useEffect(() => {
     if (open) {
@@ -72,6 +78,7 @@ export function PluginBrowserDialog({ open, onOpenChange, onInstalled }: PluginB
 
     try {
       const success = await window.electronAPI.claudeConfig.plugins.install(
+        repoPath,
         plugin.name,
         plugin.marketplace
       );
@@ -102,7 +109,7 @@ export function PluginBrowserDialog({ open, onOpenChange, onInstalled }: PluginB
     setInstalling(pluginId);
 
     try {
-      const success = await window.electronAPI.claudeConfig.plugins.uninstall(pluginId);
+      const success = await window.electronAPI.claudeConfig.plugins.uninstall(repoPath, pluginId);
 
       if (success) {
         toastManager.add({ type: 'success', title: t('Plugin uninstalled') });

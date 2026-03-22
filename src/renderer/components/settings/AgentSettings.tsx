@@ -173,7 +173,7 @@ function AgentForm({ agent, onSubmit, onCancel }: AgentFormProps) {
   );
 }
 
-export function AgentSettings() {
+export function AgentSettings({ repoPath }: { repoPath?: string }) {
   const {
     agentSettings,
     agentDetectionStatus,
@@ -201,7 +201,12 @@ export function AgentSettings() {
       try {
         // Get customPath from settings for builtin agents
         const customPath = agentSettings[agentId]?.customPath;
-        const result = await window.electronAPI.cli.detectOne(agentId, customAgent, customPath);
+        const result = await window.electronAPI.cli.detectOne(
+          repoPath,
+          agentId,
+          customAgent,
+          customPath
+        );
         setAgentDetectionStatus(agentId, {
           installed: result.installed,
           version: result.version,
@@ -219,7 +224,7 @@ export function AgentSettings() {
         });
       }
     },
-    [agentSettings, setAgentDetectionStatus, setAgentEnabled]
+    [agentSettings, repoPath, setAgentDetectionStatus, setAgentEnabled]
   );
 
   // Refresh only enabled agents (auto-disable if not installed)
@@ -237,7 +242,12 @@ export function AgentSettings() {
         enabledAgentIds.map(async (agentId) => {
           const customAgent = customAgents.find((a) => a.id === agentId);
           const customPath = agentSettings[agentId]?.customPath;
-          const result = await window.electronAPI.cli.detectOne(agentId, customAgent, customPath);
+          const result = await window.electronAPI.cli.detectOne(
+            repoPath,
+            agentId,
+            customAgent,
+            customPath
+          );
           setAgentDetectionStatus(agentId, {
             installed: result.installed,
             version: result.version,
@@ -255,7 +265,7 @@ export function AgentSettings() {
     } finally {
       setLoadingAgents(new Set());
     }
-  }, [agentSettings, customAgents, setAgentDetectionStatus, setAgentEnabled]);
+  }, [agentSettings, customAgents, repoPath, setAgentDetectionStatus, setAgentEnabled]);
 
   const handleEnabledChange = (agentId: string, enabled: boolean) => {
     setAgentEnabled(agentId, enabled);
@@ -313,7 +323,7 @@ export function AgentSettings() {
 
   // Check happy global installation on mount
   React.useEffect(() => {
-    window.electronAPI.happy.checkGlobal(false).then((result) => {
+    window.electronAPI.happy.checkGlobal(undefined, false).then((result) => {
       setHappyGlobal(result);
     });
   }, []);

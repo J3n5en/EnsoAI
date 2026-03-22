@@ -5,6 +5,7 @@ import {
   Keyboard,
   Link,
   Palette,
+  Server,
   Settings,
   Share2,
   Sparkles,
@@ -24,6 +25,7 @@ import { GeneralSettings } from './GeneralSettings';
 import { HapiSettings } from './HapiSettings';
 import { IntegrationSettings } from './IntegrationSettings';
 import { KeybindingsSettings } from './KeybindingsSettings';
+import { RemoteSettings } from './RemoteSettings';
 import { WebInspectorSettings } from './WebInspectorSettings';
 
 interface SettingsDialogProps {
@@ -65,6 +67,7 @@ export function SettingsDialog({
     { id: 'ai', icon: Sparkles, label: t('AI') },
     { id: 'integration', icon: Link, label: t('Claude Integration') },
     { id: 'hapi', icon: Share2, label: t('Remote Sharing') },
+    { id: 'remote', icon: Server, label: t('Remote Connection') },
     { id: 'webInspector', icon: Globe, label: t('Web Inspector') },
   ];
 
@@ -122,8 +125,8 @@ export function SettingsDialog({
                     : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                 )}
               >
-                <category.icon className="h-4 w-4" />
-                {category.label}
+                <category.icon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-left">{category.label}</span>
               </button>
             ))}
           </nav>
@@ -140,6 +143,7 @@ export function SettingsDialog({
               <IntegrationSettings scrollToProvider={scrollToProvider} />
             )}
             {activeCategory === 'hapi' && <HapiSettings />}
+            {activeCategory === 'remote' && <RemoteSettings />}
             {activeCategory === 'webInspector' && <WebInspectorSettings />}
           </div>
         </div>

@@ -105,6 +105,7 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
           id: t.id,
           title: t.title || t.name,
           cwd: t.cwd,
+          backendSessionId: t.backendSessionId,
         }))
       )
     );
@@ -938,11 +939,40 @@ export function TerminalPanel({ repoPath, cwd, isActive = false }: TerminalPanel
                   >
                     <ShellTerminal
                       cwd={info.tab.cwd}
+                      backendSessionId={info.tab.backendSessionId}
                       isActive={isTerminalActive}
                       canMerge={state.groups.length > 1}
                       initialCommand={info.tab.initialCommand}
                       onExit={() => handleTerminalClose(tabId)}
                       onTitleChange={(title) => handleTitleChange(tabId, title)}
+                      onSessionIdChange={(backendSessionId) => {
+                        setWorktreeStates((prev) => {
+                          for (const [path, currentState] of Object.entries(prev)) {
+                            for (const group of currentState.groups) {
+                              if (!group.tabs.some((tab) => tab.id === tabId)) {
+                                continue;
+                              }
+                              return {
+                                ...prev,
+                                [path]: {
+                                  ...currentState,
+                                  groups: currentState.groups.map((currentGroup) =>
+                                    currentGroup.id === group.id
+                                      ? {
+                                          ...currentGroup,
+                                          tabs: currentGroup.tabs.map((tab) =>
+                                            tab.id === tabId ? { ...tab, backendSessionId } : tab
+                                          ),
+                                        }
+                                      : currentGroup
+                                  ),
+                                },
+                              };
+                            }
+                          }
+                          return prev;
+                        });
+                      }}
                       onSplit={() => handleSplit(info.group.id)}
                       onMerge={() => handleMerge(info.group.id)}
                     />

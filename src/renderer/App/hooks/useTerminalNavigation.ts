@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { useNavigationStore } from '@/stores/navigation';
 import { useEditor } from '@/hooks/useEditor';
+import { useNavigationStore } from '@/stores/navigation';
 import type { TabId } from '../constants';
 
 export function useTerminalNavigation(
@@ -30,5 +30,12 @@ export function useTerminalNavigation(
 
     // Clear the navigation request
     clearNavigation();
-  }, [pendingNavigation, navigateToFile, clearNavigation, activeWorktreePath, setActiveTab, setWorktreeTabMap]);
+  }, [
+    pendingNavigation,
+    navigateToFile,
+    clearNavigation,
+    activeWorktreePath,
+    setActiveTab,
+    setWorktreeTabMap,
+  ]);
 }

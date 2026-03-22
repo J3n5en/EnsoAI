@@ -1,4 +1,5 @@
 import type { TerminalCreateOptions } from '@shared/types';
+import { isRemoteVirtualPath } from '@shared/utils/remotePath';
 import { useCallback, useEffect } from 'react';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalStore } from '@/stores/terminal';
@@ -10,8 +11,8 @@ export function useTerminal() {
 
   // Listen for terminal exit events from main process
   useEffect(() => {
-    const unsubscribe = window.electronAPI.terminal.onExit(({ id }) => {
-      removeSession(id);
+    const unsubscribe = window.electronAPI.session.onExit(({ sessionId }) => {
+      removeSession(sessionId);
     });
     return unsubscribe;
   }, [removeSession]);
@@ -22,7 +23,17 @@ export function useTerminal() {
         ...options,
         shellConfig: options?.shell ? undefined : shellConfig,
       };
-      const id = await window.electronAPI.terminal.create(createOptions);
+      const session = await window.electronAPI.session.create({
+        ...createOptions,
+        kind: 'terminal',
+      });
+      const id = session.session.sessionId;
+      if (!createOptions.cwd || !isRemoteVirtualPath(createOptions.cwd)) {
+        await window.electronAPI.session.attach({
+          sessionId: id,
+          cwd: createOptions.cwd,
+        });
+      }
       addSession({
         id,
         title: 'Terminal',
@@ -35,18 +46,18 @@ export function useTerminal() {
 
   const destroyTerminal = useCallback(
     async (id: string) => {
-      await window.electronAPI.terminal.destroy(id);
+      await window.electronAPI.session.kill(id);
       removeSession(id);
     },
     [removeSession]
   );
 
   const writeToTerminal = useCallback(async (id: string, data: string) => {
-    await window.electronAPI.terminal.write(id, data);
+    await window.electronAPI.session.write(id, data);
   }, []);
 
   const resizeTerminal = useCallback(async (id: string, cols: number, rows: number) => {
-    await window.electronAPI.terminal.resize(id, { cols, rows });
+    await window.electronAPI.session.resize(id, { cols, rows });
   }, []);
 
   return {
@@ -62,8 +73,8 @@ export function useTerminal() {
 
 export function useTerminalData(onData: (id: string, data: string) => void) {
   useEffect(() => {
-    const unsubscribe = window.electronAPI.terminal.onData(({ id, data }) => {
-      onData(id, data);
+    const unsubscribe = window.electronAPI.session.onData(({ sessionId, data }) => {
+      onData(sessionId, data);
     });
     return unsubscribe;
   }, [onData]);

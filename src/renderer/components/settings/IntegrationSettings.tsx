@@ -28,9 +28,10 @@ import { PromptsSection } from './prompts';
 interface IntegrationSettingsProps {
   /** Scroll to Claude Provider section on mount */
   scrollToProvider?: boolean;
+  repoPath?: string;
 }
 
-export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsProps) {
+export function IntegrationSettings({ scrollToProvider, repoPath }: IntegrationSettingsProps) {
   const { t } = useI18n();
   const providerRef = React.useRef<HTMLDivElement>(null);
   const { claudeCodeIntegration, setClaudeCodeIntegration } = useSettingsStore();
@@ -505,7 +506,7 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
                   onCheckedChange={async (checked) => {
                     if (checked) {
                       setTmuxError(null);
-                      const result = await window.electronAPI.tmux.check(true);
+                      const result = await window.electronAPI.tmux.check(repoPath, true);
                       if (!result.installed) {
                         setTmuxError(t('tmux is not installed. Please install tmux first.'));
                         return;
@@ -579,18 +580,18 @@ export function IntegrationSettings({ scrollToProvider }: IntegrationSettingsPro
               {t('Manage Claude API provider configurations')}
             </p>
           </div>
-          <ProviderList />
+          <ProviderList repoPath={repoPath} />
         </div>
       </div>
 
       {/* MCP Servers */}
-      <McpSection />
+      <McpSection repoPath={repoPath} />
 
       {/* Plugins */}
-      <PluginsSection />
+      <PluginsSection repoPath={repoPath} />
 
       {/* Prompts */}
-      <PromptsSection />
+      <PromptsSection repoPath={repoPath} />
     </div>
   );
 }
