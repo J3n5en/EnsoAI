@@ -28,6 +28,7 @@ import {
 import { addToast } from '@/components/ui/toast';
 import { useDebouncedSave } from '@/hooks/useDebouncedSave';
 import { useI18n } from '@/i18n';
+import { toMonacoFileUri } from '@/lib/monacoModelPath';
 import { useActiveSessionId } from '@/stores/agentSessions';
 import type { EditorTab, PendingCursor } from '@/stores/editor';
 import { useEditorStore } from '@/stores/editor';
@@ -904,7 +905,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
           window.electronAPI.mcp.sendSelectionChanged({
             text: selectedText,
             filePath: activeTabPath,
-            fileUrl: `file://${activeTabPath}`,
+            fileUrl: toMonacoFileUri(activeTabPath),
             selection: {
               start: {
                 line: selection.startLineNumber,
@@ -1287,7 +1288,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                   key={activeTab.path}
                   width="100%"
                   height="100%"
-                  path={activeTab.path}
+                  path={toMonacoFileUri(activeTab.path)}
                   value={activeTab.content}
                   theme={monacoTheme}
                   onChange={handleEditorChange}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/shallow';
 import { CUSTOM_THEME_NAME, defineMonacoTheme } from '@/components/files/monacoTheme';
 import { useI18n } from '@/i18n';
+import { toMonacoVirtualUri } from '@/lib/monacoModelPath';
 import { useSettingsStore } from '@/stores/settings';
 
 interface SearchPreviewPanelProps {
@@ -162,7 +163,7 @@ export function SearchPreviewPanel({ path, line, query }: SearchPreviewPanelProp
       <div className="min-h-0 flex-1">
         <Editor
           key={path}
-          path={`preview://${path}`}
+          path={toMonacoVirtualUri('preview', path)}
           value={content}
           theme={monacoTheme}
           onMount={handleEditorMount}

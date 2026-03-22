@@ -29,6 +29,7 @@ import { useFileDiff } from '@/hooks/useSourceControl';
 import { useI18n } from '@/i18n';
 import { getXtermTheme, isTerminalThemeDark } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
+import { toMonacoVirtualUri } from '@/lib/monacoModelPath';
 import { cn } from '@/lib/utils';
 import { useActiveSessionId } from '@/stores/agentSessions';
 import { useNavigationStore } from '@/stores/navigation';
@@ -1201,8 +1202,8 @@ export function DiffViewer({
             key={`${rootPath}-${file.path}-${file.staged}-${isThemeReady}-${isEditing}`}
             original={diff.original}
             modified={isEditing && editedContent !== null ? editedContent : diff.modified}
-            originalModelPath={`inmemory://original/${rootPath}/${file.path}`}
-            modifiedModelPath={`inmemory://modified/${rootPath}/${file.path}`}
+            originalModelPath={toMonacoVirtualUri('inmemory', `original/${rootPath}/${file.path}`)}
+            modifiedModelPath={toMonacoVirtualUri('inmemory', `modified/${rootPath}/${file.path}`)}
             language={getLanguageFromPath(file.path)}
             theme={CUSTOM_THEME_NAME}
             onMount={handleEditorMount}
