@@ -1,9 +1,19 @@
+import type { AppCloseRequestPayload } from '@shared/types';
 import { useCallback, useEffect, useRef } from 'react';
 import { useEditorStore } from '@/stores/editor';
 import { useSettingsStore } from '@/stores/settings';
 
 export function useAppLifecycle(setCloseDialogOpen: (open: boolean) => void) {
   const pendingRequestIdRef = useRef<string | null>(null);
+  const getDirtyPaths = useCallback(() => {
+    const state = useEditorStore.getState();
+    const editorSettings = useSettingsStore.getState().editorSettings;
+    const allTabs = [...state.tabs, ...Object.values(state.worktreeStates).flatMap((s) => s.tabs)];
+
+    return editorSettings.autoSave === 'off'
+      ? Array.from(new Set(allTabs.filter((t) => t.isDirty).map((t) => t.path)))
+      : [];
+  }, []);
 
   // Called by the close confirmation dialog when user confirms
   const confirmCloseAndRespond = useCallback(() => {
@@ -11,18 +21,11 @@ export function useAppLifecycle(setCloseDialogOpen: (open: boolean) => void) {
     if (!requestId) return;
     pendingRequestIdRef.current = null;
 
-    const state = useEditorStore.getState();
-    const editorSettings = useSettingsStore.getState().editorSettings;
-
-    const allTabs = [...state.tabs, ...Object.values(state.worktreeStates).flatMap((s) => s.tabs)];
-
-    const dirtyPaths =
-      editorSettings.autoSave === 'off'
-        ? Array.from(new Set(allTabs.filter((t) => t.isDirty).map((t) => t.path)))
-        : [];
-
-    window.electronAPI.app.respondCloseRequest(requestId, { confirmed: true, dirtyPaths });
-  }, []);
+    window.electronAPI.app.respondCloseRequest(requestId, {
+      confirmed: true,
+      dirtyPaths: getDirtyPaths(),
+    });
+  }, [getDirtyPaths]);
 
   // Called by the close confirmation dialog when user cancels (or dismisses)
   const cancelCloseAndRespond = useCallback(() => {
@@ -35,12 +38,20 @@ export function useAppLifecycle(setCloseDialogOpen: (open: boolean) => void) {
 
   // Listen for close request from main process
   useEffect(() => {
-    const cleanup = window.electronAPI.app.onCloseRequest((requestId) => {
-      pendingRequestIdRef.current = requestId;
+    const cleanup = window.electronAPI.app.onCloseRequest((payload: AppCloseRequestPayload) => {
+      if (payload.reason === 'replace-window') {
+        window.electronAPI.app.respondCloseRequest(payload.requestId, {
+          confirmed: true,
+          dirtyPaths: getDirtyPaths(),
+        });
+        return;
+      }
+
+      pendingRequestIdRef.current = payload.requestId;
       setCloseDialogOpen(true);
     });
     return cleanup;
-  }, [setCloseDialogOpen]);
+  }, [getDirtyPaths, setCloseDialogOpen]);
 
   // Main process asks renderer to save a specific dirty file before closing
   useEffect(() => {

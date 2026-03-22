@@ -8,7 +8,7 @@ import { useI18n } from '@/i18n';
 import { MarketplacesDialog } from './MarketplacesDialog';
 import { PluginBrowserDialog } from './PluginBrowserDialog';
 
-export function PluginsSection() {
+export function PluginsSection({ repoPath }: { repoPath?: string }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = React.useState(false);
   const [plugins, setPlugins] = React.useState<Plugin[]>([]);
@@ -19,14 +19,14 @@ export function PluginsSection() {
 
   const loadPlugins = React.useCallback(async () => {
     try {
-      const list = await window.electronAPI.claudeConfig.plugins.list();
+      const list = await window.electronAPI.claudeConfig.plugins.list(repoPath);
       setPlugins(list);
     } catch (error) {
       console.error('Failed to load plugins:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [repoPath]);
 
   React.useEffect(() => {
     loadPlugins();
@@ -37,7 +37,11 @@ export function PluginsSection() {
     setPlugins((prev) => prev.map((p) => (p.id === pluginId ? { ...p, enabled } : p)));
 
     // 调用后端
-    const success = await window.electronAPI.claudeConfig.plugins.setEnabled(pluginId, enabled);
+    const success = await window.electronAPI.claudeConfig.plugins.setEnabled(
+      repoPath,
+      pluginId,
+      enabled
+    );
     if (!success) {
       // 回滚
       setPlugins((prev) => prev.map((p) => (p.id === pluginId ? { ...p, enabled: !enabled } : p)));
@@ -47,7 +51,7 @@ export function PluginsSection() {
   const handleUninstall = async (pluginId: string) => {
     setUninstalling(pluginId);
     try {
-      const success = await window.electronAPI.claudeConfig.plugins.uninstall(pluginId);
+      const success = await window.electronAPI.claudeConfig.plugins.uninstall(repoPath, pluginId);
       if (success) {
         toastManager.add({ type: 'success', title: t('Plugin uninstalled') });
         setPlugins((prev) => prev.filter((p) => p.id !== pluginId));
@@ -104,11 +108,16 @@ export function PluginsSection() {
         </div>
       </button>
 
-      <MarketplacesDialog open={marketplacesOpen} onOpenChange={setMarketplacesOpen} />
+      <MarketplacesDialog
+        open={marketplacesOpen}
+        onOpenChange={setMarketplacesOpen}
+        repoPath={repoPath}
+      />
       <PluginBrowserDialog
         open={browserOpen}
         onOpenChange={setBrowserOpen}
         onInstalled={loadPlugins}
+        repoPath={repoPath}
       />
 
       {expanded && (

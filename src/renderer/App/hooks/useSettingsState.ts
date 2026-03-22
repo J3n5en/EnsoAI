@@ -1,5 +1,5 @@
-import type { SettingsCategory } from '@/components/settings/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SettingsCategory } from '@/components/settings/constants';
 import { useSettingsStore } from '@/stores/settings';
 import type { TabId } from '../constants';
 
@@ -21,6 +21,7 @@ export function useSettingsState(
         'ai',
         'integration',
         'hapi',
+        'remote',
         'webInspector',
       ];
       return saved && validCategories.includes(saved as SettingsCategory)

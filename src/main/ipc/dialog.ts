@@ -11,10 +11,13 @@ interface ContextMenuItem {
 }
 
 export function registerDialogHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_DIRECTORY, async () => {
-    const window = BrowserWindow.getFocusedWindow();
+  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_DIRECTORY, async (event) => {
+    const window =
+      BrowserWindow.fromWebContents(event.sender) ??
+      BrowserWindow.getFocusedWindow() ??
+      BrowserWindow.getAllWindows()[0];
     const t = (key: string) => translate(getCurrentLocale(), key);
-    const result = await dialog.showOpenDialog(window!, {
+    const result = await dialog.showOpenDialog(window, {
       properties: ['openDirectory', 'createDirectory'],
       title: t('Select folder'),
     });
@@ -28,10 +31,13 @@ export function registerDialogHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.DIALOG_OPEN_FILE,
-    async (_, options?: { filters?: Array<{ name: string; extensions: string[] }> }) => {
-      const window = BrowserWindow.getFocusedWindow();
+    async (event, options?: { filters?: Array<{ name: string; extensions: string[] }> }) => {
+      const window =
+        BrowserWindow.fromWebContents(event.sender) ??
+        BrowserWindow.getFocusedWindow() ??
+        BrowserWindow.getAllWindows()[0];
       const t = (key: string) => translate(getCurrentLocale(), key);
-      const result = await dialog.showOpenDialog(window!, {
+      const result = await dialog.showOpenDialog(window, {
         properties: ['openFile'],
         title: t('Select file'),
         filters: options?.filters,

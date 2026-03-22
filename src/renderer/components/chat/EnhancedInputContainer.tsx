@@ -34,6 +34,9 @@ export const EnhancedInputContainer = memo(function EnhancedInputContainer({
 
   // Get cwd from session for file mention search
   const cwd = useAgentSessionsStore((state) => state.sessions.find((s) => s.id === sessionId)?.cwd);
+  const repoPath = useAgentSessionsStore(
+    (state) => state.sessions.find((s) => s.id === sessionId)?.repoPath
+  );
 
   // Default state if not found
   const open = enhancedInputState?.open ?? false;
@@ -63,6 +66,7 @@ export const EnhancedInputContainer = memo(function EnhancedInputContainer({
       keepOpenAfterSend={keepOpenAfterSend}
       isActive={isActive}
       cwd={cwd}
+      repoPath={repoPath}
     />
   );
 });

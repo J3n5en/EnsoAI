@@ -1,10 +1,13 @@
 import type {
   GitWorktree,
+  RemoteConnectionStatus,
   WorktreeCreateOptions,
   WorktreeMergeOptions,
   WorktreeMergeResult,
 } from '@shared/types';
-import { getPathBasename } from '@shared/utils/path';
+import { getDisplayPath, getDisplayPathBasename } from '@shared/utils/path';
+import { isRemoteVirtualPath, toRemoteVirtualPath } from '@shared/utils/remotePath';
+import { buildRepositoryId } from '@shared/utils/workspace';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -57,6 +60,7 @@ import { TemporaryWorkspacePanel } from './components/layout/TemporaryWorkspaceP
 import { TreeSidebar } from './components/layout/TreeSidebar';
 import { WindowTitleBar } from './components/layout/WindowTitleBar';
 import { WorktreePanel } from './components/layout/WorktreePanel';
+import { RemoteAuthPromptHost } from './components/remote/RemoteAuthPromptHost';
 import { DraggableSettingsWindow } from './components/settings/DraggableSettingsWindow';
 import { TempWorkspaceDialogs } from './components/temp-workspace/TempWorkspaceDialogs';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -120,7 +124,7 @@ export default function App() {
     selectedRepo,
     groups,
     activeGroupId,
-    setSelectedRepo,
+    setSelectedRepo: setSelectedRepoState,
     setActiveGroupId,
     saveRepositories,
     handleCreateGroup,
@@ -179,15 +183,93 @@ export default function App() {
     setInitialLocalPath,
     setActionPanelOpen,
     setCloseDialogOpen,
-    handleAddRepository,
   } = panelState;
 
+  const openLocalAddRepositoryDialog = useCallback(() => {
+    setAddRepoDialogOpen(true);
+  }, [setAddRepoDialogOpen]);
+
   const { isFileDragOver, repositorySidebarRef } = useFileDragDrop(
+    true,
     setInitialLocalPath,
-    setAddRepoDialogOpen
+    openLocalAddRepositoryDialog
   );
   const [fileSidebarCollapsed, setFileSidebarCollapsed] = useState(() =>
     getStoredBoolean(STORAGE_KEYS.FILE_SIDEBAR_COLLAPSED, false)
+  );
+
+  const [activatedRemoteRepos, setActivatedRemoteRepos] = useState<Set<string>>(() => new Set());
+  const [remoteStatuses, setRemoteStatuses] = useState<Record<string, RemoteConnectionStatus>>({});
+
+  const repositoryByPath = useMemo(
+    () => new Map(repositories.map((repo) => [repo.path, repo])),
+    [repositories]
+  );
+
+  useEffect(() => {
+    return window.electronAPI.remote.onStatusChange(({ connectionId, status }) => {
+      setRemoteStatuses((prev) => ({
+        ...prev,
+        [connectionId]: status,
+      }));
+    });
+  }, []);
+
+  const isRemoteRepoPath = useCallback(
+    (repoPath: string | null | undefined) => {
+      if (!repoPath || repoPath === TEMP_REPO_ID) {
+        return false;
+      }
+
+      const repo = repositoryByPath.get(repoPath);
+      return repo?.kind === 'remote' || isRemoteVirtualPath(repoPath);
+    },
+    [repositoryByPath]
+  );
+
+  const activateRemoteRepo = useCallback(
+    (repoPath: string | null | undefined) => {
+      if (!repoPath || !isRemoteRepoPath(repoPath)) {
+        return;
+      }
+
+      const repo = repositoryByPath.get(repoPath);
+      if (repo?.connectionId) {
+        window.electronAPI.remote.connect(repo.connectionId).catch((error) => {
+          console.warn('[remote] Failed to activate remote repository:', error);
+        });
+      }
+
+      setActivatedRemoteRepos((prev) => {
+        if (prev.has(repoPath)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.add(repoPath);
+        return next;
+      });
+    },
+    [isRemoteRepoPath, repositoryByPath]
+  );
+
+  const canLoadRepo = useCallback(
+    (repoPath: string | null | undefined) => {
+      if (!repoPath || repoPath === TEMP_REPO_ID) {
+        return false;
+      }
+      return !isRemoteRepoPath(repoPath) || activatedRemoteRepos.has(repoPath);
+    },
+    [activatedRemoteRepos, isRemoteRepoPath]
+  );
+
+  const setSelectedRepoForWorktreeSelection = useCallback(
+    (repoPath: string) => {
+      if (isRemoteRepoPath(repoPath)) {
+        activateRemoteRepo(repoPath);
+      }
+      setSelectedRepoState(repoPath);
+    },
+    [activateRemoteRepo, isRemoteRepoPath, setSelectedRepoState]
   );
 
   const { refreshGitData, handleSelectWorktree } = useWorktreeSelection(
@@ -199,7 +281,7 @@ export default function App() {
     activeTab,
     setActiveTab,
     selectedRepo,
-    setSelectedRepo
+    setSelectedRepoForWorktreeSelection
   );
 
   const {
@@ -239,6 +321,7 @@ export default function App() {
     }
     return display;
   }, [effectiveTempBasePath]);
+  const effectiveTemporaryWorkspaceEnabled = temporaryWorkspaceEnabled;
 
   // Panel resize hook
   const {
@@ -251,6 +334,7 @@ export default function App() {
   } = usePanelResize(layoutMode);
 
   const worktreeError = useWorktreeStore((s) => s.error);
+  const setWorktreeError = useWorktreeStore((s) => s.setError);
   const clearEditorWorktreeState = useEditorStore((s) => s.clearWorktreeState);
   const tempWorkspaces = useTempWorkspaceStore((s) => s.items);
   const addTempWorkspace = useTempWorkspaceStore((s) => s.addItem);
@@ -348,28 +432,49 @@ export default function App() {
   }, [fileSidebarCollapsed]);
 
   useTempWorkspaceSync(
-    temporaryWorkspaceEnabled,
+    effectiveTemporaryWorkspaceEnabled,
     selectedRepo,
     activeWorktree,
     tempWorkspaces,
     repositories,
-    setSelectedRepo,
+    setSelectedRepoState,
     setActiveWorktree
   );
 
   const isTempRepo = selectedRepo === TEMP_REPO_ID;
   const worktreeRepoPath = isTempRepo ? null : selectedRepo;
+  const selectedRepoCanLoad = canLoadRepo(worktreeRepoPath);
+  const selectedRepository = worktreeRepoPath ? repositoryByPath.get(worktreeRepoPath) : null;
+  const selectedRemoteStatus = selectedRepository?.connectionId
+    ? (remoteStatuses[selectedRepository.connectionId] ?? null)
+    : null;
+  const selectedRemoteReady =
+    !selectedRepository?.connectionId ||
+    !isRemoteRepoPath(worktreeRepoPath) ||
+    selectedRemoteStatus?.connected !== false ||
+    selectedRemoteStatus == null;
+  const worktreeQueryEnabled = Boolean(worktreeRepoPath && selectedRepoCanLoad);
+  const inactiveSelectedRemoteRepo = Boolean(
+    worktreeRepoPath &&
+      isRemoteRepoPath(worktreeRepoPath) &&
+      (!selectedRepoCanLoad || !selectedRemoteReady)
+  );
 
   // Get worktrees for selected repo (used in columns mode)
   const {
     data: worktrees = [],
     isLoading: worktreesLoading,
     isFetching: worktreesFetching,
+    isFetched: worktreesFetched,
     refetch,
-  } = useWorktreeList(worktreeRepoPath);
+  } = useWorktreeList(worktreeRepoPath, {
+    enabled: worktreeQueryEnabled,
+  });
 
   // Get branches for selected repo
-  const { data: branches = [], refetch: refetchBranches } = useGitBranches(worktreeRepoPath);
+  const { data: branches = [], refetch: refetchBranches } = useGitBranches(worktreeRepoPath, {
+    enabled: worktreeQueryEnabled,
+  });
 
   // Worktree mutations
   const createWorktreeMutation = useWorktreeCreate();
@@ -385,6 +490,23 @@ export default function App() {
   useEffect(() => {
     rehydrateTempWorkspaces();
   }, [rehydrateTempWorkspaces]);
+
+  useEffect(() => {
+    if (!inactiveSelectedRemoteRepo) {
+      return;
+    }
+    setWorktreeError(null);
+  }, [inactiveSelectedRemoteRepo, setWorktreeError]);
+
+  useEffect(() => {
+    if (!selectedRepo || selectedRepo === TEMP_REPO_ID) {
+      return;
+    }
+    if (selectedRepoCanLoad || !activeWorktree) {
+      return;
+    }
+    setActiveWorktree(null);
+  }, [selectedRepo, selectedRepoCanLoad, activeWorktree, setActiveWorktree]);
 
   useEffect(() => {
     if (!selectedRepo) return;
@@ -404,9 +526,12 @@ export default function App() {
       localStorage.removeItem(STORAGE_KEYS.ACTIVE_WORKTREE);
     }
 
+    if (!selectedRepoCanLoad) return;
+
     if (!activeWorktree) {
       const savedWorktreePath = repoWorktreeMap[selectedRepo];
       if (!savedWorktreePath) return;
+      if (!worktreesFetched) return;
       if (worktreesFetching) return;
 
       const matchedWorktree = worktrees.find((wt) => wt.path === savedWorktreePath);
@@ -428,7 +553,9 @@ export default function App() {
     selectedRepo,
     activeWorktree,
     repoWorktreeMap,
+    selectedRepoCanLoad,
     worktrees,
+    worktreesFetched,
     worktreesFetching,
     setRepoWorktreeMap,
     setActiveWorktree,
@@ -441,8 +568,8 @@ export default function App() {
   );
 
   useGroupSync(hideGroups, activeGroupId, setActiveGroupId, saveActiveGroupId);
-  useOpenPathListener(repositories, saveRepositories, setSelectedRepo);
-  useClaudeIntegration(activeWorktree?.path ?? null);
+  useOpenPathListener(true, repositories, saveRepositories, setSelectedRepoState);
+  useClaudeIntegration(activeWorktree?.path ?? null, true);
   useCodeReviewContinue(activeWorktree, handleTabChange);
   useWorktreeSync(worktrees, activeWorktree, worktreesFetching, setActiveWorktree);
 
@@ -458,17 +585,27 @@ export default function App() {
     (repoPath: string) => {
       const updated = repositories.filter((r) => r.path !== repoPath);
       saveRepositories(updated);
+      setActivatedRemoteRepos((prev) => {
+        if (!prev.has(repoPath)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(repoPath);
+        return next;
+      });
       // Clear selection if removed repo was selected
       if (selectedRepo === repoPath) {
-        setSelectedRepo(null);
+        setSelectedRepoState(null);
         setActiveWorktree(null);
       }
     },
-    [repositories, saveRepositories, selectedRepo, setActiveWorktree, setSelectedRepo]
+    [repositories, saveRepositories, selectedRepo, setActiveWorktree, setSelectedRepoState]
   );
 
   useEffect(() => {
     if (!selectedRepo || selectedRepo === TEMP_REPO_ID) return;
+    if (!selectedRepoCanLoad) return;
+    if (!worktreesFetched) return;
     if (worktreesFetching) return;
 
     if (!activeWorktree) {
@@ -480,32 +617,69 @@ export default function App() {
     if (isWorktreeInSelectedRepo) {
       saveActiveWorktreeToMap(selectedRepo, activeWorktree);
     }
-  }, [selectedRepo, activeWorktree, worktrees, worktreesFetching, saveActiveWorktreeToMap]);
+  }, [
+    selectedRepo,
+    activeWorktree,
+    selectedRepoCanLoad,
+    worktrees,
+    worktreesFetched,
+    worktreesFetching,
+    saveActiveWorktreeToMap,
+  ]);
 
-  const handleSelectRepo = (repoPath: string) => {
-    // Save current worktree's tab state before switching
-    if (activeWorktree?.path) {
-      setWorktreeTabMap((prev) => ({
-        ...prev,
-        [activeWorktree.path]: activeTab,
-      }));
-    }
+  const handleSelectRepo = useCallback(
+    (repoPath: string, options?: { activateRemote?: boolean }) => {
+      // Save current worktree's tab state before switching
+      if (activeWorktree?.path) {
+        setWorktreeTabMap((prev) => ({
+          ...prev,
+          [activeWorktree.path]: activeTab,
+        }));
+      }
 
-    setSelectedRepo(repoPath);
-    // Restore previously selected worktree for this repo
-    const savedWorktreePath = repoWorktreeMap[repoPath];
-    if (savedWorktreePath) {
-      // Set temporary worktree with just the path; full object synced after worktrees load
-      setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
-      // Restore the tab state for this worktree
-      const savedTab = worktreeTabMap[savedWorktreePath] || 'chat';
-      setActiveTab(savedTab);
-    } else {
+      const shouldActivateRemote = (options?.activateRemote ?? false) && isRemoteRepoPath(repoPath);
+      if (shouldActivateRemote) {
+        activateRemoteRepo(repoPath);
+      }
+
+      const nextRepoCanLoad =
+        repoPath !== TEMP_REPO_ID &&
+        (!isRemoteRepoPath(repoPath) || shouldActivateRemote || activatedRemoteRepos.has(repoPath));
+
+      setSelectedRepoState(repoPath);
+
+      if (!nextRepoCanLoad) {
+        setActiveWorktree(null);
+        setActiveTab('chat');
+        return;
+      }
+
+      const savedWorktreePath = repoWorktreeMap[repoPath];
+      if (savedWorktreePath) {
+        // Set temporary worktree with just the path; full object syncs after worktrees load.
+        setActiveWorktree({ path: savedWorktreePath } as GitWorktree);
+        const savedTab = worktreeTabMap[savedWorktreePath] || 'chat';
+        setActiveTab(savedTab);
+        return;
+      }
+
       setActiveWorktree(null);
       setActiveTab('chat');
-    }
-    // Editor state will be synced by useEffect
-  };
+    },
+    [
+      activeTab,
+      activeWorktree,
+      activateRemoteRepo,
+      activatedRemoteRepos,
+      isRemoteRepoPath,
+      repoWorktreeMap,
+      setActiveTab,
+      setActiveWorktree,
+      setSelectedRepoState,
+      setWorktreeTabMap,
+      worktreeTabMap,
+    ]
+  );
 
   const handleSelectTempWorkspace = useCallback(
     async (path: string) => {
@@ -626,11 +800,15 @@ export default function App() {
       }
 
       for (const repo of repositories) {
+        if (isRemoteRepoPath(repo.path) && !canLoadRepo(repo.path)) {
+          continue;
+        }
+
         try {
           const repoWorktrees = await window.electronAPI.worktree.list(repo.path);
           const found = repoWorktrees.find((wt) => wt.path === worktreePath);
           if (found) {
-            setSelectedRepo(repo.path);
+            setSelectedRepoForWorktreeSelection(repo.path);
             setActiveWorktree(found);
             const savedTab = worktreeTabMap[found.path] || 'chat';
             setActiveTab(savedTab);
@@ -646,12 +824,14 @@ export default function App() {
       tempWorkspaces,
       worktrees,
       repositories,
+      isRemoteRepoPath,
+      canLoadRepo,
       worktreeTabMap,
       handleSelectWorktree,
       refreshGitData,
       setActiveTab,
       setActiveWorktree,
-      setSelectedRepo,
+      setSelectedRepoForWorktreeSelection,
     ]
   );
 
@@ -659,72 +839,121 @@ export default function App() {
   switchWorktreePathRef.current = handleSwitchWorktreePath;
 
   // Handle adding a local repository
+  const createRepositoryEntry = useCallback(
+    (
+      repoPath: string,
+      groupId: string | null,
+      options?: { kind?: 'local' | 'remote'; connectionId?: string }
+    ): Repository => ({
+      id: buildRepositoryId(options?.kind ?? 'local', repoPath, {
+        connectionId: options?.connectionId,
+        platform:
+          window.electronAPI.env.platform === 'win32'
+            ? 'win32'
+            : window.electronAPI.env.platform === 'darwin'
+              ? 'darwin'
+              : 'linux',
+      }),
+      name: getDisplayPathBasename(repoPath),
+      path: repoPath,
+      kind: options?.kind ?? 'local',
+      connectionId: options?.connectionId,
+      groupId: groupId || undefined,
+    }),
+    []
+  );
+
+  const findExistingRepository = useCallback(
+    (candidate: Repository) =>
+      repositories.find((repo) => repo.id === candidate.id || repo.path === candidate.path),
+    [repositories]
+  );
+
   const handleAddLocalRepository = useCallback(
     (selectedPath: string, groupId: string | null) => {
-      // Check if repo already exists
-      if (repositories.some((r) => r.path === selectedPath)) {
+      const candidate = createRepositoryEntry(selectedPath, groupId);
+      const existingRepo = findExistingRepository(candidate);
+      if (existingRepo) {
+        handleSelectRepo(existingRepo.path);
         return;
       }
 
-      // Extract repo name from path (handle both / and \ for Windows compatibility)
-      const name = getPathBasename(selectedPath);
-
-      const newRepo: Repository = {
-        name,
-        path: selectedPath,
-        groupId: groupId || undefined,
-      };
-
-      const updated = [...repositories, newRepo];
+      const updated = [...repositories, candidate];
       saveRepositories(updated);
 
-      // Auto-select the new repo
-      setSelectedRepo(selectedPath);
-      setActiveWorktree(null);
-      setActiveTab('chat');
+      handleSelectRepo(candidate.path);
     },
     [
+      createRepositoryEntry,
+      findExistingRepository,
+      handleSelectRepo,
       repositories,
       saveRepositories,
-      setActiveWorktree,
-      setActiveTab, // Auto-select the new repo
-      setSelectedRepo,
     ]
   );
 
   // Handle cloning a remote repository
   const handleCloneRepository = useCallback(
     (clonedPath: string, groupId: string | null) => {
-      // Check if repo already exists
-      if (repositories.some((r) => r.path === clonedPath)) {
-        setSelectedRepo(clonedPath);
+      const candidate = createRepositoryEntry(clonedPath, groupId);
+      const existingRepo = findExistingRepository(candidate);
+      if (existingRepo) {
+        handleSelectRepo(existingRepo.path);
         return;
       }
 
-      // Extract repo name from path
-      const name = getPathBasename(clonedPath);
-
-      const newRepo: Repository = {
-        name,
-        path: clonedPath,
-        groupId: groupId || undefined,
-      };
-
-      const updated = [...repositories, newRepo];
+      const updated = [...repositories, candidate];
       saveRepositories(updated);
 
-      // Auto-select the new repo
-      setSelectedRepo(clonedPath);
-      setActiveWorktree(null);
-      setActiveTab('chat');
+      handleSelectRepo(candidate.path);
     },
     [
+      createRepositoryEntry,
+      findExistingRepository,
+      handleSelectRepo,
       repositories,
       saveRepositories,
-      setActiveWorktree,
-      setActiveTab, // Auto-select the new repo
-      setSelectedRepo,
     ]
+  );
+
+  const handleAddRemoteRepository = useCallback(
+    async (remoteRepoPath: string, groupId: string | null, connectionId: string) => {
+      const candidate = createRepositoryEntry(
+        toRemoteVirtualPath(connectionId, remoteRepoPath),
+        groupId,
+        {
+          kind: 'remote',
+          connectionId,
+        }
+      );
+      const existingRepo = findExistingRepository(candidate);
+      if (existingRepo) {
+        handleSelectRepo(existingRepo.path);
+        return;
+      }
+
+      const updated = [...repositories, candidate];
+      saveRepositories(updated);
+      handleSelectRepo(candidate.path);
+    },
+    [
+      createRepositoryEntry,
+      findExistingRepository,
+      handleSelectRepo,
+      repositories,
+      saveRepositories,
+    ]
+  );
+
+  const handleOpenRepositoryDialog = useCallback(() => {
+    setAddRepoDialogOpen(true);
+  }, [setAddRepoDialogOpen]);
+
+  const handleAddRepoDialogOpenChange = useCallback(
+    (open: boolean) => {
+      setAddRepoDialogOpen(open);
+    },
+    [setAddRepoDialogOpen]
   );
 
   const setPendingScript = useInitScriptStore((s) => s.setPendingScript);
@@ -774,7 +1003,7 @@ export default function App() {
     const toastId = toastManager.add({
       type: 'loading',
       title: t('Deleting...'),
-      description: worktree.branch || worktree.path,
+      description: worktree.branch || getDisplayPath(worktree.path),
       timeout: 0,
     });
 
@@ -803,7 +1032,7 @@ export default function App() {
         toastManager.add({
           type: 'success',
           title: t('Worktree deleted'),
-          description: worktree.branch || worktree.path,
+          description: worktree.branch || getDisplayPath(worktree.path),
         });
       })
       .catch((err) => {
@@ -977,8 +1206,10 @@ export default function App() {
                   isCreating={createWorktreeMutation.isPending}
                   error={worktreeError}
                   onSelectRepo={handleSelectRepo}
+                  canLoadRepo={(repoPath) => canLoadRepo(repoPath)}
+                  onActivateRemoteRepo={activateRemoteRepo}
                   onSelectWorktree={handleSelectWorktree}
-                  onAddRepository={handleAddRepository}
+                  onAddRepository={handleOpenRepositoryDialog}
                   onRemoveRepository={handleRemoveRepository}
                   onCreateWorktree={handleCreateWorktree}
                   onRemoveWorktree={handleRemoveWorktree}
@@ -1002,7 +1233,7 @@ export default function App() {
                   onMoveToGroup={handleMoveToGroup}
                   onSwitchTab={setActiveTab}
                   onSwitchWorktreeByPath={handleSwitchWorktreePath}
-                  temporaryWorkspaceEnabled={temporaryWorkspaceEnabled}
+                  temporaryWorkspaceEnabled={effectiveTemporaryWorkspaceEnabled}
                   tempWorkspaces={tempWorkspaces}
                   tempBasePath={tempBasePathDisplay}
                   onSelectTempWorkspace={handleSelectTempWorkspace}
@@ -1041,7 +1272,8 @@ export default function App() {
                     repositories={repositories}
                     selectedRepo={selectedRepo}
                     onSelectRepo={handleSelectRepo}
-                    onAddRepository={handleAddRepository}
+                    canLoadRepo={canLoadRepo}
+                    onAddRepository={handleOpenRepositoryDialog}
                     onRemoveRepository={handleRemoveRepository}
                     onReorderRepositories={handleReorderRepositories}
                     onOpenSettings={openSettings}
@@ -1059,7 +1291,7 @@ export default function App() {
                     isSettingsActive={activeTab === 'settings'}
                     onToggleSettings={toggleSettings}
                     isFileDragOver={isFileDragOver}
-                    temporaryWorkspaceEnabled={temporaryWorkspaceEnabled}
+                    temporaryWorkspaceEnabled={effectiveTemporaryWorkspaceEnabled}
                     tempBasePath={tempBasePathDisplay}
                   />
                   {/* Resize handle */}
@@ -1098,10 +1330,12 @@ export default function App() {
                       worktrees={sortedWorktrees}
                       activeWorktree={activeWorktree}
                       branches={branches}
-                      projectName={selectedRepo ? getPathBasename(selectedRepo) : ''}
+                      projectName={selectedRepo ? getDisplayPathBasename(selectedRepo) : ''}
+                      inactiveRemote={inactiveSelectedRemoteRepo}
+                      remoteStatus={selectedRemoteStatus}
                       isLoading={worktreesLoading}
                       isCreating={createWorktreeMutation.isPending}
-                      error={worktreeError}
+                      error={inactiveSelectedRemoteRepo ? null : worktreeError}
                       onSelectWorktree={handleSelectWorktree}
                       onCreateWorktree={handleCreateWorktree}
                       onRemoveWorktree={handleRemoveWorktree}
@@ -1187,11 +1421,12 @@ export default function App() {
         {/* Add Repository Dialog */}
         <AddRepositoryDialog
           open={addRepoDialogOpen}
-          onOpenChange={setAddRepoDialogOpen}
+          onOpenChange={handleAddRepoDialogOpenChange}
           groups={sortedGroups}
           defaultGroupId={activeGroupId === ALL_GROUP_ID ? null : activeGroupId}
           onAddLocal={handleAddLocalRepository}
           onCloneComplete={handleCloneRepository}
+          onAddRemote={handleAddRemoteRepository}
           onCreateGroup={handleCreateGroup}
           initialLocalPath={initialLocalPath ?? undefined}
           onClearInitialLocalPath={() => setInitialLocalPath(null)}
@@ -1211,7 +1446,7 @@ export default function App() {
           onToggleRepository={() => setRepositoryCollapsed((prev) => !prev)}
           onToggleWorktree={() => setWorktreeCollapsed((prev) => !prev)}
           onOpenSettings={openSettings}
-          onSwitchRepo={handleSelectRepo}
+          onSwitchRepo={(repoPath) => handleSelectRepo(repoPath, { activateRemote: true })}
           onSwitchWorktree={handleSelectWorktree}
         />
 
@@ -1220,6 +1455,9 @@ export default function App() {
 
         {/* Unsaved Prompt Host */}
         <UnsavedPromptHost />
+
+        {/* Remote SSH Auth Prompt Host */}
+        <RemoteAuthPromptHost />
 
         {/* Close Confirmation Dialog */}
         <Dialog

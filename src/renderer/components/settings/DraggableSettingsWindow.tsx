@@ -16,6 +16,7 @@ interface DraggableSettingsWindowProps {
   activeCategory?: SettingsCategory;
   onCategoryChange?: (category: SettingsCategory) => void;
   scrollToProvider?: boolean;
+  repoPath?: string;
 }
 
 export function DraggableSettingsWindow({
@@ -24,6 +25,7 @@ export function DraggableSettingsWindow({
   activeCategory,
   onCategoryChange,
   scrollToProvider,
+  repoPath,
 }: DraggableSettingsWindowProps) {
   const { t } = useI18n();
   const savedPosition = useSettingsStore((s) => s.settingsModalPosition);
@@ -210,6 +212,7 @@ export function DraggableSettingsWindow({
                 activeCategory={activeCategory}
                 onCategoryChange={onCategoryChange}
                 scrollToProvider={scrollToProvider}
+                repoPath={repoPath}
               />
             </div>
           </motion.div>

@@ -205,6 +205,12 @@ export function readClaudeSettings(): ClaudeSettings | null {
  */
 export function extractProviderFromSettings(): Partial<ClaudeProvider> | null {
   const settings = readClaudeSettings();
+  return extractProviderFromClaudeSettings(settings);
+}
+
+export function extractProviderFromClaudeSettings(
+  settings: ClaudeSettings | null | undefined
+): Partial<ClaudeProvider> | null {
   if (!settings?.env?.ANTHROPIC_BASE_URL) {
     return null;
   }
@@ -233,46 +239,7 @@ export function applyProvider(provider: ClaudeProvider): boolean {
       settings = JSON.parse(content);
     }
 
-    // 保留现有 env 中非 Provider 字段
-    const existingEnv = { ...(settings.env ?? {}) };
-
-    // 先清除所有 Provider 相关字段（防止残留）
-    delete existingEnv.ANTHROPIC_BASE_URL;
-    delete existingEnv.ANTHROPIC_AUTH_TOKEN;
-    delete existingEnv.ANTHROPIC_SMALL_FAST_MODEL;
-    delete existingEnv.ANTHROPIC_DEFAULT_SONNET_MODEL;
-    delete existingEnv.ANTHROPIC_DEFAULT_OPUS_MODEL;
-    delete existingEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL;
-
-    // 构建 Provider env 字段
-    const providerEnv: Record<string, string> = {
-      ANTHROPIC_BASE_URL: provider.baseUrl,
-      ANTHROPIC_AUTH_TOKEN: provider.authToken,
-    };
-
-    // 可选字段
-    if (provider.smallFastModel) {
-      providerEnv.ANTHROPIC_SMALL_FAST_MODEL = provider.smallFastModel;
-    }
-    if (provider.defaultSonnetModel) {
-      providerEnv.ANTHROPIC_DEFAULT_SONNET_MODEL = provider.defaultSonnetModel;
-    }
-    if (provider.defaultOpusModel) {
-      providerEnv.ANTHROPIC_DEFAULT_OPUS_MODEL = provider.defaultOpusModel;
-    }
-    if (provider.defaultHaikuModel) {
-      providerEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = provider.defaultHaikuModel;
-    }
-
-    // 合并 env（Provider 字段覆盖现有值）
-    settings.env = { ...existingEnv, ...providerEnv };
-
-    // 设置/清除 model 字段
-    if (provider.model) {
-      settings.model = provider.model;
-    } else {
-      delete settings.model;
-    }
+    settings = applyProviderToClaudeSettings(settings, provider);
 
     // 确保目录存在
     const configDir = getClaudeConfigDir();
@@ -291,4 +258,47 @@ export function applyProvider(provider: ClaudeProvider): boolean {
     console.error('[ClaudeProviderManager] Failed to apply provider:', error);
     return false;
   }
+}
+
+export function applyProviderToClaudeSettings(
+  settings: ClaudeSettings,
+  provider: ClaudeProvider
+): ClaudeSettings {
+  const nextSettings: ClaudeSettings = { ...settings };
+  const existingEnv = { ...(nextSettings.env ?? {}) };
+
+  delete existingEnv.ANTHROPIC_BASE_URL;
+  delete existingEnv.ANTHROPIC_AUTH_TOKEN;
+  delete existingEnv.ANTHROPIC_SMALL_FAST_MODEL;
+  delete existingEnv.ANTHROPIC_DEFAULT_SONNET_MODEL;
+  delete existingEnv.ANTHROPIC_DEFAULT_OPUS_MODEL;
+  delete existingEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL;
+
+  const providerEnv: Record<string, string> = {
+    ANTHROPIC_BASE_URL: provider.baseUrl,
+    ANTHROPIC_AUTH_TOKEN: provider.authToken,
+  };
+
+  if (provider.smallFastModel) {
+    providerEnv.ANTHROPIC_SMALL_FAST_MODEL = provider.smallFastModel;
+  }
+  if (provider.defaultSonnetModel) {
+    providerEnv.ANTHROPIC_DEFAULT_SONNET_MODEL = provider.defaultSonnetModel;
+  }
+  if (provider.defaultOpusModel) {
+    providerEnv.ANTHROPIC_DEFAULT_OPUS_MODEL = provider.defaultOpusModel;
+  }
+  if (provider.defaultHaikuModel) {
+    providerEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = provider.defaultHaikuModel;
+  }
+
+  nextSettings.env = { ...existingEnv, ...providerEnv };
+
+  if (provider.model) {
+    nextSettings.model = provider.model;
+  } else {
+    delete nextSettings.model;
+  }
+
+  return nextSettings;
 }

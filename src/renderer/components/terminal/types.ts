@@ -7,6 +7,7 @@ export interface TerminalTab {
   title?: string;
   userEdited?: boolean;
   initialCommand?: string;
+  backendSessionId?: string;
 }
 
 export interface TerminalGroup {

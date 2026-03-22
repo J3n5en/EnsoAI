@@ -4,7 +4,7 @@ import type {
   TempWorkspaceItem,
   WorktreeCreateOptions,
 } from '@shared/types';
-import { getPathBasename, isWslUncPath, trimTrailingPathSeparators } from '@shared/utils/path';
+import { getDisplayPath, getDisplayPathBasename, isWslUncPath } from '@shared/utils/path';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import {
   ChevronRight,
@@ -97,7 +97,9 @@ interface TreeSidebarProps {
   isLoading?: boolean;
   isCreating?: boolean;
   error?: string | null;
-  onSelectRepo: (repoPath: string) => void;
+  onSelectRepo: (repoPath: string, options?: { activateRemote?: boolean }) => void;
+  canLoadRepo: (repoPath: string) => boolean;
+  onActivateRemoteRepo: (repoPath: string) => void;
   onSelectWorktree: (worktree: GitWorktree) => void;
   onAddRepository: () => void;
   onRemoveRepository?: (repoPath: string) => void;
@@ -148,6 +150,8 @@ export function TreeSidebar({
   isCreating,
   error: _error,
   onSelectRepo,
+  canLoadRepo,
+  onActivateRemoteRepo,
   onSelectWorktree,
   onAddRepository,
   onRemoveRepository,
@@ -227,9 +231,24 @@ export function TreeSidebar({
     errorsMap,
     loadingMap,
     refetchAll: refetchExpandedWorktrees,
-  } = useWorktreeListMultiple(expandedRepoList);
+  } = useWorktreeListMultiple(
+    expandedRepoList.map((repoPath) => ({
+      repoPath,
+      enabled: canLoadRepo(repoPath),
+    }))
+  );
   const allRepoPaths = useMemo(() => repositories.map((repo) => repo.path), [repositories]);
-  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(allRepoPaths);
+  const { worktreesMap: allRepoWorktreesMap } = useWorktreeListMultiple(
+    useMemo(
+      () =>
+        allRepoPaths.map((repoPath) => ({
+          repoPath,
+          // Keep startup passive for unopened remote repos; otherwise search can trigger SSH auth.
+          enabled: canLoadRepo(repoPath),
+        })),
+      [allRepoPaths, canLoadRepo]
+    )
+  );
 
   // Repository context menu
   const [repoMenuOpen, setRepoMenuOpen] = useState(false);
@@ -274,7 +293,7 @@ export function TreeSidebar({
 
   // Wait for branches to update before opening dialog
   useEffect(() => {
-    if (waitingForBranchRefresh && branches.length >= 0) {
+    if (waitingForBranchRefresh && branches.length > 0) {
       // Small delay to ensure branches state is fully updated
       const timer = setTimeout(() => {
         setCreateWorktreeDialogOpen(true);
@@ -347,22 +366,33 @@ export function TreeSidebar({
         return;
       }
       // Skip auto-expand if user explicitly clicked the tree
-      if (!skipAutoExpandRef.current && !expandedRepos.has(selectedRepo)) {
+      if (
+        !skipAutoExpandRef.current &&
+        !expandedRepos.has(selectedRepo) &&
+        canLoadRepo(selectedRepo)
+      ) {
         setExpandedRepoList((prev) => [...prev, selectedRepo]);
       }
       skipAutoExpandRef.current = false;
     }
     prevSelectedRepoRef.current = selectedRepo;
-  }, [selectedRepo, expandedRepos]);
+  }, [selectedRepo, expandedRepos, canLoadRepo]);
 
-  const toggleRepoExpanded = useCallback((repoPath: string) => {
-    setExpandedRepoList((prev) => {
-      if (prev.includes(repoPath)) {
-        return prev.filter((p) => p !== repoPath);
+  const toggleRepoExpanded = useCallback(
+    (repoPath: string) => {
+      const isExpanded = expandedRepos.has(repoPath);
+      if (!isExpanded) {
+        onActivateRemoteRepo(repoPath);
       }
-      return [...prev, repoPath];
-    });
-  }, []);
+      setExpandedRepoList((prev) => {
+        if (isExpanded) {
+          return prev.filter((p) => p !== repoPath);
+        }
+        return [...prev, repoPath];
+      });
+    },
+    [expandedRepos, onActivateRemoteRepo]
+  );
 
   // Expose toggle function for selected repo via ref
   useEffect(() => {
@@ -466,7 +496,7 @@ export function TreeSidebar({
       e.dataTransfer.setData('text/plain', `worktree:${index}`);
 
       const dragImage = document.createElement('div');
-      dragImage.textContent = worktree.branch || getPathBasename(worktree.path);
+      dragImage.textContent = worktree.branch || getDisplayPathBasename(worktree.path);
       dragImage.style.cssText = `
         position: fixed;
         top: -9999px;
@@ -620,7 +650,9 @@ export function TreeSidebar({
         if (repo.name.toLowerCase().includes(query)) return true;
         const repoWorktrees = worktreesMap[repo.path] || [];
         return repoWorktrees.some(
-          (wt) => wt.branch?.toLowerCase().includes(query) || wt.path.toLowerCase().includes(query)
+          (wt) =>
+            wt.branch?.toLowerCase().includes(query) ||
+            getDisplayPath(wt.path).toLowerCase().includes(query)
         );
       });
     }
@@ -714,14 +746,17 @@ export function TreeSidebar({
   const renderRepoItem = (repo: Repository, originalIndex: number, sectionGroupId?: string) => {
     const isSelected = selectedRepo === repo.path;
     const isExpanded = expandedRepos.has(repo.path);
+    const repoCanLoad = canLoadRepo(repo.path);
     const repoWorktrees = getFilteredWorktrees(repo.path);
     const repoError = errorsMap[repo.path];
-    const repoLoading = loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]);
+    const repoLoading = repoCanLoad
+      ? (loadingMap[repo.path] ?? (isExpanded && !worktreesMap[repo.path]))
+      : false;
     const repoWts = worktreesMap[repo.path] || [];
     const repoMainWorktree = repoWts.find((wt) => wt.isMainWorktree);
     const workdir = repoMainWorktree?.path || repo.path;
-    const displayRepoPath = trimTrailingPathSeparators(repo.path);
-    const useLtrPathDisplay = isWslUncPath(repo.path);
+    const displayRepoPath = getDisplayPath(repo.path);
+    const useLtrPathDisplay = isWslUncPath(displayRepoPath);
 
     return (
       <div key={repo.path} className={cn('relative rounded-lg', isSelected && 'pb-2')}>
@@ -787,7 +822,7 @@ export function TreeSidebar({
               </span>
 
               {/* Create Worktree Button */}
-              {isSelected ? (
+              {isSelected && repoCanLoad ? (
                 <CreateWorktreeDialog
                   branches={branches}
                   projectName={repo.name}
@@ -819,7 +854,7 @@ export function TreeSidebar({
                     e.stopPropagation();
                     e.currentTarget.blur();
                     setRepoMenuTarget(repo);
-                    onSelectRepo(repo.path);
+                    onSelectRepo(repo.path, { activateRemote: true });
                     setPendingCreateWorktree(true);
                   }}
                   title={t('New Worktree')}
@@ -872,7 +907,11 @@ export function TreeSidebar({
               transition={{ duration: 0.2, ease: 'easeInOut' }}
               className="ml-2 mr-2 mt-1 flex flex-col gap-y-0.5 overflow-hidden"
             >
-              {repoError ? (
+              {!repoCanLoad ? (
+                <div className="py-2 px-2 text-xs text-muted-foreground">
+                  {t('Click to load worktrees')}
+                </div>
+              ) : repoError ? (
                 <div className="py-2 px-2 text-xs text-muted-foreground flex flex-col items-center gap-1.5">
                   <span className="text-destructive">{t('Not a Git repository')}</span>
                   {onInitGit && isSelected && (
@@ -912,7 +951,7 @@ export function TreeSidebar({
                     isActive={activeWorktree?.path === worktree.path}
                     onClick={() => {
                       if (!isSelected) {
-                        onSelectRepo(repo.path);
+                        onSelectRepo(repo.path, { activateRemote: true });
                       }
                       onSelectWorktree(worktree);
                     }}
@@ -951,7 +990,7 @@ export function TreeSidebar({
       )}
     >
       {/* Header */}
-      <div className="flex h-12 items-center justify-end gap-1 border-b px-3 drag-region">
+      <div className="flex h-12 items-center justify-end gap-2 border-b px-3 drag-region">
         <div className="flex items-center gap-1">
           {/* Manage repositories button */}
           <button
@@ -1031,7 +1070,7 @@ export function TreeSidebar({
       </div>
 
       {/* Tree List */}
-      <div className="flex-1 overflow-auto p-2">
+      <div className="flex-1 overflow-auto px-2 pb-2">
         {temporaryWorkspaceEnabled && (
           <div className="mb-2">
             <div
@@ -1135,9 +1174,7 @@ export function TreeSidebar({
             </EmptyMedia>
             <EmptyHeader>
               <EmptyTitle className="text-base">{t('Add Repository')}</EmptyTitle>
-              <EmptyDescription>
-                {t('Add a Git repository from a local folder to get started')}
-              </EmptyDescription>
+              <EmptyDescription>{t('Add a repository to get started.')}</EmptyDescription>
             </EmptyHeader>
             <Button
               onClick={(e) => {
@@ -1271,8 +1308,11 @@ export function TreeSidebar({
               onClick={() => {
                 setRepoMenuOpen(false);
                 // Switch to the right-clicked repo first, then wait for state update
-                if (repoMenuTarget && repoMenuTarget.path !== selectedRepo) {
-                  onSelectRepo(repoMenuTarget.path);
+                if (
+                  repoMenuTarget &&
+                  (repoMenuTarget.path !== selectedRepo || !canLoadRepo(repoMenuTarget.path))
+                ) {
+                  onSelectRepo(repoMenuTarget.path, { activateRemote: true });
                   setPendingCreateWorktree(true);
                 } else {
                   // Already on target repo, trigger refresh and open dialog
@@ -1485,7 +1525,7 @@ export function TreeSidebar({
         open={createWorktreeDialogOpen}
         onOpenChange={setCreateWorktreeDialogOpen}
         branches={branches}
-        projectName={selectedRepo ? getPathBasename(selectedRepo) : ''}
+        projectName={selectedRepo ? getDisplayPathBasename(selectedRepo) : ''}
         workdir={workdir}
         isLoading={isCreating}
         onSubmit={async (options) => {
@@ -1660,6 +1700,7 @@ function WorktreeTreeItem({
   const branchDisplay = worktree.branch || t('Detached');
   const isPrunable = worktree.prunable;
   const glowEnabled = useGlowEffectEnabled();
+  const displayWorktreePath = getDisplayPath(worktree.path);
 
   // Check if branch is merged to main
   const isMerged = useMemo(() => {
@@ -1714,7 +1755,7 @@ function WorktreeTreeItem({
 
   const handleCopyPath = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(worktree.path);
+      await navigator.clipboard.writeText(displayWorktreePath);
       toastManager.add({
         title: t('Copied'),
         description: t('Path copied to clipboard'),
@@ -1730,7 +1771,7 @@ function WorktreeTreeItem({
         timeout: 3000,
       });
     }
-  }, [t, worktree.path]);
+  }, [displayWorktreePath, t]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
