@@ -5,7 +5,7 @@ export type SupportedFileUrlPlatform = 'darwin' | 'linux' | 'win32';
  *
  * This does NOT URL-encode; URL will handle encoding when converting to string.
  */
-export function normalizeAbsolutePathForUrlPathname(absPath: string): string {
+function normalizeAbsolutePathForUrlPathname(absPath: string): string {
   let normalized = absPath.replace(/\\/g, '/');
 
   if (/^[a-zA-Z]:\//.test(normalized)) {
