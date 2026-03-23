@@ -1,4 +1,4 @@
-import { toCustomProtocolFileUrl } from '@shared/utils/fileUrl';
+import { fileUriToPath, toCustomProtocolFileUrl } from '@shared/utils/fileUrl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -48,6 +48,10 @@ function resolveMediaUrl(path: string): string {
     return trimmed;
   }
   if (lower.startsWith('file://')) {
+    const filePath = fileUriToPath(trimmed, window.electronAPI.env.platform);
+    if (filePath) {
+      return toCustomProtocolFileUrl(filePath, 'local-image');
+    }
     return trimmed.replace(/^file:\/\//i, 'local-image://');
   }
 
