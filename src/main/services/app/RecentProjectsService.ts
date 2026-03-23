@@ -2,6 +2,7 @@ import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { RecentEditorProject } from '@shared/types';
+import { fileUriToPath } from '@shared/utils/fileUrl';
 import sqlite3 from 'sqlite3';
 
 // Cache with TTL (5 minutes)
@@ -52,20 +53,6 @@ function getStoragePath(configDir: string): string {
 }
 
 /**
- * Convert file:// URI to filesystem path.
- */
-function fileUriToPath(uri: string): string | null {
-  if (!uri.startsWith('file://')) return null;
-  try {
-    const fsPath = decodeURIComponent(new URL(uri).pathname);
-    // Windows: remove leading slash from /C:/path
-    return process.platform === 'win32' && fsPath.startsWith('/') ? fsPath.slice(1) : fsPath;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Check if path exists.
  */
 async function pathExists(path: string): Promise<boolean> {
@@ -113,7 +100,11 @@ async function readEditorProjects(editor: EditorConfig): Promise<RecentEditorPro
 
     // Extract valid paths from entries
     const paths = entries
-      .map((e) => (typeof e.folderUri === 'string' ? fileUriToPath(e.folderUri) : null))
+      .map((e) =>
+        typeof e.folderUri === 'string'
+          ? fileUriToPath(e.folderUri, process.platform as 'darwin' | 'linux' | 'win32')
+          : null
+      )
       .filter((p): p is string => p !== null);
 
     // Batch check existence

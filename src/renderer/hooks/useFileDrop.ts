@@ -1,3 +1,4 @@
+import { fileUriToPath } from '@shared/utils/fileUrl';
 import { normalizePath } from '@shared/utils/path';
 import { useEffect, useRef } from 'react';
 
@@ -69,27 +70,6 @@ export function useFileDrop<T extends HTMLElement>({
 }
 
 /**
- * Parse a file:// URI to a local file path.
- * Handles both Unix and Windows formats:
- * - Unix: file:///path/to/file → /path/to/file
- * - Windows: file:///C:/path/to/file → C:/path/to/file
- */
-function fileUriToPath(uri: string): string {
-  try {
-    const url = new URL(uri);
-    let pathname = decodeURIComponent(url.pathname);
-    // On Windows, pathname starts with /C:/..., need to remove leading slash
-    if (/^\/[A-Za-z]:/.test(pathname)) {
-      pathname = pathname.slice(1);
-    }
-    return pathname;
-  } catch {
-    // Fallback for malformed URIs
-    return '';
-  }
-}
-
-/**
  * Extract file paths from a DataTransfer, supporting:
  * 1. Native file drops (dataTransfer.files + Electron webUtils)
  * 2. URI list drops (text/uri-list from VS Code, etc.)
@@ -120,7 +100,7 @@ function resolveDroppedPaths(dt: DataTransfer, cwd?: string): string[] {
         // Skip comments and empty lines per RFC 2483
         if (!trimmed || trimmed.startsWith('#')) continue;
         if (trimmed.startsWith('file://')) {
-          const decoded = fileUriToPath(trimmed);
+          const decoded = fileUriToPath(trimmed, window.electronAPI.env.platform);
           if (decoded) {
             paths.push(decoded);
           }
@@ -135,10 +115,11 @@ function resolveDroppedPaths(dt: DataTransfer, cwd?: string): string[] {
   return paths.map((p) => {
     const normalizedPath = normalizePath(p);
     if (normalizedCwd && normalizedPath.startsWith(`${normalizedCwd}/`)) {
-      // File is inside current repo → use relative path
+      // File is inside current repo, use relative path
       return normalizedPath.substring(normalizedCwd.length + 1);
     }
-    // File is outside current repo → use absolute path
+
+    // File is outside current repo, use absolute path
     return normalizedPath;
   });
 }

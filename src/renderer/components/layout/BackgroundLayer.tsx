@@ -1,3 +1,4 @@
+import { toCustomProtocolFileUrl } from '@shared/utils/fileUrl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -22,21 +23,9 @@ function isMediaFile(name: string): boolean {
   return MEDIA_EXTENSIONS.has(getExtension(name));
 }
 
-function normalizeForUrlPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/');
-  if (/^[a-zA-Z]:\//.test(normalized)) {
-    return `/${normalized}`;
-  }
-  if (!normalized.startsWith('/') && !normalized.includes('://')) {
-    return `/${normalized}`;
-  }
-  return normalized;
-}
-
 function buildLocalMediaUrl(rawPath: string): string {
   try {
-    const pathPart = normalizeForUrlPath(rawPath);
-    return `local-image://${encodeURI(pathPart)}`;
+    return toCustomProtocolFileUrl(rawPath, 'local-image');
   } catch {
     return '';
   }

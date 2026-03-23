@@ -1,9 +1,10 @@
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
-import { fileURLToPath, URL } from 'node:url';
+import { pathToFileURL, URL } from 'node:url';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
 import { IPC_CHANNELS, type ProxySettings } from '@shared/types';
+import { customProtocolUriToPath, type SupportedFileUrlPlatform } from '@shared/utils/fileUrl';
 import { app, BrowserWindow, ipcMain, Menu, net, protocol } from 'electron';
 
 // Register custom protocol privileges
@@ -378,14 +379,20 @@ app.whenReady().then(async () => {
   // Register protocol to handle local file:// URLs for markdown images
   protocol.handle('local-file', (request) => {
     try {
-      const fileUrl = new URL(request.url.replace(/^local-file:/, 'file:'));
-      const filePath = fileURLToPath(fileUrl);
+      const filePath = customProtocolUriToPath(
+        request.url,
+        'local-file',
+        process.platform as SupportedFileUrlPlatform
+      );
+      if (!filePath) {
+        return new Response('Bad Request', { status: 400 });
+      }
 
       if (!isAllowedLocalFilePath(filePath)) {
         return new Response('Forbidden', { status: 403 });
       }
 
-      return net.fetch(fileUrl.toString());
+      return net.fetch(pathToFileURL(filePath).toString());
     } catch {
       return new Response('Bad Request', { status: 400 });
     }
@@ -452,25 +459,13 @@ app.whenReady().then(async () => {
         }
       }
 
-      // Manual path parsing to handle Windows drive letters robustly
-      // Standard fileURLToPath can be flaky with custom protocols if hostname is interpreted as drive letter
-      let filePath = '';
-
-      if (urlObj.hostname && /^[a-zA-Z]$/.test(urlObj.hostname) && process.platform === 'win32') {
-        // Case: local-image://c/Users/... (hostname='c')
-        filePath = `${urlObj.hostname}:${decodeURIComponent(urlObj.pathname)}`;
-      } else {
-        // Case: local-image:///C:/Users/... (pathname='/C:/Users/...')
-        let pathname = decodeURIComponent(urlObj.pathname);
-        if (process.platform === 'win32' && /^\/[a-zA-Z]:/.test(pathname)) {
-          pathname = pathname.slice(1);
-        }
-        filePath = pathname;
-      }
-
-      // Normalize slashes for Windows
-      if (process.platform === 'win32') {
-        filePath = filePath.replace(/\//g, '\\');
+      const filePath = customProtocolUriToPath(
+        request.url,
+        'local-image',
+        process.platform as SupportedFileUrlPlatform
+      );
+      if (!filePath) {
+        return new Response('Bad Request', { status: 400 });
       }
 
       console.log(`[local-image] Request URL: ${request.url}`);
