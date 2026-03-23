@@ -52,7 +52,7 @@ function resolveMediaUrl(path: string): string {
     if (filePath) {
       return toCustomProtocolFileUrl(filePath, 'local-image');
     }
-    return trimmed.replace(/^file:\/\//i, 'local-image://');
+    return '';
   }
 
   return buildLocalMediaUrl(trimmed);
