@@ -695,6 +695,7 @@ function parseLog(stdout) {
       const parts = record.split(GIT_LOG_FIELD_SEPARATOR);
       const message = (parts[4] || '').trim();
       const fullMessage = (parts[5] || '').trim() || message;
+      const refs = parts[6] || '';
       return {
         hash: parts[0] || '',
         date: parts[1] || '',
@@ -702,7 +703,7 @@ function parseLog(stdout) {
         author_email: parts[3] || '',
         message,
         fullMessage,
-        refs: ((parts[6] || '').replace('HEAD ->', '').trim() || undefined),
+        refs: refs ? refs.replace('HEAD ->', '').trim() || undefined : undefined,
       };
     });
 }
