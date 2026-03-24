@@ -28,6 +28,7 @@ export interface GitLogEntry {
   hash: string;
   date: string;
   message: string;
+  fullMessage: string;
   author_name: string;
   author_email: string;
   refs?: string;

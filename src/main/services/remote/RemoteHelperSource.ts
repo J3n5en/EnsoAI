@@ -1,3 +1,9 @@
+import {
+  GIT_LOG_FIELD_SEPARATOR,
+  GIT_LOG_PRETTY_FORMAT,
+  GIT_LOG_RECORD_SEPARATOR,
+} from '../git/gitLogFormat';
+
 export const REMOTE_SERVER_VERSION = '0.4.0';
 export const REMOTE_HELPER_VERSION = REMOTE_SERVER_VERSION;
 
@@ -18,6 +24,9 @@ const state = {
 };
 
 const REMOTE_SERVER_VERSION = ${JSON.stringify(REMOTE_SERVER_VERSION)};
+const GIT_LOG_FIELD_SEPARATOR = ${JSON.stringify(GIT_LOG_FIELD_SEPARATOR)};
+const GIT_LOG_RECORD_SEPARATOR = ${JSON.stringify(GIT_LOG_RECORD_SEPARATOR)};
+const GIT_LOG_PRETTY_FORMAT = ${JSON.stringify(GIT_LOG_PRETTY_FORMAT)};
 const DAEMON_INFO_FILE = 'enso-remote-daemon.json';
 const MAX_SESSION_REPLAY_CHARS = 65536;
 const EXEC_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
@@ -680,18 +689,20 @@ function parseBranches(stdout) {
 
 function parseLog(stdout) {
   return stdout
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const parts = line.split('\x01');
+    .split(GIT_LOG_RECORD_SEPARATOR)
+    .filter((record) => record.trim().length > 0)
+    .map((record) => {
+      const parts = record.split(GIT_LOG_FIELD_SEPARATOR);
+      const message = (parts[4] || '').trim();
+      const fullMessage = (parts[5] || '').trim() || message;
       return {
         hash: parts[0] || '',
         date: parts[1] || '',
         author_name: parts[2] || '',
         author_email: parts[3] || '',
-        message: (parts[4] || '').trim(),
-        refs: (parts[5] || '').trim() || undefined,
+        message,
+        fullMessage,
+        refs: ((parts[6] || '').replace('HEAD ->', '').trim() || undefined),
       };
     });
 }
@@ -828,7 +839,7 @@ async function gitCheckout(rootPath, branch) {
 }
 
 async function gitLog(rootPath, maxCount = 50, skip = 0) {
-  const args = ['log', '-n' + maxCount, '--pretty=format:%H%x01%ai%x01%an%x01%ae%x01%s%x01%D'];
+  const args = ['log', '-n' + maxCount, '--pretty=format:' + GIT_LOG_PRETTY_FORMAT];
   if (skip > 0) {
     args.push('--skip=' + skip);
   }

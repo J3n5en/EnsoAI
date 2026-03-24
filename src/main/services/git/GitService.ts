@@ -20,6 +20,7 @@ import type {
 } from '@shared/types';
 import type { SimpleGit, StatusResult } from 'simple-git';
 import { decodeBuffer, detectBinaryFile, gitShow } from './encoding';
+import { GIT_LOG_PRETTY_FORMAT, parseGitLogOutput } from './gitLogFormat';
 import {
   createGitEnv,
   createSimpleGit,
@@ -375,10 +376,7 @@ export class GitService {
 
   async getLog(maxCount = 50, skip = 0, submodulePath?: string): Promise<GitLogEntry[]> {
     const git = this.getGitInstance(submodulePath);
-    const options: string[] = [
-      `-n${maxCount}`,
-      '--pretty=format:%H%x01%ai%x01%an%x01%ae%x01%s%x01%D',
-    ];
+    const options: string[] = [`-n${maxCount}`, `--pretty=format:${GIT_LOG_PRETTY_FORMAT}`];
     if (skip > 0) {
       options.push(`--skip=${skip}`);
     }
@@ -393,29 +391,7 @@ export class GitService {
       }
       throw error;
     }
-    const entries = result
-      .trim()
-      .split('\n')
-      .filter((line) => line.trim());
-
-    return entries.map((line) => {
-      const parts = line.split('\x01');
-      const hash = parts[0] || '';
-      const date = parts[1] || '';
-      const author_name = parts[2] || '';
-      const author_email = parts[3] || '';
-      const message = parts[4] || '';
-      const refs = parts[5] || '';
-
-      return {
-        hash,
-        date,
-        message: message.trim(),
-        author_name,
-        author_email,
-        refs: refs ? refs.replace('HEAD ->', '').trim() || undefined : undefined,
-      };
-    });
+    return parseGitLogOutput(result);
   }
 
   async commit(message: string, files?: string[]): Promise<string> {

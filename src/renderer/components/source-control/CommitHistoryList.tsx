@@ -310,7 +310,7 @@ export function CommitHistoryList({
                       </div>
                       <div className="mt-1 border-t border-border/50 pt-1.5">
                         <span className="text-muted-foreground">Message:</span>
-                        <p className="mt-0.5">{commit.message}</p>
+                        <p className="mt-0.5 break-words">{commit.fullMessage}</p>
                       </div>
                     </div>
                   </TooltipPopup>
