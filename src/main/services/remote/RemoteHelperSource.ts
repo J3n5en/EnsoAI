@@ -692,6 +692,8 @@ function parseLog(stdout) {
     .split(GIT_LOG_RECORD_SEPARATOR)
     .filter((record) => record.trim().length > 0)
     .map((record) => {
+      // 远程 helper 运行在独立源码字符串中，这里的字段顺序必须与
+      // GIT_LOG_PRETTY_FORMAT 和 src/main/services/git/gitLogFormat.ts 保持同步。
       const parts = record.split(GIT_LOG_FIELD_SEPARATOR);
       const message = (parts[4] || '').trim();
       const fullMessage = (parts[5] || '').trim() || message;
