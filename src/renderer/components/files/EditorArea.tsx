@@ -1102,16 +1102,18 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         }
 
         // Debounced: record edit position into navigation history (500ms after last keystroke)
+        // Capture path now (not inside the callback) to avoid recording the wrong file
+        // if the user switches tabs before the timer fires.
         if (editNavTimerRef.current) clearTimeout(editNavTimerRef.current);
+        const capturedPath = activeTabPath;
         editNavTimerRef.current = setTimeout(() => {
           const editor = editorRef.current;
-          const path = activeTabPathRef.current;
-          if (!editor || !path) return;
+          if (!editor || !capturedPath) return;
           const pos = editor.getPosition();
           if (!pos) return;
           useEditorStore
             .getState()
-            .pushNavHistory({ path, line: pos.lineNumber, column: pos.column });
+            .pushNavHistory({ path: capturedPath, line: pos.lineNumber, column: pos.column });
         }, 500);
       }
     },
