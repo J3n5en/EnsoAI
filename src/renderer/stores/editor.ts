@@ -280,6 +280,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (target.path !== current.path || target.line !== current.line) {
       newBackStack.push(target);
     }
+    if (newBackStack.length > 100) newBackStack.shift();
     set({ navBackStack: newBackStack, navForwardStack: newForwardStack });
     return target;
   },
