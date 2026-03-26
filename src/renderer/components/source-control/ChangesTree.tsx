@@ -66,12 +66,17 @@ function buildTree(files: FileChange[]): TreeNode[] {
   const root: TreeNode[] = [];
 
   for (const file of files) {
-    const parts = file.path.split('/');
+    // Git returns folder paths ending with '/' when using --untracked-files=normal
+    // Remove trailing slash for consistent processing
+    const normalizedPath = file.path.endsWith('/') ? file.path.slice(0, -1) : file.path;
+    const isFolder = file.path.endsWith('/');
+
+    const parts = normalizedPath.split('/');
     let currentLevel = root;
 
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
-      const isFile = i === parts.length - 1;
+      const isFile = !isFolder && i === parts.length - 1;
       const currentPath = parts.slice(0, i + 1).join('/');
 
       let node = currentLevel.find((n) => n.name === part);

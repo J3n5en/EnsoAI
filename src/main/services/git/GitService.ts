@@ -211,7 +211,7 @@ export class GitService {
     return new Promise((resolve, reject) => {
       const proc = spawnGit(
         this.workdir,
-        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
+        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'],
         { cwd: this.workdir, env: this.getGitEnv() }
       );
 
@@ -579,7 +579,7 @@ export class GitService {
     await new Promise<void>((resolve, reject) => {
       const proc = spawnGit(
         this.workdir,
-        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
+        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'],
         { cwd: this.workdir, env }
       );
 
