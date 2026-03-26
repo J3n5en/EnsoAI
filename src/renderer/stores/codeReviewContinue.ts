@@ -132,6 +132,8 @@ export async function startCodeReview(
     provider: AIProvider;
     model: string;
     reasoningEffort?: string;
+    bare?: boolean;
+    claudeEffort?: string;
     language: string;
     prompt?: string;
   }
@@ -199,6 +201,8 @@ export async function startCodeReview(
       provider: settings.provider,
       model: settings.model,
       reasoningEffort: settings.reasoningEffort,
+      bare: settings.bare,
+      claudeEffort: settings.claudeEffort,
       language: settings.language ?? '中文',
       reviewId,
       sessionId, // Pass sessionId for Claude session persistence

@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { type FileChangeStatus, IPC_CHANNELS } from '@shared/types';
+import type { ClaudeEffort } from '@shared/types/ai';
 import { ipcMain } from 'electron';
 import {
   type AIProvider,
@@ -317,6 +318,8 @@ export function registerGitHandlers(): void {
         provider: string;
         model: string;
         reasoningEffort?: string;
+        bare?: boolean;
+        claudeEffort?: string;
         prompt?: string;
       }
     ): Promise<{ success: boolean; message?: string; error?: string }> => {
@@ -331,6 +334,8 @@ export function registerGitHandlers(): void {
         provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
+        bare: options.bare,
+        claudeEffort: options.claudeEffort as ClaudeEffort | undefined,
         prompt: options.prompt,
       });
     }
@@ -346,6 +351,8 @@ export function registerGitHandlers(): void {
         provider: string;
         model: string;
         reasoningEffort?: string;
+        bare?: boolean;
+        claudeEffort?: string;
         language?: string;
         reviewId: string;
         sessionId?: string; // Support sessionId for "Continue Conversation"
@@ -363,6 +370,8 @@ export function registerGitHandlers(): void {
         provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
+        bare: options.bare,
+        claudeEffort: options.claudeEffort as ClaudeEffort | undefined,
         language: options.language ?? '中文',
         reviewId: options.reviewId,
         sessionId: options.sessionId, // Pass sessionId for session preservation
@@ -457,6 +466,8 @@ export function registerGitHandlers(): void {
         provider: string;
         model: string;
         reasoningEffort?: string;
+        bare?: boolean;
+        claudeEffort?: string;
       }
     ): Promise<{ success: boolean; branchName?: string; error?: string }> => {
       if (isRemoteWorkdir(workdir)) {
@@ -469,6 +480,8 @@ export function registerGitHandlers(): void {
         provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
+        bare: options.bare,
+        claudeEffort: options.claudeEffort as ClaudeEffort | undefined,
       });
     }
   );

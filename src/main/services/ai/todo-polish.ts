@@ -1,12 +1,10 @@
-import type { AIProvider, ModelId, ReasoningEffort } from '@shared/types';
-import { parseCLIOutput, spawnCLI } from './providers';
+import type { AIProvider, ModelId } from '@shared/types';
+import type { CommonAICLIOptions } from '@shared/types/ai';
+import { parseCLIOutput, spawnCLI, stripCodeFence } from './providers';
 
-export interface TodoPolishOptions {
+export interface TodoPolishOptions extends CommonAICLIOptions {
   text: string; // Raw requirement text to polish
   timeout: number; // in seconds
-  provider: AIProvider;
-  model: ModelId;
-  reasoningEffort?: ReasoningEffort;
   prompt?: string; // Custom prompt template (with {text} placeholder)
 }
 
@@ -15,19 +13,6 @@ export interface TodoPolishResult {
   title?: string;
   description?: string;
   error?: string;
-}
-
-/** Strip markdown code fence from AI output */
-function stripCodeFence(text: string): string {
-  const trimmed = text.trim();
-  const fenceMatch = trimmed.match(/```\w*\s*[\r\n]+([\s\S]*?)[\r\n]+\s*```\s*$/);
-  if (fenceMatch) {
-    return fenceMatch[1].trim();
-  }
-  return trimmed
-    .replace(/^```\w*\s*[\r\n]*/, '')
-    .replace(/[\r\n]*\s*```\s*$/, '')
-    .trim();
 }
 
 /** Parse JSON output from AI (expects { title, description } format) */
@@ -59,7 +44,16 @@ function parsePolishOutput(raw: string): { title: string; description: string } 
 }
 
 export async function polishTodoTask(options: TodoPolishOptions): Promise<TodoPolishResult> {
-  const { text, timeout, provider, model, reasoningEffort, prompt: customPrompt } = options;
+  const {
+    text,
+    timeout,
+    provider,
+    model,
+    reasoningEffort,
+    bare,
+    claudeEffort,
+    prompt: customPrompt,
+  } = options;
 
   const defaultPrompt = `You are a task management assistant. Convert the following raw requirement text into a structured todo task.
 
@@ -78,14 +72,14 @@ Raw requirement:
   return new Promise((resolve) => {
     const timeoutMs = timeout * 1000;
 
-    console.log(`[todo-polish] Starting with provider=${provider}, model=${model}`);
-
     const { proc, kill } = spawnCLI({
       provider,
       model,
       prompt,
       cwd: process.cwd(),
       reasoningEffort,
+      bare,
+      claudeEffort,
       outputFormat: 'json',
     });
 
@@ -119,7 +113,6 @@ Raw requirement:
       }
 
       const result = parseCLIOutput(provider, stdout);
-      console.log(`[todo-polish] Parse result:`, result);
 
       if (result.success && result.text) {
         const parsed = parsePolishOutput(result.text);

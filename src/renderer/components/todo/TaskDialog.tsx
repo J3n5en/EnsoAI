@@ -110,6 +110,8 @@ export function TaskDialog({ open, onOpenChange, task, defaultStatus, repoPath }
         provider: todoPolish.provider,
         model: todoPolish.model,
         reasoningEffort: todoPolish.reasoningEffort,
+        bare: todoPolish.bare,
+        claudeEffort: todoPolish.claudeEffort,
         prompt: todoPolish.prompt,
       });
 

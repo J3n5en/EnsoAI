@@ -162,13 +162,22 @@ const electronAPI = {
         provider: string;
         model: string;
         reasoningEffort?: string;
+        bare?: boolean;
+        claudeEffort?: string;
         prompt?: string;
       }
     ): Promise<{ success: boolean; message?: string; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_GENERATE_COMMIT_MSG, workdir, options),
     generateBranchName: (
       workdir: string,
-      options: { prompt: string; provider: string; model: string; reasoningEffort?: string }
+      options: {
+        prompt: string;
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+        bare?: boolean;
+        claudeEffort?: string;
+      }
     ): Promise<{ success: boolean; branchName?: string; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_GENERATE_BRANCH_NAME, workdir, options),
     startCodeReview: (
@@ -177,6 +186,8 @@ const electronAPI = {
         provider: string;
         model: string;
         reasoningEffort?: string;
+        bare?: boolean;
+        claudeEffort?: string;
         reviewId: string;
         language?: string;
         sessionId?: string; // Restore this parameter for "Continue Conversation"
@@ -694,6 +705,8 @@ const electronAPI = {
       provider: string;
       model: string;
       reasoningEffort?: string;
+      bare?: boolean;
+      claudeEffort?: string;
       prompt?: string;
     }): Promise<{ success: boolean; title?: string; description?: string; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.TODO_AI_POLISH, options),

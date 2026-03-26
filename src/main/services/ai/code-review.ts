@@ -1,13 +1,11 @@
 import type { ChildProcess } from 'node:child_process';
-import type { AIProvider, ModelId, ReasoningEffort } from '@shared/types';
+import type { AIProvider, ModelId } from '@shared/types';
+import type { CommonAICLIOptions } from '@shared/types/ai';
 import { spawnGit } from '../git/runtime';
 import { spawnCLI, stripAnsi } from './providers';
 
-export interface CodeReviewOptions {
+export interface CodeReviewOptions extends CommonAICLIOptions {
   workdir: string;
-  provider: AIProvider;
-  model: ModelId;
-  reasoningEffort?: ReasoningEffort;
   language: string;
   reviewId: string;
   sessionId?: string; // Support session preservation for "Continue Conversation"
@@ -305,6 +303,8 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     provider,
     model,
     reasoningEffort,
+    bare,
+    claudeEffort,
     language,
     reviewId,
     prompt: customPrompt,
@@ -339,6 +339,8 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     prompt,
     cwd: workdir,
     reasoningEffort,
+    bare,
+    claudeEffort,
     outputFormat,
     // Claude CLI honors this; Cursor CLI does not (see providers.buildCursorArgs). Cursor may edit/run git.
     disallowedTools: ['"Bash(git:*)"', 'Edit'],

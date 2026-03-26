@@ -11,6 +11,7 @@ export {
   generateCommitMessage,
 } from './commit-message';
 export type { AIProvider, ModelId, ReasoningEffort } from './providers';
+export { clearVersionCache } from './providers';
 export {
   polishTodoTask,
   type TodoPolishOptions,

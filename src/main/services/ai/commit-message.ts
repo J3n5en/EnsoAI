@@ -1,15 +1,13 @@
 import { execSync } from 'node:child_process';
-import type { AIProvider, ModelId, ReasoningEffort } from '@shared/types';
+import type { AIProvider, ModelId } from '@shared/types';
+import type { CommonAICLIOptions } from '@shared/types/ai';
 import { isWslGitRepository, spawnGit } from '../git/runtime';
-import { parseCLIOutput, spawnCLI } from './providers';
+import { parseCLIOutput, spawnCLI, stripCodeFence } from './providers';
 
-export interface CommitMessageOptions {
+export interface CommitMessageOptions extends CommonAICLIOptions {
   workdir: string;
   maxDiffLines: number;
   timeout: number;
-  provider: AIProvider;
-  model: ModelId;
-  reasoningEffort?: ReasoningEffort;
   prompt?: string; // Custom prompt template
 }
 
@@ -17,23 +15,6 @@ export interface CommitMessageResult {
   success: boolean;
   message?: string;
   error?: string;
-}
-
-/** Strip markdown code fence (e.g. ``` or ```text) from start/end when CLI returns wrapped message */
-function stripCodeFence(text: string): string {
-  const trimmed = text.trim();
-
-  // Match a fenced block anywhere in the text (handles leading explanation text)
-  const fenceMatch = trimmed.match(/```\w*\s*[\r\n]+([\s\S]*?)[\r\n]+\s*```\s*$/);
-  if (fenceMatch) {
-    return fenceMatch[1].trim();
-  }
-
-  // Fallback: strip leading/trailing fences when only one side is present
-  return trimmed
-    .replace(/^```\w*\s*[\r\n]*/, '')
-    .replace(/[\r\n]*\s*```\s*$/, '')
-    .trim();
 }
 
 function runGit(args: string[], cwd: string): Promise<string> {
@@ -95,6 +76,8 @@ export async function generateCommitMessage(
     provider,
     model,
     reasoningEffort,
+    bare,
+    claudeEffort,
     prompt: customPrompt,
   } = options;
 
@@ -134,14 +117,14 @@ ${truncatedDiff}`;
   return new Promise((resolve) => {
     const timeoutMs = timeout * 1000;
 
-    console.log(`[commit-msg] Starting with provider=${provider}, model=${model}, cwd=${workdir}`);
-
     const { proc, kill } = spawnCLI({
       provider,
       model,
       prompt,
       cwd: workdir,
       reasoningEffort,
+      bare,
+      claudeEffort,
       outputFormat: 'json',
     });
 
@@ -171,7 +154,6 @@ ${truncatedDiff}`;
       }
 
       const result = parseCLIOutput(provider, stdout);
-      console.log(`[commit-msg] Parse result:`, result);
 
       if (result.success && result.text) {
         resolve({ success: true, message: stripCodeFence(result.text) });

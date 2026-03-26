@@ -51,6 +51,8 @@ export function CommitBox({
         provider: commitMessageGenerator.provider,
         model: commitMessageGenerator.model,
         reasoningEffort: commitMessageGenerator.reasoningEffort,
+        bare: commitMessageGenerator.bare,
+        claudeEffort: commitMessageGenerator.claudeEffort,
         prompt: commitMessageGenerator.prompt,
       });
 

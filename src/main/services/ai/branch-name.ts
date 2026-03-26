@@ -1,12 +1,10 @@
-import type { AIProvider, ModelId, ReasoningEffort } from '@shared/types';
+import type { AIProvider, ModelId } from '@shared/types';
+import type { CommonAICLIOptions } from '@shared/types/ai';
 import { parseCLIOutput, spawnCLI } from './providers';
 
-export interface BranchNameOptions {
+export interface BranchNameOptions extends CommonAICLIOptions {
   workdir: string;
   prompt: string;
-  provider: AIProvider;
-  model: ModelId;
-  reasoningEffort?: ReasoningEffort;
   timeout?: number;
 }
 
@@ -17,12 +15,19 @@ export interface BranchNameResult {
 }
 
 export async function generateBranchName(options: BranchNameOptions): Promise<BranchNameResult> {
-  const { workdir, prompt, provider, model, reasoningEffort, timeout = 120 } = options;
+  const {
+    workdir,
+    prompt,
+    provider,
+    model,
+    reasoningEffort,
+    bare,
+    claudeEffort,
+    timeout = 120,
+  } = options;
 
   return new Promise((resolve) => {
     const timeoutMs = timeout * 1000;
-
-    console.log(`[branch-name] Starting with provider=${provider}, model=${model}, cwd=${workdir}`);
 
     const { proc, kill } = spawnCLI({
       provider,
@@ -30,6 +35,8 @@ export async function generateBranchName(options: BranchNameOptions): Promise<Br
       prompt,
       cwd: workdir,
       reasoningEffort,
+      bare,
+      claudeEffort,
       outputFormat: 'json',
     });
 
@@ -59,7 +66,6 @@ export async function generateBranchName(options: BranchNameOptions): Promise<Br
       }
 
       const result = parseCLIOutput(provider, stdout);
-      console.log(`[branch-name] Parse result:`, result);
 
       if (result.success && result.text) {
         resolve({ success: true, branchName: result.text.trim() });

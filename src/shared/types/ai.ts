@@ -8,3 +8,28 @@ export type GeminiModelId = 'gemini-3-pro-preview' | 'gemini-3-flash-preview';
 export type ModelId = ClaudeModelId | CodexModelId | CursorModelId | GeminiModelId;
 
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+// Claude Code effort parameter for CI/CD optimization
+// Controls how much effort Claude spends on reasoning (token usage vs quality)
+// Requires Claude CLI 2.1.60+ for full support
+export type ClaudeEffort = 'low' | 'medium' | 'high' | 'max' | 'auto';
+
+// Common AI optimization options shared across settings and CLI operations
+export interface AIOptimizationOptions {
+  bare?: boolean;
+  claudeEffort?: ClaudeEffort;
+}
+
+// Common AI settings interface for renderer store settings
+export interface CommonAISettings extends AIOptimizationOptions {
+  provider: AIProvider;
+  model: string;
+  reasoningEffort?: ReasoningEffort;
+}
+
+// Common AI CLI options for main process services
+export interface CommonAICLIOptions extends AIOptimizationOptions {
+  provider: AIProvider;
+  model: ModelId;
+  reasoningEffort?: ReasoningEffort;
+}

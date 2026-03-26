@@ -31,6 +31,8 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
       provider: codeReviewSettings.provider,
       model: codeReviewSettings.model,
       reasoningEffort: codeReviewSettings.reasoningEffort,
+      bare: codeReviewSettings.bare,
+      claudeEffort: codeReviewSettings.claudeEffort,
       language: codeReviewSettings.language ?? '中文',
       prompt: codeReviewSettings.prompt,
     });
@@ -39,6 +41,8 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
     codeReviewSettings.provider,
     codeReviewSettings.model,
     codeReviewSettings.reasoningEffort,
+    codeReviewSettings.bare,
+    codeReviewSettings.claudeEffort,
     codeReviewSettings.language,
     codeReviewSettings.prompt,
   ]);

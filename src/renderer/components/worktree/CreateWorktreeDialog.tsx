@@ -340,6 +340,8 @@ export function CreateWorktreeDialog({
         provider: branchNameGenerator.provider,
         model: branchNameGenerator.model,
         reasoningEffort: branchNameGenerator.reasoningEffort,
+        bare: branchNameGenerator.bare,
+        claudeEffort: branchNameGenerator.claudeEffort,
       });
 
       if (result.success && result.branchName) {

@@ -2,6 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { spawn, spawnSync } from 'node:child_process';
 import type {
   AIProvider,
+  ClaudeEffort,
   ClaudeModelId,
   CodexModelId,
   CursorModelId,
@@ -9,16 +10,96 @@ import type {
   ModelId,
   ReasoningEffort,
 } from '@shared/types';
+import type { CommonAICLIOptions } from '@shared/types/ai';
 import { getEnvForCommand, getShellForCommand } from '../../utils/shell';
 
-export type { AIProvider, ModelId, ReasoningEffort } from '@shared/types';
+export type {
+  AIProvider,
+  ClaudeEffort,
+  CommonAICLIOptions,
+  ModelId,
+  ReasoningEffort,
+} from '@shared/types';
 
-export interface CLISpawnOptions {
-  provider: AIProvider;
-  model: ModelId;
+// Version constants for Claude CLI feature flags
+const CLAUDE_VERSION = {
+  MAJOR: 2,
+  MINOR: 1,
+  BARE_FLAG_PATCH: 81,
+  EFFORT_FLAG_PATCH: 60,
+  VERSION_TIMEOUT_MS: 5000,
+} as const;
+
+// Version cache for Claude CLI - parsed version numbers
+let cachedParsedVersion: [number, number, number] | null = null;
+
+/**
+ * Parse and cache Claude CLI version
+ * Returns parsed version numbers [major, minor, patch] or null if detection fails
+ */
+function getParsedClaudeVersion(): [number, number, number] | null {
+  if (cachedParsedVersion) {
+    return cachedParsedVersion;
+  }
+
+  try {
+    const { shell, args: shellArgs } = getShellForCommand();
+    const result = spawnSync(shell, [...shellArgs, 'claude', '--version'], {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      timeout: CLAUDE_VERSION.VERSION_TIMEOUT_MS,
+    });
+
+    const output = result.stdout || result.stderr || '';
+    const match = output.match(/(\d+)\.(\d+)\.(\d+)/);
+    if (match) {
+      cachedParsedVersion = [
+        parseInt(match[1], 10),
+        parseInt(match[2], 10),
+        parseInt(match[3], 10),
+      ];
+      return cachedParsedVersion;
+    }
+  } catch (error) {
+    console.warn('[providers] Failed to detect Claude CLI version:', error);
+  }
+
+  return null;
+}
+
+/**
+ * Check if Claude CLI supports a feature flag at a specific patch version
+ */
+function supportsVersionFlag(minPatch: number): boolean {
+  const version = getParsedClaudeVersion();
+  if (!version) return false;
+
+  const [major, minor, patch] = version;
+  if (major > CLAUDE_VERSION.MAJOR) return true;
+  if (major === CLAUDE_VERSION.MAJOR && minor > CLAUDE_VERSION.MINOR) return true;
+  return major === CLAUDE_VERSION.MAJOR && minor === CLAUDE_VERSION.MINOR && patch >= minPatch;
+}
+
+/**
+ * Check if Claude CLI supports --bare flag (2.1.81+)
+ */
+const supportsBareFlag = () => supportsVersionFlag(CLAUDE_VERSION.BARE_FLAG_PATCH);
+
+/**
+ * Check if Claude CLI supports --effort flag (2.1.60+)
+ */
+const supportsEffortFlag = () => supportsVersionFlag(CLAUDE_VERSION.EFFORT_FLAG_PATCH);
+
+/**
+ * Clear cached version (for testing or when CLI is updated during runtime)
+ */
+export function clearVersionCache(): void {
+  cachedParsedVersion = null;
+}
+
+export interface CLISpawnOptions extends CommonAICLIOptions {
   prompt: string;
   cwd: string;
-  reasoningEffort?: ReasoningEffort;
   outputFormat?: 'json' | 'stream-json';
   timeout?: number;
   disallowedTools?: string[];
@@ -39,6 +120,18 @@ function buildClaudeArgs(options: CLISpawnOptions): string[] {
     '--model',
     options.model as ClaudeModelId,
   ];
+
+  // Add --bare flag for CI/CD optimization (skips hooks, LSP, plugins, skills, etc.)
+  // Only add if the CLI version supports it (2.1.81+)
+  if (options.bare && supportsBareFlag()) {
+    args.push('--bare');
+  }
+
+  // Add --effort flag for CI/CD optimization (controls token usage vs quality)
+  // Only add if the CLI version supports it (2.1.60+)
+  if (options.claudeEffort && supportsEffortFlag()) {
+    args.push('--effort', options.claudeEffort);
+  }
 
   // Support session ID for preserving conversation
   if (options.sessionId) {
@@ -195,6 +288,24 @@ const ANSI_REGEX = new RegExp(
 
 export function stripAnsi(str: string): string {
   return str.replace(ANSI_REGEX, '');
+}
+
+/**
+ * Strip markdown code fence from AI output
+ * Handles cases like ```text\ncontent\n``` or ```json\n{...}\n```
+ */
+export function stripCodeFence(text: string): string {
+  const trimmed = text.trim();
+  // Match complete fenced block: ```lang\ncontent\n```
+  const fenceMatch = trimmed.match(/```\w*\s*[\r\n]+([\s\S]*?)[\r\n]+\s*```\s*$/);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+  // Fallback: strip leading/trailing fences when only one side is present
+  return trimmed
+    .replace(/^```\w*\s*[\r\n]*/, '')
+    .replace(/[\r\n]*\s*```\s*$/, '')
+    .trim();
 }
 
 export function parseClaudeJsonOutput(stdout: string): ParsedCLIResult {

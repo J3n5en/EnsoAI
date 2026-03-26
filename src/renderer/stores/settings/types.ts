@@ -11,6 +11,7 @@ import type {
   ReasoningEffort,
   ShellConfig,
 } from '@shared/types';
+import type { ClaudeEffort, CommonAISettings } from '@shared/types/ai';
 
 // Theme types
 export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
@@ -205,41 +206,29 @@ export interface ClaudeCodeIntegrationSettings {
 }
 
 // Commit message generator settings
-export interface CommitMessageGeneratorSettings {
+export interface CommitMessageGeneratorSettings extends CommonAISettings {
   enabled: boolean;
   maxDiffLines: number;
   timeout: number; // in seconds
-  provider: AIProvider;
-  model: string; // Dynamic based on provider
-  reasoningEffort?: ReasoningEffort; // For Codex CLI
   prompt: string; // Custom prompt template
 }
 
 // Todo AI polish settings
-export interface TodoPolishSettings {
+export interface TodoPolishSettings extends CommonAISettings {
   enabled: boolean;
-  provider: AIProvider;
-  model: string; // Dynamic based on provider
-  reasoningEffort?: ReasoningEffort; // For Codex CLI
   timeout: number; // in seconds
   prompt: string; // Custom prompt template (with {text} placeholder)
 }
 
 // Branch name generator settings
-export interface BranchNameGeneratorSettings {
+export interface BranchNameGeneratorSettings extends CommonAISettings {
   enabled: boolean;
-  provider: AIProvider;
-  model: string; // Dynamic based on provider
-  reasoningEffort?: ReasoningEffort; // For Codex CLI
   prompt: string;
 }
 
 // Code review settings
-export interface CodeReviewSettings {
+export interface CodeReviewSettings extends CommonAISettings {
   enabled: boolean;
-  provider: AIProvider;
-  model: string; // Dynamic based on provider
-  reasoningEffort?: ReasoningEffort; // For Codex CLI
   language: string;
   prompt: string; // Custom prompt template
 }
@@ -568,7 +557,7 @@ export interface SettingsState {
 }
 
 // Re-export types from @shared/types
-export type { AIProvider, ReasoningEffort } from '@shared/types';
+export type { AIProvider, ClaudeEffort, CommonAISettings, ReasoningEffort } from '@shared/types';
 
 // Builtin agent IDs
 export const BUILTIN_AGENT_IDS: BuiltinAgentId[] = [

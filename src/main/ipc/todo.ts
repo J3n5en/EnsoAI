@@ -1,4 +1,5 @@
 import { IPC_CHANNELS } from '@shared/types';
+import type { ClaudeEffort } from '@shared/types/ai';
 import { ipcMain } from 'electron';
 import type { AIProvider, ModelId, ReasoningEffort } from '../services/ai';
 import { polishTodoTask } from '../services/ai';
@@ -86,6 +87,8 @@ export function registerTodoHandlers(): void {
         provider: string;
         model: string;
         reasoningEffort?: string;
+        bare?: boolean;
+        claudeEffort?: string;
         prompt?: string;
       }
     ): Promise<{ success: boolean; title?: string; description?: string; error?: string }> => {
@@ -95,6 +98,8 @@ export function registerTodoHandlers(): void {
         provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
+        bare: options.bare,
+        claudeEffort: options.claudeEffort as ClaudeEffort | undefined,
         prompt: options.prompt,
       });
     }

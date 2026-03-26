@@ -172,6 +172,8 @@ export const defaultCommitMessageGeneratorSettings: CommitMessageGeneratorSettin
   timeout: 120,
   provider: 'claude-code',
   model: 'haiku',
+  bare: true,
+  claudeEffort: 'low',
   prompt: defaultCommitPromptZh,
 };
 
@@ -180,6 +182,8 @@ export const defaultBranchNameGeneratorSettings: BranchNameGeneratorSettings = {
   enabled: false,
   provider: 'claude-code',
   model: 'haiku',
+  bare: true,
+  claudeEffort: 'low',
   prompt:
     '你是 Git 分支命名助手（不可用工具）。输入含 desc 可含 date/branch_style。任务：从 desc 判定 type、提取 ticket、生成 slug，按模板渲染分支名。只输出一行分支名，无解释无标点。\n\n约束：仅允许 a-z0-9-/.；全小写；词用 -；禁空格/中文/下划线/其他符号。渲染后：-// 连续压缩为 1；去掉首尾 - / .；空变量不产生多余分隔符。\n\nticket：识别 ABC-123/#456/issue 789 等 → 小写，去 #；若存在则置于 slug 最前（形成 ticket-slug）。\n\nslug：取核心关键词 3–8 词，过滤泛词（如：一下/相关/进行/支持/增加/优化/问题/功能/页面/接口/调整/更新/修改等）；必要时将中文概念转换为常见英文词（如 login/order/pay），无法转换则丢弃。\n\ntype 枚举：feat fix hotfix perf refactor docs test chore ci build 判定优先级：hotfix(紧急/回滚/prod) > perf(性能) > fix(bug/修复) > feat(新增) > refactor(结构不变) > docs > test > ci > build > chore(兜底)。\n\ndate: 格式为 yyyyMMdd\n\n输出格式：{type}-{date}-{slug}\n\ndate: {current_date}\ntime: {current_time}\ndesc：{description}',
 };
@@ -212,6 +216,8 @@ export const defaultTodoPolishSettings: TodoPolishSettings = {
   enabled: true,
   provider: 'claude-code',
   model: 'haiku',
+  bare: true,
+  claudeEffort: 'low',
   timeout: 60,
   prompt: defaultTodoPolishPromptZh,
 };
@@ -221,6 +227,8 @@ export const defaultCodeReviewSettings: CodeReviewSettings = {
   enabled: true,
   provider: 'claude-code',
   model: 'haiku',
+  bare: true,
+  claudeEffort: 'high',
   language: '中文',
   prompt: defaultCodeReviewPromptZh,
 };
