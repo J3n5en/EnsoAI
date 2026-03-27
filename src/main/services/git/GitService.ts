@@ -1,5 +1,5 @@
 import { exec } from 'node:child_process';
-import { existsSync, promises as fs } from 'node:fs';
+import { existsSync, promises as fs, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type {
@@ -1403,12 +1403,20 @@ export class GitService {
    * - SSH with optional port and multi-level paths
    */
   static isValidGitUrl(url: string): boolean {
-    // HTTPS: supports port, username, multi-level paths
-    // e.g., https://github.com/user/repo.git
-    //       https://git.example.com:8443/user/repo
-    //       https://user@github.com/user/repo.git
-    //       https://gitlab.com/group/subgroup/repo
-    const httpsPattern = /^https?:\/\/(?:[\w-]+@)?[\w.-]+(?::\d+)?(?:\/[\w.-]+)+(?:\.git)?$/;
+    // Use URL constructor for HTTP/HTTPS — handles ports, auth, encoded chars, etc.
+    if (/^https?:\/\//i.test(url)) {
+      try {
+        const parsed = new URL(url);
+        const segments = parsed.pathname
+          .replace(/^\/+|\/+$/g, '')
+          .split('/')
+          .filter(Boolean);
+        return segments.length > 0;
+      } catch {
+        return false;
+      }
+    }
+
     // SSH: supports port, multi-level paths
     // e.g., git@github.com:user/repo.git
     //       ssh://git@github.com:22/user/repo.git
@@ -1416,7 +1424,7 @@ export class GitService {
     const sshPattern =
       /^(?:ssh:\/\/)?(?:[\w-]+@)?[\w.-]+(?::\d+)?[:/](?:[\w.-]+\/)+[\w.-]+(?:\.git)?$/;
 
-    return httpsPattern.test(url) || sshPattern.test(url);
+    return sshPattern.test(url);
   }
 
   /**
@@ -1451,8 +1459,14 @@ export class GitService {
     const cloneBaseDir = path.dirname(targetPath);
     const cloneTarget = toGitPath(cloneBaseDir, targetPath);
 
-    // Create simple-git instance with progress callback
+    // Ensure parent directory exists before cloning
+    if (!existsSync(cloneBaseDir)) {
+      mkdirSync(cloneBaseDir, { recursive: true });
+    }
+
+    // Create simple-git instance with progress callback and extended timeout
     const git = createSimpleGit(cloneBaseDir, {
+      timeout: { block: 300_000 },
       progress: ({ method, stage, progress }) => {
         if (method === 'clone' && onProgress) {
           onProgress({ stage, progress });

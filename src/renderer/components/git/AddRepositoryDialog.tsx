@@ -347,9 +347,16 @@ export function AddRepositoryDialog({
           if (!targetDirUserModifiedRef.current) {
             setTargetDir(autoTargetDir);
           }
+        } else {
+          setRepoName('');
+          setTargetDir('');
+          targetDirUserModifiedRef.current = false;
         }
       } catch {
         setIsValidUrl(false);
+        setRepoName('');
+        setTargetDir('');
+        targetDirUserModifiedRef.current = false;
       }
     }, 300);
 
