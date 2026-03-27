@@ -94,16 +94,24 @@ export function RunningProjectsPopover({
   );
 
   const handleCloseAllAgents = useCallback(() => {
+    if (!window.confirm(t('Confirm close all agent sessions?'))) {
+      return;
+    }
+
     for (const path of activeWorktreePaths) {
       closeAgentSessions(path);
     }
-  }, [activeWorktreePaths, closeAgentSessions]);
+  }, [activeWorktreePaths, closeAgentSessions, t]);
 
   const handleCloseAllTerminals = useCallback(() => {
+    if (!window.confirm(t('Confirm close all terminal sessions?'))) {
+      return;
+    }
+
     for (const path of activeWorktreePaths) {
       closeTerminalSessions(path);
     }
-  }, [activeWorktreePaths, closeTerminalSessions]);
+  }, [activeWorktreePaths, closeTerminalSessions, t]);
 
   useEffect(() => {
     if (open) {
@@ -325,7 +333,7 @@ export function RunningProjectsPopover({
                 className="h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
               />
             </div>
-            {totalRunning > 0 && (
+            {totalRunning > 0 && (totalAgents > 0 || totalTerminals > 0) && (
               <div className="flex items-center gap-1 border-b px-2 py-1.5">
                 <button
                   type="button"
