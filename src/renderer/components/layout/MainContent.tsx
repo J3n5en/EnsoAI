@@ -553,7 +553,8 @@ export function MainContent({
             )}
           >
             <TodoPanel
-              worktreePath={worktreePath}
+              repoPath={effectiveRepoPath ?? undefined}
+              worktreePath={effectiveWorktreePath ?? undefined}
               isActive={activeTab === 'todo'}
               onSwitchToAgent={() => onTabChange('chat')}
             />
