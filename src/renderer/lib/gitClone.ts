@@ -33,15 +33,23 @@ export function parseGitUrl(url: string): ParsedGitUrl | null {
     let owner = '';
     let repo = '';
 
-    // Check for HTTPS URL
-    const httpsMatch = url.match(/^https?:\/\/(?:[\w-]+@)?([\w.-]+)(?::\d+)?\/(.+?)(?:\.git)?$/);
-    if (httpsMatch) {
-      protocol = 'https';
-      host = httpsMatch[1];
-      const path = httpsMatch[2];
-      pathSegments = path.split('/');
-      owner = pathSegments[0] || '';
-      repo = pathSegments[pathSegments.length - 1] || '';
+    // Check for HTTPS/HTTP URL — use URL constructor for robust parsing
+    if (/^https?:\/\//i.test(url)) {
+      try {
+        const parsed = new URL(url);
+        protocol = 'https';
+        host = parsed.hostname;
+        const path = parsed.pathname
+          .replace(/\/+$/, '')
+          .replace(/\.git$/, '')
+          .replace(/^\/+/, '');
+        pathSegments = path.split('/').filter(Boolean);
+        if (pathSegments.length === 0) return null;
+        owner = pathSegments[0] || '';
+        repo = pathSegments[pathSegments.length - 1] || '';
+      } catch {
+        return null;
+      }
     } else {
       // Check for SSH URL
       // Format: git@github.com:user/repo.git or ssh://git@github.com:22/user/repo.git
