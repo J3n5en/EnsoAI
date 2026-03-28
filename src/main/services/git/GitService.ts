@@ -1,5 +1,5 @@
 import { exec } from 'node:child_process';
-import { existsSync, promises as fs, mkdirSync } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type {
@@ -1411,7 +1411,7 @@ export class GitService {
           .replace(/^\/+|\/+$/g, '')
           .split('/')
           .filter(Boolean);
-        return segments.length > 0;
+        return segments.length >= 2;
       } catch {
         return false;
       }
@@ -1460,9 +1460,7 @@ export class GitService {
     const cloneTarget = toGitPath(cloneBaseDir, targetPath);
 
     // Ensure parent directory exists before cloning
-    if (!existsSync(cloneBaseDir)) {
-      mkdirSync(cloneBaseDir, { recursive: true });
-    }
+    await fs.mkdir(cloneBaseDir, { recursive: true });
 
     // Create simple-git instance with progress callback and extended timeout
     const git = createSimpleGit(cloneBaseDir, {

@@ -328,6 +328,12 @@ export function AddRepositoryDialog({
       return;
     }
 
+    const resetCloneFields = () => {
+      setRepoName('');
+      setTargetDir('');
+      targetDirUserModifiedRef.current = false;
+    };
+
     const timer = setTimeout(async () => {
       try {
         const result = await window.electronAPI.git.validateUrl(remoteUrl.trim());
@@ -348,15 +354,11 @@ export function AddRepositoryDialog({
             setTargetDir(autoTargetDir);
           }
         } else {
-          setRepoName('');
-          setTargetDir('');
-          targetDirUserModifiedRef.current = false;
+          resetCloneFields();
         }
       } catch {
         setIsValidUrl(false);
-        setRepoName('');
-        setTargetDir('');
-        targetDirUserModifiedRef.current = false;
+        resetCloneFields();
       }
     }, 300);
 

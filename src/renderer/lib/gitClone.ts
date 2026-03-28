@@ -39,7 +39,10 @@ export function parseGitUrl(url: string): ParsedGitUrl | null {
         const parsed = new URL(url);
         protocol = 'https';
         host = parsed.hostname;
-        const path = parsed.pathname.replace(/^\/+|\.git$/g, '').replace(/\/+$/, '');
+        const path = parsed.pathname
+          .replace(/\/+$/, '')
+          .replace(/\.git$/, '')
+          .replace(/^\/+/, '');
         pathSegments = path.split('/').filter(Boolean);
         if (pathSegments.length === 0) return null;
         owner = pathSegments[0] || '';
