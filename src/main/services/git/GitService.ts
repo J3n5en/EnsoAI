@@ -1455,8 +1455,14 @@ export class GitService {
     const cloneBaseDir = path.dirname(targetPath);
     const cloneTarget = toGitPath(cloneBaseDir, targetPath);
 
+    // Ensure parent directory exists
+    if (!existsSync(cloneBaseDir)) {
+      await fs.mkdir(cloneBaseDir, { recursive: true });
+    }
+
     // Create simple-git instance with progress callback
     const git = createSimpleGit(cloneBaseDir, {
+      timeout: { block: 300_000 }, // 5 minutes timeout for clone operations
       progress: ({ method, stage, progress }) => {
         if (method === 'clone' && onProgress) {
           onProgress({ stage, progress });
