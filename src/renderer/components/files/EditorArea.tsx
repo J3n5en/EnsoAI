@@ -604,12 +604,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       editorForPathRef.current = activeTabPath;
       setEditorReady(true);
 
-      // Add Cmd/Ctrl+S shortcut
-      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
-        if (activeTabPath) {
-          handleSaveWithBlameRefresh(activeTabPath);
-        }
-      });
+      // Cmd/Ctrl+S shortcut is registered via useEffect + onKeyDown below
+      // to avoid addCommand's closure stale issue and registry leak problem
 
       editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
         const selection = editor.getSelection();
@@ -734,7 +730,6 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     [
       activeTab?.viewState,
       activeTabPath,
-      handleSaveWithBlameRefresh,
       onGlobalSearch,
       onClearPendingCursor,
       getRelativePath,
@@ -773,6 +768,33 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
     return () => disposable.dispose();
   }, [editorInstance, monacoInstance, editorReady, editorKeybindings.gotoSymbol]);
+
+  // Register Cmd/Ctrl+S save shortcut via onKeyDown instead of addCommand.
+  // addCommand captures stale closure values and leaks into Monaco's shared command registry.
+  // Using onKeyDown with ref ensures we always get the current activeTabPath.
+  useEffect(() => {
+    if (!editorInstance || !monacoInstance || !editorReady) return;
+
+    const disposable = editorInstance.onKeyDown((e) => {
+      // Check for Cmd+S (macOS) or Ctrl+S (Windows/Linux)
+      const isSaveShortcut =
+        e.keyCode === monacoInstance.KeyCode.KeyS &&
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey;
+
+      if (!isSaveShortcut) return;
+
+      const currentPath = activeTabPathRef.current;
+      if (!currentPath) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      handleSaveWithBlameRefresh(currentPath);
+    });
+
+    return () => disposable.dispose();
+  }, [editorInstance, monacoInstance, editorReady, handleSaveWithBlameRefresh]);
 
   // Register Alt+Left/Right navigation keybindings via onKeyDown instead of addCommand.
   // addCommand leaks into Monaco's shared command registry and cannot be disposed;

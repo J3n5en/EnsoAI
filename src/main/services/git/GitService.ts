@@ -209,9 +209,11 @@ export class GitService {
     };
 
     return new Promise((resolve, reject) => {
+      // Use 'normal' mode for status - only need to know if there are untracked files,
+      // not the full list. This significantly improves performance for large repos.
       const proc = spawnGit(
         this.workdir,
-        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'],
+        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
         { cwd: this.workdir, env: this.getGitEnv() }
       );
 
@@ -577,9 +579,11 @@ export class GitService {
     };
 
     await new Promise<void>((resolve, reject) => {
+      // Use 'normal' mode to avoid recursively listing all files in untracked directories.
+      // The UI (ChangesTree) already handles folder paths ending with '/' correctly.
       const proc = spawnGit(
         this.workdir,
-        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'],
+        ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'],
         { cwd: this.workdir, env }
       );
 
