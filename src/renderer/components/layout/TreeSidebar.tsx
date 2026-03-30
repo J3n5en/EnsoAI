@@ -1383,7 +1383,7 @@ export function TreeSidebar({
                 currentGroupId={repoMenuTarget?.groupId}
                 onMove={(groupId) => {
                   if (repoMenuTarget) {
-                    onMoveToGroup(repoMenuTarget.path, groupId);
+                    onMoveToGroup(repoMenuTarget.id, groupId);
                   }
                 }}
                 onClose={() => setRepoMenuOpen(false)}
