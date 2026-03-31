@@ -318,8 +318,6 @@ export function registerGitHandlers(): void {
         provider: string;
         model: string;
         reasoningEffort?: string;
-        bare?: boolean;
-        claudeEffort?: string;
         prompt?: string;
       }
     ): Promise<{ success: boolean; message?: string; error?: string }> => {
@@ -327,6 +325,7 @@ export function registerGitHandlers(): void {
         assertRemoteUnsupported('aiCommitMessageGeneration');
       }
       const resolved = validateWorkdir(workdir);
+      // Always use --bare and --effort low for fast commit message generation
       return generateCommitMessage({
         workdir: resolved,
         maxDiffLines: options.maxDiffLines,
@@ -334,8 +333,8 @@ export function registerGitHandlers(): void {
         provider: (options.provider ?? 'claude-code') as AIProvider,
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
-        bare: options.bare,
-        claudeEffort: options.claudeEffort as ClaudeEffort | undefined,
+        bare: true,
+        claudeEffort: 'low',
         prompt: options.prompt,
       });
     }

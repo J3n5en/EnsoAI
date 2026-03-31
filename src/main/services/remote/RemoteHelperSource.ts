@@ -809,7 +809,7 @@ async function gitShowFile(workdir, spec) {
 }
 
 async function gitStatus(rootPath) {
-  const { stdout } = await execCommand('git', ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'], { cwd: rootPath });
+  const { stdout } = await execCommand('git', ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'], { cwd: rootPath });
   return parsePorcelainStatus(stdout);
 }
 
@@ -902,7 +902,7 @@ async function gitFetch(rootPath, remote = 'origin') {
 }
 
 async function gitFileChanges(rootPath) {
-  const { stdout } = await execCommand('git', ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=normal'], { cwd: rootPath });
+  const { stdout } = await execCommand('git', ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'], { cwd: rootPath });
   return parseFileChanges(stdout);
 }
 

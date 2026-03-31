@@ -162,8 +162,6 @@ const electronAPI = {
         provider: string;
         model: string;
         reasoningEffort?: string;
-        bare?: boolean;
-        claudeEffort?: string;
         prompt?: string;
       }
     ): Promise<{ success: boolean; message?: string; error?: string }> =>
