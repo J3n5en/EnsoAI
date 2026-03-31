@@ -282,15 +282,8 @@ jobs:
           path: dist/remote-runtime/*
           retention-days: 1
 
-      - name: Upload remote runtime bundle to Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          # Ensure draft release exists (may not yet be created by electron-builder)
-          gh release create "$TAG" --draft --title "$TAG" --notes "" 2>/dev/null || true
-          gh release upload "$TAG" dist/remote-runtime/* --clobber
+      # Remote runtime assets are uploaded to Release in the generate-release-notes job
+      # after electron-builder has created the draft release
 
   generate-release-notes:
     needs: [build-mac, build-windows, build-linux, build-remote-runtime-linux]
@@ -348,6 +341,21 @@ jobs:
           echo "name=$TAG" >> $GITHUB_OUTPUT
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download remote runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remote-runtime-linux-*
+          path: remote-runtime-artifacts
+
+      - name: Upload remote runtime bundles to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          for dir in remote-runtime-artifacts/remote-runtime-linux-*/; do
+            gh release upload "$TAG" "$dir"* --clobber
+          done
 
       - name: Verify Linux remote runtime release assets
         env:
