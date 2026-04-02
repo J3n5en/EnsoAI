@@ -945,6 +945,9 @@ async function gitCommitShow(rootPath, hash) {
 }
 
 async function gitCommitFiles(rootPath, hash) {
+  // Trim hash to handle potential whitespace from IPC layer
+  hash = hash.trim();
+
   // Use cat-file to reliably detect merge commits (check parent count)
   const { stdout: commitInfo } = await execCommand('git', ['cat-file', '-p', hash], {
     cwd: rootPath,
@@ -956,7 +959,7 @@ async function gitCommitFiles(rootPath, hash) {
     // Merge commit: use git diff to compare with first parent
     const parentHash = commitInfo.match(/^parent ([a-f0-9]+)/m)?.[1];
     if (parentHash) {
-      const diffResult = await execCommand('git', ['diff', parentHash + '', hash, '--name-status'], {
+      const diffResult = await execCommand('git', ['diff', parentHash, hash, '--name-status'], {
         cwd: rootPath,
       });
       stdout = diffResult.stdout;
