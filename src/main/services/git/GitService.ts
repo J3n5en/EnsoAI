@@ -728,16 +728,19 @@ export class GitService {
   }
 
   async getCommitFiles(hash: string, submodulePath?: string): Promise<CommitFileChange[]> {
+    // Trim hash to remove any whitespace/newlines that may be passed from IPC layer
+    const trimmedHash = hash.trim();
     const git = this.getGitInstance(submodulePath);
+
     // Use cat-file to reliably detect merge commits (check parent count)
-    const commitInfo = await git.catFile(['-p', hash]);
+    const commitInfo = await git.catFile(['-p', trimmedHash]);
     const isMergeCommit = (commitInfo.match(/^parent /gm) ?? []).length >= 2;
 
     const files: CommitFileChange[] = [];
 
     if (isMergeCommit) {
       // Merge commit: use git diff to compare with first parent
-      const mergeDiff = await git.diff([`${hash}^1`, hash, '--name-status']);
+      const mergeDiff = await git.diff([`${trimmedHash}^1`, trimmedHash, '--name-status']);
       const diffLines = mergeDiff.split('\n').filter((line) => line.trim());
 
       for (const line of diffLines) {
@@ -756,7 +759,7 @@ export class GitService {
       }
     } else {
       // Regular commit: use show --name-status
-      const commitShow = await git.show([hash, '--name-status', '--pretty=format:%P']);
+      const commitShow = await git.show([trimmedHash, '--name-status', '--pretty=format:%P']);
       const lines = commitShow.split('\n').filter((line) => line.trim());
 
       for (const line of lines) {

@@ -945,9 +945,32 @@ async function gitCommitShow(rootPath, hash) {
 }
 
 async function gitCommitFiles(rootPath, hash) {
-  const { stdout } = await execCommand('git', ['show', '--name-status', '--format=', hash], {
+  // Use cat-file to reliably detect merge commits (check parent count)
+  const { stdout: commitInfo } = await execCommand('git', ['cat-file', '-p', hash], {
     cwd: rootPath,
   });
+  const isMergeCommit = (commitInfo.match(/^parent /gm) ?? []).length >= 2;
+
+  let stdout: string;
+  if (isMergeCommit) {
+    // Merge commit: use git diff to compare with first parent
+    const parentHash = commitInfo.match(/^parent ([a-f0-9]+)/m)?.[1];
+    if (parentHash) {
+      const diffResult = await execCommand('git', ['diff', parentHash + '', hash, '--name-status'], {
+        cwd: rootPath,
+      });
+      stdout = diffResult.stdout;
+    } else {
+      stdout = '';
+    }
+  } else {
+    // Regular commit: use git show --name-status
+    const result = await execCommand('git', ['show', '--name-status', '--format=', hash], {
+      cwd: rootPath,
+    });
+    stdout = result.stdout;
+  }
+
   return parseCommitFiles(stdout);
 }
 
