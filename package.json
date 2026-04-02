@@ -116,9 +116,6 @@
       "dmg-builder": "26.4.0",
       "app-builder-lib": "26.4.0",
       "electron-builder-squirrel-windows": "26.4.0"
-    },
-    "ignoredBuiltDependencies": [
-      "sqlite3"
-    ]
+    }
   }
 }

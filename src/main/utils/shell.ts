@@ -6,7 +6,7 @@
 import type { ShellConfig } from '@shared/types';
 import * as pty from 'node-pty';
 import { readSettings } from '../ipc/settings';
-import { findLoginShell, getEnhancedPath } from '../services/terminal/PtyManager';
+import { findLoginShell, getEnhancedPath, mergePathLists } from '../services/terminal/PtyManager';
 import { shellDetector } from '../services/terminal/ShellDetector';
 import { killProcessTree } from './processUtils';
 
@@ -133,13 +133,19 @@ export function getShellForCommand(): { shell: string; args: string[] } {
  * Includes enhanced PATH and proper locale settings.
  */
 export function getEnvForCommand(additionalEnv?: Record<string, string>): Record<string, string> {
-  return {
+  const env = {
     ...process.env,
-    PATH: getEnhancedPath(),
-    LANG: process.env.LANG || 'en_US.UTF-8',
-    LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
     ...additionalEnv,
   } as Record<string, string>;
+  const currentPath = env.PATH || env.Path || '';
+  const mergedPath = mergePathLists(getEnhancedPath(), currentPath);
+  env.PATH = mergedPath;
+  if (process.platform === 'win32') {
+    env.Path = mergedPath;
+  }
+  env.LANG = process.env.LANG || 'en_US.UTF-8';
+  env.LC_ALL = process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8';
+  return env;
 }
 
 export interface ExecInPtyOptions {
