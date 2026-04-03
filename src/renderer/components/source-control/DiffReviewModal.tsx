@@ -356,7 +356,8 @@ export function DiffReviewModal({ open, onOpenChange, rootPath, onSend }: DiffRe
     rootPath ?? null,
     selectedFile?.submodulePath ?? null,
     selectedFile?.submodulePath ? selectedFile.path : null,
-    selectedFile?.staged ?? false
+    selectedFile?.staged ?? false,
+    { enabled: open, isActive: open }
   );
 
   // 合并 diff 数据

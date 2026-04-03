@@ -1021,6 +1021,7 @@ export function DiffViewer({
     hasAutoNavigatedRef.current = false;
     setIsEditing(false);
     setEditedContent(null);
+    diffContentRef.current = '';
   }, [file?.path, file?.staged]);
 
   if (!file) {

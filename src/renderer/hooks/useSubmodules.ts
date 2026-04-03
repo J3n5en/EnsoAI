@@ -217,15 +217,30 @@ export function useSubmoduleFileDiff(
   workdir: string | null,
   submodulePath: string | null,
   filePath: string | null,
-  staged: boolean
+  staged: boolean,
+  options?: { enabled?: boolean; isActive?: boolean }
 ) {
+  const shouldPoll = useShouldPoll();
+
   return useQuery({
     queryKey: ['git', 'submodule', 'diff', workdir, submodulePath, filePath, staged],
     queryFn: async () => {
       if (!workdir || !submodulePath || !filePath) return null;
       return window.electronAPI.git.getSubmoduleFileDiff(workdir, submodulePath, filePath, staged);
     },
-    enabled: !!workdir && !!submodulePath && !!filePath,
+    enabled: (options?.enabled ?? true) && !!workdir && !!submodulePath && !!filePath,
+    staleTime: 0,
+    // Prefer event-driven refresh; polling is a lightweight fallback only while active.
+    refetchInterval: shouldPoll && (options?.isActive ?? true) ? 5000 : false,
+    refetchIntervalInBackground: false,
+    // When not active, avoid passive refetches (e.g. focus/mount) to reduce git diff pressure.
+    ...(options?.isActive === false
+      ? {
+          refetchOnMount: false as const,
+          refetchOnWindowFocus: false as const,
+          refetchOnReconnect: false as const,
+        }
+      : {}),
   });
 }
 
