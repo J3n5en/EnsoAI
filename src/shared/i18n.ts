@@ -219,6 +219,8 @@ export const zhTranslations: Record<string, string> = {
   'API Base URL': 'API 基础地址',
   Port: '端口',
   'Choose a localhost port for the external session API': '为外部会话 API 选择一个 localhost 端口',
+  'This localhost API is intended for local desktop integrations. Keep it disabled if you do not need external control':
+    '这个 localhost API 面向本地桌面集成使用。如果你不需要外部控制，请保持关闭',
   'List sessions': '列出会话',
   'Focus a session': '聚焦会话',
   'Edit Group': '编辑分组',

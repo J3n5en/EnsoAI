@@ -8,8 +8,6 @@ import {
 import { BrowserWindow } from 'electron';
 
 const DEFAULT_EXTERNAL_SESSION_API_PORT = 27124;
-const MAX_BODY_SIZE = 64 * 1024;
-
 interface WindowSnapshotEntry {
   windowId: number;
   snapshot: ExternalSessionSnapshot;
@@ -49,6 +47,8 @@ export class ExternalSessionApiServer {
 
       this.server = http.createServer((req, res) => {
         if (req.method === 'OPTIONS') {
+          // Intentionally do not emit CORS headers. This API is designed for local
+          // desktop integrations, not arbitrary browser pages.
           json(res, 204, {});
           return;
         }
@@ -79,26 +79,12 @@ export class ExternalSessionApiServer {
             json(res, 404, { error: 'Not found' });
             return;
           }
-
-          let bodySize = 0;
-
-          req.on('data', (chunk: Buffer) => {
-            bodySize += chunk.length;
-            if (bodySize > MAX_BODY_SIZE) {
-              req.destroy();
-              return;
-            }
-          });
-
-          req.on('end', () => {
-            const payload = this.focusSession(sessionId);
-            if (!payload) {
-              json(res, 404, { error: 'Session not found' });
-              return;
-            }
-            json(res, 200, { ok: true, session: payload });
-          });
-
+          const payload = this.focusSession(sessionId);
+          if (!payload) {
+            json(res, 404, { error: 'Session not found' });
+            return;
+          }
+          json(res, 200, { ok: true, session: payload });
           return;
         }
 
@@ -107,13 +93,12 @@ export class ExternalSessionApiServer {
 
       this.server.on('error', (error: NodeJS.ErrnoException) => {
         console.error('[external-session-api] Server error:', error);
-        if (error.code === 'EADDRINUSE') {
-          this.server = null;
-          resolve({
-            success: false,
-            error: `Port ${this.port} is already in use`,
-          });
-        }
+        this.server = null;
+        resolve({
+          success: false,
+          error:
+            error.code === 'EADDRINUSE' ? `Port ${this.port} is already in use` : error.message,
+        });
       });
 
       this.server.listen(this.port, '127.0.0.1', () => {
@@ -131,6 +116,7 @@ export class ExternalSessionApiServer {
   stop(): Promise<void> {
     return new Promise((resolve) => {
       if (!this.server) {
+        this.snapshots.clear();
         resolve();
         return;
       }
@@ -138,6 +124,7 @@ export class ExternalSessionApiServer {
       const server = this.server;
       this.server = null;
       server.close(() => {
+        this.snapshots.clear();
         resolve();
       });
     });
@@ -160,11 +147,12 @@ export class ExternalSessionApiServer {
 
   listSessions(): ExternalSessionApiItem[] {
     const items: ExternalSessionApiItem[] = [];
+    const staleWindowIds: number[] = [];
 
     for (const entry of this.snapshots.values()) {
       const window = BrowserWindow.fromId(entry.windowId);
       if (!window || window.isDestroyed()) {
-        this.snapshots.delete(entry.windowId);
+        staleWindowIds.push(entry.windowId);
         continue;
       }
 
@@ -174,6 +162,10 @@ export class ExternalSessionApiServer {
           windowId: entry.windowId,
         });
       }
+    }
+
+    for (const windowId of staleWindowIds) {
+      this.snapshots.delete(windowId);
     }
 
     return items.sort((left, right) => {

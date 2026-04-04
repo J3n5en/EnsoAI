@@ -463,6 +463,9 @@ export function GeneralSettings() {
   const focusCommand = isWindows
     ? `curl -X POST ${externalSessionApiBaseUrl}/api/sessions/{sessionId}/focus`
     : `curl -X POST "${externalSessionApiBaseUrl}/api/sessions/{sessionId}/focus"`;
+  const [externalSessionApiPortInput, setExternalSessionApiPortInput] = React.useState(() =>
+    String(externalSessionApiPort)
+  );
   const handleCopyText = React.useCallback(
     async (value: string) => {
       try {
@@ -477,6 +480,10 @@ export function GeneralSettings() {
     },
     [t]
   );
+
+  React.useEffect(() => {
+    setExternalSessionApiPortInput(String(externalSessionApiPort));
+  }, [externalSessionApiPort]);
 
   return (
     <div className="space-y-6">
@@ -1418,18 +1425,26 @@ export function GeneralSettings() {
             type="number"
             min={1024}
             max={65535}
-            value={String(externalSessionApiPort)}
+            value={externalSessionApiPortInput}
             onChange={(e) => {
-              const nextValue = Number(e.target.value);
-              if (Number.isFinite(nextValue)) {
-                setExternalSessionApi({
-                  port: Math.max(1024, Math.min(65535, nextValue)),
-                });
-              }
+              setExternalSessionApiPortInput(e.target.value);
+            }}
+            onBlur={() => {
+              const nextValue = Number(externalSessionApiPortInput);
+              setExternalSessionApi({
+                port: Number.isFinite(nextValue)
+                  ? Math.max(1024, Math.min(65535, nextValue))
+                  : 27124,
+              });
             }}
           />
           <p className="text-xs text-muted-foreground">
             {t('Choose a localhost port for the external session API')}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              'This localhost API is intended for local desktop integrations. Keep it disabled if you do not need external control'
+            )}
           </p>
         </div>
       </div>
