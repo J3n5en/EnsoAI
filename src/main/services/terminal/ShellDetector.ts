@@ -1,5 +1,6 @@
-import { exec } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
 import { promisify } from 'node:util';
 import type { ShellConfig, ShellInfo } from '@shared/types';
 
@@ -19,7 +20,11 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
   {
     id: 'powershell7',
     name: 'PowerShell 7',
-    paths: ['pwsh.exe'],
+    paths: [
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      'C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe',
+      'pwsh.exe',
+    ],
     args: ['-NoLogo'],
     // -Login loads user profile (for version managers like vfox, nvm-windows, etc.)
     // -ExecutionPolicy Bypass allows running .ps1 scripts (npm global packages use them)
@@ -28,7 +33,11 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
   {
     id: 'powershell',
     name: 'PowerShell',
-    paths: ['powershell.exe'],
+    paths: [
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      'C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe',
+      'powershell.exe',
+    ],
     args: ['-NoLogo'],
     // -ExecutionPolicy Bypass allows running .ps1 scripts (npm global packages use them)
     execArgs: ['-NoLogo', '-ExecutionPolicy', 'Bypass', '-Command'],
@@ -36,7 +45,7 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
   {
     id: 'cmd',
     name: 'Command Prompt',
-    paths: ['cmd.exe'],
+    paths: ['C:\\Windows\\System32\\cmd.exe', 'C:\\Windows\\SysWOW64\\cmd.exe', 'cmd.exe'],
     args: [],
     execArgs: ['/c'],
   },
@@ -61,7 +70,7 @@ const WINDOWS_SHELLS: ShellDefinition[] = [
   {
     id: 'wsl',
     name: 'WSL',
-    paths: ['wsl.exe'],
+    paths: ['C:\\Windows\\System32\\wsl.exe', 'wsl.exe'],
     args: [],
     execArgs: ['--', 'bash', '-ilc'],
     isWsl: true,
@@ -109,6 +118,97 @@ const UNIX_SHELLS: ShellDefinition[] = [
 class ShellDetector {
   private cachedShells: ShellInfo[] | null = null;
   private wslAvailable: boolean | null = null;
+  private windowsPathCache: string | null = null;
+
+  private getWindowsPath(): string {
+    if (!isWindows) {
+      return process.env.PATH || '';
+    }
+    if (this.windowsPathCache !== null) {
+      return this.windowsPathCache;
+    }
+
+    const parseRegistryValue = (output: string): string => {
+      const match = output.match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.+)/i);
+      return match ? match[1].trim() : '';
+    };
+
+    const expandEnvVars = (value: string): string =>
+      value.replace(/%([^%]+)%/g, (match, varName) => process.env[varName] || match);
+
+    try {
+      let userPath = '';
+      let systemPath = '';
+
+      try {
+        userPath = parseRegistryValue(
+          execSync('reg query "HKCU\\Environment" /v Path 2>nul', {
+            encoding: 'utf8',
+            timeout: 3000,
+          })
+        );
+      } catch {
+        // Ignore missing user PATH
+      }
+
+      try {
+        systemPath = parseRegistryValue(
+          execSync(
+            'reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" /v Path 2>nul',
+            {
+              encoding: 'utf8',
+              timeout: 3000,
+            }
+          )
+        );
+      } catch {
+        // Ignore missing system PATH
+      }
+
+      const combined = [systemPath, userPath, process.env.Path, process.env.PATH]
+        .filter(Boolean)
+        .join(delimiter);
+      this.windowsPathCache = expandEnvVars(combined);
+      return this.windowsPathCache;
+    } catch {
+      this.windowsPathCache = process.env.Path || process.env.PATH || '';
+      return this.windowsPathCache;
+    }
+  }
+
+  private resolveCommandOnPath(command: string): string | null {
+    const pathValue = isWindows ? this.getWindowsPath() : process.env.PATH || '';
+    const directories = pathValue.split(delimiter).filter(Boolean);
+
+    if (isWindows) {
+      const hasKnownExtension = /\.(exe|cmd|bat|com)$/i.test(command);
+      const extensions = hasKnownExtension
+        ? ['']
+        : (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+            .split(';')
+            .filter(Boolean)
+            .map((ext) => ext.toLowerCase());
+
+      for (const directory of directories) {
+        for (const extension of extensions) {
+          const candidate = join(directory, hasKnownExtension ? command : `${command}${extension}`);
+          if (existsSync(candidate)) {
+            return candidate;
+          }
+        }
+      }
+      return null;
+    }
+
+    for (const directory of directories) {
+      const candidate = join(directory, command);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
 
   private async isWslAvailable(): Promise<boolean> {
     if (this.wslAvailable !== null) {
@@ -118,8 +218,15 @@ class ShellDetector {
       this.wslAvailable = false;
       return false;
     }
+
+    const wslPath = this.findAvailablePath(['C:\\Windows\\System32\\wsl.exe', 'wsl.exe']);
+    if (!wslPath) {
+      this.wslAvailable = false;
+      return false;
+    }
+
     try {
-      await execAsync('wsl --status', { timeout: 3000 });
+      await execAsync(`"${wslPath}" --status`, { timeout: 3000 });
       this.wslAvailable = true;
       return true;
     } catch {
@@ -135,7 +242,10 @@ class ShellDetector {
           return p;
         }
       } else {
-        return p;
+        const resolved = this.resolveCommandOnPath(p);
+        if (resolved) {
+          return resolved;
+        }
       }
     }
     return null;
@@ -147,10 +257,11 @@ class ShellDetector {
     for (const def of WINDOWS_SHELLS) {
       if (def.isWsl) {
         if (await this.isWslAvailable()) {
+          const resolvedPath = this.findAvailablePath(def.paths) || def.paths[0];
           shells.push({
             id: def.id,
             name: def.name,
-            path: 'wsl.exe',
+            path: resolvedPath,
             args: def.args,
             available: true,
             isWsl: true,
@@ -214,9 +325,20 @@ class ShellDetector {
 
   resolveShellConfig(config: ShellConfig): { shell: string; args: string[] } {
     if (config.shellType === 'custom') {
+      const customPath = config.customShellPath?.trim();
+      const customArgs = config.customShellArgs || [];
+      if (customPath) {
+        if (customPath.includes('\\') || customPath.startsWith('/')) {
+          if (existsSync(customPath)) {
+            return { shell: customPath, args: customArgs };
+          }
+        } else {
+          return { shell: customPath, args: customArgs };
+        }
+      }
       return {
-        shell: config.customShellPath || (isWindows ? 'powershell.exe' : '/bin/sh'),
-        args: config.customShellArgs || [],
+        shell: isWindows ? 'powershell.exe' : '/bin/sh',
+        args: isWindows ? ['-NoLogo'] : [],
       };
     }
 
@@ -260,10 +382,22 @@ class ShellDetector {
    */
   resolveShellForCommand(config: ShellConfig): { shell: string; execArgs: string[] } {
     if (config.shellType === 'custom') {
-      const shell = config.customShellPath || (isWindows ? 'powershell.exe' : '/bin/sh');
-      // For custom shell, try to infer execArgs based on shell name
-      const execArgs = this.inferExecArgs(shell, config.customShellArgs);
-      return { shell, execArgs };
+      const customPath = config.customShellPath?.trim();
+      const customArgs = config.customShellArgs || [];
+      if (customPath) {
+        if (customPath.includes('\\') || customPath.startsWith('/')) {
+          if (existsSync(customPath)) {
+            const execArgs = this.inferExecArgs(customPath, customArgs);
+            return { shell: customPath, execArgs };
+          }
+        } else {
+          const execArgs = this.inferExecArgs(customPath, customArgs);
+          return { shell: customPath, execArgs };
+        }
+      }
+      const fallbackShell = isWindows ? 'powershell.exe' : '/bin/sh';
+      const execArgs = this.inferExecArgs(fallbackShell, customArgs);
+      return { shell: fallbackShell, execArgs };
     }
 
     const definitions = isWindows ? WINDOWS_SHELLS : UNIX_SHELLS;
@@ -339,8 +473,20 @@ class ShellDetector {
 
   getDefaultShell(): string {
     if (isWindows) {
-      // Try pwsh.exe (PowerShell 7) from PATH first
-      return 'pwsh.exe';
+      const pwshPath = this.findAvailablePath(['C:\\Program Files\\PowerShell\\7\\pwsh.exe', 'pwsh.exe']);
+      if (pwshPath) {
+        return pwshPath;
+      }
+
+      const powershellPath = this.findAvailablePath([
+        'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        'powershell.exe',
+      ]);
+      if (powershellPath) {
+        return powershellPath;
+      }
+
+      return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
     }
 
     const shell = process.env.SHELL;

@@ -267,6 +267,10 @@ export function AgentSettings({ repoPath }: { repoPath?: string }) {
     }
   }, [agentSettings, customAgents, repoPath, setAgentDetectionStatus, setAgentEnabled]);
 
+  React.useEffect(() => {
+    void Promise.allSettled(BUILTIN_AGENTS.map((agentId) => detectSingleAgent(agentId)));
+  }, [detectSingleAgent]);
+
   const handleEnabledChange = (agentId: string, enabled: boolean) => {
     setAgentEnabled(agentId, enabled);
     if (!enabled) {

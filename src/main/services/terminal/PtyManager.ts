@@ -90,6 +90,21 @@ function getWindowsRegistryEnvVars(): Record<string, string> {
   return envVars;
 }
 
+function lookupEnvVar(varName: string, registryEnvVars: Record<string, string>): string | null {
+  const upperVarName = varName.toUpperCase();
+  for (const [key, value] of Object.entries(registryEnvVars)) {
+    if (key.toUpperCase() === upperVarName) {
+      return value;
+    }
+  }
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.toUpperCase() === upperVarName && value) {
+      return value;
+    }
+  }
+  return null;
+}
+
 /**
  * Expand Windows environment variables in a string (e.g., %PATH% -> actual value)
  * Reads variable values from registry (GUI apps don't inherit shell environment)
@@ -99,15 +114,39 @@ function expandWindowsEnvVars(str: string): string {
 
   // Replace %VAR% patterns with their values from registry
   return str.replace(/%([^%]+)%/g, (match, varName) => {
-    const upperVarName = varName.toUpperCase();
-    for (const [key, value] of Object.entries(registryEnvVars)) {
-      if (key.toUpperCase() === upperVarName) {
-        return value;
-      }
-    }
-    // Keep original if not found
-    return match;
+    const resolved = lookupEnvVar(varName, registryEnvVars);
+    return resolved ?? match;
   });
+}
+
+function splitPathEntries(pathValue: string): string[] {
+  return pathValue
+    .split(delimiter)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export function mergePathLists(primary: string, secondary?: string): string {
+  const merged = new Set<string>();
+  for (const entry of splitPathEntries(primary)) {
+    merged.add(entry);
+  }
+  for (const entry of splitPathEntries(secondary ?? '')) {
+    if (!merged.has(entry)) {
+      merged.add(entry);
+    }
+  }
+  return [...merged].join(delimiter);
+}
+
+function applyEnhancedPath(env: Record<string, string>): void {
+  const enhancedPath = getEnhancedPath();
+  const currentPath = env.PATH || env.Path || '';
+  const mergedPath = mergePathLists(enhancedPath, currentPath);
+  env.PATH = mergedPath;
+  if (isWindows) {
+    env.Path = mergedPath;
+  }
 }
 
 /**
@@ -373,6 +412,17 @@ export class PtyManager {
     }
 
     let ptyProcess: pty.IPty;
+    const baseEnv: Record<string, string> = {
+      ...process.env,
+      ...getProxyEnvVars(),
+      ...options.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
+      LANG: process.env.LANG || 'en_US.UTF-8',
+      LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
+    } as Record<string, string>;
+    applyEnhancedPath(baseEnv);
 
     try {
       ptyProcess = pty.spawn(shell, args, {
@@ -380,16 +430,7 @@ export class PtyManager {
         cols: options.cols || 80,
         rows: options.rows || 24,
         cwd: spawnCwd,
-        env: {
-          ...process.env,
-          ...getProxyEnvVars(),
-          ...options.env,
-          TERM: 'xterm-256color',
-          COLORTERM: 'truecolor',
-          // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
-          LANG: process.env.LANG || 'en_US.UTF-8',
-          LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
-        } as Record<string, string>,
+        env: baseEnv,
       });
     } catch (error) {
       if (!isWindows) {
