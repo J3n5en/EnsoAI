@@ -13,6 +13,7 @@ import { registerClaudeConfigHandlers } from './claudeConfig';
 import { registerClaudeProviderHandlers } from './claudeProvider';
 import { registerCliHandlers } from './cli';
 import { registerDialogHandlers } from './dialog';
+import { registerExternalSessionHandlers } from './externalSession';
 import {
   cleanupTempFiles,
   cleanupTempFilesSync,
@@ -49,6 +50,7 @@ export function registerIpcHandlers(): void {
   registerGitHandlers();
   registerWorktreeHandlers();
   registerFileHandlers();
+  registerExternalSessionHandlers();
   registerSessionHandlers();
   registerSessionStorageHandlers();
   registerAgentHandlers();

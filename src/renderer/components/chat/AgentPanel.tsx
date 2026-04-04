@@ -1,4 +1,4 @@
-import type { AIProvider } from '@shared/types';
+import type { AIProvider, ExternalSessionSnapshot } from '@shared/types';
 import { Plus, Settings, Sparkles } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEMP_REPO_ID } from '@/App/constants';
@@ -100,6 +100,12 @@ function getDefaultAgentId(
   }
   // Ultimate fallback
   return 'claude';
+}
+
+function getProjectNameFromPath(input: string): string {
+  const trimmed = input.replace(/[\\/]+$/, '');
+  const parts = trimmed.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) || trimmed;
 }
 
 function createSession(
@@ -816,19 +822,91 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     [allSessions]
   );
 
-  // 监听通知点击，激活对应 session 并切换 worktree
-  useEffect(() => {
-    const unsubscribe = window.electronAPI.notification.onClick((sessionId) => {
-      const session = findSessionByNotificationId(sessionId);
-      if (session && !pathsEqual(session.cwd, cwd) && onSwitchWorktree) {
+  const selectSessionAcrossWorktrees = useCallback(
+    (incomingSessionId: string, incomingGroupId?: string | null) => {
+      const session = findSessionByNotificationId(incomingSessionId);
+      if (!session) {
+        return;
+      }
+
+      if (!pathsEqual(session.cwd, cwd) && onSwitchWorktree) {
         onSwitchWorktree(session.cwd);
       }
-      if (session) {
-        handleSelectSession(session.id);
-      }
+
+      const state = useAgentSessionsStore.getState();
+      state.setActiveId(session.cwd, session.id);
+      state.updateGroupState(session.cwd, (groupState) => {
+        const targetGroupId =
+          incomingGroupId ??
+          groupState.groups.find((group) => group.sessionIds.includes(session.id))?.id;
+        if (!targetGroupId) {
+          return groupState;
+        }
+
+        return {
+          ...groupState,
+          groups: groupState.groups.map((group) =>
+            group.id === targetGroupId ? { ...group, activeSessionId: session.id } : group
+          ),
+          activeGroupId: targetGroupId,
+        };
+      });
+    },
+    [cwd, findSessionByNotificationId, onSwitchWorktree]
+  );
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.notification.onClick((sessionId) => {
+      selectSessionAcrossWorktrees(sessionId);
     });
     return unsubscribe;
-  }, [handleSelectSession, findSessionByNotificationId, cwd, onSwitchWorktree]);
+  }, [selectSessionAcrossWorktrees]);
+
+  useEffect(() => {
+    return window.electronAPI.externalSession.onFocusSession(({ sessionId, groupId }) => {
+      selectSessionAcrossWorktrees(sessionId, groupId);
+    });
+  }, [selectSessionAcrossWorktrees]);
+
+  const externalSessionSnapshot = useMemo<ExternalSessionSnapshot>(() => {
+    const snapshotSessions = allSessions
+      .filter((session) => session.backendSessionId || session.sessionId || session.agentId)
+      .map((session) => {
+        const groupState =
+          worktreeGroupStates[normalizePath(session.cwd)] || createInitialGroupState();
+        const group = groupState.groups.find((item) => item.sessionIds.includes(session.id));
+        const isGroupActive = group != null && group.id === groupState.activeGroupId;
+        const isSessionActive = isGroupActive && group?.activeSessionId === session.id;
+
+        return {
+          id: session.id,
+          backendSessionId: session.backendSessionId,
+          sessionId: session.sessionId,
+          name: session.name,
+          displayName: session.terminalTitle || session.name,
+          agentId: session.agentId,
+          agentCommand: session.agentCommand,
+          repoPath: session.repoPath,
+          cwd: session.cwd,
+          projectName: getProjectNameFromPath(session.cwd),
+          groupId: group?.id ?? null,
+          terminalTitle: session.terminalTitle,
+          isGroupActive,
+          isSessionActive,
+          displayOrder: session.displayOrder ?? 0,
+          updatedAt: Date.now(),
+        };
+      });
+
+    return {
+      sessions: snapshotSessions,
+      syncedAt: Date.now(),
+    };
+  }, [allSessions, worktreeGroupStates]);
+
+  useEffect(() => {
+    void window.electronAPI.externalSession.syncSnapshot(externalSessionSnapshot);
+  }, [externalSessionSnapshot]);
 
   // Enhanced input sender ref (unchanged)
   const enhancedInputSenderRef = useRef<

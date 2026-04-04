@@ -43,6 +43,7 @@ import { readSettings } from './ipc/settings';
 import { registerWindowHandlers } from './ipc/window';
 import { registerClaudeBridgeIpcHandlers } from './services/claude/ClaudeIdeBridge';
 import { unwatchClaudeSettings } from './services/claude/ClaudeProviderManager';
+import { externalSessionApiServer } from './services/externalSession/ExternalSessionApiServer';
 import {
   isAllowedLocalFilePath,
   registerAllowedLocalFileRoot,
@@ -626,6 +627,10 @@ app.whenReady().then(async () => {
   // Default open or close DevTools by F12 in development
   // Also intercept Cmd+- for all windows to bypass Monaco Editor interception
   app.on('browser-window-created', (_, window) => {
+    window.on('closed', () => {
+      externalSessionApiServer.clearWindow(window.id);
+    });
+
     // Snapshot listeners before the optimizer adds its own, only needed in production.
     const listenersBefore = app.isPackaged
       ? new Set(window.webContents.listeners('before-input-event'))
@@ -680,6 +685,7 @@ app.whenReady().then(async () => {
 
   // Auto-start Hapi server if enabled in settings
   await autoStartHapi();
+  await externalSessionApiServer.start();
 
   setCurrentLocale(readStoredLanguage());
 
@@ -761,6 +767,7 @@ app.on('will-quit', (event) => {
   cleanupWindowHandlers = null;
   unwatchClaudeSettings();
   gitAutoFetchService.cleanup();
+  void externalSessionApiServer.stop();
 
   // Guard against double-cleanup: sync cleanup in the force-exit path must be
   // skipped if async cleanup already finished, otherwise both paths would
@@ -807,6 +814,7 @@ function handleShutdownSignal(signal: string): void {
   // Sync cleanup: kill child processes immediately
   unwatchClaudeSettings();
   gitAutoFetchService.cleanup();
+  void externalSessionApiServer.stop();
   cleanupAllResourcesSync();
   // Use app.exit() to bypass will-quit handler (already cleaned up)
   app.exit(0);

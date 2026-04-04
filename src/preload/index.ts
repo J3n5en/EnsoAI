@@ -15,6 +15,8 @@ import type {
   ContentSearchResult,
   CustomAgent,
   DetectedApp,
+  ExternalSessionFocusPayload,
+  ExternalSessionSnapshot,
   FileChange,
   FileChangeEvent,
   FileChangesResult,
@@ -841,6 +843,16 @@ const electronAPI = {
       const handler = (_: unknown, data: Parameters<typeof callback>[0]) => callback(data);
       ipcRenderer.on(IPC_CHANNELS.AGENT_STATUS_UPDATE, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.AGENT_STATUS_UPDATE, handler);
+    },
+  },
+
+  externalSession: {
+    syncSnapshot: (snapshot: ExternalSessionSnapshot): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.EXTERNAL_SESSION_SYNC, snapshot),
+    onFocusSession: (callback: (payload: ExternalSessionFocusPayload) => void): (() => void) => {
+      const handler = (_: unknown, payload: ExternalSessionFocusPayload) => callback(payload);
+      ipcRenderer.on(IPC_CHANNELS.EXTERNAL_SESSION_FOCUS, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.EXTERNAL_SESSION_FOCUS, handler);
     },
   },
 

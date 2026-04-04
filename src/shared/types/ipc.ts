@@ -158,6 +158,8 @@ export const IPC_CHANNELS = {
   WINDOW_IS_FULLSCREEN: 'window:isFullScreen',
   WINDOW_FULLSCREEN_CHANGED: 'window:fullScreenChanged',
   WINDOW_GET_REPOSITORY_RUNTIME_CONTEXT: 'window:getRepositoryRuntimeContext',
+  EXTERNAL_SESSION_SYNC: 'externalSession:sync',
+  EXTERNAL_SESSION_FOCUS: 'externalSession:focus',
   // Dialog
   DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
   DIALOG_OPEN_FILE: 'dialog:openFile',
