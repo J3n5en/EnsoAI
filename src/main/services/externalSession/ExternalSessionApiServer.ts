@@ -7,7 +7,7 @@ import {
 } from '@shared/types';
 import { BrowserWindow } from 'electron';
 
-const EXTERNAL_SESSION_API_PORT = 27124;
+const DEFAULT_EXTERNAL_SESSION_API_PORT = 27124;
 const MAX_BODY_SIZE = 64 * 1024;
 
 interface WindowSnapshotEntry {
@@ -18,9 +18,6 @@ interface WindowSnapshotEntry {
 function json(res: http.ServerResponse, status: number, payload: unknown): void {
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(JSON.stringify(payload));
 }
@@ -40,13 +37,15 @@ function normalizePathname(url: string | undefined): string {
 export class ExternalSessionApiServer {
   private server: http.Server | null = null;
   private snapshots = new Map<number, WindowSnapshotEntry>();
+  private port = DEFAULT_EXTERNAL_SESSION_API_PORT;
 
-  start(): Promise<{ success: boolean; error?: string }> {
+  start(port = this.port): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {
       if (this.server) {
         resolve({ success: true });
         return;
       }
+      this.port = port;
 
       this.server = http.createServer((req, res) => {
         if (req.method === 'OPTIONS') {
@@ -57,7 +56,7 @@ export class ExternalSessionApiServer {
         const pathname = normalizePathname(req.url);
 
         if (req.method === 'GET' && pathname === '/health') {
-          json(res, 200, { ok: true, port: EXTERNAL_SESSION_API_PORT });
+          json(res, 200, { ok: true, port: this.port });
           return;
         }
 
@@ -112,13 +111,18 @@ export class ExternalSessionApiServer {
           this.server = null;
           resolve({
             success: false,
-            error: `Port ${EXTERNAL_SESSION_API_PORT} is already in use`,
+            error: `Port ${this.port} is already in use`,
           });
         }
       });
 
-      this.server.listen(EXTERNAL_SESSION_API_PORT, '127.0.0.1', () => {
-        console.log(`[external-session-api] Server started on port ${EXTERNAL_SESSION_API_PORT}`);
+      this.server.listen(this.port, '127.0.0.1', () => {
+        console.log(`[external-session-api] Server started on port ${this.port}`);
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.webContents.send(IPC_CHANNELS.EXTERNAL_SESSION_RESYNC);
+          }
+        }
         resolve({ success: true });
       });
     });
@@ -133,16 +137,25 @@ export class ExternalSessionApiServer {
 
       const server = this.server;
       this.server = null;
-      server.close(() => resolve());
+      server.close(() => {
+        resolve();
+      });
     });
   }
 
   updateSnapshot(windowId: number, snapshot: ExternalSessionSnapshot): void {
+    if (!this.server) {
+      return;
+    }
     this.snapshots.set(windowId, { windowId, snapshot });
   }
 
   clearWindow(windowId: number): void {
     this.snapshots.delete(windowId);
+  }
+
+  getPort(): number {
+    return this.port;
   }
 
   listSessions(): ExternalSessionApiItem[] {
@@ -206,6 +219,7 @@ export class ExternalSessionApiServer {
     if (window.isMinimized()) {
       window.restore();
     }
+    window.moveTop();
     window.show();
     window.focus();
 

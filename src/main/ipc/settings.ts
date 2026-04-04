@@ -1,5 +1,6 @@
 import { IPC_CHANNELS } from '@shared/types';
 import { app, ipcMain } from 'electron';
+import { externalSessionApiServer } from '../services/externalSession/ExternalSessionApiServer';
 import {
   readSharedSettings,
   writeSharedSettings,
@@ -15,6 +16,19 @@ let isDirty = false;
 
 const DEBOUNCE_MS = 500;
 const MAX_WAIT_MS = 5000;
+
+function getPersistedState(
+  data: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  const persisted = data?.['enso-settings'];
+  if (persisted && typeof persisted === 'object') {
+    const state = (persisted as { state?: Record<string, unknown> }).state;
+    if (state && typeof state === 'object') {
+      return state;
+    }
+  }
+  return {};
+}
 
 /**
  * Read settings from disk (for use in main process)
@@ -84,6 +98,34 @@ export function registerSettingsHandlers(): void {
         ?.enableProviderWatcher;
       if (oldEnabled !== newEnabled) {
         toggleClaudeProviderWatcher(newEnabled !== false);
+      }
+
+      const oldState = getPersistedState(cachedSettings);
+      const newState = getPersistedState(newData);
+      const oldExternalSessionApiEnabled = (oldState.externalSessionApi as Record<string, unknown>)
+        ?.enabled;
+      const newExternalSessionApiEnabled = (newState.externalSessionApi as Record<string, unknown>)
+        ?.enabled;
+      const oldExternalSessionApiPort =
+        Number((oldState.externalSessionApi as Record<string, unknown>)?.port) || 27124;
+      const newExternalSessionApiPort =
+        Number((newState.externalSessionApi as Record<string, unknown>)?.port) || 27124;
+      if (
+        oldExternalSessionApiEnabled !== newExternalSessionApiEnabled ||
+        (newExternalSessionApiEnabled === true &&
+          oldExternalSessionApiPort !== newExternalSessionApiPort)
+      ) {
+        if (newExternalSessionApiEnabled === true) {
+          if (oldExternalSessionApiEnabled === true) {
+            await externalSessionApiServer.stop();
+          }
+          const result = await externalSessionApiServer.start(newExternalSessionApiPort);
+          if (!result.success) {
+            console.error('[external-session-api] Failed to start:', result.error);
+          }
+        } else {
+          await externalSessionApiServer.stop();
+        }
       }
 
       // 更新内存缓存

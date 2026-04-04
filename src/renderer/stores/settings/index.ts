@@ -17,6 +17,7 @@ import {
   defaultCommitMessageGeneratorSettings,
   defaultEditorKeybindings,
   defaultEditorSettings,
+  defaultExternalSessionApiSettings,
   defaultGitCloneSettings,
   defaultGlobalKeybindings,
   defaultHapiSettings,
@@ -141,6 +142,7 @@ function getInitialState() {
 
     // Claude Code Integration
     claudeCodeIntegration: defaultClaudeCodeIntegrationSettings,
+    externalSessionApi: defaultExternalSessionApiSettings,
 
     // AI Features
     commitMessageGenerator: defaultCommitMessageGeneratorSettings,
@@ -389,6 +391,11 @@ export const useSettingsStore = create<SettingsState>()(
       setClaudeCodeIntegration: (settings) =>
         set((state) => ({
           claudeCodeIntegration: { ...state.claudeCodeIntegration, ...settings },
+        })),
+
+      setExternalSessionApi: (settings) =>
+        set((state) => ({
+          externalSessionApi: { ...state.externalSessionApi, ...settings },
         })),
 
       addClaudeProvider: (provider) =>

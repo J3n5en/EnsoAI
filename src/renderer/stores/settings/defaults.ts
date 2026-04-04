@@ -9,6 +9,7 @@ import type {
   CommitMessageGeneratorSettings,
   EditorKeybindings,
   EditorSettings,
+  ExternalSessionApiSettings,
   GitCloneSettings,
   GlobalKeybindings,
   HapiSettings,
@@ -163,6 +164,11 @@ export const defaultClaudeCodeIntegrationSettings: ClaudeCodeIntegrationSettings
   providers: [],
   enhancedInputEnabled: false, // Disable enhanced input by default
   enhancedInputAutoPopup: 'hideWhileRunning', // Hide while running by default
+};
+
+export const defaultExternalSessionApiSettings: ExternalSessionApiSettings = {
+  enabled: false,
+  port: 27124,
 };
 
 // Default commit message generator settings

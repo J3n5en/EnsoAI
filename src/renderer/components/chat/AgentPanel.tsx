@@ -249,6 +249,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   ]);
 
   const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
+  const externalSessionApiEnabled = useSettingsStore((s) => s.externalSessionApi.enabled);
   const terminalBgColor = useMemo(() => {
     if (bgImageEnabled) return 'transparent';
     return getXtermTheme(terminalTheme)?.background ?? defaultDarkTheme.background;
@@ -863,10 +864,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   }, [selectSessionAcrossWorktrees]);
 
   useEffect(() => {
+    if (!externalSessionApiEnabled) {
+      return undefined;
+    }
     return window.electronAPI.externalSession.onFocusSession(({ sessionId, groupId }) => {
       selectSessionAcrossWorktrees(sessionId, groupId);
     });
-  }, [selectSessionAcrossWorktrees]);
+  }, [externalSessionApiEnabled, selectSessionAcrossWorktrees]);
 
   const externalSessionSnapshot = useMemo<ExternalSessionSnapshot>(() => {
     const snapshotSessions = allSessions
@@ -905,8 +909,20 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   }, [allSessions, worktreeGroupStates]);
 
   useEffect(() => {
+    if (!externalSessionApiEnabled) {
+      return;
+    }
     void window.electronAPI.externalSession.syncSnapshot(externalSessionSnapshot);
-  }, [externalSessionSnapshot]);
+  }, [externalSessionApiEnabled, externalSessionSnapshot]);
+
+  useEffect(() => {
+    if (!externalSessionApiEnabled) {
+      return undefined;
+    }
+    return window.electronAPI.externalSession.onResyncRequest(() => {
+      void window.electronAPI.externalSession.syncSnapshot(externalSessionSnapshot);
+    });
+  }, [externalSessionApiEnabled, externalSessionSnapshot]);
 
   // Enhanced input sender ref (unchanged)
   const enhancedInputSenderRef = useRef<

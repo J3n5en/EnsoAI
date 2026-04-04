@@ -1,6 +1,5 @@
 import type { Locale } from '@shared/i18n';
 import type {
-  AIProvider,
   BuiltinAgentId,
   ConnectionProfile,
   CustomAgent,
@@ -8,10 +7,8 @@ import type {
   McpServer,
   PromptPreset,
   ProxySettings,
-  ReasoningEffort,
   ShellConfig,
 } from '@shared/types';
-import type { ClaudeEffort, CommonAISettings } from '@shared/types/ai';
 
 // Theme types
 export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
@@ -205,6 +202,11 @@ export interface ClaudeCodeIntegrationSettings {
   enhancedInputAutoPopup: 'always' | 'hideWhileRunning' | 'manual'; // Enhanced input auto popup mode
 }
 
+export interface ExternalSessionApiSettings {
+  enabled: boolean;
+  port: number;
+}
+
 // Commit message generator settings
 export interface CommitMessageGeneratorSettings extends CommonAISettings {
   enabled: boolean;
@@ -333,6 +335,7 @@ export interface SettingsState {
 
   // Claude Code Integration
   claudeCodeIntegration: ClaudeCodeIntegrationSettings;
+  externalSessionApi: ExternalSessionApiSettings;
 
   // AI Features
   commitMessageGenerator: CommitMessageGeneratorSettings;
@@ -455,6 +458,7 @@ export interface SettingsState {
 
   // Setters - Claude Code Integration
   setClaudeCodeIntegration: (settings: Partial<ClaudeCodeIntegrationSettings>) => void;
+  setExternalSessionApi: (settings: Partial<ExternalSessionApiSettings>) => void;
   addClaudeProvider: (provider: import('@shared/types').ClaudeProvider) => void;
   updateClaudeProvider: (
     id: string,

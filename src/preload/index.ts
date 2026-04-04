@@ -854,6 +854,11 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.EXTERNAL_SESSION_FOCUS, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.EXTERNAL_SESSION_FOCUS, handler);
     },
+    onResyncRequest: (callback: () => void): (() => void) => {
+      const handler = () => callback();
+      ipcRenderer.on(IPC_CHANNELS.EXTERNAL_SESSION_RESYNC, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.EXTERNAL_SESSION_RESYNC, handler);
+    },
   },
 
   // Updater

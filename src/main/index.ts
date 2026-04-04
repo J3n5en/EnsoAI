@@ -684,8 +684,21 @@ app.whenReady().then(async () => {
   await init();
 
   // Auto-start Hapi server if enabled in settings
+  const appSettings = readSettings();
   await autoStartHapi();
-  await externalSessionApiServer.start();
+  const persistedSettings = appSettings?.['enso-settings'] as
+    | { state?: Record<string, unknown> }
+    | undefined;
+  const externalSessionApiSettings = persistedSettings?.state?.externalSessionApi as
+    | Record<string, unknown>
+    | undefined;
+  if (externalSessionApiSettings?.enabled === true) {
+    const port = Number(externalSessionApiSettings?.port) || 27124;
+    const result = await externalSessionApiServer.start(port);
+    if (!result.success) {
+      console.error('[external-session-api] Failed to start:', result.error);
+    }
+  }
 
   setCurrentLocale(readStoredLanguage());
 
@@ -696,7 +709,6 @@ app.whenReady().then(async () => {
   webInspectorServer.setMainWindow(mainWindow);
 
   // Initialize Claude Provider Watcher (only when enableProviderWatcher is true)
-  const appSettings = readSettings();
   const providerWatcherEnabled =
     (appSettings?.claudeCodeIntegration as Record<string, unknown>)?.enableProviderWatcher !==
     false;

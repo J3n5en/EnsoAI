@@ -160,6 +160,7 @@ export const IPC_CHANNELS = {
   WINDOW_GET_REPOSITORY_RUNTIME_CONTEXT: 'window:getRepositoryRuntimeContext',
   EXTERNAL_SESSION_SYNC: 'externalSession:sync',
   EXTERNAL_SESSION_FOCUS: 'externalSession:focus',
+  EXTERNAL_SESSION_RESYNC: 'externalSession:resync',
   // Dialog
   DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
   DIALOG_OPEN_FILE: 'dialog:openFile',

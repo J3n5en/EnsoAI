@@ -208,6 +208,19 @@ export const zhTranslations: Record<string, string> = {
   Edit: '编辑',
   'Edit Agent': '编辑 Agent',
   'Enable notifications': '启用通知',
+  'External Session API': '外部会话 API',
+  'Expose a localhost API for external desktop tools to list and focus sessions':
+    '暴露本地 localhost API，供外部桌面工具列出并聚焦会话',
+  'Disabled by default. Turn this on only if you need external tools to control sessions':
+    '默认关闭。仅在你需要外部工具控制会话时再开启',
+  'API Usage': 'API 用法',
+  'Use these localhost endpoints to inspect and focus sessions from external tools':
+    '外部工具可使用以下 localhost 接口查看并聚焦会话',
+  'API Base URL': 'API 基础地址',
+  Port: '端口',
+  'Choose a localhost port for the external session API': '为外部会话 API 选择一个 localhost 端口',
+  'List sessions': '列出会话',
+  'Focus a session': '聚焦会话',
   'Edit Group': '编辑分组',
   English: '英语',
   'Enter delay': '启动延迟',

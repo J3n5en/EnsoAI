@@ -30,7 +30,6 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Dialog,
-  DialogClose,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -48,6 +47,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { toastManager } from '@/components/ui/toast';
 import { useDetectedApps } from '@/hooks/useAppDetector';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -101,6 +101,8 @@ export function GeneralSettings() {
   const {
     language,
     setLanguage,
+    externalSessionApi,
+    setExternalSessionApi,
     layoutMode,
     setLayoutMode,
     fileTreeDisplayMode,
@@ -453,6 +455,28 @@ export function GeneralSettings() {
   const shellArgsPlaceholder = isWindows
     ? '/k "C:\\Program Files\\init.bat"'
     : "-l -c '/usr/local/bin/app'";
+  const externalSessionApiPort = externalSessionApi.port || 27124;
+  const externalSessionApiBaseUrl = `http://127.0.0.1:${externalSessionApiPort}`;
+  const sessionListCommand = isWindows
+    ? `curl ${externalSessionApiBaseUrl}/api/sessions`
+    : `curl "${externalSessionApiBaseUrl}/api/sessions"`;
+  const focusCommand = isWindows
+    ? `curl -X POST ${externalSessionApiBaseUrl}/api/sessions/{sessionId}/focus`
+    : `curl -X POST "${externalSessionApiBaseUrl}/api/sessions/{sessionId}/focus"`;
+  const handleCopyText = React.useCallback(
+    async (value: string) => {
+      try {
+        await navigator.clipboard.writeText(value);
+        toastManager.add({
+          type: 'success',
+          title: t('Copied to clipboard'),
+        });
+      } catch {
+        // Ignore clipboard errors
+      }
+    },
+    [t]
+  );
 
   return (
     <div className="space-y-6">
@@ -1364,6 +1388,114 @@ export function GeneralSettings() {
           <Switch checked={autoUpdateEnabled} onCheckedChange={setAutoUpdateEnabled} />
         </div>
       </div>
+
+      <div className="pt-4 border-t">
+        <h3 className="text-lg font-medium">{t('External Session API')}</h3>
+        <p className="text-sm text-muted-foreground">
+          {t('Expose a localhost API for external desktop tools to list and focus sessions')}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Enable')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t(
+              'Disabled by default. Turn this on only if you need external tools to control sessions'
+            )}
+          </p>
+          <Switch
+            checked={externalSessionApi.enabled}
+            onCheckedChange={(checked) => setExternalSessionApi({ enabled: checked })}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+        <span className="text-sm font-medium mt-2">{t('Port')}</span>
+        <div className="space-y-1.5">
+          <Input
+            type="number"
+            min={1024}
+            max={65535}
+            value={String(externalSessionApiPort)}
+            onChange={(e) => {
+              const nextValue = Number(e.target.value);
+              if (Number.isFinite(nextValue)) {
+                setExternalSessionApi({
+                  port: Math.max(1024, Math.min(65535, nextValue)),
+                });
+              }
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('Choose a localhost port for the external session API')}
+          </p>
+        </div>
+      </div>
+
+      {externalSessionApi.enabled && (
+        <div className="grid grid-cols-[100px_1fr] items-start gap-4">
+          <span className="text-sm font-medium mt-2">{t('API Usage')}</span>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {t('Use these localhost endpoints to inspect and focus sessions from external tools')}
+            </p>
+            <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">{t('API Base URL')}</div>
+                <div className="mt-1 flex items-center gap-2 rounded-md bg-background px-3 py-2">
+                  <div className="min-w-0 flex-1 font-mono text-xs break-all">
+                    {externalSessionApiBaseUrl}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyText(externalSessionApiBaseUrl)}
+                  >
+                    {t('Copy')}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  {t('List sessions')}
+                </div>
+                <div className="mt-1 flex items-center gap-2 rounded-md bg-background px-3 py-2">
+                  <div className="min-w-0 flex-1 font-mono text-xs break-all">
+                    {sessionListCommand}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyText(sessionListCommand)}
+                  >
+                    {t('Copy')}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  {t('Focus a session')}
+                </div>
+                <div className="mt-1 flex items-center gap-2 rounded-md bg-background px-3 py-2">
+                  <div className="min-w-0 flex-1 font-mono text-xs break-all">{focusCommand}</div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyText(focusCommand)}
+                  >
+                    {t('Copy')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AlertDialog open={tempPathDialogOpen} onOpenChange={setTempPathDialogOpen}>
         <AlertDialogPopup className="max-w-md">
