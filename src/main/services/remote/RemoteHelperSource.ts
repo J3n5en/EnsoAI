@@ -808,6 +808,8 @@ async function gitShowFile(workdir, spec) {
   }
 }
 
+// Use --untracked-files=all to list all untracked files including nested ones
+// This is intentional per PR #405 performance improvement
 async function gitStatus(rootPath) {
   const { stdout } = await execCommand('git', ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'], { cwd: rootPath });
   return parsePorcelainStatus(stdout);
@@ -901,6 +903,8 @@ async function gitFetch(rootPath, remote = 'origin') {
   return { success: true };
 }
 
+// Use --untracked-files=all to list all untracked files including nested ones
+// This is intentional per PR #405 performance improvement
 async function gitFileChanges(rootPath) {
   const { stdout } = await execCommand('git', ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all'], { cwd: rootPath });
   return parseFileChanges(stdout);

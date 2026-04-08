@@ -67,7 +67,7 @@ export function CreateWorktreeDialog({
   onOpenChange: controlledOnOpenChange,
 }: CreateWorktreeDialogProps) {
   const { t } = useI18n();
-  const { defaultWorktreePath, branchNameGenerator } = useSettingsStore();
+  const { defaultWorktreePath, branchNameGenerator, aiPerformance } = useSettingsStore();
 
   // Internal state (for uncontrolled mode)
   const [internalOpen, setInternalOpen] = React.useState(false);
@@ -335,7 +335,6 @@ export function CreateWorktreeDialog({
         .replaceAll('{description}', trimmedDescription)
         .replaceAll('{current_date}', currentDate)
         .replaceAll('{current_time}', currentTime);
-      const { aiPerformance } = useSettingsStore.getState();
       const result = await window.electronAPI.git.generateBranchName(workdir, {
         prompt,
         provider: branchNameGenerator.provider,

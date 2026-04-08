@@ -22,7 +22,7 @@ export function CommitBox({
   const { t } = useI18n();
   const [message, setMessage] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const { commitMessageGenerator } = useSettingsStore();
+  const { commitMessageGenerator, aiPerformance } = useSettingsStore();
   const bgImageEnabled = useSettingsStore((s) => s.backgroundImageEnabled);
 
   const handleCommit = () => {
@@ -45,7 +45,6 @@ export function CommitBox({
 
     setIsGenerating(true);
     try {
-      const { aiPerformance } = useSettingsStore.getState();
       const result = await window.electronAPI.git.generateCommitMessage(rootPath, {
         maxDiffLines: commitMessageGenerator.maxDiffLines,
         timeout: commitMessageGenerator.timeout,

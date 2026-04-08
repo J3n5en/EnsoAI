@@ -337,7 +337,9 @@ export function registerGitHandlers(): void {
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
         bare: options.bareEnabled,
-        claudeEffort: options.effortEnabled ? (options.effortLevel as ClaudeEffort) : undefined,
+        claudeEffort: options.effortEnabled
+          ? ((options.effortLevel as ClaudeEffort) ?? 'low')
+          : undefined,
         prompt: options.prompt,
       });
     }
@@ -375,7 +377,9 @@ export function registerGitHandlers(): void {
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
         bare: options.bareEnabled,
-        claudeEffort: options.effortEnabled ? (options.effortLevel as ClaudeEffort) : undefined,
+        claudeEffort: options.effortEnabled
+          ? ((options.effortLevel as ClaudeEffort) ?? 'low')
+          : undefined,
         language: options.language ?? '中文',
         reviewId: options.reviewId,
         sessionId: options.sessionId, // Pass sessionId for session preservation
@@ -487,7 +491,9 @@ export function registerGitHandlers(): void {
         model: options.model as ModelId,
         reasoningEffort: options.reasoningEffort as ReasoningEffort | undefined,
         bare: options.bareEnabled,
-        claudeEffort: options.effortEnabled ? (options.effortLevel as ClaudeEffort) : undefined,
+        claudeEffort: options.effortEnabled
+          ? ((options.effortLevel as ClaudeEffort) ?? 'low')
+          : undefined,
       });
     }
   );
