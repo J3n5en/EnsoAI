@@ -1684,6 +1684,15 @@ export const zhTranslations: Record<string, string> = {
     '这将恢复待办润色的默认 AI 提示词，自定义提示词将会丢失。',
   'Enter a prompt template.\nAvailable variables:\n• {text} - Raw requirement text':
     '输入提示词模板。\n可用变量：\n• {text} - 原始需求文本',
+  // AI Performance
+  'Performance Optimization': '性能优化',
+  'Global settings for AI CLI performance optimization': 'AI CLI 性能优化的全局设置',
+  'Enable bare mode': '启用 bare 模式',
+  'Skip hooks, LSP, plugins for faster response': '跳过 hooks、LSP、插件以加快响应速度',
+  'Enable effort control': '启用 effort 控制',
+  'Control token usage vs quality balance': '控制 token 使用量与质量的平衡',
+  'Effort Level': 'Effort 级别',
+  'Higher effort = better quality, more tokens': '更高级别 = 更好质量，更多 token',
 };
 
 export function normalizeLocale(input?: string): Locale {
