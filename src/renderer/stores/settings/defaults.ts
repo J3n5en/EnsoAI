@@ -3,6 +3,7 @@ import type { ProxySettings } from '@shared/types';
 import type {
   AgentDetectionStatus,
   AgentSettings,
+  AIPerformanceSettings,
   BranchNameGeneratorSettings,
   ClaudeCodeIntegrationSettings,
   CodeReviewSettings,
@@ -231,6 +232,13 @@ export const defaultCodeReviewSettings: CodeReviewSettings = {
   claudeEffort: 'high',
   language: '中文',
   prompt: defaultCodeReviewPromptZh,
+};
+
+// Default AI performance settings
+export const defaultAiPerformanceSettings: AIPerformanceSettings = {
+  bareEnabled: false,
+  effortEnabled: false,
+  effortLevel: 'low',
 };
 
 // Default Hapi settings
