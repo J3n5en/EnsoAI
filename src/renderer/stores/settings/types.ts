@@ -1,6 +1,5 @@
 import type { Locale } from '@shared/i18n';
 import type {
-  AIProvider,
   BuiltinAgentId,
   ConnectionProfile,
   CustomAgent,
@@ -8,7 +7,6 @@ import type {
   McpServer,
   PromptPreset,
   ProxySettings,
-  ReasoningEffort,
   ShellConfig,
 } from '@shared/types';
 import type { ClaudeEffort, CommonAISettings } from '@shared/types/ai';

@@ -1,4 +1,3 @@
-import type { AIProvider, ModelId } from '@shared/types';
 import type { CommonAICLIOptions } from '@shared/types/ai';
 import { parseCLIOutput, spawnCLI, stripCodeFence } from './providers';
 

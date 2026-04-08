@@ -36,7 +36,6 @@ import {
 import { cleanupLegacyFields, migrateSettings } from './migration';
 import { electronStorage } from './storage';
 import type {
-  AIPerformanceSettings,
   BackgroundSizeMode,
   BackgroundSourceType,
   FontWeight,

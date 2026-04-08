@@ -133,14 +133,14 @@ async function main() {
     await writeFile(checksumOutputPath, `${checksum}  ${runtimeArchiveName}\n`, 'utf8');
 
     process.stdout.write(
-      JSON.stringify({
+      `${JSON.stringify({
         ok: true,
         arch,
         nodeVersion,
         serverVersion,
         archive: archiveOutputPath,
         checksumFile: checksumOutputPath,
-      }) + '\n'
+      })}\n`
     );
   } finally {
     await rm(tempRoot, { recursive: true, force: true }).catch(() => {});

@@ -1,5 +1,4 @@
 import type { ChildProcess } from 'node:child_process';
-import type { AIProvider, ModelId } from '@shared/types';
 import type { CommonAICLIOptions } from '@shared/types/ai';
 import { spawnGit } from '../git/runtime';
 import { spawnCLI, stripAnsi } from './providers';

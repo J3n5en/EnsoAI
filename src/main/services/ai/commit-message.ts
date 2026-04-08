@@ -1,5 +1,4 @@
 import { execSync } from 'node:child_process';
-import type { AIProvider, ModelId } from '@shared/types';
 import type { CommonAICLIOptions } from '@shared/types/ai';
 import { isWslGitRepository, spawnGit } from '../git/runtime';
 import { parseCLIOutput, spawnCLI, stripCodeFence } from './providers';

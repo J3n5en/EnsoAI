@@ -25,7 +25,7 @@ function getClaudeConfigDirs(): string[] {
   const envDir = process.env.CLAUDE_CONFIG_DIR;
 
   const candidates = [homeDir];
-  if (envDir && envDir.trim()) {
+  if (envDir?.trim()) {
     candidates.push(envDir);
   }
 

@@ -235,7 +235,7 @@ export function FileSidebar({
       if (!effectiveSessionId) return;
       let displayPath = path;
       const normalizedRoot = rootPath ? normalizePath(rootPath) : '';
-      if (normalizedRoot && path.startsWith(normalizedRoot + '/')) {
+      if (normalizedRoot && path.startsWith(`${normalizedRoot}/`)) {
         displayPath = path.slice(normalizedRoot.length + 1);
       }
       terminalWrite(effectiveSessionId, `@${displayPath} `);

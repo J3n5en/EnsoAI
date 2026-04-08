@@ -92,7 +92,7 @@ export function findHostDirname(host: string, mappings: GitHostMapping[]): strin
     // - The resulting pattern is simple: ^escaped\.pattern[\w.-]*$
     // Escape special regex characters except *, then replace * with wildcard pattern
     const escaped = m.pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp('^' + escaped.replace(/\*/g, '[\\w.-]*') + '$');
+    const regex = new RegExp(`^${escaped.replace(/\*/g, '[\\w.-]*')}$`);
     return regex.test(host);
   });
   if (wildcardMatch) {
