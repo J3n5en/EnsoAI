@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { useI18n } from '@/i18n';
 import {
   type AIProvider,
+  type ClaudeEffort,
   defaultBranchNameGeneratorSettings,
   defaultCodeReviewPromptEn,
   defaultCodeReviewPromptZh,
@@ -65,6 +66,15 @@ const REASONING_EFFORTS: { value: string; label: string }[] = [
   { value: 'xhigh', label: 'xHigh' },
 ];
 
+// Claude effort levels for performance optimization
+const EFFORT_LEVELS: { value: ClaudeEffort; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'max', label: 'Max' },
+  { value: 'auto', label: 'Auto' },
+];
+
 // Get default model for provider
 function getDefaultModel(provider: AIProvider): string {
   const models = MODELS_BY_PROVIDER[provider];
@@ -74,6 +84,8 @@ function getDefaultModel(provider: AIProvider): string {
 export function AISettings() {
   const { t, locale } = useI18n();
   const {
+    aiPerformance,
+    setAiPerformance,
     commitMessageGenerator,
     setCommitMessageGenerator,
     codeReview,
@@ -141,6 +153,76 @@ export function AISettings() {
         <p className="text-sm text-muted-foreground">
           {t('Configure AI-powered features for code generation and review')}
         </p>
+      </div>
+
+      {/* Performance Optimization Section */}
+      <div className="border-t pt-6">
+        <div>
+          <h4 className="text-base font-medium">{t('Performance Optimization')}</h4>
+          <p className="text-sm text-muted-foreground">
+            {t('Global settings for AI CLI performance optimization')}
+          </p>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          {/* Enable bare mode */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">{t('Enable bare mode')}</span>
+              <p className="text-xs text-muted-foreground">
+                {t('Skip hooks, LSP, plugins for faster response')}
+              </p>
+            </div>
+            <Switch
+              checked={aiPerformance.bareEnabled}
+              onCheckedChange={(checked) => setAiPerformance({ bareEnabled: checked })}
+            />
+          </div>
+
+          {/* Enable effort control */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">{t('Enable effort control')}</span>
+              <p className="text-xs text-muted-foreground">
+                {t('Control token usage vs quality balance')}
+              </p>
+            </div>
+            <Switch
+              checked={aiPerformance.effortEnabled}
+              onCheckedChange={(checked) => setAiPerformance({ effortEnabled: checked })}
+            />
+          </div>
+
+          {/* Effort level selector - only show when effort is enabled */}
+          {aiPerformance.effortEnabled && (
+            <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+              <span className="text-sm font-medium">{t('Effort Level')}</span>
+              <div className="space-y-1.5">
+                <Select
+                  value={aiPerformance.effortLevel}
+                  onValueChange={(v) => setAiPerformance({ effortLevel: v as ClaudeEffort })}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue>
+                      {EFFORT_LEVELS.find((e) => e.value === aiPerformance.effortLevel)?.label ??
+                        'Low'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {EFFORT_LEVELS.map((e) => (
+                      <SelectItem key={e.value} value={e.value}>
+                        {e.label}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('Higher effort = better quality, more tokens')}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Commit Message Generator Section */}
