@@ -13,6 +13,13 @@ import type {
 } from '@shared/types';
 import type { ClaudeEffort, CommonAISettings } from '@shared/types/ai';
 
+// AI Performance Optimization Settings
+export interface AIPerformanceSettings {
+  bareEnabled: boolean;
+  effortEnabled: boolean;
+  effortLevel: ClaudeEffort;
+}
+
 // Theme types
 export type Theme = 'light' | 'dark' | 'system' | 'sync-terminal';
 
@@ -340,6 +347,9 @@ export interface SettingsState {
   branchNameGenerator: BranchNameGeneratorSettings;
   todoPolish: TodoPolishSettings;
 
+  // AI Performance Optimization
+  aiPerformance: AIPerformanceSettings;
+
   // App Settings
   autoUpdateEnabled: boolean;
   hapiSettings: HapiSettings;
@@ -470,6 +480,9 @@ export interface SettingsState {
   setCodeReview: (settings: Partial<CodeReviewSettings>) => void;
   setBranchNameGenerator: (settings: Partial<BranchNameGeneratorSettings>) => void;
   setTodoPolish: (settings: Partial<TodoPolishSettings>) => void;
+
+  // Setters - AI Performance
+  setAiPerformance: (settings: Partial<AIPerformanceSettings>) => void;
 
   // Setters - App
   setAutoUpdateEnabled: (enabled: boolean) => void;
