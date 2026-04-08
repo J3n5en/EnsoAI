@@ -21,6 +21,7 @@ interface UseCodeReviewReturn {
 
 export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReviewReturn {
   const codeReviewSettings = useSettingsStore((s) => s.codeReview);
+  const { aiPerformance } = useSettingsStore();
   const review = useCodeReviewContinueStore((s) => s.review);
   const resetReview = useCodeReviewContinueStore((s) => s.resetReview);
 
@@ -31,8 +32,9 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
       provider: codeReviewSettings.provider,
       model: codeReviewSettings.model,
       reasoningEffort: codeReviewSettings.reasoningEffort,
-      bare: codeReviewSettings.bare,
-      claudeEffort: codeReviewSettings.claudeEffort,
+      bareEnabled: aiPerformance.bareEnabled,
+      effortEnabled: aiPerformance.effortEnabled,
+      effortLevel: aiPerformance.effortLevel,
       language: codeReviewSettings.language ?? '中文',
       prompt: codeReviewSettings.prompt,
     });
@@ -41,10 +43,11 @@ export function useCodeReview({ repoPath }: UseCodeReviewOptions): UseCodeReview
     codeReviewSettings.provider,
     codeReviewSettings.model,
     codeReviewSettings.reasoningEffort,
-    codeReviewSettings.bare,
-    codeReviewSettings.claudeEffort,
     codeReviewSettings.language,
     codeReviewSettings.prompt,
+    aiPerformance.bareEnabled,
+    aiPerformance.effortEnabled,
+    aiPerformance.effortLevel,
   ]);
 
   return {

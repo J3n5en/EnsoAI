@@ -45,6 +45,7 @@ export function CommitBox({
 
     setIsGenerating(true);
     try {
+      const { aiPerformance } = useSettingsStore.getState();
       const result = await window.electronAPI.git.generateCommitMessage(rootPath, {
         maxDiffLines: commitMessageGenerator.maxDiffLines,
         timeout: commitMessageGenerator.timeout,
@@ -52,6 +53,9 @@ export function CommitBox({
         model: commitMessageGenerator.model,
         reasoningEffort: commitMessageGenerator.reasoningEffort,
         prompt: commitMessageGenerator.prompt,
+        bareEnabled: aiPerformance.bareEnabled,
+        effortEnabled: aiPerformance.effortEnabled,
+        effortLevel: aiPerformance.effortLevel,
       });
 
       if (result.success && result.message) {

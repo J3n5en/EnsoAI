@@ -335,13 +335,15 @@ export function CreateWorktreeDialog({
         .replaceAll('{description}', trimmedDescription)
         .replaceAll('{current_date}', currentDate)
         .replaceAll('{current_time}', currentTime);
+      const { aiPerformance } = useSettingsStore.getState();
       const result = await window.electronAPI.git.generateBranchName(workdir, {
         prompt,
         provider: branchNameGenerator.provider,
         model: branchNameGenerator.model,
         reasoningEffort: branchNameGenerator.reasoningEffort,
-        bare: branchNameGenerator.bare,
-        claudeEffort: branchNameGenerator.claudeEffort,
+        bareEnabled: aiPerformance.bareEnabled,
+        effortEnabled: aiPerformance.effortEnabled,
+        effortLevel: aiPerformance.effortLevel,
       });
 
       if (result.success && result.branchName) {
