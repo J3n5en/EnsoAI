@@ -1538,7 +1538,12 @@ export function TreeSidebar({
       {repoSettingsTarget && (
         <RepositorySettingsDialog
           open={repoSettingsOpen}
-          onOpenChange={setRepoSettingsOpen}
+          onOpenChange={(open) => {
+            setRepoSettingsOpen(open);
+            if (open === false) {
+              refreshRepoSettings();
+            }
+          }}
           repoPath={repoSettingsTarget.path}
           repoName={repoSettingsTarget.name}
         />
