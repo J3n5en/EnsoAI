@@ -97,12 +97,14 @@ export function forceReplaceClose(win: BrowserWindow): void {
 }
 
 export function createMainWindow(options: CreateMainWindowOptions = {}): BrowserWindow {
-  const replacementState = options.replaceWindow?.isDestroyed()
-    ? null
-    : {
-        ...options.replaceWindow?.getBounds(),
-        isMaximized: options.replaceWindow?.isMaximized(),
-      };
+  const replacementState =
+    options.replaceWindow && !options.replaceWindow.isDestroyed()
+      ? {
+          ...options.replaceWindow.getBounds(),
+          isMaximized: options.replaceWindow.isMaximized(),
+        }
+      : null;
+
   const state = replacementState ?? loadWindowState();
 
   const isMac = process.platform === 'darwin';
@@ -265,6 +267,7 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
     if (win.isDestroyed()) {
       return;
     }
+    saveWindowState(win);
     forceClose = true;
     win.hide();
     win.close();
@@ -368,8 +371,10 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
   });
 
   win.on('close', (e) => {
-    // Skip confirmation if force close, or quitting for update
-    if (forceClose || autoUpdaterService.isQuittingForUpdate()) {
+    if (forceClose) {
+      return;
+    }
+    if (autoUpdaterService.isQuittingForUpdate()) {
       saveWindowState(win);
       return;
     }
