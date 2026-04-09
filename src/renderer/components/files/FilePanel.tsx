@@ -413,6 +413,13 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
     [tabs, promptUnsaved, saveFile, closeFile, t]
   );
 
+  const closeSavedTabs = useCallback(async () => {
+    const paths = tabs.filter((tab) => !tab.isDirty).map((tab) => tab.path);
+    for (const path of paths) {
+      await closeFile(path);
+    }
+  }, [tabs, closeFile]);
+
   // Handle file click (single click = open in editor)
   const handleFileClick = useCallback(
     (path: string) => {
@@ -795,6 +802,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
             const paths = tabs.map((t) => t.path);
             await requestCloseTabs(paths);
           }}
+          onCloseSaved={closeSavedTabs}
           onCloseLeft={async (path) => {
             const index = tabs.findIndex((t) => t.path === path);
             if (index <= 0) return;

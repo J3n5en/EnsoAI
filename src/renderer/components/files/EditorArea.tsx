@@ -1,5 +1,14 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
-import { ChevronRight, Eye, EyeOff, FileCode, FileX, Maximize2, MessageSquare } from 'lucide-react';
+import {
+  ChevronRight,
+  Eye,
+  EyeOff,
+  FileCode,
+  FileX,
+  Maximize2,
+  MessageSquare,
+  MoreVertical,
+} from 'lucide-react';
 import type * as monaco from 'monaco-editor';
 import {
   forwardRef,
@@ -18,6 +27,7 @@ import {
   BreadcrumbList,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
 import {
   Empty,
   EmptyDescription,
@@ -25,6 +35,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/components/ui/menu';
 import { addToast } from '@/components/ui/toast';
 import { useDebouncedSave } from '@/hooks/useDebouncedSave';
 import { useI18n } from '@/i18n';
@@ -139,6 +150,7 @@ interface EditorAreaProps {
   onTabClose: (path: string) => void | Promise<void>;
   onCloseOthers?: (keepPath: string) => void | Promise<void>;
   onCloseAll?: () => void | Promise<void>;
+  onCloseSaved?: () => void | Promise<void>;
   onCloseLeft?: (path: string) => void | Promise<void>;
   onCloseRight?: (path: string) => void | Promise<void>;
   onTabReorder: (fromIndex: number, toIndex: number) => void;
@@ -163,6 +175,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     onTabClose,
     onCloseOthers,
     onCloseAll,
+    onCloseSaved,
     onCloseLeft,
     onCloseRight,
     onTabReorder,
@@ -1287,7 +1300,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
   return (
     <div className="flex h-full flex-col">
       {/* Tabs */}
-      <div className="flex items-center">
+      <div className="flex h-10 items-center border-b">
         {isFileTreeCollapsed && onToggleFileTree && (
           <button
             type="button"
@@ -1307,6 +1320,7 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             onClose={onTabClose}
             onCloseOthers={onCloseOthers}
             onCloseAll={onCloseAll}
+            onCloseSaved={onCloseSaved}
             onCloseLeft={onCloseLeft}
             onCloseRight={onCloseRight}
             onTabReorder={onTabReorder}
@@ -1314,12 +1328,48 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
             sessionId={sessionId}
           />
         </div>
+        {tabs.length > 0 && (onCloseSaved || onCloseAll) && (
+          <Menu>
+            <MenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 shrink-0 rounded-none p-0 text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  title={t('Tab actions')}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <MenuPopup align="end" side="bottom" sideOffset={4}>
+              <MenuItem
+                disabled={!onCloseSaved || !tabs.some((tab) => !tab.isDirty)}
+                onClick={async () => {
+                  if (onCloseSaved) await onCloseSaved();
+                }}
+              >
+                {t('Close Saved Tabs')}
+              </MenuItem>
+              <MenuItem
+                disabled={!onCloseAll}
+                onClick={async () => {
+                  if (!onCloseAll) return;
+                  await onCloseAll();
+                }}
+              >
+                {t('Close All Tabs')}
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        )}
         {/* Markdown Preview Toggle */}
         {isMarkdown && (
           <button
             type="button"
             onClick={cyclePreviewMode}
-            className="flex h-10 w-10 shrink-0 items-center justify-center border-b text-muted-foreground hover:text-foreground transition-colors"
+            className="flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
             title={
               previewMode === 'off'
                 ? t('Show split preview')

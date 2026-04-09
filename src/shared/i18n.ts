@@ -130,6 +130,8 @@ export const zhTranslations: Record<string, string> = {
   'Close Tabs to the Left': '关闭左侧所有',
   'Close Tabs to the Right': '关闭右侧所有',
   'Close All Tabs': '关闭所有',
+  'Close Saved Tabs': '关闭已保存',
+  'Tab actions': '标签页操作',
   Collapse: '折叠',
   'Collapse all': '折叠所有',
   'Collapse all folders': '折叠所有文件夹',

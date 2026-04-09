@@ -200,6 +200,13 @@ export function CurrentFilePanel({ rootPath, isActive = false }: CurrentFilePane
     [tabs, promptUnsaved, saveFile, closeFile, t]
   );
 
+  const closeSavedTabs = useCallback(async () => {
+    const paths = tabs.filter((tab) => !tab.isDirty).map((tab) => tab.path);
+    for (const path of paths) {
+      await closeFile(path);
+    }
+  }, [tabs, closeFile]);
+
   // Handle tab click
   const handleTabClick = useCallback(
     (path: string) => {
@@ -266,6 +273,7 @@ export function CurrentFilePanel({ rootPath, isActive = false }: CurrentFilePane
             const paths = tabs.map((t) => t.path);
             await requestCloseTabs(paths);
           }}
+          onCloseSaved={closeSavedTabs}
           onCloseLeft={async (path) => {
             const index = tabs.findIndex((t) => t.path === path);
             if (index <= 0) return;
