@@ -614,7 +614,27 @@ export function useXterm({
             setTimeout(() => {
               if (writeBufferRef.current.length > 0) {
                 const bufferedData = writeBufferRef.current;
+
+                // If user has scrolled up to view history, lock their viewport position.
+                // TUI control sequences (CSI 2J, CSI 3J, alternate buffer switch)
+                // can reset or scroll the viewport regardless of isUserScrolling.
+                // We preserve the user's scroll offset from the bottom.
+                const buffer = terminal.buffer.active;
+                const offsetFromBottom = buffer.baseY - buffer.viewportY;
+                const shouldLockViewport = offsetFromBottom > 0;
+                const savedOffsetFromBottom = shouldLockViewport ? offsetFromBottom : 0;
+
                 terminal.write(bufferedData);
+
+                // Restore viewport if it was moved by the write
+                if (shouldLockViewport) {
+                  const targetViewportY = terminal.buffer.active.baseY - savedOffsetFromBottom;
+                  const currentViewportY = terminal.buffer.active.viewportY;
+                  if (targetViewportY !== currentViewportY) {
+                    terminal.scrollLines(targetViewportY - currentViewportY);
+                  }
+                }
+
                 // Call onData after write to avoid React re-render storm
                 onDataRef.current?.(bufferedData);
                 writeBufferRef.current = '';
