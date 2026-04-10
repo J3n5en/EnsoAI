@@ -142,6 +142,7 @@ export const IPC_CHANNELS = {
   APP_CLOSE_SAVE_REQUEST: 'app:closeSaveRequest',
   APP_CLOSE_SAVE_RESPONSE: 'app:closeSaveResponse',
   APP_OPEN_PATH: 'app:openPath',
+  APP_FOCUS_SESSION: 'app:focusSession',
   APP_SET_LANGUAGE: 'app:setLanguage',
   APP_SET_PROXY: 'app:setProxy',
   APP_TEST_PROXY: 'app:testProxy',

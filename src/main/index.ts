@@ -69,6 +69,7 @@ import { openLocalWindow } from './windows/WindowManager';
 
 let mainWindow: BrowserWindow | null = null;
 let pendingOpenPath: string | null = null;
+let pendingFocusSession: FocusSessionParams | null = null;
 let cleanupWindowHandlers: (() => void) | null = null;
 let isQuittingCleanupRunning = false;
 
@@ -157,6 +158,33 @@ function parseEnsoUrl(url: string): string | null {
   return null;
 }
 
+// Parse focus URL (enso://focus?session=<id>&cwd=<path>)
+interface FocusSessionParams {
+  sessionId?: string;
+  cwd?: string;
+}
+
+function parseFocusUrl(url: string): FocusSessionParams | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'enso:') {
+      const host = parsed.host;
+      const pathname = parsed.pathname;
+      // Match //focus or host === 'focus'
+      if (pathname === '//focus' || host === 'focus') {
+        const sessionId = parsed.searchParams.get('session') ?? undefined;
+        const cwd = parsed.searchParams.get('cwd') ?? undefined;
+        if (sessionId || cwd) {
+          return { sessionId, cwd };
+        }
+      }
+    }
+  } catch {
+    // Invalid URL
+  }
+  return null;
+}
+
 // Send open path event to renderer
 function sendOpenPath(path: string): void {
   const windows = BrowserWindow.getAllWindows();
@@ -171,6 +199,24 @@ function sendOpenPath(path: string): void {
     }
   } else {
     pendingOpenPath = path;
+  }
+}
+
+// Send focus session event to renderer
+function sendFocusSession(params: FocusSessionParams): void {
+  const windows = BrowserWindow.getAllWindows();
+  if (windows.length > 0) {
+    const win = windows[0];
+    win.focus();
+    if (win.webContents.isLoading()) {
+      // Store for later - overwrite any pending path since focus is more specific
+      pendingOpenPath = null;
+      pendingFocusSession = params;
+    } else {
+      win.webContents.send(IPC_CHANNELS.APP_FOCUS_SESSION, params);
+    }
+  } else {
+    pendingFocusSession = params;
   }
 }
 
@@ -191,6 +237,13 @@ function handleCommandLineArgs(argv: string[]): void {
       return;
     }
     if (arg.startsWith('enso://')) {
+      // Check for focus URL first
+      const focusParams = parseFocusUrl(arg);
+      if (focusParams) {
+        sendFocusSession(focusParams);
+        return;
+      }
+      // Fall back to path-based URL
       const rawPath = parseEnsoUrl(arg);
       const path = rawPath ? sanitizePath(rawPath) : null;
       if (path) {
@@ -204,6 +257,17 @@ function handleCommandLineArgs(argv: string[]): void {
 // macOS: Handle open-url event
 app.on('open-url', (event, url) => {
   event.preventDefault();
+  // Check for focus URL first
+  const focusParams = parseFocusUrl(url);
+  if (focusParams) {
+    if (app.isReady()) {
+      sendFocusSession(focusParams);
+    } else {
+      pendingFocusSession = focusParams;
+    }
+    return;
+  }
+  // Fall back to path-based URL
   const path = parseEnsoUrl(url);
   if (path) {
     if (app.isReady()) {
@@ -702,6 +766,10 @@ app.whenReady().then(async () => {
     if (pendingOpenPath) {
       mainWindow?.webContents.send(IPC_CHANNELS.APP_OPEN_PATH, pendingOpenPath);
       pendingOpenPath = null;
+    }
+    if (pendingFocusSession) {
+      mainWindow?.webContents.send(IPC_CHANNELS.APP_FOCUS_SESSION, pendingFocusSession);
+      pendingFocusSession = null;
     }
   });
 

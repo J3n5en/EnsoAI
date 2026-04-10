@@ -24,6 +24,7 @@ import {
   useClaudeProviderListener,
   useCodeReviewContinue,
   useFileDragDrop,
+  useFocusSession,
   useGroupSync,
   useMenuActions,
   useMergeState,
@@ -569,6 +570,10 @@ export default function App() {
 
   useGroupSync(hideGroups, activeGroupId, setActiveGroupId, saveActiveGroupId);
   useOpenPathListener(true, repositories, saveRepositories, setSelectedRepoState);
+  useFocusSession({
+    onSwitchWorktree: (path) => switchWorktreePathRef.current?.(path),
+    onSwitchTab: handleTabChange,
+  });
   useClaudeIntegration(activeWorktree?.path ?? null, true);
   useCodeReviewContinue(activeWorktree, handleTabChange);
   useWorktreeSync(worktrees, activeWorktree, worktreesFetching, setActiveWorktree);

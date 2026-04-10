@@ -4,6 +4,7 @@ export { useClaudeIntegration } from './useClaudeIntegration';
 export { useClaudeProviderListener } from './useClaudeProviderListener';
 export { useCodeReviewContinue } from './useCodeReviewContinue';
 export { useFileDragDrop } from './useFileDragDrop';
+export { useFocusSession } from './useFocusSession';
 export { useGroupSync } from './useGroupSync';
 export { useMenuActions } from './useMenuActions';
 export { useMergeState } from './useMergeState';
