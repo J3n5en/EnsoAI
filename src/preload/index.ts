@@ -506,11 +506,8 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.APP_OPEN_PATH, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_OPEN_PATH, handler);
     },
-    onFocusSession: (
-      callback: (params: { sessionId?: string; cwd?: string }) => void
-    ): (() => void) => {
-      const handler = (_: unknown, params: { sessionId?: string; cwd?: string }) =>
-        callback(params);
+    onFocusSession: (callback: (params: { sessionId: string }) => void): (() => void) => {
+      const handler = (_: unknown, params: { sessionId: string }) => callback(params);
       ipcRenderer.on(IPC_CHANNELS.APP_FOCUS_SESSION, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_FOCUS_SESSION, handler);
     },

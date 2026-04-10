@@ -158,10 +158,9 @@ function parseEnsoUrl(url: string): string | null {
   return null;
 }
 
-// Parse focus URL (enso://focus?session=<id>&cwd=<path>)
+// Parse focus URL (enso://focus?session=<id>)
 interface FocusSessionParams {
-  sessionId?: string;
-  cwd?: string;
+  sessionId: string;
 }
 
 function parseFocusUrl(url: string): FocusSessionParams | null {
@@ -172,10 +171,9 @@ function parseFocusUrl(url: string): FocusSessionParams | null {
       const pathname = parsed.pathname;
       // Match //focus or host === 'focus'
       if (pathname === '//focus' || host === 'focus') {
-        const sessionId = parsed.searchParams.get('session') ?? undefined;
-        const cwd = parsed.searchParams.get('cwd') ?? undefined;
-        if (sessionId || cwd) {
-          return { sessionId, cwd };
+        const sessionId = parsed.searchParams.get('session');
+        if (sessionId) {
+          return { sessionId };
         }
       }
     }
