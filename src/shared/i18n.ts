@@ -152,6 +152,7 @@ export const zhTranslations: Record<string, string> = {
   'Copy Commit ID': '复制 Commit ID',
   'Copy Path': '复制路径',
   'Copy Relative Path': '复制相对路径',
+  'Copy tmux restore command': '复制 tmux 恢复命令',
   'Revert commit': 'Revert 提交',
   'Reset to commit': 'Reset 到此提交',
   'Select reset mode for commit': '选择 Reset 模式',

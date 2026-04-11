@@ -877,6 +877,15 @@ export function AgentTerminal({
         { id: 'copy', label: t('Copy'), disabled: !terminal?.hasSelection() },
         { id: 'paste', label: t('Paste') },
         { id: 'selectAll', label: t('Select all') },
+        ...(tmuxSessionNameRef.current
+          ? [
+              { id: 'separator-2', label: '', type: 'separator' as const },
+              {
+                id: 'copyTmuxRestore',
+                label: t('Copy tmux restore command'),
+              },
+            ]
+          : []),
       ];
 
       const selectedId = await window.electronAPI.contextMenu.show(menuItems);
@@ -909,6 +918,12 @@ export function AgentTerminal({
           break;
         case 'selectAll':
           terminal?.selectAll();
+          break;
+        case 'copyTmuxRestore':
+          if (tmuxSessionNameRef.current) {
+            const restoreCmd = `tmux -L enso attach-session -t ${tmuxSessionNameRef.current}`;
+            navigator.clipboard.writeText(restoreCmd);
+          }
           break;
       }
     },
