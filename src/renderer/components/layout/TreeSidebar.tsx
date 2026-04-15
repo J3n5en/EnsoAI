@@ -42,6 +42,7 @@ import {
   getStoredGroupCollapsedState,
   getStoredRepositorySettings,
   normalizePath,
+  normalizeWorkspacePathKey,
   type RepositorySettings,
   saveGroupCollapsedState,
   saveRepositorySettings,
@@ -626,7 +627,8 @@ export function TreeSidebar({
 
     // Filter hidden repositories using cached settings
     filtered = filtered.filter((repo) => {
-      const settings = repoSettingsMap[normalizePath(repo.path)] || DEFAULT_REPOSITORY_SETTINGS;
+      const settings =
+        repoSettingsMap[normalizeWorkspacePathKey(repo.path)] || DEFAULT_REPOSITORY_SETTINGS;
       return !settings.hidden;
     });
 
@@ -676,7 +678,8 @@ export function TreeSidebar({
 
     // Use the same hidden filter as filteredRepos
     const visibleRepos = repositories.filter((repo) => {
-      const settings = repoSettingsMap[normalizePath(repo.path)] || DEFAULT_REPOSITORY_SETTINGS;
+      const settings =
+        repoSettingsMap[normalizeWorkspacePathKey(repo.path)] || DEFAULT_REPOSITORY_SETTINGS;
       return !settings.hidden;
     });
 
