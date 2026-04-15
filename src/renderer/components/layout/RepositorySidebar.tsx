@@ -58,6 +58,7 @@ import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { RunningProjectsPopover } from './RunningProjectsPopover';
 
 interface Repository {
+  id: string;
   name: string;
   path: string;
   groupId?: string;
@@ -82,7 +83,7 @@ interface RepositorySidebarProps {
   onCreateGroup: (name: string, emoji: string, color: string) => RepositoryGroup;
   onUpdateGroup: (groupId: string, name: string, emoji: string, color: string) => void;
   onDeleteGroup: (groupId: string) => void;
-  onMoveToGroup?: (repoPath: string, groupId: string | null) => void;
+  onMoveToGroup?: (repoId: string, groupId: string | null) => void;
   onSwitchTab?: (tab: TabId) => void;
   onSwitchWorktreeByPath?: (path: string) => Promise<void> | void;
   /** Whether a file is being dragged over the sidebar (from App.tsx global handler) */
@@ -705,7 +706,7 @@ export function RepositorySidebar({
                 currentGroupId={menuRepo?.groupId}
                 onMove={(groupId) => {
                   if (menuRepo) {
-                    onMoveToGroup(menuRepo.path, groupId);
+                    onMoveToGroup(menuRepo.id, groupId);
                   }
                 }}
                 onClose={() => setMenuOpen(false)}
