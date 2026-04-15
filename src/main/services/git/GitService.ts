@@ -758,9 +758,17 @@ export class GitService {
         }
       }
     } else {
-      // Regular commit: use show --name-status
-      const commitShow = await git.show([trimmedHash, '--name-status', '--pretty=format:%P']);
-      const lines = commitShow.split('\n').filter((line) => line.trim());
+      // Regular commit: use diff-tree to list changed files without patch output.
+      // `--root` ensures the initial commit reports its files too.
+      const diffTree = await git.raw([
+        'diff-tree',
+        '--root',
+        '--no-commit-id',
+        '--name-status',
+        '-r',
+        trimmedHash,
+      ]);
+      const lines = diffTree.split('\n').filter((line) => line.trim());
 
       for (const line of lines) {
         // Match: status (with optional percentage for R/C) and file path(s)

@@ -1282,6 +1282,7 @@ export function SourceControlPanel({
                 rootPath={selectedRepoPath ?? rootPath ?? ''}
                 fileDiff={commitDiff}
                 filePath={selectedCommitFile}
+                commitHash={selectedCommitHash}
                 isActive={isActive}
                 isLoading={commitDiffLoading}
                 onPrevFile={handlePrevCommitFile}

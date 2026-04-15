@@ -8,6 +8,7 @@ interface CommitDiffViewerProps {
   rootPath: string;
   fileDiff: FileDiff | null | undefined;
   filePath: string | null;
+  commitHash: string | null;
   isActive?: boolean;
   isLoading?: boolean;
   onPrevFile?: () => void;
@@ -20,6 +21,7 @@ export function CommitDiffViewer({
   rootPath,
   fileDiff,
   filePath,
+  commitHash,
   isActive = true,
   isLoading = false,
   onPrevFile,
@@ -65,6 +67,7 @@ export function CommitDiffViewer({
           isActive={isActive}
           diff={diffData}
           isCommitView
+          commitHash={commitHash}
           onPrevFile={onPrevFile}
           onNextFile={onNextFile}
           hasPrevFile={hasPrevFile}

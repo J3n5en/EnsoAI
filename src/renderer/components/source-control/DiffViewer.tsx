@@ -115,6 +115,7 @@ interface DiffViewerProps {
   diff?: FileDiff;
   skipFetch?: boolean;
   isCommitView?: boolean; // Add flag to indicate commit history view
+  commitHash?: string | null; // Used to scope Monaco models in commit view
 }
 
 export function DiffViewer({
@@ -128,6 +129,7 @@ export function DiffViewer({
   diff: externalDiff,
   skipFetch = false,
   isCommitView = false,
+  commitHash = null,
 }: DiffViewerProps) {
   const sessionId = useActiveSessionId(rootPath);
   const { t } = useI18n();
@@ -726,6 +728,9 @@ export function DiffViewer({
       setEditorReady(true);
 
       const currentModel = editor.getModel();
+      const mountedModels = currentModel
+        ? { original: currentModel.original, modified: currentModel.modified }
+        : null;
       if (currentModel) {
         modelsRef.current.original = currentModel.original;
         modelsRef.current.modified = currentModel.modified;
@@ -787,9 +792,16 @@ export function DiffViewer({
         for (const d of disposables) {
           d.dispose();
         }
+        // Prevent commit-view Monaco models from accumulating in memory.
+        // We intentionally keep worktree models cached for performance, but commit history
+        // can generate many unique models (commitHash scoped URIs), so dispose on unmount.
+        if (isCommitView && mountedModels) {
+          mountedModels.original?.dispose();
+          mountedModels.modified?.dispose();
+        }
       };
     },
-    [file?.path, performAutoNavigation]
+    [file?.path, performAutoNavigation, isCommitView]
   );
 
   // Toggle hide unchanged regions
@@ -1200,11 +1212,25 @@ export function DiffViewer({
       <div className="flex-1">
         {diff && diff.original != null && diff.modified != null && isThemeReady && (
           <DiffEditor
-            key={`${rootPath}-${file.path}-${file.staged}-${isThemeReady}-${isEditing}`}
+            key={
+              isCommitView
+                ? `${rootPath}-${commitHash ?? 'null'}-${file.path}-${file.staged}-${isThemeReady}-${isEditing}`
+                : `${rootPath}-${file.path}-${file.staged}-${isThemeReady}-${isEditing}`
+            }
             original={diff.original}
             modified={isEditing && editedContent !== null ? editedContent : diff.modified}
-            originalModelPath={toMonacoVirtualUri('inmemory', `original/${rootPath}/${file.path}`)}
-            modifiedModelPath={toMonacoVirtualUri('inmemory', `modified/${rootPath}/${file.path}`)}
+            originalModelPath={toMonacoVirtualUri(
+              'inmemory',
+              isCommitView && commitHash
+                ? `original/commit/${commitHash}/${rootPath}/${file.path}`
+                : `original/${rootPath}/${file.path}`
+            )}
+            modifiedModelPath={toMonacoVirtualUri(
+              'inmemory',
+              isCommitView && commitHash
+                ? `modified/commit/${commitHash}/${rootPath}/${file.path}`
+                : `modified/${rootPath}/${file.path}`
+            )}
             language={getLanguageFromPath(file.path)}
             theme={CUSTOM_THEME_NAME}
             onMount={handleEditorMount}
