@@ -44,12 +44,21 @@ function isResumableAgent(agentCommand: string): boolean {
   return agentCommand?.startsWith('claude') ?? false;
 }
 
+/**
+ * Composite key for activeIds: uniquely identifies a repo+worktree pair.
+ * Prevents cross-repo session pollution when different repos have worktrees
+ * with the same path name.
+ */
+function makeActiveKey(repoPath: string, cwd: string): string {
+  return `${normalizePath(repoPath)}::${normalizePath(cwd)}`;
+}
+
 // Group states indexed by normalized worktree path
 type WorktreeGroupStates = Record<string, AgentGroupState>;
 
 interface AgentSessionsState {
   sessions: Session[];
-  activeIds: Record<string, string | null>; // key = cwd (worktree path)
+  activeIds: Record<string, string | null>; // key = makeActiveKey(repoPath, cwd)
   groupStates: WorktreeGroupStates; // Group states per worktree (not persisted)
   runtimeStates: Record<string, SessionRuntimeState>; // Runtime output states (not persisted)
   enhancedInputStates: Record<string, EnhancedInputState>; // Enhanced input states per session (not persisted)
@@ -58,7 +67,7 @@ interface AgentSessionsState {
   addSession: (session: Session) => void;
   removeSession: (id: string) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
-  setActiveId: (cwd: string, sessionId: string | null) => void;
+  setActiveId: (repoPath: string, cwd: string, sessionId: string | null) => void;
   reorderSessions: (repoPath: string, cwd: string, fromIndex: number, toIndex: number) => void;
   getSessions: (repoPath: string, cwd: string) => Session[];
   getActiveSessionId: (repoPath: string, cwd: string) => string | null;
@@ -191,7 +200,10 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
         const newSession = { ...session, displayOrder: maxOrder + 1 };
         return {
           sessions: [...state.sessions, newSession],
-          activeIds: { ...state.activeIds, [normalizePath(session.cwd)]: session.id },
+          activeIds: {
+            ...state.activeIds,
+            [makeActiveKey(session.repoPath, session.cwd)]: session.id,
+          },
           // Initialize enhanced input state for new session to ensure auto-popup works
           enhancedInputStates: {
             ...state.enhancedInputStates,
@@ -241,9 +253,9 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
         sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
       })),
 
-    setActiveId: (cwd, sessionId) =>
+    setActiveId: (repoPath, cwd, sessionId) =>
       set((state) => ({
-        activeIds: { ...state.activeIds, [normalizePath(cwd)]: sessionId },
+        activeIds: { ...state.activeIds, [makeActiveKey(repoPath, cwd)]: sessionId },
       })),
 
     reorderSessions: (repoPath, cwd, fromIndex, toIndex) =>
@@ -289,15 +301,14 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
 
     getActiveSessionId: (repoPath, cwd) => {
       const state = get();
-      const activeId = state.activeIds[normalizePath(cwd)];
+      const key = makeActiveKey(repoPath, cwd);
+      const activeId = state.activeIds[key];
       if (activeId) {
-        // Verify the session exists and matches repoPath
         const session = state.sessions.find((s) => s.id === activeId);
-        if (session && session.repoPath === repoPath) {
+        if (session) {
           return activeId;
         }
       }
-      // Fallback to first session for this repo+cwd
       const firstSession = state.sessions.find(
         (s) => s.repoPath === repoPath && pathsEqual(s.cwd, cwd)
       );
@@ -530,19 +541,37 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
 );
 
 /**
- * Selector hook: get active session ID for a given worktree path.
- * Falls back to the first session under that cwd.
+ * Selector hook: get active session ID for a given repo+worktree pair.
+ * Falls back to the first session under that repo+cwd.
+ *
+ * @param cwd - The worktree path (required).
+ * @param repoPath - Optional repo path for cross-repo isolation. If omitted, falls back to matching by cwd only.
  */
-export function useActiveSessionId(cwd: string | undefined | null): string | null {
+export function useActiveSessionId(
+  cwd: string | undefined | null,
+  repoPath?: string | undefined | null
+): string | null {
   return useAgentSessionsStore((state) => {
     if (!cwd) return null;
+    if (repoPath) {
+      const key = makeActiveKey(repoPath, cwd);
+      const activeId = state.activeIds[key];
+      if (activeId) {
+        const session = state.sessions.find((s) => s.id === activeId);
+        if (session) return activeId;
+      }
+      const first = state.sessions.find(
+        (s) => s.repoPath === repoPath && normalizePath(s.cwd) === normalizePath(cwd)
+      );
+      return first?.id ?? null;
+    }
+    // Backward compatibility: match by cwd only
     const key = normalizePath(cwd);
     const activeId = state.activeIds[key];
     if (activeId) {
       const session = state.sessions.find((s) => s.id === activeId);
       if (session) return activeId;
     }
-    // Fallback to first session for this cwd
     const first = state.sessions.find((s) => normalizePath(s.cwd) === key);
     return first?.id ?? null;
   });

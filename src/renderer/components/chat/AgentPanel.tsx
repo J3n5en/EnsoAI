@@ -452,9 +452,8 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   useEffect(() => {
     if (!cwd || groups.length === 0) return;
 
-    const normalizedCwd = normalizePath(cwd);
     const unsubscribe = useAgentSessionsStore.subscribe(
-      (state) => state.activeIds[normalizedCwd],
+      (state) => state.activeIds[`${normalizePath(repoPath)}::${normalizePath(cwd)}`],
       (storeActiveId) => {
         if (!storeActiveId) return;
 
@@ -476,7 +475,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     );
 
     return unsubscribe;
-  }, [cwd, groups, updateCurrentGroupState]);
+  }, [repoPath, cwd, groups, updateCurrentGroupState]);
 
   // Empty state agent menu
   const [showAgentMenu, setShowAgentMenu] = useState(false);
@@ -607,7 +606,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         };
       });
 
-      setActiveId(cwd, newSession.id);
+      setActiveId(repoPath, cwd, newSession.id);
       clearContinueRequest();
     }
   }, [
@@ -791,7 +790,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   // Handle session selection
   const handleSelectSession = useCallback(
     (id: string, groupId?: string) => {
-      setActiveId(cwd, id);
+      setActiveId(repoPath, cwd, id);
 
       updateCurrentGroupState((state) => {
         const targetGroupId = groupId || state.groups.find((g) => g.sessionIds.includes(id))?.id;
@@ -806,7 +805,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         };
       });
     },
-    [cwd, setActiveId, updateCurrentGroupState]
+    [cwd, repoPath, setActiveId, updateCurrentGroupState]
   );
 
   // Notification payload may carry either UI session id or Claude sessionId.
@@ -942,14 +941,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     const nextIndex = (currentIndex + 1) % activeGroup.sessionIds.length;
     const nextSessionId = activeGroup.sessionIds[nextIndex];
 
-    setActiveId(cwd, nextSessionId);
+    setActiveId(repoPath, cwd, nextSessionId);
     updateCurrentGroupState((state) => ({
       ...state,
       groups: state.groups.map((g) =>
         g.id === activeGroupId ? { ...g, activeSessionId: nextSessionId } : g
       ),
     }));
-  }, [groups, activeGroupId, cwd, setActiveId, updateCurrentGroupState]);
+  }, [groups, activeGroupId, cwd, repoPath, setActiveId, updateCurrentGroupState]);
 
   const handlePrevSession = useCallback(() => {
     const activeGroup = groups.find((g) => g.id === activeGroupId);
@@ -959,14 +958,14 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     const prevIndex = currentIndex <= 0 ? activeGroup.sessionIds.length - 1 : currentIndex - 1;
     const prevSessionId = activeGroup.sessionIds[prevIndex];
 
-    setActiveId(cwd, prevSessionId);
+    setActiveId(repoPath, cwd, prevSessionId);
     updateCurrentGroupState((state) => ({
       ...state,
       groups: state.groups.map((g) =>
         g.id === activeGroupId ? { ...g, activeSessionId: prevSessionId } : g
       ),
     }));
-  }, [groups, activeGroupId, cwd, setActiveId, updateCurrentGroupState]);
+  }, [groups, activeGroupId, cwd, repoPath, setActiveId, updateCurrentGroupState]);
 
   const handleInitialized = useCallback(
     (id: string) => {
@@ -1340,7 +1339,10 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
     const normalizedCwd = normalizePath(cwd);
     const currentState = worktreeGroupStates[normalizedCwd];
-    const storeActiveId = useAgentSessionsStore.getState().activeIds[normalizedCwd];
+    const storeActiveId =
+      useAgentSessionsStore.getState().activeIds[
+        `${normalizePath(repoPath)}::${normalizePath(cwd)}`
+      ];
 
     // If no groups exist but sessions do, create a group with all sessions
     if (!currentState || currentState.groups.length === 0) {
@@ -1386,7 +1388,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         }
       }
     }
-  }, [cwd, currentWorktreeSessions, worktreeGroupStates, setGroupState]);
+  }, [repoPath, cwd, currentWorktreeSessions, worktreeGroupStates, setGroupState]);
 
   // Maintain global session IDs - include ALL sessions across all repos
   // This ensures terminals stay mounted when switching between repos

@@ -112,7 +112,7 @@ export function MainContent({
   const activeIds = useAgentSessionsStore((s) => s.activeIds);
   const activeSessionId = useMemo(() => {
     if (!repoPath || !worktreePath) return null;
-    const key = normalizePath(worktreePath);
+    const key = `${normalizePath(repoPath)}::${normalizePath(worktreePath)}`;
     const activeId = activeIds[key];
     if (activeId) {
       const session = sessions.find((s) => s.id === activeId);

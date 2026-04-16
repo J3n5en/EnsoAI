@@ -22,7 +22,7 @@ export function useFocusSession({ onSwitchWorktree, onSwitchTab }: UseFocusSessi
       if (session) {
         // Switch to the session's worktree first, then set active session (same as RunningProjectsPopover)
         onSwitchWorktree(session.cwd);
-        useAgentSessionsStore.getState().setActiveId(session.cwd, sessionId);
+        useAgentSessionsStore.getState().setActiveId(session.repoPath, session.cwd, sessionId);
         onSwitchTab('chat');
       }
     });

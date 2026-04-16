@@ -204,7 +204,7 @@ export function RunningProjectsPopover({
           break;
         case 'agent':
           await onSelectWorktreeByPath(item.session.cwd);
-          setAgentActiveId(item.session.cwd, item.session.id);
+          setAgentActiveId(item.session.repoPath, item.session.cwd, item.session.id);
           onSwitchTab?.('chat');
           break;
         case 'terminal':
