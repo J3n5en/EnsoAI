@@ -173,7 +173,7 @@ function AgentForm({ agent, onSubmit, onCancel }: AgentFormProps) {
   );
 }
 
-export function AgentSettings({ repoPath }: { repoPath?: string }) {
+export function AgentSettings() {
   const {
     agentSettings,
     agentDetectionStatus,
@@ -201,12 +201,7 @@ export function AgentSettings({ repoPath }: { repoPath?: string }) {
       try {
         // Get customPath from settings for builtin agents
         const customPath = agentSettings[agentId]?.customPath;
-        const result = await window.electronAPI.cli.detectOne(
-          repoPath,
-          agentId,
-          customAgent,
-          customPath
-        );
+        const result = await window.electronAPI.cli.detectOne(agentId, customAgent, customPath);
         setAgentDetectionStatus(agentId, {
           installed: result.installed,
           version: result.version,
@@ -224,7 +219,7 @@ export function AgentSettings({ repoPath }: { repoPath?: string }) {
         });
       }
     },
-    [agentSettings, repoPath, setAgentDetectionStatus, setAgentEnabled]
+    [agentSettings, setAgentDetectionStatus, setAgentEnabled]
   );
 
   // Refresh only enabled agents (auto-disable if not installed)
@@ -242,12 +237,7 @@ export function AgentSettings({ repoPath }: { repoPath?: string }) {
         enabledAgentIds.map(async (agentId) => {
           const customAgent = customAgents.find((a) => a.id === agentId);
           const customPath = agentSettings[agentId]?.customPath;
-          const result = await window.electronAPI.cli.detectOne(
-            repoPath,
-            agentId,
-            customAgent,
-            customPath
-          );
+          const result = await window.electronAPI.cli.detectOne(agentId, customAgent, customPath);
           setAgentDetectionStatus(agentId, {
             installed: result.installed,
             version: result.version,
@@ -265,7 +255,7 @@ export function AgentSettings({ repoPath }: { repoPath?: string }) {
     } finally {
       setLoadingAgents(new Set());
     }
-  }, [agentSettings, customAgents, repoPath, setAgentDetectionStatus, setAgentEnabled]);
+  }, [agentSettings, customAgents, setAgentDetectionStatus, setAgentEnabled]);
 
   React.useEffect(() => {
     void Promise.allSettled(BUILTIN_AGENTS.map((agentId) => detectSingleAgent(agentId)));
@@ -327,7 +317,7 @@ export function AgentSettings({ repoPath }: { repoPath?: string }) {
 
   // Check happy global installation on mount
   React.useEffect(() => {
-    window.electronAPI.happy.checkGlobal(undefined, false).then((result) => {
+    window.electronAPI.happy.checkGlobal(false).then((result) => {
       setHappyGlobal(result);
     });
   }, []);

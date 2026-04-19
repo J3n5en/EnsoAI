@@ -238,55 +238,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-remote-runtime-linux:
-    strategy:
-      matrix:
-        include:
-          - arch: x64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Get pnpm store directory
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: remote-runtime-${{ runner.os }}-${{ matrix.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: remote-runtime-${{ runner.os }}-${{ matrix.arch }}-pnpm-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build Linux remote runtime bundle (${{ matrix.arch }})
-        run: node scripts/build-remote-runtime-bundle.mjs --arch=${{ matrix.arch }}
-
-      - name: Upload remote runtime artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: remote-runtime-linux-${{ matrix.arch }}
-          path: dist/remote-runtime/*
-          retention-days: 1
-
-      # Remote runtime assets are uploaded to Release in the generate-release-notes job
-      # after electron-builder has created the draft release
-
   generate-release-notes:
-    needs: [build-mac, build-windows, build-linux, build-remote-runtime-linux]
+    needs: [build-mac, build-windows, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     timeout-minutes: 10
@@ -341,73 +294,6 @@ jobs:
           echo "name=$TAG" >> $GITHUB_OUTPUT
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Download remote runtime artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: remote-runtime-linux-*
-          path: remote-runtime-artifacts
-
-      - name: Upload remote runtime bundles to Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          for dir in remote-runtime-artifacts/remote-runtime-linux-*/; do
-            gh release upload "$TAG" "$dir"* --clobber
-          done
-
-      - name: Verify Linux remote runtime release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ steps.tag.outputs.name }}"
-
-          node - <<'NODE' > expected-remote-runtime-assets.txt
-          const fs = require('node:fs');
-
-          function readConstant(filePath, pattern) {
-            const content = fs.readFileSync(filePath, 'utf8');
-            const match = content.match(pattern);
-            if (!match || !match[1]) {
-              throw new Error(`Failed to read constant from ${filePath}`);
-            }
-            return match[1];
-          }
-
-          const serverVersion = readConstant(
-            'src/main/services/remote/RemoteHelperSource.ts',
-            /REMOTE_SERVER_VERSION = '([^']+)'/
-          );
-          const nodeVersion = readConstant(
-            'src/main/services/remote/RemoteRuntimeAssets.ts',
-            /MANAGED_REMOTE_NODE_VERSION = '([^']+)'/
-          );
-
-          for (const arch of ['x64', 'arm64']) {
-            const archive = `enso-remote-runtime-v${serverVersion}-node-v${nodeVersion}-linux-${arch}.tar.gz`;
-            console.log(archive);
-            console.log(`${archive}.sha256`);
-          }
-          NODE
-
-          echo "Expected remote runtime assets:"
-          cat expected-remote-runtime-assets.txt
-
-          echo "Actual release assets:"
-          gh release view "$TAG" --json assets --jq '.assets[].name' | sort | tee actual-release-assets.txt
-
-          missing=0
-          while IFS= read -r asset; do
-            if ! grep -Fx -- "$asset" actual-release-assets.txt >/dev/null; then
-              echo "Missing release asset: $asset"
-              missing=1
-            fi
-          done < expected-remote-runtime-assets.txt
-
-          if [ "$missing" -ne 0 ]; then
-            exit 1
-          fi
 
       - name: Get Previous Tag
         id: prev_tag

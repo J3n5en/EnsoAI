@@ -356,23 +356,15 @@ export class PtyManager {
   >();
   private readonly ACTIVITY_CACHE_TTL_MS = 2000; // 缓存 2 秒
 
-  allocateId(): string {
-    return `pty-${++this.counter}`;
-  }
-
   create(
     options: TerminalCreateOptions,
     onData: (data: string) => void,
     onExit?: (exitCode: number, signal?: number) => void,
-    providedId?: string
+    ownerId: number | null = null
   ): string {
-    const id = providedId || this.allocateId();
-    if (this.sessions.has(id)) {
-      throw new Error(`PTY session already exists: ${id}`);
-    }
+    const id = `pty-${++this.counter}`;
     const home = process.env.HOME || process.env.USERPROFILE || homedir();
     const cwd = options.cwd || home;
-    const spawnCwd = options.spawnCwd || cwd;
 
     let shell: string;
     let args: string[];
@@ -429,7 +421,7 @@ export class PtyManager {
         name: 'xterm-256color',
         cols: options.cols || 80,
         rows: options.rows || 24,
-        cwd: spawnCwd,
+        cwd,
         env: baseEnv,
       });
     } catch (error) {
@@ -442,7 +434,7 @@ export class PtyManager {
             name: 'xterm-256color',
             cols: options.cols || 80,
             rows: options.rows || 24,
-            cwd: spawnCwd,
+            cwd,
             env: {
               ...process.env,
               ...getProxyEnvVars(),
@@ -469,14 +461,7 @@ export class PtyManager {
     });
 
     // Store session first so onExit callback can access it
-    const session: PtySession = {
-      pty: ptyProcess,
-      cwd,
-      ownerId: null,
-      onData,
-      onExit,
-      dataDisposable,
-    };
+    const session: PtySession = { pty: ptyProcess, cwd, ownerId, onData, onExit, dataDisposable };
     this.sessions.set(id, session);
 
     const exitDisposable = ptyProcess.onExit(({ exitCode, signal }) => {

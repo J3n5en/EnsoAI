@@ -51,21 +51,9 @@ import { checkGitInstalled } from './services/git/checkGit';
 import { gitAutoFetchService } from './services/git/GitAutoFetchService';
 import { setCurrentLocale } from './services/i18n';
 import { buildAppMenu } from './services/MenuBuilder';
-import {
-  getSharedStatePaths,
-  isLegacySettingsMigrated,
-  isLegacyTodoMigrated,
-  markLegacySettingsMigrated,
-  markLegacyTodoMigrated,
-  readSharedSessionState,
-  readSharedSettings,
-  writeSharedSessionState,
-  writeSharedSettings,
-} from './services/SharedSessionState';
-import * as todoService from './services/todo/TodoService';
 import { webInspectorServer } from './services/webInspector';
 import log, { initLogger } from './utils/logger';
-import { openLocalWindow } from './windows/WindowManager';
+import { createMainWindow } from './windows/MainWindow';
 
 let mainWindow: BrowserWindow | null = null;
 let pendingOpenPath: string | null = null;
@@ -75,50 +63,6 @@ let isQuittingCleanupRunning = false;
 
 const isDev = !app.isPackaged;
 const FORCE_EXIT_TIMEOUT_MS = 8000;
-
-function isPrivateIpLiteral(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-
-  if (
-    normalized === 'localhost' ||
-    normalized === '::1' ||
-    normalized === '[::1]' ||
-    normalized.endsWith('.localhost')
-  ) {
-    return true;
-  }
-
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(normalized)) {
-    const parts = normalized.split('.').map((part) => Number(part));
-    if (parts.some((part) => Number.isNaN(part) || part < 0 || part > 255)) {
-      return false;
-    }
-    return (
-      parts[0] === 10 ||
-      parts[0] === 127 ||
-      (parts[0] === 169 && parts[1] === 254) ||
-      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-      (parts[0] === 192 && parts[1] === 168)
-    );
-  }
-
-  return false;
-}
-
-function isAllowedRemoteImageUrl(input: string): boolean {
-  try {
-    const parsed = new URL(input);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return false;
-    }
-    return !isPrivateIpLiteral(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
 
 function sanitizeProfileName(input: string): string {
   const trimmed = input.trim();
@@ -284,10 +228,9 @@ if (!gotTheLock) {
 } else {
   app.on('second-instance', (_, commandLine) => {
     // Focus existing window
-    const window = getAnyWindow();
-    if (window) {
-      if (window.isMinimized()) window.restore();
-      window.focus();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
     // Handle command line from second instance
     handleCommandLineArgs(commandLine);
@@ -296,7 +239,9 @@ if (!gotTheLock) {
 
 function readStoredLanguage(): Locale {
   try {
-    const data = readSharedSettings();
+    const settingsPath = join(app.getPath('userData'), 'settings.json');
+    if (!existsSync(settingsPath)) return 'en';
+    const data = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
     const persisted = data['enso-settings'];
     if (persisted && typeof persisted === 'object') {
       const state = (persisted as { state?: Record<string, unknown> }).state;
@@ -332,61 +277,6 @@ async function initAutoUpdater(window: BrowserWindow): Promise<void> {
 
   const { autoUpdaterService } = await import('./services/updater/AutoUpdater');
   autoUpdaterService.init(window, autoUpdateEnabled, proxySettings);
-}
-
-function migrateLegacySettingsIfNeeded(): void {
-  if (isLegacySettingsMigrated()) {
-    return;
-  }
-
-  const legacySettingsPath = join(app.getPath('userData'), 'settings.json');
-  if (!existsSync(legacySettingsPath)) {
-    markLegacySettingsMigrated();
-    return;
-  }
-
-  try {
-    const legacyData = JSON.parse(readFileSync(legacySettingsPath, 'utf-8')) as Record<
-      string,
-      unknown
-    >;
-    writeSharedSettings(legacyData);
-    const currentSession = readSharedSessionState();
-    writeSharedSessionState({
-      ...currentSession,
-      updatedAt: Date.now(),
-      settingsData: legacyData,
-    });
-    markLegacySettingsMigrated();
-  } catch (error) {
-    console.warn('[migration] Failed to migrate legacy settings:', error);
-  }
-}
-
-async function migrateLegacyTodoIfNeeded(): Promise<void> {
-  if (isLegacyTodoMigrated()) {
-    return;
-  }
-
-  const legacyTodoPath = join(app.getPath('userData'), 'todo.db');
-  if (!existsSync(legacyTodoPath)) {
-    markLegacyTodoMigrated();
-    return;
-  }
-
-  try {
-    await todoService.initialize();
-    const boards = await todoService.exportAllTasks();
-    const currentSession = readSharedSessionState();
-    writeSharedSessionState({
-      ...currentSession,
-      updatedAt: Date.now(),
-      todos: boards,
-    });
-    markLegacyTodoMigrated();
-  } catch (error) {
-    console.warn('[migration] Failed to migrate legacy todo.db:', error);
-  }
 }
 
 async function init(): Promise<void> {
@@ -433,11 +323,6 @@ app.whenReady().then(async () => {
   // Clean up temp files from previous sessions
   await cleanupTempFiles();
 
-  const sharedPaths = getSharedStatePaths();
-  log.info('Shared state paths', sharedPaths);
-  migrateLegacySettingsIfNeeded();
-  await migrateLegacyTodoIfNeeded();
-
   // Register protocol to handle local file:// URLs for markdown images
   protocol.handle('local-file', (request) => {
     try {
@@ -481,10 +366,6 @@ app.whenReady().then(async () => {
         if (!fetchUrl) {
           console.error('[local-image] Remote fetch: missing url parameter');
           return new Response('Missing url parameter', { status: 400 });
-        }
-        if (!isAllowedRemoteImageUrl(fetchUrl)) {
-          console.warn('[local-image] Blocked remote fetch URL:', fetchUrl);
-          return new Response('Forbidden', { status: 403 });
         }
 
         // Do NOT forward _t cache-busting param to the remote server —
@@ -745,12 +626,23 @@ app.whenReady().then(async () => {
 
   setCurrentLocale(readStoredLanguage());
 
-  cleanupWindowHandlers = registerWindowHandlers();
-  mainWindow = openLocalWindow();
+  mainWindow = createMainWindow();
 
   // Set main window for Web Inspector server (for IPC communication)
   webInspectorServer.setMainWindow(mainWindow);
 
+  // Register window control handlers (must be after mainWindow is created)
+  cleanupWindowHandlers = registerWindowHandlers(mainWindow);
+
+  // Clean up window handlers when window is closed
+  mainWindow.on('closed', () => {
+    if (cleanupWindowHandlers) {
+      cleanupWindowHandlers();
+      cleanupWindowHandlers = null;
+    }
+    webInspectorServer.setMainWindow(null);
+    mainWindow = null;
+  });
   // Initialize Claude Provider Watcher (only when enableProviderWatcher is true)
   const appSettings = readSettings();
   const providerWatcherEnabled =
@@ -778,11 +670,11 @@ app.whenReady().then(async () => {
   gitAutoFetchService.init(mainWindow);
 
   const handleNewWindow = () => {
-    openLocalWindow();
+    createMainWindow();
   };
 
   // Build and set application menu
-  const menu = buildAppMenu({
+  const menu = buildAppMenu(mainWindow, {
     onNewWindow: handleNewWindow,
   });
   Menu.setApplicationMenu(menu);
@@ -792,7 +684,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(IPC_CHANNELS.APP_SET_LANGUAGE, (_event, language: Locale) => {
     setCurrentLocale(language);
-    const updatedMenu = buildAppMenu({
+    if (!mainWindow) return;
+    const updatedMenu = buildAppMenu(mainWindow, {
       onNewWindow: handleNewWindow,
     });
     Menu.setApplicationMenu(updatedMenu);
@@ -800,13 +693,8 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = openLocalWindow();
+      mainWindow = createMainWindow();
     }
-  });
-
-  app.on('browser-window-focus', (_, window) => {
-    mainWindow = window;
-    webInspectorServer.setMainWindow(window);
   });
 });
 
@@ -823,8 +711,6 @@ app.on('will-quit', (event) => {
   event.preventDefault();
   isQuittingCleanupRunning = true;
   console.log('[app] Will quit, cleaning up...');
-  cleanupWindowHandlers?.();
-  cleanupWindowHandlers = null;
   unwatchClaudeSettings();
   gitAutoFetchService.cleanup();
 
@@ -881,6 +767,3 @@ function handleShutdownSignal(signal: string): void {
 process.on('SIGINT', () => handleShutdownSignal('SIGINT'));
 process.on('SIGTERM', () => handleShutdownSignal('SIGTERM'));
 process.on('SIGHUP', () => handleShutdownSignal('SIGHUP'));
-function getAnyWindow(): BrowserWindow | null {
-  return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
-}

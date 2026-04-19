@@ -33,7 +33,7 @@ interface RepositoryManagerDialogProps {
   onOpenChange: (open: boolean) => void;
   repositories: Repository[];
   selectedRepo?: string | null;
-  onSelectRepo?: (repoPath: string, options?: { activateRemote?: boolean }) => void;
+  onSelectRepo?: (repoPath: string) => void;
   onRemoveRepository?: (repoPath: string) => void;
   onSettingsChange?: () => void;
 }
@@ -84,7 +84,7 @@ export function RepositoryManagerDialog({
 
   const handleRepoClick = useCallback(
     (repoPath: string) => {
-      onSelectRepo?.(repoPath, { activateRemote: true });
+      onSelectRepo?.(repoPath);
       onOpenChange(false);
     },
     [onSelectRepo, onOpenChange]

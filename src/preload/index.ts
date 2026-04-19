@@ -4,13 +4,10 @@ import type { Locale } from '@shared/i18n';
 import type {
   AgentCliInfo,
   AgentMetadata,
-  AppCloseRequestPayload,
   CloneProgress,
   CloneResult,
   CommitFileChange,
   ConflictResolution,
-  ConnectionProfile,
-  ConnectionTestResult,
   ContentSearchParams,
   ContentSearchResult,
   CustomAgent,
@@ -37,22 +34,6 @@ import type {
   ProxySettings,
   PullRequest,
   RecentEditorProject,
-  RemoteAuthPrompt,
-  RemoteAuthResponse,
-  RemoteConnectionStatus,
-  RemoteConnectionStatusEvent,
-  RemoteHelperStatus,
-  RemoteRuntimeStatus,
-  RepositoryRuntimeContext,
-  SessionAttachOptions,
-  SessionAttachResult,
-  SessionCreateOptions,
-  SessionDataEvent,
-  SessionDescriptor,
-  SessionExitEvent,
-  SessionOpenResult,
-  SessionResizeOptions,
-  SessionStateEvent,
   ShellConfig,
   ShellInfo,
   TempWorkspaceCheckResult,
@@ -73,8 +54,6 @@ import type { AgentStopNotificationData } from '@shared/types/agent';
 import type { InspectPayload, WebInspectorStatus } from '@shared/types/webInspector';
 import { contextBridge, ipcRenderer, shell, webUtils } from 'electron';
 import pkg from '../../package.json';
-
-const REMOTE_PATH_PREFIX = '/__enso_remote__';
 
 const electronAPI = {
   // Git
@@ -416,51 +395,17 @@ const electronAPI = {
     getActivity: (id: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_GET_ACTIVITY, id),
     onData: (callback: (event: { id: string; data: string }) => void): (() => void) => {
-      const handler = (_: unknown, event: SessionDataEvent) =>
-        callback({ id: event.sessionId, data: event.data });
-      ipcRenderer.on(IPC_CHANNELS.SESSION_DATA, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_DATA, handler);
+      const handler = (_: unknown, event: { id: string; data: string }) => callback(event);
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_DATA, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.TERMINAL_DATA, handler);
     },
     onExit: (
       callback: (event: { id: string; exitCode: number; signal?: number }) => void
     ): (() => void) => {
-      const handler = (_: unknown, event: SessionExitEvent) =>
-        callback({ id: event.sessionId, exitCode: event.exitCode, signal: event.signal });
-      ipcRenderer.on(IPC_CHANNELS.SESSION_EXIT, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_EXIT, handler);
-    },
-  },
-
-  session: {
-    create: (options?: SessionCreateOptions): Promise<SessionOpenResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_CREATE, options),
-    attach: (options: SessionAttachOptions): Promise<SessionAttachResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_ATTACH, options),
-    detach: (sessionId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_DETACH, sessionId),
-    kill: (sessionId: string): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_KILL, sessionId),
-    write: (sessionId: string, data: string): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_WRITE, sessionId, data),
-    resize: (sessionId: string, size: SessionResizeOptions): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_RESIZE, sessionId, size),
-    list: (): Promise<SessionDescriptor[]> => ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST),
-    getActivity: (sessionId: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_ACTIVITY, sessionId),
-    onData: (callback: (event: SessionDataEvent) => void): (() => void) => {
-      const handler = (_: unknown, event: SessionDataEvent) => callback(event);
-      ipcRenderer.on(IPC_CHANNELS.SESSION_DATA, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_DATA, handler);
-    },
-    onExit: (callback: (event: SessionExitEvent) => void): (() => void) => {
-      const handler = (_: unknown, event: SessionExitEvent) => callback(event);
-      ipcRenderer.on(IPC_CHANNELS.SESSION_EXIT, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_EXIT, handler);
-    },
-    onState: (callback: (event: SessionStateEvent) => void): (() => void) => {
-      const handler = (_: unknown, event: SessionStateEvent) => callback(event);
-      ipcRenderer.on(IPC_CHANNELS.SESSION_STATE, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.SESSION_STATE, handler);
+      const handler = (_: unknown, event: { id: string; exitCode: number; signal?: number }) =>
+        callback(event);
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_EXIT, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.TERMINAL_EXIT, handler);
     },
   },
 
@@ -477,8 +422,8 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.APP_UPDATE_AVAILABLE, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_UPDATE_AVAILABLE, handler);
     },
-    onCloseRequest: (callback: (payload: AppCloseRequestPayload) => void): (() => void) => {
-      const handler = (_: unknown, payload: AppCloseRequestPayload) => callback(payload);
+    onCloseRequest: (callback: (requestId: string) => void): (() => void) => {
+      const handler = (_: unknown, requestId: string) => callback(requestId);
       ipcRenderer.on(IPC_CHANNELS.APP_CLOSE_REQUEST, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_CLOSE_REQUEST, handler);
     },
@@ -533,72 +478,6 @@ const electronAPI = {
     }): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FILE, options),
   },
 
-  // Remote connections
-  remote: {
-    listProfiles: (): Promise<ConnectionProfile[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_PROFILE_LIST),
-    saveProfile: (
-      profile: Omit<ConnectionProfile, 'id' | 'createdAt' | 'updatedAt'> &
-        Partial<Pick<ConnectionProfile, 'id'>>
-    ): Promise<ConnectionProfile> => ipcRenderer.invoke(IPC_CHANNELS.REMOTE_PROFILE_SAVE, profile),
-    deleteProfile: (profileId: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_PROFILE_DELETE, profileId),
-    testConnection: (profileOrId: string | ConnectionProfile): Promise<ConnectionTestResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_TEST_CONNECTION, profileOrId),
-    connect: (profileOrId: string | ConnectionProfile): Promise<RemoteConnectionStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_CONNECT, profileOrId),
-    disconnect: (connectionId: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_DISCONNECT, connectionId),
-    getStatus: (connectionId: string): Promise<RemoteConnectionStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_GET_STATUS, connectionId),
-    listDirectory: (
-      profileOrId: string | ConnectionProfile,
-      remotePath: string
-    ): Promise<FileEntry[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_DIRECTORY_LIST, profileOrId, remotePath),
-    getRuntimeStatus: (profileOrId: string | ConnectionProfile): Promise<RemoteRuntimeStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_STATUS, profileOrId),
-    installRuntime: (profileOrId: string | ConnectionProfile): Promise<RemoteRuntimeStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_INSTALL, profileOrId),
-    updateRuntime: (profileOrId: string | ConnectionProfile): Promise<RemoteRuntimeStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_UPDATE, profileOrId),
-    deleteRuntime: (profileOrId: string | ConnectionProfile): Promise<RemoteRuntimeStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_DELETE, profileOrId),
-    getHelperStatus: (profileOrId: string | ConnectionProfile): Promise<RemoteHelperStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_STATUS, profileOrId),
-    installHelper: (profileOrId: string | ConnectionProfile): Promise<RemoteHelperStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_INSTALL, profileOrId),
-    updateHelper: (profileOrId: string | ConnectionProfile): Promise<RemoteHelperStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_UPDATE, profileOrId),
-    deleteHelper: (profileOrId: string | ConnectionProfile): Promise<RemoteHelperStatus> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_HELPER_DELETE, profileOrId),
-    browseRoots: (profileOrId: string | ConnectionProfile): Promise<string[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_BROWSE_ROOTS, profileOrId),
-    onAuthPrompt: (callback: (prompt: RemoteAuthPrompt) => void): (() => void) => {
-      const handler = (_: unknown, prompt: RemoteAuthPrompt) => callback(prompt);
-      ipcRenderer.on(IPC_CHANNELS.REMOTE_AUTH_PROMPT, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.REMOTE_AUTH_PROMPT, handler);
-    },
-    onStatusChange: (callback: (event: RemoteConnectionStatusEvent) => void): (() => void) => {
-      const handler = (_: unknown, event: RemoteConnectionStatusEvent) => callback(event);
-      ipcRenderer.on(IPC_CHANNELS.REMOTE_STATUS_CHANGED, handler);
-      return () => ipcRenderer.off(IPC_CHANNELS.REMOTE_STATUS_CHANGED, handler);
-    },
-    respondAuthPrompt: (response: RemoteAuthResponse): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.REMOTE_AUTH_RESPONSE, response),
-  },
-
-  sessionStorage: {
-    get: (): Promise<{ localStorage: Record<string, string> } | null> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_GET),
-    syncLocalStorage: (snapshot: Record<string, string>): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_SYNC_LOCAL_STORAGE, snapshot),
-    importLocalStorage: (snapshot: Record<string, string>): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_IMPORT_LOCAL_STORAGE, snapshot),
-    isLegacyLocalStorageMigrated: (): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SESSION_STORAGE_IS_LEGACY_LOCAL_STORAGE_MIGRATED),
-  },
-
   // Context Menu
   contextMenu: {
     show: (
@@ -623,12 +502,7 @@ const electronAPI = {
         openFiles?: string[];
         activeFile?: string;
       }
-    ): Promise<void> => {
-      if (path.startsWith(REMOTE_PATH_PREFIX)) {
-        return Promise.reject(new Error('Remote files cannot be opened with local applications'));
-      }
-      return ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_WITH, path, bundleId, options);
-    },
+    ): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_WITH, path, bundleId, options),
     getIcon: (bundleId: string): Promise<string | undefined> =>
       ipcRenderer.invoke(IPC_CHANNELS.APP_GET_ICON, bundleId),
     getRecentProjects: (): Promise<RecentEditorProject[]> =>
@@ -638,12 +512,11 @@ const electronAPI = {
   // CLI Detector
   cli: {
     detectOne: (
-      repoPath: string | undefined,
       agentId: string,
       customAgent?: CustomAgent,
       customPath?: string
     ): Promise<AgentCliInfo> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CLI_DETECT_ONE, repoPath, agentId, customAgent, customPath),
+      ipcRenderer.invoke(IPC_CHANNELS.CLI_DETECT_ONE, agentId, customAgent, customPath),
     // CLI Installer
     getInstallStatus: (): Promise<{ installed: boolean; path: string | null; error?: string }> =>
       ipcRenderer.invoke(IPC_CHANNELS.CLI_INSTALL_STATUS),
@@ -656,12 +529,11 @@ const electronAPI = {
   // Tmux
   tmux: {
     check: (
-      repoPath: string | undefined,
       forceRefresh?: boolean
     ): Promise<{ installed: boolean; version?: string; error?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.TMUX_CHECK, repoPath, forceRefresh),
-    killSession: (repoPath: string | undefined, name: string): Promise<void> =>
-      ipcRenderer.invoke(IPC_CHANNELS.TMUX_KILL_SESSION, repoPath, name),
+      ipcRenderer.invoke(IPC_CHANNELS.TMUX_CHECK, forceRefresh),
+    killSession: (name: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.TMUX_KILL_SESSION, name),
   },
 
   // Settings
@@ -729,20 +601,11 @@ const electronAPI = {
 
   // Shell
   shell: {
-    detect: (repoPath?: string): Promise<ShellInfo[]> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SHELL_DETECT, repoPath),
-    resolveForCommand: (
-      repoPath: string | undefined,
-      config: ShellConfig
-    ): Promise<{ shell: string; execArgs: string[] }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.SHELL_RESOLVE_FOR_COMMAND, repoPath, config),
+    detect: (): Promise<ShellInfo[]> => ipcRenderer.invoke(IPC_CHANNELS.SHELL_DETECT),
+    resolveForCommand: (config: ShellConfig): Promise<{ shell: string; execArgs: string[] }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_RESOLVE_FOR_COMMAND, config),
     openExternal: (url: string): Promise<void> => shell.openExternal(url),
-    openPath: (path: string): Promise<string> => {
-      if (path.startsWith(REMOTE_PATH_PREFIX)) {
-        return Promise.reject(new Error('Remote paths cannot be revealed locally'));
-      }
-      return shell.openPath(path);
-    },
+    openPath: (path: string): Promise<string> => shell.openPath(path),
   },
 
   // Menu actions from main process
@@ -779,8 +642,6 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGED, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGED, handler);
     },
-    getRepositoryRuntimeContext: (repoPath?: string): Promise<RepositoryRuntimeContext> =>
-      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_GET_REPOSITORY_RUNTIME_CONTEXT, repoPath),
   },
 
   // Notification
@@ -927,17 +788,12 @@ const electronAPI = {
 
   // Claude Provider
   claudeProvider: {
-    readSettings: (
-      repoPath?: string
-    ): Promise<{
+    readSettings: (): Promise<{
       settings: import('@shared/types').ClaudeSettings | null;
       extracted: Partial<import('@shared/types').ClaudeProvider> | null;
-    }> => ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_READ_SETTINGS, repoPath),
-    apply: (
-      repoPath: string | undefined,
-      provider: import('@shared/types').ClaudeProvider
-    ): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_APPLY, repoPath, provider),
+    }> => ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_READ_SETTINGS),
+    apply: (provider: import('@shared/types').ClaudeProvider): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROVIDER_APPLY, provider),
     onSettingsChanged: (
       callback: (data: {
         settings: import('@shared/types').ClaudeSettings | null;
@@ -954,71 +810,55 @@ const electronAPI = {
   claudeConfig: {
     // MCP Management
     mcp: {
-      read: (repoPath?: string): Promise<Record<string, McpServerConfig>> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_READ, repoPath),
-      sync: (repoPath: string | undefined, servers: McpServer[]): Promise<boolean> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_SYNC, repoPath, servers),
-      upsert: (repoPath: string | undefined, server: McpServer): Promise<boolean> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_UPSERT, repoPath, server),
-      delete: (repoPath: string | undefined, serverId: string): Promise<boolean> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_DELETE, repoPath, serverId),
+      read: (): Promise<Record<string, McpServerConfig>> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_READ),
+      sync: (servers: McpServer[]): Promise<boolean> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_SYNC, servers),
+      upsert: (server: McpServer): Promise<boolean> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_UPSERT, server),
+      delete: (serverId: string): Promise<boolean> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_MCP_DELETE, serverId),
     },
     // Prompts Management
     prompts: {
-      read: (repoPath?: string): Promise<string | null> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROMPTS_READ, repoPath),
-      write: (repoPath: string | undefined, content: string): Promise<boolean> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROMPTS_WRITE, repoPath, content),
-      backup: (repoPath?: string): Promise<string | null> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROMPTS_BACKUP, repoPath),
+      read: (): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROMPTS_READ),
+      write: (content: string): Promise<boolean> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROMPTS_WRITE, content),
+      backup: (): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROMPTS_BACKUP),
     },
     // Plugins Management
     plugins: {
-      list: (repoPath?: string): Promise<import('@shared/types').Plugin[]> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_LIST, repoPath),
-      setEnabled: (
-        repoPath: string | undefined,
-        pluginId: string,
-        enabled: boolean
-      ): Promise<boolean> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_SET_ENABLED, repoPath, pluginId, enabled),
-      available: (
-        repoPath: string | undefined,
-        marketplace?: string
-      ): Promise<import('@shared/types').AvailablePlugin[]> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_AVAILABLE, repoPath, marketplace),
-      install: (
-        repoPath: string | undefined,
-        pluginName: string,
-        marketplace?: string
-      ): Promise<boolean> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_INSTALL, repoPath, pluginName, marketplace),
-      uninstall: (repoPath: string | undefined, pluginId: string): Promise<boolean> =>
-        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_UNINSTALL, repoPath, pluginId),
+      list: (): Promise<import('@shared/types').Plugin[]> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_LIST),
+      setEnabled: (pluginId: string, enabled: boolean): Promise<boolean> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_SET_ENABLED, pluginId, enabled),
+      available: (marketplace?: string): Promise<import('@shared/types').AvailablePlugin[]> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_AVAILABLE, marketplace),
+      install: (pluginName: string, marketplace?: string): Promise<boolean> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_INSTALL, pluginName, marketplace),
+      uninstall: (pluginId: string): Promise<boolean> =>
+        ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_UNINSTALL, pluginId),
       marketplaces: {
-        list: (repoPath?: string): Promise<import('@shared/types').PluginMarketplace[]> =>
-          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_LIST, repoPath),
-        add: (repoPath: string | undefined, repo: string): Promise<boolean> =>
-          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_ADD, repoPath, repo),
-        remove: (repoPath: string | undefined, name: string): Promise<boolean> =>
-          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_REMOVE, repoPath, name),
-        refresh: (repoPath: string | undefined, name?: string): Promise<boolean> =>
-          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_REFRESH, repoPath, name),
+        list: (): Promise<import('@shared/types').PluginMarketplace[]> =>
+          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_LIST),
+        add: (repo: string): Promise<boolean> =>
+          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_ADD, repo),
+        remove: (name: string): Promise<boolean> =>
+          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_REMOVE, name),
+        refresh: (name?: string): Promise<boolean> =>
+          ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PLUGINS_MARKETPLACES_REFRESH, name),
       },
     },
   },
 
   // Claude Slash Completions (/ commands + skills)
   claudeCompletions: {
-    get: (repoPath?: string): Promise<import('@shared/types').ClaudeSlashCompletionsSnapshot> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_COMPLETIONS_GET, repoPath),
-    refresh: (repoPath?: string): Promise<import('@shared/types').ClaudeSlashCompletionsSnapshot> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_COMPLETIONS_REFRESH, repoPath),
-    learn: (
-      repoPath: string | undefined,
-      label: string
-    ): Promise<import('@shared/types').ClaudeSlashCompletionsSnapshot> =>
-      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_COMPLETIONS_LEARN, repoPath, label),
+    get: (): Promise<import('@shared/types').ClaudeSlashCompletionsSnapshot> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_COMPLETIONS_GET),
+    refresh: (): Promise<import('@shared/types').ClaudeSlashCompletionsSnapshot> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_COMPLETIONS_REFRESH),
+    learn: (label: string): Promise<import('@shared/types').ClaudeSlashCompletionsSnapshot> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_COMPLETIONS_LEARN, label),
     onUpdated: (
       callback: (data: import('@shared/types').ClaudeSlashCompletionsSnapshot) => void
     ): (() => void) => {
@@ -1038,11 +878,8 @@ const electronAPI = {
 
   // Hapi Remote Sharing
   hapi: {
-    checkGlobal: (
-      repoPath: string | undefined,
-      forceRefresh?: boolean
-    ): Promise<{ installed: boolean; version?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.HAPI_CHECK_GLOBAL, repoPath, forceRefresh),
+    checkGlobal: (forceRefresh?: boolean): Promise<{ installed: boolean; version?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HAPI_CHECK_GLOBAL, forceRefresh),
     start: (config: {
       webappPort: number;
       cliApiToken: string;
@@ -1127,11 +964,8 @@ const electronAPI = {
 
   // Happy
   happy: {
-    checkGlobal: (
-      repoPath: string | undefined,
-      forceRefresh?: boolean
-    ): Promise<{ installed: boolean; version?: string }> =>
-      ipcRenderer.invoke(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, repoPath, forceRefresh),
+    checkGlobal: (forceRefresh?: boolean): Promise<{ installed: boolean; version?: string }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.HAPPY_CHECK_GLOBAL, forceRefresh),
   },
 
   // Cloudflared Tunnel

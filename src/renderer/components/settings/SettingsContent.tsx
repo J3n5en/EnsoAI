@@ -5,7 +5,6 @@ import {
   Keyboard,
   Link,
   Palette,
-  Server,
   Settings,
   Share2,
   Sparkles,
@@ -22,21 +21,18 @@ import { GeneralSettings } from './GeneralSettings';
 import { HapiSettings } from './HapiSettings';
 import { IntegrationSettings } from './IntegrationSettings';
 import { KeybindingsSettings } from './KeybindingsSettings';
-import { RemoteSettings } from './RemoteSettings';
 import { WebInspectorSettings } from './WebInspectorSettings';
 
 interface SettingsContentProps {
   activeCategory?: SettingsCategory;
   onCategoryChange?: (category: SettingsCategory) => void;
   scrollToProvider?: boolean;
-  repoPath?: string;
 }
 
 export function SettingsContent({
   activeCategory: controlledCategory,
   onCategoryChange,
   scrollToProvider,
-  repoPath,
 }: SettingsContentProps) {
   const { t } = useI18n();
 
@@ -61,7 +57,6 @@ export function SettingsContent({
     { id: 'ai', icon: Sparkles, label: t('AI') },
     { id: 'integration', icon: Link, label: t('Claude Integration') },
     { id: 'hapi', icon: Share2, label: t('Remote Sharing') },
-    { id: 'remote', icon: Server, label: t('Remote Connection') },
     { id: 'webInspector', icon: Globe, label: t('Web Inspector') },
   ];
 
@@ -81,8 +76,8 @@ export function SettingsContent({
                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
             )}
           >
-            <category.icon className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate text-left">{category.label}</span>
+            <category.icon className="h-4 w-4" />
+            {category.label}
           </button>
         ))}
       </nav>
@@ -93,13 +88,12 @@ export function SettingsContent({
         {activeCategory === 'appearance' && <AppearanceSettings />}
         {activeCategory === 'editor' && <EditorSettings />}
         {activeCategory === 'keybindings' && <KeybindingsSettings />}
-        {activeCategory === 'agent' && <AgentSettings repoPath={repoPath} />}
+        {activeCategory === 'agent' && <AgentSettings />}
         {activeCategory === 'ai' && <AISettings />}
         {activeCategory === 'integration' && (
-          <IntegrationSettings repoPath={repoPath} scrollToProvider={scrollToProvider} />
+          <IntegrationSettings scrollToProvider={scrollToProvider} />
         )}
-        {activeCategory === 'hapi' && <HapiSettings repoPath={repoPath} />}
-        {activeCategory === 'remote' && <RemoteSettings />}
+        {activeCategory === 'hapi' && <HapiSettings />}
         {activeCategory === 'webInspector' && <WebInspectorSettings />}
       </div>
     </div>

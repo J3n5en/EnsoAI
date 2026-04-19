@@ -26,15 +26,9 @@ interface PluginBrowserDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInstalled?: () => void;
-  repoPath?: string;
 }
 
-export function PluginBrowserDialog({
-  open,
-  onOpenChange,
-  onInstalled,
-  repoPath,
-}: PluginBrowserDialogProps) {
+export function PluginBrowserDialog({ open, onOpenChange, onInstalled }: PluginBrowserDialogProps) {
   const { t } = useI18n();
   const [marketplaces, setMarketplaces] = React.useState<PluginMarketplace[]>([]);
   const [selectedMarketplace, setSelectedMarketplace] = React.useState<string>('all');
@@ -45,25 +39,25 @@ export function PluginBrowserDialog({
 
   const loadMarketplaces = React.useCallback(async () => {
     try {
-      const list = await window.electronAPI.claudeConfig.plugins.marketplaces.list(repoPath);
+      const list = await window.electronAPI.claudeConfig.plugins.marketplaces.list();
       setMarketplaces(list);
     } catch (error) {
       console.error('Failed to load marketplaces:', error);
     }
-  }, [repoPath]);
+  }, []);
 
   const loadPlugins = React.useCallback(async () => {
     setLoading(true);
     try {
       const marketplace = selectedMarketplace === 'all' ? undefined : selectedMarketplace;
-      const list = await window.electronAPI.claudeConfig.plugins.available(repoPath, marketplace);
+      const list = await window.electronAPI.claudeConfig.plugins.available(marketplace);
       setPlugins(list);
     } catch (err) {
       console.error('Failed to load available plugins:', err);
     } finally {
       setLoading(false);
     }
-  }, [repoPath, selectedMarketplace]);
+  }, [selectedMarketplace]);
 
   React.useEffect(() => {
     if (open) {
@@ -78,7 +72,6 @@ export function PluginBrowserDialog({
 
     try {
       const success = await window.electronAPI.claudeConfig.plugins.install(
-        repoPath,
         plugin.name,
         plugin.marketplace
       );
@@ -109,7 +102,7 @@ export function PluginBrowserDialog({
     setInstalling(pluginId);
 
     try {
-      const success = await window.electronAPI.claudeConfig.plugins.uninstall(repoPath, pluginId);
+      const success = await window.electronAPI.claudeConfig.plugins.uninstall(pluginId);
 
       if (success) {
         toastManager.add({ type: 'success', title: t('Plugin uninstalled') });

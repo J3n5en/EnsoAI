@@ -1,7 +1,6 @@
 import { AppCategory, type DetectedApp } from '@shared/types';
 import { ChevronDown, FileCode, FolderOpen, Terminal } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { TabId } from '@/App/constants';
 import { Select, SelectItem, SelectPopup, SelectTrigger } from '@/components/ui/select';
 import { useDetectedApps, useOpenWith } from '@/hooks/useAppDetector';
 import { useI18n } from '@/i18n';
@@ -30,6 +29,9 @@ function AppIcon({
   }
   return <Fallback className="size-5" />;
 }
+
+import type { TabId } from '@/App/constants';
+
 interface OpenInMenuProps {
   path?: string;
   activeTab?: TabId;
@@ -41,7 +43,6 @@ export function OpenInMenu({ path, activeTab }: OpenInMenuProps) {
   const openWith = useOpenWith();
   const [lastUsedApp, setLastUsedApp] = useState<string>('');
   const { activeTabPath, tabs, currentCursorLine } = useEditorStore();
-  const isRemotePath = path?.startsWith('/__enso_remote__/') ?? false;
   const hiddenOpenInApps = useSettingsStore((s) => s.hiddenOpenInApps);
   const openInMenuFilterEnabled = useSettingsStore((s) => s.openInMenuFilterEnabled);
   const hiddenSet = useMemo(() => new Set(hiddenOpenInApps), [hiddenOpenInApps]);
@@ -103,11 +104,11 @@ export function OpenInMenu({ path, activeTab }: OpenInMenuProps) {
     );
   }
 
-  if (!path || isRemotePath) {
+  if (!path) {
     return (
       <div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-sm opacity-50">
         <FolderOpen className="h-3.5 w-3.5" />
-        <span>{isRemotePath ? 'Remote Only' : 'Quick Open'}</span>
+        <span>Quick Open</span>
       </div>
     );
   }

@@ -155,7 +155,6 @@ interface ActionPanelProps {
   repositoryCollapsed: boolean;
   worktreeCollapsed: boolean;
   projectPath?: string;
-  repoPath?: string;
   repositories?: Repository[];
   selectedRepoPath?: string;
   worktrees?: GitWorktree[];
@@ -188,7 +187,6 @@ export function ActionPanel({
   repositoryCollapsed,
   worktreeCollapsed,
   projectPath,
-  repoPath,
   repositories = [],
   selectedRepoPath,
   worktrees = [],
@@ -223,8 +221,8 @@ export function ActionPanel({
   const providers = useSettingsStore((s) => s.claudeCodeIntegration.providers);
 
   const { data: claudeData } = useQuery({
-    queryKey: ['claude-settings', repoPath ?? null],
-    queryFn: () => window.electronAPI.claudeProvider.readSettings(repoPath),
+    queryKey: ['claude-settings'],
+    queryFn: () => window.electronAPI.claudeProvider.readSettings(),
     enabled: open, // 只在面板打开时查询
   });
 
@@ -235,14 +233,13 @@ export function ActionPanel({
   }, [providers, claudeData?.extracted]);
 
   const applyProvider = useMutation({
-    mutationFn: (provider: ClaudeProvider) =>
-      window.electronAPI.claudeProvider.apply(repoPath, provider),
+    mutationFn: (provider: ClaudeProvider) => window.electronAPI.claudeProvider.apply(provider),
     onSuccess: (success, provider) => {
       if (!success) {
         clearClaudeProviderSwitch();
         return;
       }
-      queryClient.invalidateQueries({ queryKey: ['claude-settings', repoPath ?? null] });
+      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
       toastManager.add({
         type: 'success',
         title: t('Provider switched'),

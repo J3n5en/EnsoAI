@@ -38,7 +38,6 @@ import { ProviderDialog } from './ProviderDialog';
 
 interface ProviderListProps {
   className?: string;
-  repoPath?: string;
 }
 
 interface ProviderItemProps {
@@ -177,7 +176,7 @@ function ProviderItem({
   );
 }
 
-export function ProviderList({ className, repoPath }: ProviderListProps) {
+export function ProviderList({ className }: ProviderListProps) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const providers = useSettingsStore((s) => s.claudeCodeIntegration.providers);
@@ -197,8 +196,8 @@ export function ProviderList({ className, repoPath }: ProviderListProps) {
 
   // 读取当前 Claude settings（窗口空闲时停止轮询）
   const { data: claudeData } = useQuery({
-    queryKey: ['claude-settings', repoPath ?? null],
-    queryFn: () => window.electronAPI.claudeProvider.readSettings(repoPath),
+    queryKey: ['claude-settings'],
+    queryFn: () => window.electronAPI.claudeProvider.readSettings(),
     refetchInterval: shouldPoll ? 30000 : false,
   });
 
@@ -209,10 +208,10 @@ export function ProviderList({ className, repoPath }: ProviderListProps) {
     if (!shouldPoll) return;
 
     const cleanup = window.electronAPI.claudeProvider.onSettingsChanged(() => {
-      queryClient.invalidateQueries({ queryKey: ['claude-settings', repoPath ?? null] });
+      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
     });
     return cleanup;
-  }, [queryClient, repoPath, shouldPoll]);
+  }, [queryClient, shouldPoll]);
 
   // 计算当前激活的 Provider
   const activeProvider = React.useMemo(() => {
@@ -230,9 +229,9 @@ export function ProviderList({ className, repoPath }: ProviderListProps) {
   // 切换 Provider
   const handleSwitch = async (provider: ClaudeProvider) => {
     markClaudeProviderSwitch(provider);
-    const success = await window.electronAPI.claudeProvider.apply(repoPath, provider);
+    const success = await window.electronAPI.claudeProvider.apply(provider);
     if (success) {
-      queryClient.invalidateQueries({ queryKey: ['claude-settings', repoPath ?? null] });
+      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
       toastManager.add({
         type: 'success',
         title: t('Provider switched'),

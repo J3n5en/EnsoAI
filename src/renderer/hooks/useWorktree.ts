@@ -10,21 +10,9 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { useMemo } from 'react';
 import { useWorktreeStore } from '@/stores/worktree';
 
-interface WorktreeListOptions {
-  enabled?: boolean;
-}
-
-type WorktreeListMultipleInput =
-  | string
-  | {
-      repoPath: string;
-      enabled?: boolean;
-    };
-
-export function useWorktreeList(workdir: string | null, options?: WorktreeListOptions) {
+export function useWorktreeList(workdir: string | null) {
   const setWorktrees = useWorktreeStore((s) => s.setWorktrees);
   const setError = useWorktreeStore((s) => s.setError);
-  const queryEnabled = options?.enabled ?? true;
 
   return useQuery({
     queryKey: ['worktree', 'list', workdir],
@@ -42,7 +30,7 @@ export function useWorktreeList(workdir: string | null, options?: WorktreeListOp
         return [];
       }
     },
-    enabled: !!workdir && queryEnabled,
+    enabled: !!workdir,
     retry: false, // Don't retry on git errors
   });
 }
@@ -51,25 +39,15 @@ export function useWorktreeList(workdir: string | null, options?: WorktreeListOp
  * Fetch worktrees for multiple repositories in parallel.
  * Returns a map of repo path -> worktrees array and error map.
  */
-export function useWorktreeListMultiple(repoInputs: WorktreeListMultipleInput[]) {
-  const repoQueries = useMemo(
-    () =>
-      repoInputs.map((input) =>
-        typeof input === 'string'
-          ? { repoPath: input, enabled: true }
-          : { repoPath: input.repoPath, enabled: input.enabled ?? true }
-      ),
-    [repoInputs]
-  );
-
+export function useWorktreeListMultiple(repoPaths: string[]) {
   const queries = useQueries({
-    queries: repoQueries.map(({ repoPath, enabled }) => ({
+    queries: repoPaths.map((repoPath) => ({
       queryKey: ['worktree', 'listMultiple', repoPath],
       queryFn: async () => {
         const worktrees = await window.electronAPI.worktree.list(repoPath);
         return { repoPath, worktrees };
       },
-      enabled,
+      enabled: true,
       retry: false,
       staleTime: 30000, // Cache for 30 seconds to avoid excessive refetching
     })),
@@ -77,61 +55,41 @@ export function useWorktreeListMultiple(repoInputs: WorktreeListMultipleInput[])
 
   const worktreesMap = useMemo(() => {
     const map: Record<string, GitWorktree[]> = {};
-    for (let i = 0; i < repoQueries.length; i++) {
-      if (!repoQueries[i]?.enabled) {
-        continue;
-      }
+    for (let i = 0; i < repoPaths.length; i++) {
       const query = queries[i];
       if (query?.data) {
         map[query.data.repoPath] = query.data.worktrees;
       }
     }
     return map;
-  }, [queries, repoQueries]);
+  }, [queries, repoPaths]);
 
   const errorsMap = useMemo(() => {
     const map: Record<string, string | null> = {};
-    for (let i = 0; i < repoQueries.length; i++) {
-      const repoPath = repoQueries[i]?.repoPath;
-      if (!repoPath) {
-        continue;
-      }
-      if (!repoQueries[i]?.enabled) {
-        map[repoPath] = null;
-        continue;
-      }
+    for (let i = 0; i < repoPaths.length; i++) {
       const query = queries[i];
       if (query?.error) {
-        map[repoPath] = query.error instanceof Error ? query.error.message : 'Failed to load';
+        map[repoPaths[i]] = query.error instanceof Error ? query.error.message : 'Failed to load';
       } else {
-        map[repoPath] = null;
+        map[repoPaths[i]] = null;
       }
     }
     return map;
-  }, [queries, repoQueries]);
+  }, [queries, repoPaths]);
 
   const loadingMap = useMemo(() => {
     const map: Record<string, boolean> = {};
-    for (let i = 0; i < repoQueries.length; i++) {
-      const repoPath = repoQueries[i]?.repoPath;
-      if (!repoPath) {
-        continue;
-      }
-      map[repoPath] = repoQueries[i]?.enabled ? (queries[i]?.isLoading ?? false) : false;
+    for (let i = 0; i < repoPaths.length; i++) {
+      map[repoPaths[i]] = queries[i]?.isLoading ?? false;
     }
     return map;
-  }, [queries, repoQueries]);
+  }, [queries, repoPaths]);
 
-  const isLoading = repoQueries.some(
-    (queryInfo, index) => queryInfo.enabled && queries[index]?.isLoading
-  );
+  const isLoading = queries.some((q) => q.isLoading);
 
   const refetchAll = () => {
-    for (let i = 0; i < repoQueries.length; i++) {
-      if (!repoQueries[i]?.enabled) {
-        continue;
-      }
-      queries[i]?.refetch();
+    for (const query of queries) {
+      query.refetch();
     }
   };
 

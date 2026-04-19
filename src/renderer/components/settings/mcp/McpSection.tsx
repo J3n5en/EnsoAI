@@ -43,7 +43,7 @@ function configToServer(id: string, config: McpServerConfig): McpServer {
   };
 }
 
-export function McpSection({ repoPath }: { repoPath?: string }) {
+export function McpSection() {
   const { t } = useI18n();
   const [expanded, setExpanded] = React.useState(false);
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -62,7 +62,7 @@ export function McpSection({ repoPath }: { repoPath?: string }) {
 
     const loadExistingMcpServers = async () => {
       try {
-        const existingConfig = await window.electronAPI.claudeConfig.mcp.read(repoPath);
+        const existingConfig = await window.electronAPI.claudeConfig.mcp.read();
         if (!existingConfig || Object.keys(existingConfig).length === 0) {
           setInitialized(true);
           return;
@@ -87,7 +87,7 @@ export function McpSection({ repoPath }: { repoPath?: string }) {
     };
 
     loadExistingMcpServers();
-  }, [initialized, mcpServers, addMcpServer, repoPath]);
+  }, [initialized, mcpServers, addMcpServer]);
 
   const enabledCount = mcpServers.filter((s) => s.enabled).length;
 
@@ -100,7 +100,7 @@ export function McpSection({ repoPath }: { repoPath?: string }) {
     setMcpServerEnabled(id, enabled);
 
     // 使用 upsert 更新单个服务器
-    await window.electronAPI.claudeConfig.mcp.upsert(repoPath, { ...server, enabled });
+    await window.electronAPI.claudeConfig.mcp.upsert({ ...server, enabled });
   };
 
   const handleEdit = (server: McpServer) => {
@@ -115,7 +115,7 @@ export function McpSection({ repoPath }: { repoPath?: string }) {
 
   const handleDelete = async (id: string) => {
     removeMcpServer(id);
-    await window.electronAPI.claudeConfig.mcp.delete(repoPath, id);
+    await window.electronAPI.claudeConfig.mcp.delete(id);
     toastManager.add({ type: 'success', title: t('MCP server removed') });
   };
 
@@ -126,7 +126,7 @@ export function McpSection({ repoPath }: { repoPath?: string }) {
       addMcpServer(server);
     }
     // 使用 upsert 更新单个服务器
-    await window.electronAPI.claudeConfig.mcp.upsert(repoPath, server);
+    await window.electronAPI.claudeConfig.mcp.upsert(server);
     setDialogOpen(false);
     toastManager.add({ type: 'success', title: t('MCP server saved') });
   };

@@ -16,6 +16,8 @@ export interface TodoTaskRow {
   updated_at: number;
 }
 
+type DbCallback<T> = (err: Error | null, result: T) => void;
+
 function getDbPath(): string {
   return join(app.getPath('userData'), 'todo.db');
 }
@@ -293,49 +295,6 @@ export async function migrateFromLocalStorage(boardsJson: string): Promise<void>
     await dbRun(database, 'ROLLBACK').catch(() => {});
     throw err;
   }
-}
-
-export async function exportAllTasks(): Promise<
-  Record<
-    string,
-    Array<{
-      id: string;
-      title: string;
-      description: string;
-      priority: string;
-      status: string;
-      createdAt: number;
-      updatedAt: number;
-      order: number;
-    }>
-  >
-> {
-  const rows = await dbAll<TodoTaskRow>(
-    getDb(),
-    'SELECT * FROM tasks ORDER BY repo_path, status, "order"'
-  );
-  const boards: Record<
-    string,
-    Array<{
-      id: string;
-      title: string;
-      description: string;
-      priority: string;
-      status: string;
-      createdAt: number;
-      updatedAt: number;
-      order: number;
-    }>
-  > = {};
-
-  for (const row of rows) {
-    if (!boards[row.repo_path]) {
-      boards[row.repo_path] = [];
-    }
-    boards[row.repo_path].push(rowToTask(row));
-  }
-
-  return boards;
 }
 
 export function close(): Promise<void> {

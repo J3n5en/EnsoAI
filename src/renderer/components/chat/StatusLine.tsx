@@ -1,4 +1,3 @@
-import { getDisplayPath } from '@shared/utils/path';
 import {
   Bot,
   Clock,
@@ -90,10 +89,9 @@ function formatApiTime(apiMs: number, totalMs: number): string {
 }
 
 function shortenPath(p: string): string {
-  const displayPath = getDisplayPath(p);
   // Show last 2 segments for brevity
-  const parts = displayPath.split('/').filter(Boolean);
-  if (parts.length <= 2) return displayPath;
+  const parts = p.split('/').filter(Boolean);
+  if (parts.length <= 2) return p;
   return `.../${parts.slice(-2).join('/')}`;
 }
 
@@ -106,12 +104,11 @@ interface DirItemProps {
 function DirItem({ path, icon, label }: DirItemProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const displayPath = getDisplayPath(path);
 
   const handleCopyPath = useCallback(async () => {
     setOpen(false);
     try {
-      await navigator.clipboard.writeText(displayPath);
+      await navigator.clipboard.writeText(path);
       toastManager.add({
         title: t('Copied'),
         description: t('Path copied to clipboard'),
@@ -121,7 +118,7 @@ function DirItem({ path, icon, label }: DirItemProps) {
     } catch {
       // Ignore clipboard errors
     }
-  }, [displayPath, t]);
+  }, [path, t]);
 
   const handleOpenFolder = useCallback(() => {
     setOpen(false);
@@ -134,7 +131,7 @@ function DirItem({ path, icon, label }: DirItemProps) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded px-1 hover:bg-accent/50"
-        title={displayPath}
+        title={path}
       >
         <Icon className="h-5 w-5" />
         <span>{label}</span>

@@ -21,7 +21,6 @@ export function useSettingsState(
         'ai',
         'integration',
         'hapi',
-        'remote',
         'webInspector',
       ];
       return saved && validCategories.includes(saved as SettingsCategory)

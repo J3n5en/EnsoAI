@@ -15,7 +15,6 @@ import type {
   HapiSettings,
   MainTabKeybindings,
   QuickTerminalSettings,
-  RemoteSettings,
   SearchKeybindings,
   SourceControlKeybindings,
   StatusLineFieldSettings,
@@ -252,10 +251,6 @@ export const defaultHapiSettings: HapiSettings = {
   happyEnabled: false,
 };
 
-export const defaultRemoteSettings: RemoteSettings = {
-  profiles: [],
-};
-
 // Default proxy settings
 export const defaultProxySettings: ProxySettings = {
   enabled: false,
@@ -444,11 +439,13 @@ export function getDefaultLocale(): import('@shared/i18n').Locale {
  * Get default shell config based on platform
  */
 export function getDefaultShellConfig(): import('@shared/types').ShellConfig {
-  const executionPlatform = window.electronAPI?.env?.platform;
   return {
     // Use PowerShell 5.x as default on Windows (always available)
     // PowerShell 7 (pwsh.exe) requires separate installation
-    shellType: executionPlatform === 'win32' ? 'powershell' : 'system',
+    shellType:
+      typeof window !== 'undefined' && window.electronAPI?.env?.platform === 'win32'
+        ? 'powershell'
+        : 'system',
   };
 }
 

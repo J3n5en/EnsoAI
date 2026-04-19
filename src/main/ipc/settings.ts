@@ -1,11 +1,12 @@
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { IPC_CHANNELS } from '@shared/types';
 import { app, ipcMain } from 'electron';
-import {
-  readSharedSettings,
-  writeSharedSettings,
-  writeSharedSettingsToSession,
-} from '../services/SharedSessionState';
 import { toggleClaudeProviderWatcher } from './claudeProvider';
+
+function getSettingsPath(): string {
+  return join(app.getPath('userData'), 'settings.json');
+}
 
 // 内存缓存和防抖配置
 let cachedSettings: Record<string, unknown> | null = null;
@@ -26,8 +27,12 @@ export function readSettings(): Record<string, unknown> | null {
   }
 
   try {
-    cachedSettings = readSharedSettings();
-    return cachedSettings;
+    const settingsPath = getSettingsPath();
+    if (existsSync(settingsPath)) {
+      const data = readFileSync(settingsPath, 'utf-8');
+      cachedSettings = JSON.parse(data);
+      return cachedSettings;
+    }
   } catch {
     // Return null if file doesn't exist or is corrupted
   }
@@ -40,8 +45,11 @@ export function readSettings(): Record<string, unknown> | null {
  */
 function atomicWriteSettings(data: Record<string, unknown>): boolean {
   try {
-    writeSharedSettings(data);
-    writeSharedSettingsToSession(data);
+    const settingsPath = getSettingsPath();
+    const tempPath = `${settingsPath}.tmp`;
+
+    writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+    renameSync(tempPath, settingsPath);
     return true;
   } catch {
     return false;

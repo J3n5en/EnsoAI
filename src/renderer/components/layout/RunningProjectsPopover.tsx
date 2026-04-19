@@ -1,5 +1,5 @@
 import type { GitWorktree, TerminalSession } from '@shared/types';
-import { getDisplayPath, getDisplayPathBasename } from '@shared/utils/path';
+import { getPathBasename } from '@shared/utils/path';
 import {
   Activity,
   Bot,
@@ -34,7 +34,6 @@ interface RunningProjectsPopoverProps {
 interface GroupedProject {
   path: string;
   repoPath: string;
-  displayPath: string;
   repoName: string;
   branchName: string;
   worktree: GitWorktree | undefined;
@@ -155,9 +154,8 @@ export function RunningProjectsPopover({
       return {
         path,
         repoPath,
-        displayPath: getDisplayPath(path),
-        repoName: getDisplayPathBasename(repoPath),
-        branchName: worktree?.branch || getDisplayPathBasename(path),
+        repoName: getPathBasename(repoPath),
+        branchName: worktree?.branch || getPathBasename(path),
         worktree,
         agents,
         terminals,
@@ -171,7 +169,7 @@ export function RunningProjectsPopover({
     return groupedProjects.filter((project) => {
       if (project.repoName.toLowerCase().includes(query)) return true;
       if (project.branchName.toLowerCase().includes(query)) return true;
-      if (project.displayPath.toLowerCase().includes(query)) return true;
+      if (project.path.toLowerCase().includes(query)) return true;
       if (project.agents.some((a) => (a.name || a.agentId).toLowerCase().includes(query)))
         return true;
       if (project.terminals.some((t) => (t.title || 'Terminal').toLowerCase().includes(query)))
@@ -291,7 +289,7 @@ export function RunningProjectsPopover({
   }, []);
 
   const handleCopyPath = (path: string) => {
-    navigator.clipboard.writeText(getDisplayPath(path));
+    navigator.clipboard.writeText(path);
     toastManager.add({
       type: 'success',
       title: t('Copied to clipboard'),

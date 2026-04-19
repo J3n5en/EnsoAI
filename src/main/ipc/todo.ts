@@ -3,7 +3,6 @@ import type { ClaudeEffort } from '@shared/types/ai';
 import { ipcMain } from 'electron';
 import type { AIProvider, ModelId, ReasoningEffort } from '../services/ai';
 import { polishTodoTask } from '../services/ai';
-import { localSessionManager } from '../services/LocalSessionManager';
 import * as todoService from '../services/todo/TodoService';
 
 let readyPromise: Promise<void>;
@@ -19,13 +18,14 @@ export function registerTodoHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.TODO_GET_TASKS, async (_, repoPath: string) => {
-    return localSessionManager.getTodoTasks(repoPath);
+    await ensureReady();
+    return todoService.getTasks(repoPath);
   });
 
   ipcMain.handle(
     IPC_CHANNELS.TODO_ADD_TASK,
     async (
-      _event,
+      _,
       repoPath: string,
       task: {
         id: string;
@@ -38,37 +38,42 @@ export function registerTodoHandlers(): void {
         updatedAt: number;
       }
     ) => {
-      return localSessionManager.addTodoTask(repoPath, task);
+      await ensureReady();
+      return todoService.addTask(repoPath, task);
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.TODO_UPDATE_TASK,
     async (
-      _event,
+      _,
       repoPath: string,
       taskId: string,
       updates: { title?: string; description?: string; priority?: string; status?: string }
     ) => {
-      return localSessionManager.updateTodoTask(repoPath, taskId, updates);
+      await ensureReady();
+      return todoService.updateTask(repoPath, taskId, updates);
     }
   );
 
   ipcMain.handle(IPC_CHANNELS.TODO_DELETE_TASK, async (_, repoPath: string, taskId: string) => {
-    return localSessionManager.deleteTodoTask(repoPath, taskId);
+    await ensureReady();
+    return todoService.deleteTask(repoPath, taskId);
   });
 
   ipcMain.handle(
     IPC_CHANNELS.TODO_MOVE_TASK,
     async (_, repoPath: string, taskId: string, newStatus: string, newOrder: number) => {
-      return localSessionManager.moveTodoTask(repoPath, taskId, newStatus, newOrder);
+      await ensureReady();
+      return todoService.moveTask(repoPath, taskId, newStatus, newOrder);
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.TODO_REORDER_TASKS,
     async (_, repoPath: string, status: string, orderedIds: string[]) => {
-      return localSessionManager.reorderTodoTasks(repoPath, status, orderedIds);
+      await ensureReady();
+      return todoService.reorderTasks(repoPath, status, orderedIds);
     }
   );
 

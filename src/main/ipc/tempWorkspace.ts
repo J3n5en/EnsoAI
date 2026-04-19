@@ -11,9 +11,9 @@ import {
 } from '@shared/types';
 import { ipcMain } from 'electron';
 import { GitService } from '../services/git/GitService';
-import { sessionManager } from '../services/session/SessionManager';
 import { stopWatchersInDirectory } from './files';
 import { unregisterAuthorizedWorkdir } from './git';
+import { ptyManager } from './terminal';
 
 function expandHome(inputPath: string): string {
   if (!inputPath) return inputPath;
@@ -213,7 +213,7 @@ export function registerTempWorkspaceHandlers(): void {
         }
 
         await stopWatchersInDirectory(resolvedDirPath);
-        await sessionManager.killByWorkdir(resolvedDirPath);
+        await Promise.resolve(ptyManager.destroyByWorkdir(resolvedDirPath));
         unregisterAuthorizedWorkdir(resolvedDirPath);
         const recheckedPath = await resolveSafePath(dirPath);
         if (recheckedPath !== resolvedDirPath || path.dirname(recheckedPath) !== basePath) {

@@ -1,4 +1,3 @@
-import { getDisplayPath } from '@shared/utils/path';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronRight,
@@ -370,7 +369,7 @@ export function FileTree({
   );
 
   const handleCopyPath = useCallback((path: string) => {
-    navigator.clipboard.writeText(getDisplayPath(path));
+    navigator.clipboard.writeText(path);
   }, []);
 
   const handleCopyRelativePath = useCallback(
@@ -1720,7 +1719,7 @@ function FileTreeNodeComponent({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className="min-w-0 flex-1 truncate" title={getDisplayPath(actualNode.path)}>
+          <span className="min-w-0 flex-1 truncate" title={actualNode.path}>
             {displayName}
           </span>
         )}

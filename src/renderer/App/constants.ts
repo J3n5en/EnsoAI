@@ -1,5 +1,3 @@
-import type { WorkspaceKind } from '@shared/types';
-
 // Animation config
 export const panelTransition = { type: 'spring' as const, stiffness: 400, damping: 30 };
 
@@ -62,11 +60,8 @@ export interface RepositoryGroup {
 
 // Repository type
 export interface Repository {
-  id: string;
   name: string;
   path: string;
-  kind?: WorkspaceKind;
-  connectionId?: string;
   /** 所属分组 ID，undefined = 仅在「全部」中显示 */
   groupId?: string;
 }

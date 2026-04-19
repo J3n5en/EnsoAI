@@ -12,12 +12,12 @@ import {
 } from '../storage';
 
 export function useWorktreeState() {
-  // Per-worktree tab state: { [worktreeId or legacy worktreePath]: TabId }
+  // Per-worktree tab state: { [worktreePath]: TabId }
   const [worktreeTabMap, setWorktreeTabMap] = useState<Record<string, TabId>>(getStoredTabMap);
-  // Per-repo worktree state: { [repoId or legacy repoPath]: worktreePath }
+  // Per-repo worktree state: { [repoPath]: worktreePath }
   const [repoWorktreeMap, setRepoWorktreeMap] =
     useState<Record<string, string>>(getStoredWorktreeMap);
-  // Per-repo worktree display order: { [repoId or legacy repoPath]: { [worktreePath]: displayOrder } }
+  // Per-repo worktree display order: { [repoPath]: { [worktreePath]: displayOrder } }
   const [worktreeOrderMap, setWorktreeOrderMap] =
     useState<Record<string, Record<string, number>>>(getStoredWorktreeOrderMap);
   // Panel tab order: custom order of tabs

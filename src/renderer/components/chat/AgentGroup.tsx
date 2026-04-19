@@ -9,7 +9,6 @@ import type { AgentGroup as AgentGroupType } from './types';
 
 interface AgentGroupProps {
   group: AgentGroupType;
-  repoPath?: string;
   sessions: Session[]; // All sessions for current worktree (filtered by groupSessionIds)
   enabledAgents: string[];
   customAgents: Array<{ id: string; name: string; command: string }>;
@@ -33,7 +32,6 @@ interface AgentGroupProps {
 
 export function AgentGroup({
   group,
-  repoPath,
   sessions,
   enabledAgents,
   customAgents,
@@ -160,7 +158,6 @@ export function AgentGroup({
     <SessionBar
       sessions={groupSessions}
       activeSessionId={activeSessionId}
-      repoPath={repoPath}
       onSelectSession={handleSelectSession}
       onCloseSession={onSessionClose}
       onNewSession={onSessionNew}

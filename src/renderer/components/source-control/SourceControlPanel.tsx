@@ -1,9 +1,4 @@
-import {
-  getDisplayPathBasename,
-  getPathBasename,
-  joinPath,
-  normalizePath,
-} from '@shared/utils/path';
+import { getPathBasename, joinPath, normalizePath } from '@shared/utils/path';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, GitBranch, GripVertical, History, PanelLeft } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -77,8 +72,6 @@ interface SourceControlPanelProps {
   isActive?: boolean;
   onExpandWorktree?: () => void;
   worktreeCollapsed?: boolean;
-  emptyTitle?: string;
-  emptyDescription?: string;
 }
 
 export function SourceControlPanel({
@@ -86,8 +79,6 @@ export function SourceControlPanel({
   isActive = false,
   onExpandWorktree,
   worktreeCollapsed,
-  emptyTitle,
-  emptyDescription,
 }: SourceControlPanelProps) {
   const { t, tNode } = useI18n();
   const queryClient = useQueryClient();
@@ -139,7 +130,7 @@ export function SourceControlPanel({
   const skippedDirs = fileChangesResult?.skippedDirs;
 
   // Git sync operations using shared hook
-  const { refetchStatus, ahead, behind, tracking, currentBranch } = useGitSync({
+  const { refetchStatus, isSyncing, ahead, behind, tracking, currentBranch } = useGitSync({
     workdir: rootPath ?? '',
     enabled: isActive && !!rootPath,
   });
@@ -174,7 +165,7 @@ export function SourceControlPanel({
     if (!rootPath) return null;
     return {
       type: 'main',
-      name: getDisplayPathBasename(rootPath),
+      name: getPathBasename(rootPath),
       path: rootPath,
       branch: currentBranch ?? null,
       tracking: tracking ?? null,
@@ -441,6 +432,7 @@ export function SourceControlPanel({
     },
     [rootPath, repositories, pushMutation, queryClient, refetchStatus, refetch, refetchCommits, t]
   );
+
   // Branch checkout handler - handles both main repo and submodule branches
   const handleBranchCheckout = useCallback(
     async (repoPath: string, branch: string) => {
@@ -994,10 +986,8 @@ export function SourceControlPanel({
           <GitBranch className="h-4.5 w-4.5" />
         </EmptyMedia>
         <EmptyHeader>
-          <EmptyTitle>{emptyTitle ?? t('Version Control')}</EmptyTitle>
-          <EmptyDescription>
-            {emptyDescription ?? t('Select a Worktree to view changes')}
-          </EmptyDescription>
+          <EmptyTitle>{t('Version Control')}</EmptyTitle>
+          <EmptyDescription>{t('Select a Worktree to view changes')}</EmptyDescription>
         </EmptyHeader>
         {onExpandWorktree && worktreeCollapsed && (
           <Button onClick={onExpandWorktree} variant="outline" className="mt-2">
@@ -1105,11 +1095,7 @@ export function SourceControlPanel({
                 behind={selectedRepo?.behind ?? 0}
                 tracking={selectedRepo?.tracking ?? null}
                 currentBranch={selectedRepo?.branch ?? null}
-                isSyncing={
-                  syncingPath === selectedRepoPath ||
-                  pullMutation.isPending ||
-                  pushMutation.isPending
-                }
+                isSyncing={isSyncing || pullMutation.isPending || pushMutation.isPending}
                 onSync={() => selectedRepoPath && handleSync(selectedRepoPath)}
                 onPublish={() => selectedRepoPath && handlePublish(selectedRepoPath)}
               />

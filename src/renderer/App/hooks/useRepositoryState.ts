@@ -1,5 +1,4 @@
-import { getDisplayPathBasename } from '@shared/utils/path';
-import { buildRepositoryId } from '@shared/utils/workspace';
+import { getPathBasename } from '@shared/utils/path';
 import { useCallback, useEffect, useState } from 'react';
 import { normalizeHexColor } from '@/lib/colors';
 import {
@@ -10,7 +9,6 @@ import {
   type RepositoryGroup,
 } from '../constants';
 import {
-  ensureRepositoryId,
   getActiveGroupId,
   getStoredGroups,
   migrateRepositoryGroups,
@@ -42,19 +40,16 @@ export function useRepositoryState() {
         let parsed = JSON.parse(savedRepos) as Repository[];
         let needsMigration = false;
         parsed = parsed.map((repo) => {
-          const withId = ensureRepositoryId(repo);
-          if (withId.id !== repo.id) {
-            needsMigration = true;
-          }
           if (repo.name.includes('/') || repo.name.includes('\\')) {
             needsMigration = true;
-            return { ...withId, name: getDisplayPathBasename(repo.path) };
+            const fixedName = getPathBasename(repo.path);
+            return { ...repo, name: fixedName };
           }
-          if (withId.groupId && !validGroupIds.has(withId.groupId)) {
+          if (repo.groupId && !validGroupIds.has(repo.groupId)) {
             needsMigration = true;
-            return { ...withId, groupId: undefined };
+            return { ...repo, groupId: undefined };
           }
-          return withId;
+          return repo;
         });
         if (needsMigration) {
           localStorage.setItem(STORAGE_KEYS.REPOSITORIES, JSON.stringify(parsed));
@@ -144,9 +139,9 @@ export function useRepositoryState() {
   }, []);
 
   const handleMoveToGroup = useCallback(
-    (repoId: string, targetGroupId: string | null) => {
+    (repoPath: string, targetGroupId: string | null) => {
       const updated = repositories.map((r) =>
-        r.id === repoId ? { ...r, groupId: targetGroupId || undefined } : r
+        r.path === repoPath ? { ...r, groupId: targetGroupId || undefined } : r
       );
       saveRepositories(updated);
     },
@@ -155,43 +150,16 @@ export function useRepositoryState() {
 
   // Repository management
   const handleAddRepository = useCallback(
-    (
-      path: string,
-      groupId: string | null = null,
-      options?: { kind?: 'local' | 'remote'; connectionId?: string }
-    ) => {
-      const id = buildRepositoryId(options?.kind ?? 'local', path, {
-        connectionId: options?.connectionId,
-        platform:
-          window.electronAPI?.env?.platform === 'win32'
-            ? 'win32'
-            : window.electronAPI?.env?.platform === 'darwin'
-              ? 'darwin'
-              : 'linux',
-      });
-      if (
-        repositories.some(
-          (r) =>
-            r.id === id ||
-            (r.kind !== 'remote' && options?.kind !== 'remote' && pathsEqual(r.path, path))
-        )
-      ) {
-        const existingRepo = repositories.find(
-          (r) =>
-            r.id === id ||
-            (r.kind !== 'remote' && options?.kind !== 'remote' && pathsEqual(r.path, path))
-        );
-        setSelectedRepo(existingRepo?.path ?? path);
+    (path: string, groupId: string | null = null) => {
+      if (repositories.some((r) => pathsEqual(r.path, path))) {
+        setSelectedRepo(path);
         return;
       }
 
-      const name = getDisplayPathBasename(path);
+      const name = getPathBasename(path);
       const newRepo: Repository = {
-        id,
         name,
         path,
-        kind: options?.kind ?? 'local',
-        connectionId: options?.connectionId,
         groupId: groupId || undefined,
       };
 

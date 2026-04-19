@@ -19,10 +19,9 @@ import { useI18n } from '@/i18n';
 interface MarketplacesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  repoPath?: string;
 }
 
-export function MarketplacesDialog({ open, onOpenChange, repoPath }: MarketplacesDialogProps) {
+export function MarketplacesDialog({ open, onOpenChange }: MarketplacesDialogProps) {
   const { t } = useI18n();
   const [marketplaces, setMarketplaces] = React.useState<PluginMarketplace[]>([]);
   const [newRepo, setNewRepo] = React.useState('');
@@ -31,12 +30,12 @@ export function MarketplacesDialog({ open, onOpenChange, repoPath }: Marketplace
 
   const loadMarketplaces = React.useCallback(async () => {
     try {
-      const list = await window.electronAPI.claudeConfig.plugins.marketplaces.list(repoPath);
+      const list = await window.electronAPI.claudeConfig.plugins.marketplaces.list();
       setMarketplaces(list);
     } catch (error) {
       console.error('Failed to load marketplaces:', error);
     }
-  }, [repoPath]);
+  }, []);
 
   React.useEffect(() => {
     if (open) {
@@ -56,10 +55,7 @@ export function MarketplacesDialog({ open, onOpenChange, repoPath }: Marketplace
 
     setLoading(true);
     try {
-      const success = await window.electronAPI.claudeConfig.plugins.marketplaces.add(
-        repoPath,
-        repo
-      );
+      const success = await window.electronAPI.claudeConfig.plugins.marketplaces.add(repo);
       if (success) {
         toastManager.add({ type: 'success', title: t('Marketplace added') });
         setNewRepo('');
@@ -76,10 +72,7 @@ export function MarketplacesDialog({ open, onOpenChange, repoPath }: Marketplace
 
   const handleRemove = async (name: string) => {
     try {
-      const success = await window.electronAPI.claudeConfig.plugins.marketplaces.remove(
-        repoPath,
-        name
-      );
+      const success = await window.electronAPI.claudeConfig.plugins.marketplaces.remove(name);
       if (success) {
         toastManager.add({ type: 'success', title: t('Marketplace removed') });
         await loadMarketplaces();
@@ -92,7 +85,7 @@ export function MarketplacesDialog({ open, onOpenChange, repoPath }: Marketplace
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const success = await window.electronAPI.claudeConfig.plugins.marketplaces.refresh(repoPath);
+      const success = await window.electronAPI.claudeConfig.plugins.marketplaces.refresh();
       if (success) {
         toastManager.add({ type: 'success', title: t('Marketplaces updated') });
         await loadMarketplaces();

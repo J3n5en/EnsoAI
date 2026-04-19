@@ -1,5 +1,5 @@
 import { translate } from '@shared/i18n';
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import { app, type BrowserWindow, Menu, shell } from 'electron';
 import { getCurrentLocale } from './i18n';
 
 export type MenuAction = 'open-settings' | 'toggle-devtools' | 'open-action-panel';
@@ -8,17 +8,13 @@ interface MenuOptions {
   onNewWindow?: () => void;
 }
 
-function getActiveWindow(): BrowserWindow | null {
-  return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
-}
-
-export function buildAppMenu(options: MenuOptions = {}): Menu {
+export function buildAppMenu(mainWindow: BrowserWindow, options: MenuOptions = {}): Menu {
   const isMac = process.platform === 'darwin';
   const locale = getCurrentLocale();
   const t = (key: string) => translate(locale, key);
 
   const sendAction = (action: MenuAction) => {
-    getActiveWindow()?.webContents.send('menu-action', action);
+    mainWindow.webContents.send('menu-action', action);
   };
 
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -100,34 +96,30 @@ export function buildAppMenu(options: MenuOptions = {}): Menu {
         {
           label: t('Developer Tools'),
           accelerator: 'CommandOrControl+Option+I',
-          click: () => getActiveWindow()?.webContents.toggleDevTools(),
+          click: () => mainWindow.webContents.toggleDevTools(),
         },
         { type: 'separator' as const },
         {
           label: t('Reset Zoom'),
           accelerator: 'CommandOrControl+0',
           click: () => {
-            getActiveWindow()?.webContents.setZoomLevel(0);
+            mainWindow.webContents.setZoomLevel(0);
           },
         },
         {
           label: t('Zoom In'),
           accelerator: 'CommandOrControl+=',
           click: () => {
-            const window = getActiveWindow();
-            if (!window) return;
-            const currentZoom = window.webContents.getZoomLevel();
-            window.webContents.setZoomLevel(currentZoom + 0.5);
+            const currentZoom = mainWindow.webContents.getZoomLevel();
+            mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
           },
         },
         {
           label: t('Zoom Out'),
           accelerator: 'CommandOrControl+-',
           click: () => {
-            const window = getActiveWindow();
-            if (!window) return;
-            const currentZoom = window.webContents.getZoomLevel();
-            window.webContents.setZoomLevel(currentZoom - 0.5);
+            const currentZoom = mainWindow.webContents.getZoomLevel();
+            mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
           },
         },
         { type: 'separator' as const },

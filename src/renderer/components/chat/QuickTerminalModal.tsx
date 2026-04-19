@@ -14,7 +14,6 @@ interface QuickTerminalModalProps {
   onOpenChange: (open: boolean) => void;
   onClose: () => void; // 真正关闭并销毁 PTY
   cwd: string;
-  backendSessionId?: string;
   onSessionInit: (sessionId: string) => void;
 }
 
@@ -23,7 +22,6 @@ export function QuickTerminalModal({
   onOpenChange,
   onClose,
   cwd,
-  backendSessionId,
   onSessionInit,
 }: QuickTerminalModalProps) {
   const modalPosition = useSettingsStore((s) => s.quickTerminal.modalPosition);
@@ -290,10 +288,8 @@ export function QuickTerminalModal({
             >
               <ShellTerminal
                 cwd={terminalCwd}
-                backendSessionId={terminalCwd === cwd ? backendSessionId : undefined}
                 isActive={open && terminalCwd === cwd}
                 onInit={onSessionInit}
-                onSessionIdChange={onSessionInit}
               />
             </div>
           ))}

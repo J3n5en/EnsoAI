@@ -2,12 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
-import { translate } from '@shared/i18n';
-import type { AppCloseRequestPayload, AppCloseRequestReason } from '@shared/types';
 import { IPC_CHANNELS } from '@shared/types';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
-import { getCurrentLocale } from '../services/i18n';
-import { sessionManager } from '../services/session/SessionManager';
 import { autoUpdaterService } from '../services/updater/AutoUpdater';
 
 /** Default macOS traffic lights position (matches BrowserWindow trafficLightPosition) */
@@ -65,47 +61,8 @@ function saveWindowState(win: BrowserWindow): void {
   } catch {}
 }
 
-interface CreateMainWindowOptions {
-  initializeWindow?: (window: BrowserWindow) => Promise<void> | void;
-  partition?: string;
-  replaceWindow?: BrowserWindow | null;
-}
-
-interface WindowReplacementController {
-  confirmWindowReplace: () => Promise<boolean>;
-  forceReplaceClose: () => void;
-}
-
-const windowReplacementControllers = new WeakMap<BrowserWindow, WindowReplacementController>();
-
-function t(key: string, params?: Record<string, string | number>): string {
-  return translate(getCurrentLocale(), key, params);
-}
-
-export async function confirmWindowReplace(win: BrowserWindow): Promise<boolean> {
-  if (win.isDestroyed()) {
-    return false;
-  }
-  return (await windowReplacementControllers.get(win)?.confirmWindowReplace()) ?? true;
-}
-
-export function forceReplaceClose(win: BrowserWindow): void {
-  if (win.isDestroyed()) {
-    return;
-  }
-  windowReplacementControllers.get(win)?.forceReplaceClose() ?? win.close();
-}
-
-export function createMainWindow(options: CreateMainWindowOptions = {}): BrowserWindow {
-  const replacementState =
-    options.replaceWindow && !options.replaceWindow.isDestroyed()
-      ? {
-          ...options.replaceWindow.getBounds(),
-          isMaximized: options.replaceWindow.isMaximized(),
-        }
-      : null;
-
-  const state = replacementState ?? loadWindowState();
+export function createMainWindow(): BrowserWindow {
+  const state = loadWindowState();
 
   const isMac = process.platform === 'darwin';
   const isWindows = process.platform === 'win32';
@@ -132,12 +89,9 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
       sandbox: false,
       webSecurity: true,
       allowRunningInsecureContent: false,
-      partition: options.partition,
       preload: join(__dirname, '../preload/index.cjs'),
     },
   });
-
-  void options.initializeWindow?.(win);
 
   // Enable native context menu for editable fields (input/textarea/contenteditable)
   // so EnhancedInput and other text fields support Cut/Copy/Paste/SelectAll.
@@ -167,9 +121,6 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
 
   win.once('ready-to-show', () => {
     win.show();
-    if (options.replaceWindow) {
-      forceReplaceClose(options.replaceWindow);
-    }
   });
 
   // DevTools state management for traffic lights adjustment.
@@ -187,35 +138,27 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
     });
   }
 
-  win.on('maximize', () => {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGED, true);
-    }
-  });
-
-  win.on('unmaximize', () => {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED_CHANGED, false);
-    }
-  });
-
-  win.on('enter-full-screen', () => {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGED, true);
-    }
-  });
-
-  win.on('leave-full-screen', () => {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IPC_CHANNELS.WINDOW_FULLSCREEN_CHANGED, false);
-    }
-  });
-
   // Confirm before close (skip in dev mode)
   let forceClose = false;
   let closeFlowInProgress = false;
   const CLOSE_RESPONSE_IPC_TIMEOUT_MS = 30000;
   const CLOSE_SAVE_IPC_TIMEOUT_MS = 30000;
+
+  // Listen for close confirmation from renderer
+  const handleCloseConfirm = (event: Electron.IpcMainEvent, confirmed: boolean) => {
+    if (event.sender === win.webContents && confirmed) {
+      forceClose = true;
+      // Hide window first to avoid black screen during cleanup
+      win.hide();
+      win.close();
+    }
+  };
+  ipcMain.on(IPC_CHANNELS.APP_CLOSE_CONFIRM, handleCloseConfirm);
+
+  const cleanupWindowListeners = () => {
+    ipcMain.removeListener(IPC_CHANNELS.APP_CLOSE_CONFIRM, handleCloseConfirm);
+  };
+  win.once('closed', cleanupWindowListeners);
 
   const waitForWindowIpc = <T>(
     channel: string,
@@ -263,69 +206,65 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
       webContents.once('destroyed', handleWindowGone);
     });
 
-  const forceReplaceCloseCurrentWindow = () => {
-    if (win.isDestroyed()) {
-      return;
-    }
-    saveWindowState(win);
-    forceClose = true;
-    win.hide();
-    win.close();
-  };
-
-  const confirmCloseWithReason = async (reason: AppCloseRequestReason): Promise<boolean> => {
-    if (win.isDestroyed() || win.webContents.isDestroyed()) {
-      return false;
-    }
-
+  win.on('close', (e) => {
+    // Skip confirmation if force close, or quitting for update
     if (forceClose || autoUpdaterService.isQuittingForUpdate()) {
-      return true;
+      saveWindowState(win);
+      return;
     }
 
     if (closeFlowInProgress) {
-      return false;
+      e.preventDefault();
+      return;
     }
 
+    e.preventDefault();
     closeFlowInProgress = true;
-    try {
-      const requestId = randomUUID();
-      const payload: AppCloseRequestPayload = { requestId, reason };
-      win.webContents.send(IPC_CHANNELS.APP_CLOSE_REQUEST, payload);
+
+    const requestId = randomUUID();
+
+    const runCloseFlow = async () => {
+      if (win.isDestroyed() || win.webContents.isDestroyed()) {
+        return;
+      }
+
+      win.webContents.send(IPC_CHANNELS.APP_CLOSE_REQUEST, requestId);
 
       const response = await waitForWindowIpc<{ confirmed: boolean; dirtyPaths: string[] }>(
         IPC_CHANNELS.APP_CLOSE_RESPONSE,
-        (
-          event,
-          respRequestId: string,
-          responsePayload: { confirmed: boolean; dirtyPaths: string[] }
-        ) => {
+        (event, respRequestId: string, payload: { confirmed: boolean; dirtyPaths: string[] }) => {
           if (event.sender !== win.webContents) return null;
           if (respRequestId !== requestId) return null;
-          return responsePayload;
+          return payload;
         },
         CLOSE_RESPONSE_IPC_TIMEOUT_MS
       );
 
       if (!response?.confirmed) {
-        return false;
+        return;
       }
 
       const dirtyPaths = response.dirtyPaths ?? [];
+      if (dirtyPaths.length === 0) {
+        forceClose = true;
+        win.hide();
+        win.close();
+        return;
+      }
+
       for (const filePath of dirtyPaths) {
         const fileName = filePath.split(/[/\\\\]/).pop() || filePath;
         const { response: buttonIndex } = await dialog.showMessageBox(win, {
           type: 'warning',
-          buttons: [t('Save'), t("Don't Save"), t('Cancel')],
+          buttons: ['Save', "Don't Save", 'Cancel'],
           defaultId: 0,
           cancelId: 2,
-          message: t('Do you want to save the changes you made to {{file}}?', {
-            file: fileName,
-          }),
-          detail: t("Your changes will be lost if you don't save them."),
+          message: `Do you want to save the changes you made to ${fileName}?`,
+          detail: "Your changes will be lost if you don't save them.",
         });
 
         if (buttonIndex === 2) {
-          return false;
+          return;
         }
 
         if (buttonIndex === 0) {
@@ -334,14 +273,10 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
 
           const saveResult = await waitForWindowIpc<{ ok: boolean; error?: string }>(
             IPC_CHANNELS.APP_CLOSE_SAVE_RESPONSE,
-            (
-              event,
-              respSaveRequestId: string,
-              responsePayload: { ok: boolean; error?: string }
-            ) => {
+            (event, respSaveRequestId: string, payload: { ok: boolean; error?: string }) => {
               if (event.sender !== win.webContents) return null;
               if (respSaveRequestId !== saveRequestId) return null;
-              return responsePayload;
+              return payload;
             },
             CLOSE_SAVE_IPC_TIMEOUT_MS
           );
@@ -349,41 +284,23 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
           if (!saveResult?.ok) {
             await dialog.showMessageBox(win, {
               type: 'error',
-              buttons: [t('Close')],
+              buttons: ['OK'],
               defaultId: 0,
-              message: t('Save failed'),
-              detail: saveResult?.error || t('Unknown error'),
+              message: 'Save failed',
+              detail: saveResult?.error || 'Unknown error',
             });
-            return false;
+            return;
           }
         }
       }
 
-      return true;
-    } finally {
+      forceClose = true;
+      win.hide();
+      win.close();
+    };
+
+    void runCloseFlow().finally(() => {
       closeFlowInProgress = false;
-    }
-  };
-
-  windowReplacementControllers.set(win, {
-    confirmWindowReplace: () => confirmCloseWithReason('replace-window'),
-    forceReplaceClose: forceReplaceCloseCurrentWindow,
-  });
-
-  win.on('close', (e) => {
-    if (forceClose) {
-      return;
-    }
-    if (autoUpdaterService.isQuittingForUpdate()) {
-      saveWindowState(win);
-      return;
-    }
-
-    e.preventDefault();
-    void confirmCloseWithReason('quit-app').then((confirmed) => {
-      if (confirmed) {
-        forceReplaceCloseCurrentWindow();
-      }
     });
   });
 
@@ -401,10 +318,6 @@ export function createMainWindow(options: CreateMainWindowOptions = {}): Browser
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'));
   }
-
-  win.on('closed', () => {
-    void sessionManager.detachWindowSessions(win.id);
-  });
 
   return win;
 }

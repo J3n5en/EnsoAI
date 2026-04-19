@@ -32,7 +32,6 @@ const EDGE_THRESHOLD = 20; // pixels from edge
 export interface Session {
   id: string; // Session's own unique ID
   sessionId?: string; // Optional Claude session ID for --session-id/--resume (defaults to id if not set)
-  backendSessionId?: string; // Backend session host ID used by the unified session API
   name: string;
   agentId: string; // which agent CLI to use (e.g., 'claude', 'codex', 'gemini', 'claude-hapi', 'claude-happy')
   agentCommand: string; // the CLI command to run (e.g., 'claude', 'codex')
@@ -52,7 +51,6 @@ export interface Session {
 interface SessionBarProps {
   sessions: Session[];
   activeSessionId: string | null;
-  repoPath?: string;
   onSelectSession: (id: string) => void;
   onCloseSession: (id: string) => void;
   onNewSession: () => void;
@@ -454,7 +452,6 @@ function SessionTab({
 export function SessionBar({
   sessions,
   activeSessionId,
-  repoPath,
   onSelectSession,
   onCloseSession,
   onNewSession,
@@ -490,8 +487,8 @@ export function SessionBar({
   );
 
   const { data: claudeData } = useQuery({
-    queryKey: ['claude-settings', repoPath ?? null],
-    queryFn: () => window.electronAPI.claudeProvider.readSettings(repoPath),
+    queryKey: ['claude-settings'],
+    queryFn: () => window.electronAPI.claudeProvider.readSettings(),
     enabled: !state.collapsed, // 仅在展开状态查询
     staleTime: 30000, // 30秒缓存避免频繁查询
   });
@@ -505,8 +502,7 @@ export function SessionBar({
 
   // Provider 切换 mutation
   const applyProvider = useMutation({
-    mutationFn: (provider: ClaudeProvider) =>
-      window.electronAPI.claudeProvider.apply(repoPath, provider),
+    mutationFn: (provider: ClaudeProvider) => window.electronAPI.claudeProvider.apply(provider),
     onSuccess: (success, provider) => {
       if (!success) {
         clearClaudeProviderSwitch();
@@ -516,7 +512,7 @@ export function SessionBar({
         });
         return;
       }
-      queryClient.invalidateQueries({ queryKey: ['claude-settings', repoPath ?? null] });
+      queryClient.invalidateQueries({ queryKey: ['claude-settings'] });
       toastManager.add({
         type: 'success',
         title: t('Provider switched'),

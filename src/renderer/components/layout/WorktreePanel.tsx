@@ -1,10 +1,5 @@
-import type {
-  GitBranch as GitBranchType,
-  GitWorktree,
-  RemoteConnectionStatus,
-  WorktreeCreateOptions,
-} from '@shared/types';
-import { getDisplayPath, getDisplayPathBasename, isWslUncPath } from '@shared/utils/path';
+import type { GitBranch as GitBranchType, GitWorktree, WorktreeCreateOptions } from '@shared/types';
+import { getPathBasename, isWslUncPath } from '@shared/utils/path';
 import { LayoutGroup, motion } from 'framer-motion';
 import {
   Copy,
@@ -55,8 +50,6 @@ interface WorktreePanelProps {
   activeWorktree: GitWorktree | null;
   branches: GitBranchType[];
   projectName: string;
-  inactiveRemote?: boolean;
-  remoteStatus?: RemoteConnectionStatus | null;
   isLoading?: boolean;
   isCreating?: boolean;
   error?: string | null;
@@ -82,8 +75,6 @@ export function WorktreePanel({
   activeWorktree,
   branches,
   projectName,
-  inactiveRemote = false,
-  remoteStatus = null,
   isLoading,
   isCreating,
   error,
@@ -119,7 +110,7 @@ export function WorktreePanel({
 
       // Create styled drag image
       const dragImage = document.createElement('div');
-      dragImage.textContent = worktree.branch || getDisplayPathBasename(worktree.path);
+      dragImage.textContent = worktree.branch || getPathBasename(worktree.path);
       dragImage.style.cssText = `
         position: fixed;
         top: -9999px;
@@ -179,7 +170,7 @@ export function WorktreePanel({
     .filter(
       ({ worktree: wt }) =>
         wt.branch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getDisplayPath(wt.path).toLowerCase().includes(searchQuery.toLowerCase())
+        wt.path.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
   // Get the main worktree path for git operations
@@ -189,13 +180,6 @@ export function WorktreePanel({
   const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
   const activities = useWorktreeActivityStore((s) => s.activities);
   const shouldPoll = useShouldPoll();
-  const isRemoteReconnecting = remoteStatus?.phase === 'reconnecting';
-  const isRemoteFailed = Boolean(
-    inactiveRemote &&
-      remoteStatus &&
-      remoteStatus.phase === 'failed' &&
-      remoteStatus.recoverable === false
-  );
 
   useEffect(() => {
     if (worktrees.length === 0 || !shouldPoll) return;
@@ -241,7 +225,6 @@ export function WorktreePanel({
           className="flex h-8 w-8 items-center justify-center rounded-md no-drag text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
           onClick={onRefresh}
           title={t('Refresh')}
-          disabled={inactiveRemote}
         >
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -274,29 +257,7 @@ export function WorktreePanel({
 
       {/* Worktree List */}
       <div className="flex-1 overflow-auto p-2">
-        {inactiveRemote ? (
-          <Empty className="h-full border-0">
-            <EmptyMedia variant="icon">
-              <GitBranch className="h-4.5 w-4.5" />
-            </EmptyMedia>
-            <EmptyHeader>
-              <EmptyTitle className="text-base">
-                {isRemoteReconnecting
-                  ? t('Remote connection lost. Attempting to reconnect...')
-                  : isRemoteFailed
-                    ? t('Remote connection lost')
-                    : t('Remote repository is not connected yet')}
-              </EmptyTitle>
-              <EmptyDescription>
-                {isRemoteReconnecting
-                  ? t('Reconnecting remote connection...')
-                  : isRemoteFailed
-                    ? remoteStatus?.error || t('Remote connection lost')
-                    : t('Click the selected repository again to connect and load worktrees.')}
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : error ? (
+        {error ? (
           <Empty className="h-full border-0">
             <EmptyMedia variant="icon">
               <GitBranch className="h-4.5 w-4.5" />
@@ -537,8 +498,7 @@ function WorktreeItem({
     worktree.isMainWorktree || worktree.branch === 'main' || worktree.branch === 'master';
   const branchDisplay = worktree.branch || t('Detached');
   const isPrunable = worktree.prunable;
-  const displayWorktreePath = getDisplayPath(worktree.path);
-  const useLtrPathDisplay = isWslUncPath(displayWorktreePath);
+  const useLtrPathDisplay = isWslUncPath(worktree.path);
   const glowEnabled = useGlowEffectEnabled();
 
   // Git sync operations
@@ -573,7 +533,7 @@ function WorktreeItem({
 
   const handleCopyPath = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(displayWorktreePath);
+      await navigator.clipboard.writeText(worktree.path);
       toastManager.add({
         title: t('Copied'),
         description: t('Path copied to clipboard'),
@@ -589,7 +549,7 @@ function WorktreeItem({
         timeout: 3000,
       });
     }
-  }, [displayWorktreePath, t]);
+  }, [t, worktree.path]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -704,9 +664,9 @@ function WorktreeItem({
             isPrunable && 'line-through',
             isActive ? 'text-accent-foreground/70' : 'text-muted-foreground'
           )}
-          title={displayWorktreePath}
+          title={worktree.path}
         >
-          {displayWorktreePath}
+          {worktree.path}
         </div>
 
         {/* Activity counts and diff stats (only shown when has active sessions) */}

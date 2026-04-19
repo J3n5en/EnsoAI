@@ -33,7 +33,6 @@ interface EnhancedInputProps {
   isActive?: boolean;
   /** Working directory for file mention search */
   cwd?: string;
-  repoPath?: string;
 }
 
 const MAX_IMAGES = 5;
@@ -52,7 +51,6 @@ export function EnhancedInput({
   keepOpenAfterSend = false,
   isActive = false,
   cwd,
-  repoPath,
 }: EnhancedInputProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,7 +81,7 @@ export function EnhancedInput({
     if (!api) return;
 
     api
-      .get(repoPath)
+      .get()
       .then((data: ClaudeSlashCompletionsSnapshot) => {
         if (!alive) return;
         setSlashItems(data.items ?? []);
@@ -102,7 +100,7 @@ export function EnhancedInput({
       alive = false;
       cleanup?.();
     };
-  }, [repoPath]);
+  }, []);
 
   // Extract mention query from text before cursor
   const extractMentionQuery = useCallback((text: string, cursorPos: number): string | null => {
@@ -259,7 +257,7 @@ export function EnhancedInput({
       // Auto-learn: executing a slash item should be counted in the learned cache.
       const token = newContent.match(/^\/\S+/)?.[0];
       if (token && !token.slice(1).includes('/') && !token.includes('\\')) {
-        window.electronAPI?.claudeCompletions?.learn(repoPath, token).catch(() => {
+        window.electronAPI?.claudeCompletions?.learn(token).catch(() => {
           // Ignore learning failures; they should not block sending.
         });
       }
@@ -269,7 +267,7 @@ export function EnhancedInput({
         onOpenChange(false);
       }
     },
-    [content, imagePaths, keepOpenAfterSend, onOpenChange, onSend, findSlashTokenStart, repoPath]
+    [content, imagePaths, keepOpenAfterSend, onOpenChange, onSend, findSlashTokenStart]
   );
 
   // Scroll highlighted mention into view
@@ -382,7 +380,7 @@ export function EnhancedInput({
         const token = trimmed.match(/^\/\S+/)?.[0];
         // Avoid learning path-like tokens such as `/usr/local/bin`.
         if (token && !token.slice(1).includes('/') && !token.includes('\\')) {
-          window.electronAPI?.claudeCompletions?.learn(repoPath, token).catch(() => {
+          window.electronAPI?.claudeCompletions?.learn(token).catch(() => {
             // Ignore learning failures; they should not block sending.
           });
         }
@@ -401,7 +399,7 @@ export function EnhancedInput({
         description: message,
       });
     }
-  }, [content, imagePaths, onSend, keepOpenAfterSend, onOpenChange, repoPath, t]);
+  }, [content, imagePaths, onSend, keepOpenAfterSend, onOpenChange, t]);
 
   const getImageExtension = useCallback((file: File): string => {
     const mime = file.type.toLowerCase();

@@ -1,7 +1,6 @@
 import type { Locale } from '@shared/i18n';
 import type {
   BuiltinAgentId,
-  ConnectionProfile,
   CustomAgent,
   GitHostMapping,
   McpServer,
@@ -275,10 +274,6 @@ export interface QuickTerminalSettings {
   isOpen: boolean;
 }
 
-export interface RemoteSettings {
-  profiles: ConnectionProfile[];
-}
-
 // Background image settings
 export type BackgroundSourceType = 'file' | 'folder' | 'url';
 export type BackgroundSizeMode = 'cover' | 'contain' | 'repeat' | 'center';
@@ -351,7 +346,6 @@ export interface SettingsState {
   // App Settings
   autoUpdateEnabled: boolean;
   hapiSettings: HapiSettings;
-  remoteSettings: RemoteSettings;
   defaultWorktreePath: string; // Default path for creating worktrees
   proxySettings: ProxySettings;
   autoCreateSessionOnActivate: boolean; // Auto-create agent/terminal session when worktree becomes active
@@ -485,9 +479,6 @@ export interface SettingsState {
   // Setters - App
   setAutoUpdateEnabled: (enabled: boolean) => void;
   setHapiSettings: (settings: Partial<HapiSettings>) => void;
-  setRemoteProfiles: (profiles: ConnectionProfile[]) => void;
-  upsertRemoteProfile: (profile: ConnectionProfile) => void;
-  removeRemoteProfile: (profileId: string) => void;
   setDefaultWorktreePath: (path: string) => void;
   setProxySettings: (settings: Partial<ProxySettings>) => void;
   setAutoCreateSessionOnActivate: (enabled: boolean) => void;
