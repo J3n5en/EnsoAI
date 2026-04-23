@@ -472,7 +472,7 @@ jobs:
           sed -i "s/SHA256_PLACEHOLDER/${SHA256}/" PKGBUILD
 
       - name: Publish to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
         with:
           pkgname: ensoai
           pkgbuild: ./PKGBUILD
