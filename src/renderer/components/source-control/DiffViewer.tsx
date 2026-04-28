@@ -192,7 +192,83 @@ export function DiffViewer({
   const pendingNavigationDirectionRef = useRef<'next' | 'prev' | null>(null);
   const navigationIdRef = useRef(0); // Increment on each new file selection
   const [isThemeReady, setIsThemeReady] = useState(false);
-  const diffContentRef = useRef<string>(''); // Track diff content changes
+  const diffSignatureRef = useRef<string>(''); // Track diff identity changes
+  const hideUnchangedFrameRef = useRef<number | null>(null);
+  const lastAppliedHideUnchangedRef = useRef<{
+    editor: DiffEditorInstance | null;
+    enabled: boolean | null;
+  }>({
+    editor: null,
+    enabled: null,
+  });
+
+  const buildDiffSignature = useCallback(
+    (targetDiff: FileDiff | null | undefined) => {
+      const original = targetDiff?.original ?? '';
+      const modified = targetDiff?.modified ?? '';
+      const summarize = (text: string) =>
+        `${text.length}:${text.slice(0, 64)}:${text.slice(Math.max(0, text.length - 64))}`;
+
+      return [
+        file?.path ?? '',
+        file?.staged ? 'staged' : 'unstaged',
+        isCommitView ? `commit:${commitHash ?? 'none'}` : 'worktree',
+        summarize(original),
+        summarize(modified),
+      ].join('\u0000');
+    },
+    [file?.path, file?.staged, isCommitView, commitHash]
+  );
+
+  const applyHideUnchangedRegions = useCallback(
+    (editor: DiffEditorInstance, forceRefresh = false) => {
+      const targetEnabled = hideUnchangedRegions;
+
+      if (
+        !forceRefresh &&
+        lastAppliedHideUnchangedRef.current.editor === editor &&
+        lastAppliedHideUnchangedRef.current.enabled === targetEnabled
+      ) {
+        return;
+      }
+
+      if (forceRefresh) {
+        editor.updateOptions({
+          hideUnchangedRegions: {
+            enabled: !targetEnabled,
+          },
+        });
+      }
+
+      editor.updateOptions({
+        hideUnchangedRegions: {
+          enabled: targetEnabled,
+        },
+      });
+
+      lastAppliedHideUnchangedRef.current = {
+        editor,
+        enabled: targetEnabled,
+      };
+    },
+    [hideUnchangedRegions]
+  );
+
+  const scheduleApplyHideUnchangedRegions = useCallback(
+    (editor: DiffEditorInstance, forceRefresh = false) => {
+      if (hideUnchangedFrameRef.current !== null) {
+        cancelAnimationFrame(hideUnchangedFrameRef.current);
+      }
+      hideUnchangedFrameRef.current = requestAnimationFrame(() => {
+        hideUnchangedFrameRef.current = null;
+        if (editorRef.current !== editor || !editor.getModel()) {
+          return;
+        }
+        applyHideUnchangedRegions(editor, forceRefresh);
+      });
+    },
+    [applyHideUnchangedRegions]
+  );
 
   // Line comment state
   const [hoveredLine, setHoveredLine] = useState<number | null>(null);
@@ -220,6 +296,16 @@ export function DiffViewer({
       setIsThemeReady(true);
     }
   }, [terminalTheme, isThemeReady]);
+
+  // Cleanup scheduled folding updates when component unmounts.
+  useEffect(() => {
+    return () => {
+      if (hideUnchangedFrameRef.current !== null) {
+        cancelAnimationFrame(hideUnchangedFrameRef.current);
+        hideUnchangedFrameRef.current = null;
+      }
+    };
+  }, []);
 
   // Handle submit comment
   const handleSubmitComment = useCallback(
@@ -727,6 +813,10 @@ export function DiffViewer({
       editorFilePathRef.current = file?.path ?? null;
       setEditorReady(true);
 
+      // Keep option state in sync at mount.
+      // Diff-ready callbacks below will run the authoritative force refresh.
+      scheduleApplyHideUnchangedRegions(editor);
+
       const currentModel = editor.getModel();
       const mountedModels = currentModel
         ? { original: currentModel.original, modified: currentModel.modified }
@@ -744,6 +834,8 @@ export function DiffViewer({
           if (changes) {
             setLineChanges(changes);
             lineChangesRef.current = changes;
+            // Use diff-ready as the authoritative point to refresh folding options.
+            scheduleApplyHideUnchangedRegions(editor, true);
             performAutoNavigation(editor, changes);
           }
         })
@@ -801,7 +893,7 @@ export function DiffViewer({
         }
       };
     },
-    [file?.path, performAutoNavigation, isCommitView]
+    [file?.path, performAutoNavigation, isCommitView, scheduleApplyHideUnchangedRegions]
   );
 
   // Toggle hide unchanged regions
@@ -830,7 +922,7 @@ export function DiffViewer({
     }
   }, [navigationDirection]);
 
-  // Manually fetch lineChanges when file changes or diff content changes
+  // Manually fetch lineChanges when file identity changes.
   // This is needed because onDidUpdateDiff doesn't fire when switching back to a previously-viewed file
   useEffect(() => {
     const editor = editorRef.current;
@@ -842,14 +934,14 @@ export function DiffViewer({
       return;
     }
 
-    // Check if diff content has actually changed
-    const currentContent = diff ? `${diff.original}${diff.modified}` : '';
-    if (currentContent === diffContentRef.current) {
+    // Include staged flag in signature because staged/unstaged may recreate models with same text.
+    const currentSignature = buildDiffSignature(diff);
+    if (currentSignature === diffSignatureRef.current) {
       // Content hasn't changed, skip
       return;
     }
 
-    diffContentRef.current = currentContent;
+    diffSignatureRef.current = currentSignature;
 
     // When models change, Monaco computes the diff asynchronously
     // We need to poll getLineChanges() until it returns a result (or times out)
@@ -864,6 +956,8 @@ export function DiffViewer({
         lineChangesRef.current = changes;
         // Perform auto-navigation with the fresh changes
         performAutoNavigation(editor, changes);
+        // Refresh folding once changes are ready.
+        scheduleApplyHideUnchangedRegions(editor, true);
         return true; // Success
       }
       return false; // Not ready yet
@@ -883,7 +977,13 @@ export function DiffViewer({
     }, 50);
 
     return () => clearInterval(timer);
-  }, [diff, file?.path, performAutoNavigation]);
+  }, [
+    diff,
+    buildDiffSignature,
+    file?.path,
+    performAutoNavigation,
+    scheduleApplyHideUnchangedRegions,
+  ]);
 
   const navigateToDiff = useCallback(
     (direction: 'prev' | 'next') => {
@@ -1033,7 +1133,11 @@ export function DiffViewer({
     hasAutoNavigatedRef.current = false;
     setIsEditing(false);
     setEditedContent(null);
-    diffContentRef.current = '';
+    diffSignatureRef.current = '';
+    lastAppliedHideUnchangedRef.current = {
+      editor: null,
+      enabled: null,
+    };
   }, [file?.path, file?.staged]);
 
   if (!file) {
