@@ -1223,13 +1223,13 @@ export function DiffViewer({
               'inmemory',
               isCommitView && commitHash
                 ? `original/commit/${commitHash}/${rootPath}/${file.path}`
-                : `original/${rootPath}/${file.path}`
+                : `original/${file.staged ? 'staged' : 'unstaged'}/${rootPath}/${file.path}`
             )}
             modifiedModelPath={toMonacoVirtualUri(
               'inmemory',
               isCommitView && commitHash
                 ? `modified/commit/${commitHash}/${rootPath}/${file.path}`
-                : `modified/${rootPath}/${file.path}`
+                : `modified/${file.staged ? 'staged' : 'unstaged'}/${rootPath}/${file.path}`
             )}
             language={getLanguageFromPath(file.path)}
             theme={CUSTOM_THEME_NAME}
