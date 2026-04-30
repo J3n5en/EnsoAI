@@ -274,6 +274,11 @@ export async function startClaudeIdeBridge(
                     toolName: 'UserPromptSubmit',
                     cwd: data.cwd,
                   });
+                  window.webContents.send(IPC_CHANNELS.AGENT_USER_PROMPT_NOTIFICATION, {
+                    sessionId,
+                    prompt: data.prompt,
+                    cwd: data.cwd,
+                  });
                 }
               }
             } else if (data.tool_name === 'AskUserQuestion' && data.tool_input) {

@@ -45,6 +45,7 @@ import {
 } from './App/storage';
 import { useAppKeyboardShortcuts } from './App/useAppKeyboardShortcuts';
 import { usePanelResize } from './App/usePanelResize';
+import { AgentTaskPanel } from './components/agent-tasks';
 import { DevToolsOverlay } from './components/DevToolsOverlay';
 import { FileSidebar } from './components/files';
 import { UnsavedPromptHost } from './components/files/UnsavedPromptHost';
@@ -84,6 +85,7 @@ import {
   useWorktreeResolveConflict,
 } from './hooks/useWorktree';
 import { useI18n } from './i18n';
+import { initAgentTasksListener } from './stores/agentTasks';
 import { initCloneProgressListener } from './stores/cloneTasks';
 import { useEditorStore } from './stores/editor';
 import { useInitScriptStore } from './stores/initScript';
@@ -101,6 +103,11 @@ export default function App() {
   // Initialize agent activity listener for tree sidebar status display
   useEffect(() => {
     return initAgentActivityListener();
+  }, []);
+
+  // Initialize agent tasks listener for task list
+  useEffect(() => {
+    return initAgentTasksListener();
   }, []);
 
   // Listen for auto-fetch completion events to refresh git status
@@ -164,6 +171,9 @@ export default function App() {
     toggleSettings,
     handleSettingsCategoryChange,
   } = settingsState;
+
+  // Agent Tasks Panel state
+  const [agentTasksPanelOpen, setAgentTasksPanelOpen] = useState(false);
 
   const {
     repositoryCollapsed,
@@ -662,6 +672,16 @@ export default function App() {
 
   // Assign to ref for use in keyboard shortcut callback
   switchWorktreePathRef.current = handleSwitchWorktreePath;
+
+  // Handle navigating to a task's session
+  const handleNavigateToTask = useCallback(
+    (task: { sessionId: string; repoPath: string; cwd: string }) => {
+      handleSwitchWorktreePath(task.cwd);
+      handleTabChange('chat');
+      setAgentTasksPanelOpen(false);
+    },
+    [handleSwitchWorktreePath, handleTabChange]
+  );
 
   // Handle adding a local repository
   const handleAddLocalRepository = useCallback(
@@ -1182,6 +1202,8 @@ export default function App() {
           onCategoryChange={handleSettingsCategoryChange}
           scrollToProvider={scrollToProvider}
           onToggleSettings={toggleSettings}
+          onOpenAgentTasks={() => setAgentTasksPanelOpen(true)}
+          isAgentTasksPanelOpen={agentTasksPanelOpen}
         />
 
         <TempWorkspaceDialogs
@@ -1317,6 +1339,13 @@ export default function App() {
             scrollToProvider={scrollToProvider}
           />
         )}
+
+        {/* Agent Tasks Panel */}
+        <AgentTaskPanel
+          open={agentTasksPanelOpen}
+          onOpenChange={setAgentTasksPanelOpen}
+          onNavigateToSession={handleNavigateToTask}
+        />
       </div>
     </div>
   );
