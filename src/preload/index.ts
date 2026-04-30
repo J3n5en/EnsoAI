@@ -678,6 +678,14 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.AGENT_PRE_TOOL_USE_NOTIFICATION, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.AGENT_PRE_TOOL_USE_NOTIFICATION, handler);
     },
+    onUserPrompt: (
+      callback: (data: { sessionId: string; prompt: string; cwd?: string }) => void
+    ): (() => void) => {
+      const handler = (_: unknown, data: { sessionId: string; prompt: string; cwd?: string }) =>
+        callback(data);
+      ipcRenderer.on(IPC_CHANNELS.AGENT_USER_PROMPT_NOTIFICATION, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_USER_PROMPT_NOTIFICATION, handler);
+    },
     onAgentStatusUpdate: (
       callback: (data: {
         sessionId: string;
