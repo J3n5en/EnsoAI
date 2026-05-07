@@ -895,6 +895,7 @@ export const zhTranslations: Record<string, string> = {
   Review: '审查',
   'Reviewing...': '审查中...',
   'Agent Tasks': 'Agent 任务',
+  'Reset Position & Size': '重置位置与大小',
   'No agent tasks': '暂无 Agent 任务',
   'Start an agent to see tasks here': '启动 Agent 后可在此查看任务',
   Idle: '空闲',

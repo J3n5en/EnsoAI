@@ -125,6 +125,7 @@ export function useResizable({
     size,
     position,
     setPosition,
+    setSize,
     isResizing,
     resizeDirection,
     getResizeHandleProps,

@@ -2,30 +2,23 @@ import type { AgentTask, AgentTaskStatus } from '@shared/types';
 import { getPathBasename } from '@shared/utils/path';
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { loadJSON, normalizePath, pathsEqual, saveJSON } from '@/App/storage';
 import type { Session } from '@/components/chat/SessionBar';
 import { useAgentSessionsStore } from './agentSessions';
 import { useAgentStatusStore } from './agentStatus';
 import { type AgentActivityState, useWorktreeActivityStore } from './worktreeActivity';
 
-// Storage key for task descriptions
 const TASK_DESCRIPTIONS_STORAGE_KEY = 'enso-agent-task-descriptions';
+const PANEL_POSITION_STORAGE_KEY = 'enso-agent-task-panel-position';
+const PANEL_SIZE_STORAGE_KEY = 'enso-agent-task-panel-size';
 const MAX_DESCRIPTION_LENGTH = 100;
 
 function loadDescriptions(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(TASK_DESCRIPTIONS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  return loadJSON<Record<string, string>>(TASK_DESCRIPTIONS_STORAGE_KEY) || {};
 }
 
 function saveDescriptions(descriptions: Record<string, string>) {
-  try {
-    localStorage.setItem(TASK_DESCRIPTIONS_STORAGE_KEY, JSON.stringify(descriptions));
-  } catch {
-    // ignore storage errors
-  }
+  saveJSON(TASK_DESCRIPTIONS_STORAGE_KEY, descriptions);
 }
 
 // Map worktreeActivity state to AgentTaskStatus
@@ -69,6 +62,10 @@ interface AgentTasksState {
   waitingReasons: Record<string, string>;
   // Track descriptions per session (persisted)
   descriptions: Record<string, string>;
+  // Agent task panel position (persisted)
+  agentTaskPanelPosition: { x: number; y: number } | null;
+  // Agent task panel size (persisted)
+  agentTaskPanelSize: { width: number; height: number } | null;
 
   // Computed (return cached values)
   getAllTasks: () => AgentTask[];
@@ -83,6 +80,9 @@ interface AgentTasksState {
   clearTask: (sessionId: string) => void;
   clearCompletedTasks: () => void;
   syncFromSessions: () => void;
+  setAgentTaskPanelPosition: (position: { x: number; y: number } | null) => void;
+  setAgentTaskPanelSize: (size: { width: number; height: number } | null) => void;
+  resetAgentTaskPanel: () => void;
 }
 
 function computeDerivedArrays(tasks: Record<string, AgentTask>) {
@@ -119,6 +119,8 @@ export const useAgentTasksStore = create<AgentTasksState>()(
     completionTimes: {},
     waitingReasons: {},
     descriptions: loadDescriptions(),
+    agentTaskPanelPosition: loadJSON(PANEL_POSITION_STORAGE_KEY),
+    agentTaskPanelSize: loadJSON(PANEL_SIZE_STORAGE_KEY),
 
     getAllTasks: () => get()._allTasksCache,
     getActiveTasks: () => get()._activeTasksCache,
@@ -276,8 +278,15 @@ export const useAgentTasksStore = create<AgentTasksState>()(
       set((state) => {
         const newTasks: Record<string, AgentTask> = {};
 
+        // Pre-build normalized activity map for O(1) lookup
+        const normalizedActivityMap = new Map<string, AgentActivityState>();
+        for (const [key, val] of Object.entries(activityStates)) {
+          normalizedActivityMap.set(normalizePath(key), val);
+        }
+
         for (const session of sessions) {
-          const activityState = activityStates[session.cwd] || 'idle';
+          const normalizedCwd = normalizePath(session.cwd);
+          const activityState = normalizedActivityMap.get(normalizedCwd) ?? 'idle';
           const statusData = statuses[session.id] || statuses[session.sessionId || ''];
 
           const existingTask = state.tasks[session.id];
@@ -308,11 +317,42 @@ export const useAgentTasksStore = create<AgentTasksState>()(
         return { tasks: newTasks, ...derived };
       });
     },
+
+    setAgentTaskPanelPosition: (position) => {
+      saveJSON(PANEL_POSITION_STORAGE_KEY, position);
+      set({ agentTaskPanelPosition: position });
+    },
+
+    setAgentTaskPanelSize: (size) => {
+      saveJSON(PANEL_SIZE_STORAGE_KEY, size);
+      set({ agentTaskPanelSize: size });
+    },
+
+    resetAgentTaskPanel: () => {
+      saveJSON(PANEL_POSITION_STORAGE_KEY, null);
+      saveJSON(PANEL_SIZE_STORAGE_KEY, null);
+      set({ agentTaskPanelPosition: null, agentTaskPanelSize: null });
+    },
   }))
 );
 
 function findSessionById(sessions: Session[], id: string) {
   return sessions.find((s) => s.sessionId === id || s.id === id);
+}
+
+function findSessionByNotification(
+  sessions: Session[],
+  sessionId: string,
+  cwd?: string
+): Session | undefined {
+  const byId = findSessionById(sessions, sessionId);
+  if (byId) return byId;
+
+  if (cwd) {
+    return sessions.find((s) => pathsEqual(s.cwd, cwd));
+  }
+
+  return undefined;
 }
 
 /**
@@ -347,7 +387,11 @@ export function initAgentTasksListener(): () => void {
   // Listen for PreToolUse -> running
   const unsubPreToolUse = window.electronAPI.notification.onPreToolUse(
     (data: { sessionId: string; toolName: string; cwd?: string }) => {
-      const session = findSessionById(useAgentSessionsStore.getState().sessions, data.sessionId);
+      const session = findSessionByNotification(
+        useAgentSessionsStore.getState().sessions,
+        data.sessionId,
+        data.cwd
+      );
       if (session) {
         useAgentTasksStore.getState().updateTaskStatus(session.id, 'running');
       }
@@ -357,7 +401,11 @@ export function initAgentTasksListener(): () => void {
   // Listen for Stop -> completed
   const unsubStop = window.electronAPI.notification.onAgentStop(
     (data: { sessionId: string; cwd?: string }) => {
-      const session = findSessionById(useAgentSessionsStore.getState().sessions, data.sessionId);
+      const session = findSessionByNotification(
+        useAgentSessionsStore.getState().sessions,
+        data.sessionId,
+        data.cwd
+      );
       if (session) {
         useAgentTasksStore.getState().updateTaskStatus(session.id, 'completed');
       }
@@ -367,7 +415,11 @@ export function initAgentTasksListener(): () => void {
   // Listen for AskUserQuestion -> waiting
   const unsubAsk = window.electronAPI.notification.onAskUserQuestion(
     (data: { sessionId: string; toolInput: unknown; cwd?: string }) => {
-      const session = findSessionById(useAgentSessionsStore.getState().sessions, data.sessionId);
+      const session = findSessionByNotification(
+        useAgentSessionsStore.getState().sessions,
+        data.sessionId,
+        data.cwd
+      );
       if (session) {
         const reason =
           data.toolInput && typeof data.toolInput === 'string'
@@ -381,7 +433,11 @@ export function initAgentTasksListener(): () => void {
   // Listen for UserPromptSubmit -> update description
   const unsubUserPrompt = window.electronAPI.notification.onUserPrompt(
     (data: { sessionId: string; prompt: string; cwd?: string }) => {
-      const session = findSessionById(useAgentSessionsStore.getState().sessions, data.sessionId);
+      const session = findSessionByNotification(
+        useAgentSessionsStore.getState().sessions,
+        data.sessionId,
+        data.cwd
+      );
       if (session && data.prompt) {
         useAgentTasksStore.getState().updateTaskDescription(session.id, data.prompt);
       }
