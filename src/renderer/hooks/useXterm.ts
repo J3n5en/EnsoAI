@@ -23,12 +23,90 @@ const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;?]*[a-zA-Z]/g;
 
 // Maximum length for session name derived from terminal current line
 const SESSION_NAME_MAX_LENGTH = 36;
+const SYNTHETIC_SCROLLBACK_MIN_INTERVAL_MS = 200;
+const WHEEL_PIXELS_PER_LINE = 40;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
+const TUI_REPAINT_REGEX = /\x1b\[[0-9;?]*[23]J|\x1b\[\?2026h/;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
+const CLEAR_SCROLLBACK_REGEX = /\x1b\[[0-9;?]*3J/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
+const ALT_SCREEN_SWITCH_REGEX = /\x1b\[\?(?:47|1047|1048|1049)[hl]/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
+const SYNC_OUTPUT_MODE_REGEX = /\x1b\[\?2026[hl]/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
+const OSC_SEQUENCE_REGEX = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
+const ANSI_CONTROL_SEQUENCE_REGEX = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequences require ESC character
+const REMAINING_ESCAPE_SEQUENCE_REGEX = /\x1b(?:[@-Z\\-_]|\([0-9A-Za-z]|\)[0-9A-Za-z])?/g;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: Terminal control characters are intentional.
+const NON_PRINTING_CONTROL_REGEX = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g;
 
 function hasVisibleContent(data: string): boolean {
   // Remove all ANSI escape sequences
   const stripped = data.replace(ANSI_ESCAPE_REGEX, '');
   // Check if there are any non-whitespace visible characters
   return stripped.trim().length > 0;
+}
+
+function stripScrollbackClear(data: string): string {
+  return data
+    .replace(CLEAR_SCROLLBACK_REGEX, '')
+    .replace(ALT_SCREEN_SWITCH_REGEX, '')
+    .replace(SYNC_OUTPUT_MODE_REGEX, '');
+}
+
+function getVisibleScreenSnapshot(terminal: Terminal): string | null {
+  const buffer = terminal.buffer.active;
+  if (buffer.type !== 'normal') return null;
+
+  const lines: string[] = [];
+  for (let row = 0; row < terminal.rows; row++) {
+    const line = buffer.getLine(buffer.baseY + row);
+    lines.push(line?.translateToString(true) ?? '');
+  }
+
+  while (lines.length > 0 && !lines[0].trim()) {
+    lines.shift();
+  }
+  while (lines.length > 0 && !lines[lines.length - 1].trim()) {
+    lines.pop();
+  }
+
+  if (lines.length === 0) return null;
+
+  const snapshot = lines.join('\r\n');
+  return snapshot.trim() ? snapshot : null;
+}
+
+function getDataTextSnapshot(data: string, maxRows: number): string | null {
+  const lines = data
+    .replace(OSC_SEQUENCE_REGEX, '')
+    .replace(ANSI_CONTROL_SEQUENCE_REGEX, '')
+    .replace(REMAINING_ESCAPE_SEQUENCE_REGEX, '')
+    .replace(NON_PRINTING_CONTROL_REGEX, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+
+  if (lines.length === 0) return null;
+
+  const dedupedLines: string[] = [];
+  for (const line of lines) {
+    if (dedupedLines[dedupedLines.length - 1] !== line) {
+      dedupedLines.push(line);
+    }
+  }
+
+  const snapshot = dedupedLines.slice(-maxRows).join('\r\n');
+  return snapshot.trim() ? snapshot : null;
+}
+
+function createScrollbackSnapshotWrite(snapshot: string, rows: number): string {
+  const bottomRow = Math.max(1, rows);
+  return `\x1b7\x1b[${bottomRow};1H\r\n${snapshot}\r\n\x1b8`;
 }
 
 export interface UseXtermOptions {
@@ -52,6 +130,7 @@ export interface UseXtermOptions {
   onSplit?: () => void;
   onMerge?: () => void;
   canMerge?: boolean;
+  preserveScreenOnClear?: boolean;
 }
 
 export interface UseXtermResult {
@@ -130,6 +209,7 @@ export function useXterm({
   onSplit,
   onMerge,
   canMerge = false,
+  preserveScreenOnClear = false,
 }: UseXtermOptions): UseXtermResult {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -148,6 +228,8 @@ export function useXterm({
   const linkProviderDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const rendererAddonRef = useRef<{ dispose: () => void } | null>(null);
   const copyOnSelectionHandlerRef = useRef<(() => void) | null>(null);
+  const wheelScrollHandlerRef = useRef<((event: WheelEvent) => void) | null>(null);
+  const wheelLineDeltaRef = useRef(0);
   const isUnmountedRef = useRef(false);
   const createRequestIdRef = useRef(0);
   const onExitRef = useRef(onExit);
@@ -166,6 +248,8 @@ export function useXterm({
   onMergeRef.current = onMerge;
   const canMergeRef = useRef(canMerge);
   canMergeRef.current = canMerge;
+  const preserveScreenOnClearRef = useRef(preserveScreenOnClear);
+  preserveScreenOnClearRef.current = preserveScreenOnClear;
   const copyOnSelectionRef = useRef(copyOnSelection);
   copyOnSelectionRef.current = copyOnSelection;
   const hasBeenActivatedRef = useRef(false);
@@ -186,6 +270,8 @@ export function useXterm({
   // rAF write buffer for smooth rendering
   const writeBufferRef = useRef('');
   const isFlushPendingRef = useRef(false);
+  const lastSyntheticSnapshotRef = useRef('');
+  const lastSyntheticSnapshotAtRef = useRef(0);
 
   const write = useCallback((data: string) => {
     if (ptyIdRef.current) {
@@ -455,6 +541,32 @@ export function useXterm({
     terminal.element?.addEventListener('mouseup', handleCopyOnSelection);
     copyOnSelectionHandlerRef.current = handleCopyOnSelection;
 
+    const handleWheelScrollback = (event: WheelEvent) => {
+      if (!preserveScreenOnClearRef.current) return;
+      if (!terminalRef.current) return;
+
+      const buffer = terminal.buffer.active;
+      if (buffer.baseY <= 0) return;
+
+      const lineDelta =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? event.deltaY
+          : event.deltaY / WHEEL_PIXELS_PER_LINE;
+      wheelLineDeltaRef.current += lineDelta;
+      const lines = Math.trunc(wheelLineDeltaRef.current);
+      if (lines === 0) return;
+      wheelLineDeltaRef.current -= lines;
+
+      event.preventDefault();
+      event.stopPropagation();
+      terminal.scrollLines(lines);
+    };
+    terminal.element?.addEventListener('wheel', handleWheelScrollback, {
+      capture: true,
+      passive: false,
+    });
+    wheelScrollHandlerRef.current = handleWheelScrollback;
+
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
     searchAddonRef.current = searchAddon;
@@ -630,15 +742,46 @@ export function useXterm({
                 const shouldLockViewport = offsetFromBottom > 0;
                 const savedOffsetFromBottom = shouldLockViewport ? offsetFromBottom : 0;
 
-                terminal.write(bufferedData);
+                let dataToWrite = bufferedData;
+                let snapshotToWrite: string | null = null;
+                if (preserveScreenOnClearRef.current) {
+                  dataToWrite = stripScrollbackClear(dataToWrite);
+
+                  if (TUI_REPAINT_REGEX.test(bufferedData)) {
+                    const now = Date.now();
+                    let snapshot = getVisibleScreenSnapshot(terminal);
+                    if (!snapshot) {
+                      snapshot = getDataTextSnapshot(bufferedData, terminal.rows * 3);
+                    }
+                    if (
+                      snapshot &&
+                      snapshot !== lastSyntheticSnapshotRef.current &&
+                      now - lastSyntheticSnapshotAtRef.current >=
+                        SYNTHETIC_SCROLLBACK_MIN_INTERVAL_MS
+                    ) {
+                      snapshotToWrite = createScrollbackSnapshotWrite(snapshot, terminal.rows);
+                      lastSyntheticSnapshotRef.current = snapshot;
+                      lastSyntheticSnapshotAtRef.current = now;
+                    }
+                  }
+                }
 
                 // Restore viewport if it was moved by the write
-                if (shouldLockViewport) {
+                const restoreViewport = () => {
+                  if (!shouldLockViewport) return;
                   const targetViewportY = terminal.buffer.active.baseY - savedOffsetFromBottom;
                   const currentViewportY = terminal.buffer.active.viewportY;
                   if (targetViewportY !== currentViewportY) {
                     terminal.scrollLines(targetViewportY - currentViewportY);
                   }
+                };
+
+                if (snapshotToWrite) {
+                  terminal.write(snapshotToWrite, () => {
+                    terminal.write(dataToWrite, restoreViewport);
+                  });
+                } else {
+                  terminal.write(dataToWrite, restoreViewport);
                 }
 
                 // Hide loading only after receiving visible content (not just control sequences)
@@ -739,6 +882,12 @@ export function useXterm({
           copyOnSelectionHandlerRef.current
         );
         copyOnSelectionHandlerRef.current = null;
+      }
+      if (wheelScrollHandlerRef.current) {
+        terminalRef.current?.element?.removeEventListener('wheel', wheelScrollHandlerRef.current, {
+          capture: true,
+        });
+        wheelScrollHandlerRef.current = null;
       }
       // Dispose addons before terminal to prevent async callback errors
       linkProviderDisposableRef.current?.dispose();
