@@ -1,5 +1,6 @@
 import type { AgentTask } from '@shared/types';
 import { Clock, Folder } from 'lucide-react';
+import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import { TaskStatusBadge } from './TaskStatusBadge';
 
@@ -28,7 +29,7 @@ function formatTime(timestamp: number): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function AgentTaskItem({ task, onClick }: AgentTaskItemProps) {
+function AgentTaskItemComponent({ task, onClick }: AgentTaskItemProps) {
   const isClickable = !!onClick;
   const duration = task.completedAt
     ? task.completedAt - task.startedAt
@@ -57,13 +58,8 @@ export function AgentTaskItem({ task, onClick }: AgentTaskItemProps) {
       {/* Description */}
       <div className="mt-1.5 min-w-0 truncate text-sm font-medium">{task.description}</div>
 
-      {/* Meta: Model + Time */}
+      {/* Meta: Time */}
       <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
-        {task.model && (
-          <span className="rounded bg-muted/50 px-1.5 py-0.5 font-mono text-[10px]">
-            {task.model}
-          </span>
-        )}
         <span className="flex items-center gap-1">
           <Clock className="h-3 w-3" />
           {formatTime(task.startedAt)}
@@ -82,3 +78,5 @@ export function AgentTaskItem({ task, onClick }: AgentTaskItemProps) {
     </button>
   );
 }
+
+export const AgentTaskItem = memo(AgentTaskItemComponent);

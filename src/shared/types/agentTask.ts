@@ -13,6 +13,5 @@ export interface AgentTask {
   startedAt: number; // timestamp ms
   completedAt?: number; // timestamp ms
 
-  model?: string; // e.g. "claude-sonnet-4-6"
   waitingReason?: string; // reason when status is 'waiting'
 }

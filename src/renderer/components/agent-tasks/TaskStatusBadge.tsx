@@ -1,4 +1,5 @@
 import type { AgentTaskStatus } from '@shared/types';
+import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
 interface TaskStatusBadgeProps {
@@ -29,7 +30,7 @@ const statusConfig: Record<AgentTaskStatus, { dotClass: string; label: string }>
   },
 };
 
-export function TaskStatusBadge({ status, className }: TaskStatusBadgeProps) {
+function TaskStatusBadgeComponent({ status, className }: TaskStatusBadgeProps) {
   const config = statusConfig[status];
 
   return (
@@ -74,3 +75,5 @@ export function TaskStatusBadge({ status, className }: TaskStatusBadgeProps) {
     </span>
   );
 }
+
+export const TaskStatusBadge = memo(TaskStatusBadgeComponent);

@@ -721,6 +721,51 @@ const electronAPI = {
     },
   },
 
+  // Agent Task Panel
+  agentTaskPanel: {
+    toggle: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.AGENT_TASK_PANEL_TOGGLE),
+    navigateToSession: (params: { sessionId: string; repoPath: string; cwd: string }): void => {
+      ipcRenderer.send(IPC_CHANNELS.AGENT_TASK_NAVIGATE_TO_SESSION, params);
+    },
+    getSnapshot: (): Promise<boolean | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT),
+    onSnapshotResponse: (callback: (snapshot: Record<string, unknown>) => void): (() => void) => {
+      const handler = (_: unknown, snapshot: Record<string, unknown>) => callback(snapshot);
+      ipcRenderer.on(IPC_CHANNELS.AGENT_TASK_SNAPSHOT_RESPONSE, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_SNAPSHOT_RESPONSE, handler);
+    },
+    onNavigateToSession: (
+      callback: (params: { sessionId: string; repoPath: string; cwd: string }) => void
+    ): (() => void) => {
+      const handler = (_: unknown, params: { sessionId: string; repoPath: string; cwd: string }) =>
+        callback(params);
+      ipcRenderer.on(IPC_CHANNELS.AGENT_TASK_NAVIGATE_TO_SESSION, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_NAVIGATE_TO_SESSION, handler);
+    },
+    resetBounds: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_TASK_PANEL_RESET_BOUNDS),
+    onVisibilityChanged: (callback: (visible: boolean) => void): (() => void) => {
+      const handler = (_: unknown, visible: boolean) => callback(visible);
+      ipcRenderer.on(IPC_CHANNELS.AGENT_TASK_PANEL_VISIBILITY_CHANGED, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_PANEL_VISIBILITY_CHANGED, handler);
+    },
+    onGetSnapshot: (callback: () => void): (() => void) => {
+      ipcRenderer.on(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT, callback);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT, callback);
+    },
+    sendSnapshotResponse: (snapshot: Record<string, unknown>): void => {
+      ipcRenderer.send(IPC_CHANNELS.AGENT_TASK_SNAPSHOT_RESPONSE, snapshot);
+    },
+    sendTaskSync: (tasks: Record<string, unknown>): void => {
+      ipcRenderer.send(IPC_CHANNELS.AGENT_TASK_SYNC, tasks);
+    },
+    onTaskSync: (callback: (tasks: Record<string, unknown>) => void): (() => void) => {
+      const handler = (_: unknown, tasks: Record<string, unknown>) => callback(tasks);
+      ipcRenderer.on(IPC_CHANNELS.AGENT_TASK_SYNC, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_SYNC, handler);
+    },
+  },
+
   // Updater
   updater: {
     checkForUpdates: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.UPDATER_CHECK),

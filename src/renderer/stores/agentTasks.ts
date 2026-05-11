@@ -5,7 +5,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { loadJSON, normalizePath, pathsEqual, saveJSON } from '@/App/storage';
 import type { Session } from '@/components/chat/SessionBar';
 import { useAgentSessionsStore } from './agentSessions';
-import { useAgentStatusStore } from './agentStatus';
+import { areAgentTaskRecordsEqual } from './agentTasksEquality';
 import { type AgentActivityState, useWorktreeActivityStore } from './worktreeActivity';
 
 const TASK_DESCRIPTIONS_STORAGE_KEY = 'enso-agent-task-descriptions';
@@ -33,15 +33,6 @@ function mapActivityToTaskStatus(activityState: AgentActivityState): AgentTaskSt
     default:
       return 'idle';
   }
-}
-
-function hasNewStatusKeys(
-  current: Record<string, unknown>,
-  next: Record<string, unknown>
-): boolean {
-  const nextKeys = Object.keys(next);
-  if (nextKeys.length !== Object.keys(current).length) return true;
-  return !nextKeys.every((k) => k in current);
 }
 
 interface AgentTasksState {
@@ -132,6 +123,11 @@ export const useAgentTasksStore = create<AgentTasksState>()(
       set((state) => {
         const task = state.tasks[sessionId];
         if (!task) return state;
+
+        // Skip if status hasn't changed to avoid unnecessary re-renders
+        if (task.status === status && (status !== 'waiting' || task.waitingReason === reason)) {
+          return state;
+        }
 
         const updates: Partial<AgentTask> = { status };
 
@@ -273,7 +269,6 @@ export const useAgentTasksStore = create<AgentTasksState>()(
     syncFromSessions: () => {
       const sessions = useAgentSessionsStore.getState().sessions;
       const activityStates = useWorktreeActivityStore.getState().activityStates;
-      const statuses = useAgentStatusStore.getState().statuses;
 
       set((state) => {
         const newTasks: Record<string, AgentTask> = {};
@@ -287,7 +282,6 @@ export const useAgentTasksStore = create<AgentTasksState>()(
         for (const session of sessions) {
           const normalizedCwd = normalizePath(session.cwd);
           const activityState = normalizedActivityMap.get(normalizedCwd) ?? 'idle';
-          const statusData = statuses[session.id] || statuses[session.sessionId || ''];
 
           const existingTask = state.tasks[session.id];
           const startTime = state.startTimes[session.id];
@@ -295,8 +289,11 @@ export const useAgentTasksStore = create<AgentTasksState>()(
           const waitingReason = state.waitingReasons[session.id];
           const persistedDescription = state.descriptions[session.id];
 
-          const taskStatus = mapActivityToTaskStatus(activityState);
-          const model = statusData?.model?.id;
+          const derivedStatus = mapActivityToTaskStatus(activityState);
+
+          // Preserve status from direct event handlers (PreToolUse, AskUserQuestion, Stop)
+          // Only use derived status for new tasks (first-time creation)
+          const finalStatus = existingTask ? existingTask.status : derivedStatus;
 
           newTasks[session.id] = {
             sessionId: session.id,
@@ -304,13 +301,16 @@ export const useAgentTasksStore = create<AgentTasksState>()(
             repoPath: session.repoPath,
             repoName: getPathBasename(session.repoPath),
             cwd: session.cwd,
-            status: taskStatus,
+            status: finalStatus,
             description: persistedDescription || session.name,
             startedAt: startTime || existingTask?.startedAt || Date.now(),
             completedAt: completionTime || existingTask?.completedAt,
-            model: model || existingTask?.model,
             waitingReason: waitingReason || existingTask?.waitingReason,
           };
+        }
+
+        if (areAgentTaskRecordsEqual(state.tasks, newTasks)) {
+          return state;
         }
 
         const derived = computeDerivedArrays(newTasks);
@@ -377,13 +377,6 @@ export function initAgentTasksListener(): () => void {
     }
   );
 
-  // Sync when status data changes
-  const unsubStatus = useAgentStatusStore.subscribe((state) => {
-    if (hasNewStatusKeys(useAgentTasksStore.getState().tasks, state.statuses)) {
-      useAgentTasksStore.getState().syncFromSessions();
-    }
-  });
-
   // Listen for PreToolUse -> running
   const unsubPreToolUse = window.electronAPI.notification.onPreToolUse(
     (data: { sessionId: string; toolName: string; cwd?: string }) => {
@@ -447,14 +440,22 @@ export function initAgentTasksListener(): () => void {
   // Initial sync
   useAgentTasksStore.getState().syncFromSessions();
 
+  // Push task changes to the standalone task panel window
+  const unsubTaskSync = useAgentTasksStore.subscribe(
+    (state) => state.tasks,
+    (tasks) => {
+      window.electronAPI.agentTaskPanel.sendTaskSync(tasks);
+    }
+  );
+
   return () => {
     unsubSessions();
     unsubActivity();
-    unsubStatus();
     unsubPreToolUse();
     unsubStop();
     unsubAsk();
     unsubUserPrompt();
+    unsubTaskSync();
   };
 }
 
@@ -479,4 +480,86 @@ function extractWaitingReason(toolInput: string): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Load a snapshot of tasks (used by the agent task panel window to initialize state).
+ */
+export function loadSnapshot(tasks: Record<string, AgentTask>): void {
+  if (areAgentTaskRecordsEqual(useAgentTasksStore.getState().tasks, tasks)) {
+    return;
+  }
+
+  const derived = computeDerivedArrays(tasks);
+  useAgentTasksStore.setState({
+    tasks,
+    ...derived,
+  });
+}
+
+/**
+ * Initialize agent task panel listeners for the standalone task panel window.
+ * Only registers IPC notification listeners (no Zustand store subscriptions,
+ * since the task panel window doesn't have sessions/activity stores).
+ */
+export function initAgentTaskPanelListeners(): () => void {
+  // Listen for PreToolUse -> running
+  const unsubPreToolUse = window.electronAPI.notification.onPreToolUse(
+    (data: { sessionId: string; toolName: string; cwd?: string }) => {
+      // In task panel window, match by sessionId directly
+      const task = useAgentTasksStore.getState().tasks[data.sessionId];
+      if (task) {
+        useAgentTasksStore.getState().updateTaskStatus(data.sessionId, 'running');
+      }
+    }
+  );
+
+  // Listen for Stop -> completed
+  const unsubStop = window.electronAPI.notification.onAgentStop(
+    (data: { sessionId: string; cwd?: string }) => {
+      const task = useAgentTasksStore.getState().tasks[data.sessionId];
+      if (task) {
+        useAgentTasksStore.getState().updateTaskStatus(data.sessionId, 'completed');
+      }
+    }
+  );
+
+  // Listen for AskUserQuestion -> waiting
+  const unsubAsk = window.electronAPI.notification.onAskUserQuestion(
+    (data: { sessionId: string; toolInput: unknown; cwd?: string }) => {
+      const task = useAgentTasksStore.getState().tasks[data.sessionId];
+      if (task) {
+        const reason =
+          data.toolInput && typeof data.toolInput === 'string'
+            ? extractWaitingReason(data.toolInput)
+            : undefined;
+        useAgentTasksStore.getState().updateTaskStatus(data.sessionId, 'waiting', reason);
+      }
+    }
+  );
+
+  // Listen for UserPromptSubmit -> update description
+  const unsubUserPrompt = window.electronAPI.notification.onUserPrompt(
+    (data: { sessionId: string; prompt: string; cwd?: string }) => {
+      const task = useAgentTasksStore.getState().tasks[data.sessionId];
+      if (task && data.prompt) {
+        useAgentTasksStore.getState().updateTaskDescription(data.sessionId, data.prompt);
+      }
+    }
+  );
+
+  // Listen for task sync from main window (covers add/remove/update)
+  const unsubTaskSync = window.electronAPI.agentTaskPanel.onTaskSync(
+    (tasks: Record<string, unknown>) => {
+      loadSnapshot(tasks as Record<string, AgentTask>);
+    }
+  );
+
+  return () => {
+    unsubPreToolUse();
+    unsubStop();
+    unsubAsk();
+    unsubUserPrompt();
+    unsubTaskSync();
+  };
 }

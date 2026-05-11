@@ -5,6 +5,7 @@ import log from 'electron-log/main.js';
 
 // Guard to ensure initialization happens only once
 let initialized = false;
+let consoleHijacked = false;
 
 /**
  * Clean up old log files (async, non-blocking)
@@ -66,9 +67,9 @@ export function initLogger(
     log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
     log.transports.console.format = '[{h}:{i}:{s}.{ms}] [{level}] {text}';
 
-    // Initialize and hijack console methods - all console.log/warn/error become log
+    // Initialize file transport. Console hijacking is enabled only when logging is explicitly on;
+    // otherwise noisy debug logs from production builds can block the app on file I/O.
     log.initialize({ preload: true });
-    Object.assign(console, log.functions);
 
     // Clean up old log files asynchronously (non-blocking)
     // Use void to explicitly ignore the promise (fire-and-forget)
@@ -81,6 +82,10 @@ export function initLogger(
   if (enabled) {
     log.transports.file.level = level;
     log.transports.console.level = level;
+    if (!consoleHijacked) {
+      Object.assign(console, log.functions);
+      consoleHijacked = true;
+    }
   } else {
     // When disabled, only log errors
     log.transports.file.level = 'error';

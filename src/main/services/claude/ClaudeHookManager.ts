@@ -39,6 +39,15 @@ interface ClaudeSettings {
         timeout?: number;
       }>;
     }>;
+    PostToolUse?: Array<{
+      matcher?: string;
+      hooks: Array<{
+        type: 'command' | 'prompt';
+        command?: string;
+        prompt?: string;
+        timeout?: number;
+      }>;
+    }>;
     UserPromptSubmit?: Array<{
       matcher?: string;
       hooks: Array<{
@@ -1023,6 +1032,72 @@ export function ensurePreToolUseHook(): boolean {
     return true;
   } catch (error) {
     console.error('[ClaudeHookManager] Failed to configure PreToolUse hook:', error);
+    return false;
+  }
+}
+
+/**
+ * Ensure PostToolUse hook is configured in Claude settings
+ * This hook triggers after Claude completes a tool call
+ * Used to detect when AskUserQuestion completes (user has answered)
+ */
+export function ensurePostToolUseHook(): boolean {
+  if (!isClaudeInstalled()) {
+    console.log('[ClaudeHookManager] Claude not installed, skipping PostToolUse hook setup');
+    return false;
+  }
+
+  try {
+    const settingsPath = getClaudeSettingsPath();
+
+    let settings: ClaudeSettings = {};
+    if (fs.existsSync(settingsPath)) {
+      const content = fs.readFileSync(settingsPath, 'utf-8');
+      settings = JSON.parse(content);
+    }
+
+    // Check if already configured
+    const hasCurrentHook = settings.hooks?.PostToolUse?.some((hookGroup) =>
+      hookGroup.hooks?.some(
+        (hook) => hook.type === 'command' && hook.command?.includes(HOOK_MARKER)
+      )
+    );
+    if (hasCurrentHook) {
+      return true;
+    }
+
+    if (!settings.hooks) {
+      settings.hooks = {};
+    }
+    if (!settings.hooks.PostToolUse) {
+      settings.hooks.PostToolUse = [];
+    }
+
+    const hookCommand = generateHookCommand();
+    settings.hooks.PostToolUse.push({
+      matcher: 'AskUserQuestion',
+      hooks: [
+        {
+          type: 'command',
+          command: hookCommand,
+          timeout: 5,
+        },
+      ],
+    });
+
+    const configDir = getClaudeConfigDir();
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    }
+
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), {
+      mode: 0o600,
+    });
+
+    console.log('[ClaudeHookManager] PostToolUse hook configured successfully');
+    return true;
+  } catch (error) {
+    console.error('[ClaudeHookManager] Failed to configure PostToolUse hook:', error);
     return false;
   }
 }
