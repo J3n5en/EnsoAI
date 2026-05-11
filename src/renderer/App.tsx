@@ -690,6 +690,7 @@ export default function App() {
   switchWorktreePathRef.current = handleSwitchWorktreePath;
 
   // Handle navigating to a task's session
+  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable, only changes on locale switch
   const handleNavigateToTask = useCallback(
     async (task: { sessionId: string; repoPath: string; cwd: string }) => {
       // Check if the repository is still in the app's repo list
@@ -752,7 +753,7 @@ export default function App() {
       useAgentSessionsStore.getState().setActiveId(task.repoPath, task.cwd, task.sessionId);
       handleTabChange('chat');
     },
-    [handleSwitchWorktreePath, handleTabChange, repositories, tempWorkspaces, t]
+    [handleSwitchWorktreePath, handleTabChange, repositories, tempWorkspaces]
   );
 
   // Listen for navigate-to-session requests from agent task panel window
