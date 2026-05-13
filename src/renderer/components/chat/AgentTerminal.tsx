@@ -57,15 +57,6 @@ const ACTIVITY_POLL_INTERVAL_MS = 1000; // Poll process activity every 1000ms
 const IDLE_CONFIRMATION_COUNT = 2; // Require 2 consecutive idle polls (2 seconds) before marking as idle
 const RECENT_OUTPUT_TIMEOUT_MS = 3000; // If output received within this time, consider still active
 
-function isCodexAgent(agentId: string | undefined, agentCommand: string | undefined): boolean {
-  return agentId === 'codex' || (agentCommand?.toLowerCase().includes('codex') ?? false);
-}
-
-function hasCodexAltScreenFlag(args: string | undefined): boolean {
-  if (!args) return false;
-  return /--no-(?:alt|alternate)-screen\b/.test(args);
-}
-
 export function AgentTerminal({
   id,
   cwd,
@@ -155,8 +146,6 @@ export function AgentTerminal({
 
   const terminalSessionId = id ?? sessionId;
   const resumeSessionId = sessionId ?? id;
-  const isWindows = window.electronAPI?.env?.platform === 'win32';
-  const shouldPreserveCodexScrollback = isWindows && isCodexAgent(agentId, agentCommand);
 
   // Use external control if provided, otherwise use local state.
   // IMPORTANT: `externalEnhancedInputOpen` can be false, so we must check `undefined` rather than truthiness.
@@ -356,15 +345,8 @@ export function AgentTerminal({
       }
     }
 
+    const isWindows = window.electronAPI?.env?.platform === 'win32';
     let envVars: Record<string, string> | undefined;
-
-    if (
-      isWindows &&
-      isCodexAgent(agentId, agentCommand) &&
-      !hasCodexAltScreenFlag(customArgs)
-    ) {
-      agentArgs.unshift('--no-alt-screen');
-    }
 
     // Hapi environment: run through hapi (global) or npx @twsxtd/hapi with CLI_API_TOKEN
     if (environment === 'hapi') {
@@ -467,7 +449,6 @@ export function AgentTerminal({
     };
   }, [
     agentCommand,
-    agentId,
     customPath,
     customArgs,
     initialPrompt,
@@ -479,7 +460,6 @@ export function AgentTerminal({
     resolvedShell,
     claudeCodeIntegration.tmuxEnabled,
     terminalSessionId,
-    isWindows,
   ]);
 
   // Handle exit with auto-close logic
@@ -767,7 +747,6 @@ export function AgentTerminal({
     onSplit,
     onMerge,
     canMerge,
-    preserveScreenOnClear: shouldPreserveCodexScrollback,
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);

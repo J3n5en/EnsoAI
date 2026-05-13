@@ -256,14 +256,10 @@
 
 .xterm,
 .xterm-viewport,
-.xterm-screen {
-  width: 100% !important;
-  height: 100% !important;
-  background-color: inherit !important;
-}
-
+.xterm-screen,
 .xterm-scroll-area,
 .xterm-scrollable-element {
   width: 100% !important;
+  height: 100% !important;
   background-color: inherit !important;
 }
