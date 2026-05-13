@@ -111,6 +111,7 @@ export const IPC_CHANNELS = {
   AGENT_STOP_NOTIFICATION: 'agent:stop:notification',
   AGENT_ASK_USER_QUESTION_NOTIFICATION: 'agent:askUserQuestion:notification',
   AGENT_PRE_TOOL_USE_NOTIFICATION: 'agent:preToolUse:notification',
+  AGENT_USER_PROMPT_NOTIFICATION: 'agent:userPrompt:notification',
   AGENT_STATUS_UPDATE: 'agent:status:update',
 
   // App
@@ -267,6 +268,15 @@ export const IPC_CHANNELS = {
   TODO_REORDER_TASKS: 'todo:reorderTasks',
   TODO_MIGRATE: 'todo:migrate',
   TODO_AI_POLISH: 'todo:aiPolish',
+
+  // Agent Task Panel
+  AGENT_TASK_PANEL_TOGGLE: 'agent-task:panel:toggle',
+  AGENT_TASK_PANEL_VISIBILITY_CHANGED: 'agent-task:panel:visibilityChanged',
+  AGENT_TASK_NAVIGATE_TO_SESSION: 'agent-task:navigateToSession',
+  AGENT_TASK_GET_SNAPSHOT: 'agent-task:getSnapshot',
+  AGENT_TASK_SNAPSHOT_RESPONSE: 'agent-task:snapshotResponse',
+  AGENT_TASK_PANEL_RESET_BOUNDS: 'agent-task:panel:resetBounds',
+  AGENT_TASK_SYNC: 'agent-task:sync',
 
   // Logging
   LOG_UPDATE_CONFIG: 'log:update-config',

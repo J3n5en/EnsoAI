@@ -894,6 +894,23 @@ export const zhTranslations: Record<string, string> = {
   'Preserve session for follow-up conversations after review': '审查后保留 session 以便继续对话',
   Review: '审查',
   'Reviewing...': '审查中...',
+  'Agent Tasks': 'Agent 任务',
+  'Reset Position & Size': '重置位置与大小',
+  'No agent tasks': '暂无 Agent 任务',
+  'Task worktree not found': '任务工作区未找到',
+  'The worktree for this task no longer exists. Task removed from list.':
+    '该任务的工作区已不存在，任务已从列表中移除。',
+  'Task repository not found': '任务仓库未找到',
+  'The repository for this task has been removed. Task removed from list.':
+    '该任务的仓库已被移除，任务已从列表中移除。',
+  'The repository for this task no longer exists. Task removed from list.':
+    '该任务的仓库已不存在，任务已从列表中移除。',
+  'Start an agent to see tasks here': '启动 Agent 后可在此查看任务',
+  Idle: '空闲',
+  'Clear all': '清除全部',
+  Running: '执行中',
+  Waiting: '等待中',
+  Paused: '已暂停',
   'View code review': '查看代码审查',
   Minimize: '最小化',
   'Missing required variable: {git_diff}': '缺少必需变量：{git_diff}',

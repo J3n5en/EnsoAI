@@ -4,6 +4,7 @@ import {
   FolderOpen,
   GitBranch,
   KanbanSquare,
+  ListTodo,
   MessageSquare,
   PanelLeft,
   RectangleEllipsis,
@@ -35,6 +36,7 @@ import { useI18n } from '@/i18n';
 import { springFast } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
+import { useAgentTasksStore } from '@/stores/agentTasks';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
 import { TerminalPanel } from '../terminal';
@@ -62,6 +64,8 @@ interface MainContentProps {
   onCategoryChange?: (category: SettingsCategory) => void;
   scrollToProvider?: boolean;
   onToggleSettings?: () => void;
+  onOpenAgentTasks?: () => void;
+  isAgentTasksPanelOpen?: boolean;
 }
 
 export function MainContent({
@@ -85,6 +89,8 @@ export function MainContent({
   onCategoryChange,
   scrollToProvider,
   onToggleSettings,
+  onOpenAgentTasks,
+  isAgentTasksPanelOpen = false,
 }: MainContentProps) {
   const { t } = useI18n();
   const settingsDisplayMode = useSettingsStore((s) => s.settingsDisplayMode);
@@ -94,6 +100,7 @@ export function MainContent({
 
   // Diff Review Modal state
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const activeTaskCount = useAgentTasksStore((s) => s._activeTaskCountCache);
 
   // Subscribe to sessions and activeIds for reactivity
   const sessions = useAgentSessionsStore((s) => s.sessions);
@@ -403,6 +410,25 @@ export function MainContent({
             title={t('Settings')}
           >
             <Settings className="h-4 w-4" />
+          </button>
+          {/* Agent Tasks button */}
+          <button
+            type="button"
+            className={cn(
+              'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors',
+              isAgentTasksPanelOpen
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+            )}
+            onClick={onOpenAgentTasks}
+            title={t('Agent Tasks')}
+          >
+            <ListTodo className="h-4 w-4" />
+            {activeTaskCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+                {activeTaskCount}
+              </span>
+            )}
           </button>
           {activeSessionId && (
             <Button

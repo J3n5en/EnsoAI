@@ -40,6 +40,7 @@ import {
   getRepositorySettings,
   getStoredBoolean,
   getStoredWorktreeMap,
+  normalizePath,
   STORAGE_KEYS,
   saveActiveGroupId,
 } from './App/storage';
@@ -84,6 +85,8 @@ import {
   useWorktreeResolveConflict,
 } from './hooks/useWorktree';
 import { useI18n } from './i18n';
+import { useAgentSessionsStore } from './stores/agentSessions';
+import { initAgentTasksListener, useAgentTasksStore } from './stores/agentTasks';
 import { initCloneProgressListener } from './stores/cloneTasks';
 import { useEditorStore } from './stores/editor';
 import { useInitScriptStore } from './stores/initScript';
@@ -101,6 +104,11 @@ export default function App() {
   // Initialize agent activity listener for tree sidebar status display
   useEffect(() => {
     return initAgentActivityListener();
+  }, []);
+
+  // Initialize agent tasks listener for task list
+  useEffect(() => {
+    return initAgentTasksListener();
   }, []);
 
   // Listen for auto-fetch completion events to refresh git status
@@ -164,6 +172,24 @@ export default function App() {
     toggleSettings,
     handleSettingsCategoryChange,
   } = settingsState;
+
+  // Agent Tasks Panel state (synced via IPC with independent BrowserWindow)
+  const [isAgentTasksPanelOpen, setIsAgentTasksPanelOpen] = useState(false);
+
+  // Listen for agent task panel visibility changes from main process
+  useEffect(() => {
+    return window.electronAPI.agentTaskPanel.onVisibilityChanged((visible: boolean) => {
+      setIsAgentTasksPanelOpen(visible);
+    });
+  }, []);
+
+  // Respond to snapshot requests from agent task panel window
+  useEffect(() => {
+    return window.electronAPI.agentTaskPanel.onGetSnapshot(() => {
+      const tasks = useAgentTasksStore.getState().tasks;
+      window.electronAPI.agentTaskPanel.sendSnapshotResponse(tasks);
+    });
+  }, []);
 
   const {
     repositoryCollapsed,
@@ -662,6 +688,82 @@ export default function App() {
 
   // Assign to ref for use in keyboard shortcut callback
   switchWorktreePathRef.current = handleSwitchWorktreePath;
+
+  // Handle navigating to a task's session
+  // biome-ignore lint/correctness/useExhaustiveDependencies: t is stable, only changes on locale switch
+  const handleNavigateToTask = useCallback(
+    async (task: { sessionId: string; repoPath: string; cwd: string }) => {
+      // Check if the repository is still in the app's repo list
+      const repoInApp = repositories.some(
+        (r) => normalizePath(r.path) === normalizePath(task.repoPath)
+      );
+      const isTemp = tempWorkspaces.some(
+        (tw) => normalizePath(tw.path) === normalizePath(task.cwd)
+      );
+
+      if (!repoInApp && !isTemp) {
+        // Repository removed from app - clean up and notify
+        useAgentTasksStore.getState().clearTask(task.sessionId);
+        useAgentSessionsStore.getState().removeSession(task.sessionId);
+        addToast({
+          type: 'warning',
+          title: t('Task repository not found'),
+          description: t('The repository for this task has been removed. Task removed from list.'),
+        });
+        return;
+      }
+
+      // For non-temp tasks, also validate worktree exists on disk
+      if (repoInApp) {
+        try {
+          const worktrees = await window.electronAPI.worktree.list(task.repoPath);
+          const worktreeExists = worktrees.some(
+            (wt) => normalizePath(wt.path) === normalizePath(task.cwd)
+          );
+
+          if (!worktreeExists) {
+            // Worktree deleted but repo still in app - clean up and notify
+            useAgentTasksStore.getState().clearTask(task.sessionId);
+            useAgentSessionsStore.getState().removeSession(task.sessionId);
+            addToast({
+              type: 'warning',
+              title: t('Task worktree not found'),
+              description: t(
+                'The worktree for this task no longer exists. Task removed from list.'
+              ),
+            });
+            return;
+          }
+        } catch {
+          // Repo on disk no longer accessible
+          useAgentTasksStore.getState().clearTask(task.sessionId);
+          useAgentSessionsStore.getState().removeSession(task.sessionId);
+          addToast({
+            type: 'warning',
+            title: t('Task repository not found'),
+            description: t(
+              'The repository for this task no longer exists. Task removed from list.'
+            ),
+          });
+          return;
+        }
+      }
+
+      await handleSwitchWorktreePath(task.cwd);
+      useAgentSessionsStore.getState().setActiveId(task.repoPath, task.cwd, task.sessionId);
+      handleTabChange('chat');
+    },
+    [handleSwitchWorktreePath, handleTabChange, repositories, tempWorkspaces]
+  );
+
+  // Listen for navigate-to-session requests from agent task panel window
+  useEffect(() => {
+    return window.electronAPI.agentTaskPanel.onNavigateToSession(
+      (params: { sessionId: string; repoPath: string; cwd: string }) => {
+        handleNavigateToTask(params);
+      }
+    );
+  }, [handleNavigateToTask]);
 
   // Handle adding a local repository
   const handleAddLocalRepository = useCallback(
@@ -1182,6 +1284,8 @@ export default function App() {
           onCategoryChange={handleSettingsCategoryChange}
           scrollToProvider={scrollToProvider}
           onToggleSettings={toggleSettings}
+          onOpenAgentTasks={() => window.electronAPI.agentTaskPanel.toggle()}
+          isAgentTasksPanelOpen={isAgentTasksPanelOpen}
         />
 
         <TempWorkspaceDialogs

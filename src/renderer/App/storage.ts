@@ -169,6 +169,28 @@ export const pathsEqual = (path1: string, path2: string): boolean => {
   return normalizePath(path1) === normalizePath(path2);
 };
 
+// Generic localStorage JSON helpers
+export function loadJSON<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveJSON<T>(key: string, value: T | null): void {
+  try {
+    if (value != null) {
+      localStorage.setItem(key, JSON.stringify(value));
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
 // Repository settings types and helpers
 export interface RepositorySettings {
   autoInitWorktree: boolean;

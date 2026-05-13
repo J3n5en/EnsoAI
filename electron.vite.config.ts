@@ -45,6 +45,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: path.resolve(__dirname, 'src/renderer/index.html'),
+          'agent-task-panel': path.resolve(__dirname, 'src/renderer/agent-task-panel.html'),
         },
       },
     },

@@ -20,6 +20,7 @@ import { matchesKeybinding } from '@/lib/keybinding';
 import { cn } from '@/lib/utils';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { initAgentStatusListener } from '@/stores/agentStatus';
+import { useAgentTasksStore } from '@/stores/agentTasks';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { BUILTIN_AGENT_IDS, useSettingsStore } from '@/stores/settings';
 import { useTerminalStore } from '@/stores/terminal';
@@ -296,6 +297,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const removeSession = useAgentSessionsStore((state) => state.removeSession);
   const updateSession = useAgentSessionsStore((state) => state.updateSession);
   const setActiveId = useAgentSessionsStore((state) => state.setActiveId);
+
+  // Agent tasks store for clearing task data on session close
+  const clearTask = useAgentTasksStore((state) => state.clearTask);
 
   // Enhanced input state actions from store
   const setEnhancedInputOpen = useAgentSessionsStore((state) => state.setEnhancedInputOpen);
@@ -695,6 +699,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       // Remove the session from Zustand store
       removeSession(id);
 
+      // Clear task data from agentTasks store (description cache, etc.)
+      clearTask(id);
+
       // Update group state
       updateCurrentGroupState((state) => {
         const targetGroupId = groupId || state.groups.find((g) => g.sessionIds.includes(id))?.id;
@@ -750,7 +757,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         };
       });
     },
-    [allSessions, removeSession, updateCurrentGroupState]
+    [allSessions, removeSession, clearTask, updateCurrentGroupState]
   );
 
   // Handle session selection
