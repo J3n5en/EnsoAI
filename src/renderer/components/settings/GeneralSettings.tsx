@@ -138,6 +138,10 @@ export function GeneralSettings() {
     setOpenInMenuFilterEnabled,
     copyOnSelection,
     setCopyOnSelection,
+    codexWheelScrollPatchEnabled,
+    setCodexWheelScrollPatchEnabled,
+    openCodeWheelScrollPatchEnabled,
+    setOpenCodeWheelScrollPatchEnabled,
     todoEnabled,
     setTodoEnabled,
     temporaryWorkspaceEnabled,
@@ -157,6 +161,8 @@ export function GeneralSettings() {
     addHostMapping,
     removeHostMapping,
     updateHostMapping,
+    codexSessionViewer,
+    setCodexSessionViewerEnabled,
   } = useSettingsStore();
   const { t, locale } = useI18n();
   const { data: detectedApps = [] } = useDetectedApps();
@@ -1041,6 +1047,48 @@ export function GeneralSettings() {
             {t('Automatically copy selected text in the terminal to the clipboard')}
           </p>
           <Switch checked={copyOnSelection} onCheckedChange={setCopyOnSelection} />
+        </div>
+      </div>
+
+      {/* Codex Session Viewer */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Codex Session Viewer')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Show Codex session viewer button and enable viewing functionality')}
+          </p>
+          <Switch
+            checked={codexSessionViewer.enabled}
+            onCheckedChange={setCodexSessionViewerEnabled}
+          />
+        </div>
+      </div>
+
+      {/* Codex Wheel Scroll Patch */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Codex Scroll Patch')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Only enable this on Windows 10 if Codex scrolling is broken.')}
+          </p>
+          <Switch
+            checked={codexWheelScrollPatchEnabled}
+            onCheckedChange={setCodexWheelScrollPatchEnabled}
+          />
+        </div>
+      </div>
+
+      {/* OpenCode Wheel Scroll Patch */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('OpenCode Scroll Patch')}</span>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            {t('Only enable this on Windows 10 if OpenCode scrolling is broken.')}
+          </p>
+          <Switch
+            checked={openCodeWheelScrollPatchEnabled}
+            onCheckedChange={setOpenCodeWheelScrollPatchEnabled}
+          />
         </div>
       </div>
 

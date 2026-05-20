@@ -14,6 +14,24 @@ interface FileTreeNode extends FileEntry {
   isLoading?: boolean;
 }
 
+function findNodeInTree(nodes: FileTreeNode[], targetPath: string): FileTreeNode | null {
+  for (const node of nodes) {
+    if (node.path === targetPath) return node;
+    if (node.children) {
+      const found = findNodeInTree(node.children, targetPath);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function getErrorCode(err: unknown): string | null {
+  if (err && typeof err === 'object' && 'code' in err) {
+    return String((err as { code?: string }).code || '');
+  }
+  return null;
+}
+
 export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFileTreeOptions) {
   const queryClient = useQueryClient();
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() =>
@@ -44,6 +62,24 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
   rootPathRef.current = rootPath;
   // Track whether children have been restored for the current rootPath
   const childrenRestoredRef = useRef(false);
+
+  const removeExpandedPath = useCallback(
+    (targetPath: string) => {
+      const next = new Set(expandedPathsRef.current);
+      for (const path of expandedPathsRef.current) {
+        if (path === targetPath || path.startsWith(`${targetPath}/`)) {
+          next.delete(path);
+        }
+      }
+      expandedPathsRef.current = next;
+      setExpandedPaths(next);
+      if (rootPathRef.current) {
+        saveFileTreeExpandedPaths(rootPathRef.current, next);
+      }
+      queryClient.removeQueries({ queryKey: ['file', 'list', targetPath] });
+    },
+    [queryClient]
+  );
 
   // Helper: update expanded state and persist to localStorage atomically
   const setAndPersistExpandedPaths = useCallback((paths: Set<string>) => {
@@ -134,6 +170,14 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     const restoreChildren = async () => {
       for (const expandedPath of sortedPaths) {
         if (cancelled) return;
+
+        const targetNode = findNodeInTree(treeRef.current, expandedPath);
+        if (!targetNode?.isDirectory) {
+          // 启动恢复时先用当前树做一次目录校验，避免把文件路径再发给主进程
+          removeExpandedPath(expandedPath);
+          continue;
+        }
+
         try {
           const children = await loadChildren(expandedPath);
           if (cancelled) return;
@@ -141,8 +185,12 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
           const updated = updateTreeWithChain(treeRef.current, expandedPath, childNodes);
           treeRef.current = updated;
           setTree(updated);
-        } catch {
-          // Silently skip paths that fail to load (e.g. deleted directories)
+        } catch (error) {
+          const code = getErrorCode(error);
+          // 启动恢复时顺手清理坏数据，避免每次启动都重复命中同一条无效路径
+          if (code === 'ENOENT' || code === 'ENOTDIR') {
+            removeExpandedPath(expandedPath);
+          }
         }
       }
       // Only mark as restored after all children loaded successfully without cancellation
@@ -155,7 +203,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     return () => {
       cancelled = true;
     };
-  }, [rootFiles, rootPath, loadChildren, updateTreeWithChain]);
+  }, [rootFiles, rootPath, loadChildren, removeExpandedPath, updateTreeWithChain]);
 
   // Toggle directory expansion
   const toggleExpand = useCallback(
@@ -180,6 +228,12 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         }
         setAndPersistExpandedPaths(newExpanded);
       } else {
+        const targetNode = findNodeInTree(treeRef.current, path);
+        if (!targetNode?.isDirectory) {
+          removeExpandedPath(path);
+          return;
+        }
+
         // 展开时，自动加载单子目录链
         const markLoading = (nodes: FileTreeNode[]): FileTreeNode[] => {
           return nodes.map((node) => {
@@ -269,7 +323,7 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         }
       }
     },
-    [loadChildren, updateTreeWithChain, setAndPersistExpandedPaths]
+    [loadChildren, removeExpandedPath, updateTreeWithChain, setAndPersistExpandedPaths]
   );
 
   // 递归更新树中某个目录的 children
@@ -302,21 +356,14 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
           return updateNode(current);
         });
       } catch (error) {
-        // Directory was deleted - remove from expanded paths and tree
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          queryClient.removeQueries({ queryKey: ['file', 'list', targetPath] });
-          // Compute next set outside updater to avoid side effects inside pure function
-          const next = new Set(expandedPathsRef.current);
-          for (const p of expandedPathsRef.current) {
-            if (p === targetPath || p.startsWith(`${targetPath}/`)) {
-              next.delete(p);
-            }
-          }
-          setAndPersistExpandedPaths(next);
+        const code = getErrorCode(error);
+        // 目录被删掉或路径其实是文件时，都要把错误的展开状态清掉
+        if (code === 'ENOENT' || code === 'ENOTDIR') {
+          removeExpandedPath(targetPath);
         }
       }
     },
-    [queryClient, rootPath, setAndPersistExpandedPaths]
+    [queryClient, removeExpandedPath, rootPath]
   );
 
   // Track if we need to refresh when becoming active

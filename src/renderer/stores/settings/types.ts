@@ -274,6 +274,28 @@ export interface QuickTerminalSettings {
   isOpen: boolean;
 }
 
+// Codex View Session Button position
+export interface CodexViewSessionButtonPosition {
+  top: number;
+  right: number;
+}
+
+// Codex Session Viewer settings
+export type CodexSessionViewerEntryFilter = 'full' | 'explain-reply';
+export type CodexSessionViewerInitialAnchor = 'end' | 'start';
+
+export interface CodexSessionViewerSettings {
+  enabled: boolean;
+  entryFilter: CodexSessionViewerEntryFilter;
+  initialAnchor: CodexSessionViewerInitialAnchor;
+  autoRefresh: boolean;
+  autoRefreshIntervalMs: number;
+  showJumpButtons: boolean;
+  modalHeight: number; // vh
+  modalWidth: number; // px
+  fontSize: number;
+}
+
 // Background image settings
 export type BackgroundSourceType = 'file' | 'folder' | 'url';
 export type BackgroundSizeMode = 'cover' | 'contain' | 'repeat' | 'center';
@@ -309,6 +331,8 @@ export interface SettingsState {
   terminalScrollback: number;
   terminalOptionIsMeta: boolean;
   copyOnSelection: boolean;
+  codexWheelScrollPatchEnabled: boolean;
+  openCodeWheelScrollPatchEnabled: boolean;
 
   // Keybindings
   xtermKeybindings: XtermKeybindings;
@@ -390,6 +414,12 @@ export interface SettingsState {
   // Quick Terminal settings
   quickTerminal: QuickTerminalSettings;
 
+  // Codex View Session Button position
+  codexViewSessionButtonPosition: CodexViewSessionButtonPosition;
+
+  // Codex Session Viewer settings
+  codexSessionViewer: CodexSessionViewerSettings;
+
   // Web Inspector settings
   webInspectorEnabled: boolean;
 
@@ -425,6 +455,8 @@ export interface SettingsState {
   setTerminalScrollback: (scrollback: number) => void;
   setTerminalOptionIsMeta: (enabled: boolean) => void;
   setCopyOnSelection: (enabled: boolean) => void;
+  setCodexWheelScrollPatchEnabled: (enabled: boolean) => void;
+  setOpenCodeWheelScrollPatchEnabled: (enabled: boolean) => void;
 
   // Setters - Keybindings
   setXtermKeybindings: (keybindings: XtermKeybindings) => void;
@@ -542,6 +574,20 @@ export interface SettingsState {
   setQuickTerminalModalPosition: (position: { x: number; y: number } | null) => void;
   setQuickTerminalModalSize: (size: { width: number; height: number } | null) => void;
   setQuickTerminalOpen: (open: boolean) => void;
+
+  // Setters - Codex View Session Button
+  setCodexViewSessionButtonPosition: (position: CodexViewSessionButtonPosition) => void;
+
+  // Setters - Codex Session Viewer
+  setCodexSessionViewerEnabled: (enabled: boolean) => void;
+  setCodexSessionViewerEntryFilter: (filter: CodexSessionViewerEntryFilter) => void;
+  setCodexSessionViewerInitialAnchor: (anchor: CodexSessionViewerInitialAnchor) => void;
+  setCodexSessionViewerAutoRefresh: (enabled: boolean) => void;
+  setCodexSessionViewerAutoRefreshInterval: (ms: number) => void;
+  setCodexSessionViewerShowJumpButtons: (show: boolean) => void;
+  setCodexSessionViewerModalHeight: (height: number) => void;
+  setCodexSessionViewerModalWidth: (width: number) => void;
+  setCodexSessionViewerFontSize: (size: number) => void;
 
   // Setters - Web Inspector
   setWebInspectorEnabled: (enabled: boolean) => void;

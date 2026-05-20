@@ -49,10 +49,14 @@ function SelectPopup({
   className,
   children,
   sideOffset = 4,
+  align = 'center',
+  alignOffset = 0,
   alignItemWithTrigger = true,
   zIndex,
   ...props
 }: SelectPrimitive.Popup.Props & {
+  align?: SelectPrimitive.Positioner.Props['align'];
+  alignOffset?: SelectPrimitive.Positioner.Props['alignOffset'];
   sideOffset?: SelectPrimitive.Positioner.Props['sideOffset'];
   alignItemWithTrigger?: SelectPrimitive.Positioner.Props['alignItemWithTrigger'];
   zIndex?: number;
@@ -60,6 +64,8 @@ function SelectPopup({
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
         className="select-none"
         style={{ zIndex: zIndex ?? Z_INDEX.DROPDOWN }}

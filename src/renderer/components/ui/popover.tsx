@@ -20,6 +20,7 @@ function PopoverPopup({
   sideOffset = 4,
   alignOffset = 0,
   tooltipStyle = false,
+  zIndex,
   ...props
 }: PopoverPrimitive.Popup.Props & {
   side?: PopoverPrimitive.Positioner.Props['side'];
@@ -27,13 +28,15 @@ function PopoverPopup({
   sideOffset?: PopoverPrimitive.Positioner.Props['sideOffset'];
   alignOffset?: PopoverPrimitive.Positioner.Props['alignOffset'];
   tooltipStyle?: boolean;
+  zIndex?: number;
 }) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
-        className="z-50 h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom,transform] data-instant:transition-none"
+        className="h-(--positioner-height) w-(--positioner-width) max-w-(--available-width) transition-[top,left,right,bottom,transform] data-instant:transition-none"
+        style={{ zIndex: zIndex ?? 50 }}
         data-slot="popover-positioner"
         side={side}
         sideOffset={sideOffset}

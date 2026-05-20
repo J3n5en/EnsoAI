@@ -15,6 +15,8 @@ import {
   defaultBranchNameGeneratorSettings,
   defaultClaudeCodeIntegrationSettings,
   defaultCodeReviewSettings,
+  defaultCodexSessionViewerSettings,
+  defaultCodexViewSessionButtonPosition,
   defaultCommitMessageGeneratorSettings,
   defaultEditorKeybindings,
   defaultEditorSettings,
@@ -117,6 +119,8 @@ function getInitialState() {
     terminalScrollback: 10000,
     terminalOptionIsMeta: true,
     copyOnSelection: false,
+    codexWheelScrollPatchEnabled: false,
+    openCodeWheelScrollPatchEnabled: false,
 
     // Keybindings
     xtermKeybindings: defaultXtermKeybindings,
@@ -200,6 +204,12 @@ function getInitialState() {
     // Quick Terminal defaults
     quickTerminal: defaultQuickTerminalSettings,
 
+    // Codex View Session Button defaults
+    codexViewSessionButtonPosition: defaultCodexViewSessionButtonPosition,
+
+    // Codex Session Viewer defaults
+    codexSessionViewer: defaultCodexSessionViewerSettings,
+
     // Web Inspector defaults
     webInspectorEnabled: false,
 
@@ -277,6 +287,10 @@ export const useSettingsStore = create<SettingsState>()(
       setTerminalScrollback: (terminalScrollback) => set({ terminalScrollback }),
       setTerminalOptionIsMeta: (terminalOptionIsMeta) => set({ terminalOptionIsMeta }),
       setCopyOnSelection: (copyOnSelection) => set({ copyOnSelection }),
+      setCodexWheelScrollPatchEnabled: (codexWheelScrollPatchEnabled) =>
+        set({ codexWheelScrollPatchEnabled }),
+      setOpenCodeWheelScrollPatchEnabled: (openCodeWheelScrollPatchEnabled) =>
+        set({ openCodeWheelScrollPatchEnabled }),
 
       // Keybinding Setters
       setXtermKeybindings: (xtermKeybindings) => set({ xtermKeybindings }),
@@ -697,6 +711,56 @@ export const useSettingsStore = create<SettingsState>()(
       setQuickTerminalOpen: (open) =>
         set((state) => ({
           quickTerminal: { ...state.quickTerminal, isOpen: open },
+        })),
+
+      // Codex View Session Button Setter
+      setCodexViewSessionButtonPosition: (position) =>
+        set({ codexViewSessionButtonPosition: position }),
+
+      // Codex Session Viewer Setters
+      setCodexSessionViewerEnabled: (enabled) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, enabled },
+        })),
+
+      setCodexSessionViewerEntryFilter: (filter) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, entryFilter: filter },
+        })),
+
+      setCodexSessionViewerInitialAnchor: (anchor) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, initialAnchor: anchor },
+        })),
+
+      setCodexSessionViewerAutoRefresh: (enabled) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, autoRefresh: enabled },
+        })),
+
+      setCodexSessionViewerAutoRefreshInterval: (ms) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, autoRefreshIntervalMs: ms },
+        })),
+
+      setCodexSessionViewerShowJumpButtons: (show) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, showJumpButtons: show },
+        })),
+
+      setCodexSessionViewerModalHeight: (height) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, modalHeight: height },
+        })),
+
+      setCodexSessionViewerModalWidth: (width) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, modalWidth: width },
+        })),
+
+      setCodexSessionViewerFontSize: (size) =>
+        set((state) => ({
+          codexSessionViewer: { ...state.codexSessionViewer, fontSize: size },
         })),
 
       // Web Inspector Setter

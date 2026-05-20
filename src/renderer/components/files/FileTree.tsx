@@ -377,7 +377,14 @@ export function FileTree({
   const handleCopyRelativePath = useCallback(
     (path: string) => {
       if (!rootPath) return;
-      const relativePath = path.startsWith(rootPath) ? path.substring(rootPath.length + 1) : path;
+      const normalizedPath = path.replace(/\\/g, '/');
+      const normalizedRootPath = rootPath.replace(/\\/g, '/').replace(/\/$/, '');
+      const relativePath =
+        normalizedPath === normalizedRootPath
+          ? ''
+          : normalizedPath.startsWith(`${normalizedRootPath}/`)
+            ? normalizedPath.slice(normalizedRootPath.length + 1)
+            : path;
       navigator.clipboard.writeText(relativePath);
     },
     [rootPath]

@@ -60,7 +60,7 @@
     "iconv-lite": "^0.7.1",
     "isbinaryfile": "^5.0.7",
     "jschardet": "^3.1.4",
-    "lucide-react": "^0.562.0",
+    "lucide-react": "^0.563.0",
     "match-sorter": "^8.2.0",
     "monaco-editor": "^0.55.1",
     "node-pty": "^1.1.0",

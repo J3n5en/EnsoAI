@@ -7,6 +7,7 @@ import type {
   BranchNameGeneratorSettings,
   ClaudeCodeIntegrationSettings,
   CodeReviewSettings,
+  CodexSessionViewerSettings,
   CommitMessageGeneratorSettings,
   EditorKeybindings,
   EditorSettings,
@@ -365,6 +366,22 @@ export const defaultQuickTerminalSettings: QuickTerminalSettings = {
   modalPosition: null,
   modalSize: null,
   isOpen: false,
+};
+
+// Default Codex View Session Button position
+export const defaultCodexViewSessionButtonPosition = { top: 12, right: 12 };
+
+// Default Codex Session Viewer settings
+export const defaultCodexSessionViewerSettings: CodexSessionViewerSettings = {
+  enabled: false,
+  entryFilter: 'full',
+  initialAnchor: 'end',
+  autoRefresh: true,
+  autoRefreshIntervalMs: 3000,
+  showJumpButtons: true,
+  modalHeight: 80,
+  modalWidth: 1200,
+  fontSize: 12,
 };
 
 /**
