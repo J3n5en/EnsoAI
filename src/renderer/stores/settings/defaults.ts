@@ -350,6 +350,7 @@ export const defaultAgentSettings: AgentSettings = {
   auggie: { enabled: false, isDefault: false },
   cursor: { enabled: false, isDefault: false },
   opencode: { enabled: false, isDefault: false },
+  pi: { enabled: false, isDefault: false },
 };
 
 // No default detection status - all agents need to be detected

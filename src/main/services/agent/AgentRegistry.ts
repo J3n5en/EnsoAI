@@ -43,6 +43,20 @@ export const BUILTIN_AGENTS: AgentMetadata[] = [
       fileWrite: false,
     },
   },
+  {
+    id: 'pi',
+    name: 'Pi',
+    description: 'Pi Coding Agent CLI',
+    icon: 'pi',
+    binary: 'pi',
+    capabilities: {
+      chat: true,
+      codeEdit: true,
+      terminal: true,
+      fileRead: true,
+      fileWrite: true,
+    },
+  },
 ];
 
 export class AgentRegistry {

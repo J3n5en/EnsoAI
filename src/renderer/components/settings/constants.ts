@@ -37,6 +37,7 @@ export const BUILTIN_AGENT_INFO: Record<BuiltinAgentId, { name: string; descript
   auggie: { name: 'Auggie', description: 'Augment Code CLI' },
   cursor: { name: 'Cursor', description: 'Cursor Agent CLI' },
   opencode: { name: 'OpenCode', description: 'OpenCode AI CLI' },
+  pi: { name: 'Pi', description: 'Pi Coding Agent CLI' },
 };
 
 export const BUILTIN_AGENTS: BuiltinAgentId[] = [
@@ -47,4 +48,5 @@ export const BUILTIN_AGENTS: BuiltinAgentId[] = [
   'auggie',
   'cursor',
   'opencode',
+  'pi',
 ];

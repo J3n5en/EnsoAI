@@ -87,6 +87,7 @@ const AGENT_INFO: Record<string, { name: string; command: string }> = {
   auggie: { name: 'Auggie', command: 'auggie' },
   cursor: { name: 'Cursor', command: 'cursor-agent' },
   opencode: { name: 'OpenCode', command: 'opencode' },
+  pi: { name: 'Pi', command: 'pi' },
 };
 
 // Session tab with glow effect
