@@ -5,4 +5,5 @@ onlyBuiltDependencies:
   - electron-winstaller
   - esbuild
   - node-pty
+  - sqlite3
   - '@vscode/ripgrep'
