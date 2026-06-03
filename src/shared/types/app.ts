@@ -29,3 +29,16 @@ export interface ValidateLocalPathResult {
   exists: boolean;
   isDirectory: boolean;
 }
+
+/**
+ * OpenContext for deep linking to specific repo/worktree/session
+ * Supports both URL scheme (enso://open?...) and CLI args (--open-path=...)
+ */
+export interface OpenContext {
+  /** Repository path */
+  path: string;
+  /** Working directory (worktree path) */
+  cwd?: string;
+  /** Session ID to focus */
+  sessionId?: string;
+}

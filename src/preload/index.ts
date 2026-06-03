@@ -31,6 +31,7 @@ import type {
   MergeConflict,
   MergeConflictContent,
   MergeState,
+  OpenContext,
   ProxySettings,
   PullRequest,
   RecentEditorProject,
@@ -454,6 +455,15 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.APP_OPEN_PATH, handler);
       return () => ipcRenderer.off(IPC_CHANNELS.APP_OPEN_PATH, handler);
     },
+    onOpenContext: (callback: (context: OpenContext) => void): (() => void) => {
+      const handler = (_: unknown, context: OpenContext) => callback(context);
+      ipcRenderer.on(IPC_CHANNELS.APP_OPEN_CONTEXT, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.APP_OPEN_CONTEXT, handler);
+    },
+    getPendingOpenContext: (): Promise<OpenContext | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.APP_GET_PENDING_OPEN_CONTEXT),
+    consumePendingOpenContext: (): Promise<OpenContext | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.APP_CONSUME_PENDING_OPEN_CONTEXT),
     onFocusSession: (callback: (params: { sessionId: string }) => void): (() => void) => {
       const handler = (_: unknown, params: { sessionId: string }) => callback(params);
       ipcRenderer.on(IPC_CHANNELS.APP_FOCUS_SESSION, handler);
