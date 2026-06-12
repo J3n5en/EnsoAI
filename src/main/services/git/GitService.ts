@@ -3,6 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type {
+  BranchHeadInfo,
   CloneProgress,
   CommitFileChange,
   FileChange,
@@ -392,6 +393,31 @@ export class GitService {
       throw error;
     }
     return parseGitLogOutput(result);
+  }
+
+  async getBranchHeadInfo(branchName: string): Promise<BranchHeadInfo | null> {
+    // %x1f = unit separator, used to safely split fields that may contain spaces
+    const format = '%H%x1f%h%x1f%s%x1f%aI%x1f%an';
+    try {
+      const result = await this.git.raw([
+        'log',
+        '-1',
+        `--pretty=format:${format}`,
+        branchName,
+        '--',
+      ]);
+      const parts = result.split('\x1f');
+      if (parts.length < 5) return null;
+      return {
+        hash: parts[0],
+        shortHash: parts[1],
+        message: parts[2],
+        date: parts[3],
+        author: parts[4],
+      };
+    } catch {
+      return null;
+    }
   }
 
   async commit(message: string, files?: string[]): Promise<string> {

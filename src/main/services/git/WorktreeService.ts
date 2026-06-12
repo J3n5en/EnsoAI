@@ -197,6 +197,21 @@ export class WorktreeService {
       );
     }
 
+    // Pre-flight: when `-b` would create a branch that already exists locally,
+    // surface a structured error so the renderer can offer "reuse existing".
+    // Done before invoking git to avoid relying on locale-dependent error text.
+    if (options.newBranch) {
+      try {
+        await this.git.raw(['show-ref', '--verify', '--quiet', `refs/heads/${options.newBranch}`]);
+        throw new Error(`BRANCH_ALREADY_EXISTS:${options.newBranch}`);
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith('BRANCH_ALREADY_EXISTS:')) {
+          throw err;
+        }
+        // show-ref exited non-zero — branch doesn't exist, continue
+      }
+    }
+
     const args = ['worktree', 'add'];
 
     if (options.newBranch) {

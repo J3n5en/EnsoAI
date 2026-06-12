@@ -95,6 +95,14 @@ export function registerGitHandlers(): void {
   });
 
   ipcMain.handle(
+    IPC_CHANNELS.GIT_BRANCH_HEAD_INFO,
+    async (_, workdir: string, branchName: string) => {
+      const git = getGitService(workdir);
+      return git.getBranchHeadInfo(branchName);
+    }
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.GIT_COMMIT,
     async (_, workdir: string, message: string, files?: string[]) => {
       const git = getGitService(workdir);
