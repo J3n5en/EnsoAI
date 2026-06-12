@@ -8,6 +8,7 @@ export { useFocusSession } from './useFocusSession';
 export { useGroupSync } from './useGroupSync';
 export { useMenuActions } from './useMenuActions';
 export { useMergeState } from './useMergeState';
+export { useOpenContextListener } from './useOpenContextListener';
 export { useOpenPathListener } from './useOpenPathListener';
 export { usePanelState } from './usePanelState';
 export { useRepositoryState } from './useRepositoryState';

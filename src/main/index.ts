@@ -3,7 +3,7 @@ import { extname, join } from 'node:path';
 import { pathToFileURL, URL } from 'node:url';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
-import { IPC_CHANNELS, type ProxySettings } from '@shared/types';
+import { IPC_CHANNELS, type OpenContext, type ProxySettings } from '@shared/types';
 import { customProtocolUriToPath, type SupportedFileUrlPlatform } from '@shared/utils/fileUrl';
 import { app, BrowserWindow, ipcMain, Menu, net, protocol } from 'electron';
 
@@ -58,7 +58,7 @@ import { destroyAgentTaskPanelWindow } from './windows/AgentTaskPanelWindow';
 import { createMainWindow } from './windows/MainWindow';
 
 let mainWindow: BrowserWindow | null = null;
-let pendingOpenPath: string | null = null;
+let pendingOpenContext: OpenContext | null = null;
 let pendingFocusSession: FocusSessionParams | null = null;
 let cleanupWindowHandlers: (() => void) | null = null;
 let isQuittingCleanupRunning = false;
@@ -88,14 +88,25 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient('enso');
 }
 
-// Parse URL and extract path
-function parseEnsoUrl(url: string): string | null {
+// Parse URL and extract OpenContext
+function parseEnsoUrl(url: string): OpenContext | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === 'enso:') {
       const path = parsed.searchParams.get('path');
       if (path) {
-        return decodeURIComponent(path);
+        const context: OpenContext = {
+          path: decodeURIComponent(path),
+        };
+        const cwd = parsed.searchParams.get('cwd');
+        if (cwd) {
+          context.cwd = decodeURIComponent(cwd);
+        }
+        const sessionId = parsed.searchParams.get('sessionId');
+        if (sessionId) {
+          context.sessionId = decodeURIComponent(sessionId);
+        }
+        return context;
       }
     }
   } catch {
@@ -129,21 +140,26 @@ function parseFocusUrl(url: string): FocusSessionParams | null {
   return null;
 }
 
-// Send open path event to renderer
-function sendOpenPath(path: string): void {
+// Send open context event to renderer
+function sendOpenContext(context: OpenContext): void {
   const windows = BrowserWindow.getAllWindows();
   if (windows.length > 0) {
     const win = windows[0];
     win.focus();
     // Check if renderer is ready (not loading)
     if (win.webContents.isLoading()) {
-      pendingOpenPath = path;
+      pendingOpenContext = context;
     } else {
-      win.webContents.send(IPC_CHANNELS.APP_OPEN_PATH, path);
+      win.webContents.send(IPC_CHANNELS.APP_OPEN_CONTEXT, context);
     }
   } else {
-    pendingOpenPath = path;
+    pendingOpenContext = context;
   }
+}
+
+// Backwards compatible wrapper for simple path opening
+function sendOpenPath(path: string): void {
+  sendOpenContext({ path });
 }
 
 // Send focus session event to renderer
@@ -153,8 +169,8 @@ function sendFocusSession(params: FocusSessionParams): void {
     const win = windows[0];
     win.focus();
     if (win.webContents.isLoading()) {
-      // Store for later - overwrite any pending path since focus is more specific
-      pendingOpenPath = null;
+      // Store for later - overwrite any pending context since focus is more specific
+      pendingOpenContext = null;
       pendingFocusSession = params;
     } else {
       win.webContents.send(IPC_CHANNELS.APP_FOCUS_SESSION, params);
@@ -171,30 +187,49 @@ function sanitizePath(path: string): string {
 
 // Handle command line arguments
 function handleCommandLineArgs(argv: string[]): void {
+  // Collect context from multiple args
+  let context: OpenContext | null = null;
+
   for (const arg of argv) {
     if (arg.startsWith('--open-path=')) {
       const rawPath = arg.slice('--open-path='.length);
       const path = sanitizePath(rawPath);
       if (path) {
-        sendOpenPath(path);
+        context = context || { path: '' };
+        context.path = path;
       }
-      return;
-    }
-    if (arg.startsWith('enso://')) {
+    } else if (arg.startsWith('--open-cwd=')) {
+      const rawCwd = arg.slice('--open-cwd='.length);
+      const cwd = sanitizePath(rawCwd);
+      if (cwd) {
+        context = context || { path: '' };
+        context.cwd = cwd;
+      }
+    } else if (arg.startsWith('--open-session-id=')) {
+      const sessionId = arg.slice('--open-session-id='.length).trim();
+      if (sessionId) {
+        context = context || { path: '' };
+        context.sessionId = sessionId;
+      }
+    } else if (arg.startsWith('enso://')) {
       // Check for focus URL first
       const focusParams = parseFocusUrl(arg);
       if (focusParams) {
         sendFocusSession(focusParams);
         return;
       }
-      // Fall back to path-based URL
-      const rawPath = parseEnsoUrl(arg);
-      const path = rawPath ? sanitizePath(rawPath) : null;
-      if (path) {
-        sendOpenPath(path);
+      // Fall back to context-based URL
+      const parsedContext = parseEnsoUrl(arg);
+      if (parsedContext) {
+        sendOpenContext(parsedContext);
+        return;
       }
-      return;
     }
+  }
+
+  // Send collected context if path is present
+  if (context && context.path) {
+    sendOpenContext(context);
   }
 }
 
@@ -211,13 +246,13 @@ app.on('open-url', (event, url) => {
     }
     return;
   }
-  // Fall back to path-based URL
-  const path = parseEnsoUrl(url);
-  if (path) {
+  // Fall back to context-based URL
+  const context = parseEnsoUrl(url);
+  if (context) {
     if (app.isReady()) {
-      sendOpenPath(path);
+      sendOpenContext(context);
     } else {
-      pendingOpenPath = path;
+      pendingOpenContext = context;
     }
   }
 });
@@ -659,9 +694,9 @@ app.whenReady().then(async () => {
   // IMPORTANT: Set up did-finish-load handler BEFORE handling command line args
   // to avoid race condition where page loads before handler is registered
   mainWindow.webContents.once('did-finish-load', () => {
-    if (pendingOpenPath) {
-      mainWindow?.webContents.send(IPC_CHANNELS.APP_OPEN_PATH, pendingOpenPath);
-      pendingOpenPath = null;
+    if (pendingOpenContext) {
+      mainWindow?.webContents.send(IPC_CHANNELS.APP_OPEN_CONTEXT, pendingOpenContext);
+      pendingOpenContext = null;
     }
     if (pendingFocusSession) {
       mainWindow?.webContents.send(IPC_CHANNELS.APP_FOCUS_SESSION, pendingFocusSession);
@@ -685,8 +720,19 @@ app.whenReady().then(async () => {
   });
   Menu.setApplicationMenu(menu);
 
-  // Handle initial command line args (this may set pendingOpenPath)
+  // Handle initial command line args (this may set pendingOpenContext)
   handleCommandLineArgs(process.argv);
+
+  // IPC handlers for OpenContext
+  ipcMain.handle(IPC_CHANNELS.APP_GET_PENDING_OPEN_CONTEXT, () => {
+    return pendingOpenContext;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APP_CONSUME_PENDING_OPEN_CONTEXT, () => {
+    const context = pendingOpenContext;
+    pendingOpenContext = null;
+    return context;
+  });
 
   ipcMain.handle(IPC_CHANNELS.APP_SET_LANGUAGE, (_event, language: Locale) => {
     setCurrentLocale(language);

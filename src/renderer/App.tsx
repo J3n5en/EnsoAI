@@ -25,6 +25,7 @@ import {
   useGroupSync,
   useMenuActions,
   useMergeState,
+  useOpenContextListener,
   useOpenPathListener,
   usePanelState,
   useRepositoryState,
@@ -468,7 +469,22 @@ export default function App() {
   );
 
   useGroupSync(hideGroups, activeGroupId, setActiveGroupId, saveActiveGroupId);
-  useOpenPathListener(repositories, saveRepositories, setSelectedRepo);
+  useOpenPathListener({
+    repositories,
+    saveRepositories,
+    setSelectedRepo,
+    onSwitchWorktree: (path) => switchWorktreePathRef.current?.(path),
+    onSwitchTab: handleTabChange,
+    tempWorkspaces,
+  });
+  useOpenContextListener({
+    repositories,
+    saveRepositories,
+    setSelectedRepo,
+    onSwitchWorktree: (path) => switchWorktreePathRef.current?.(path),
+    onSwitchTab: handleTabChange,
+    tempWorkspaces,
+  });
   useFocusSession({
     onSwitchWorktree: (path) => switchWorktreePathRef.current?.(path),
     onSwitchTab: handleTabChange,
