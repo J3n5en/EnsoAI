@@ -73,6 +73,12 @@ export const zhTranslations: Record<string, string> = {
   'Failed to delete temp session': '删除临时会话失败',
   Branch: '分支',
   'Branch already exists. Choose a different name.': '该分支已存在，请使用其他分支名',
+  'Branch already exists': '分支已存在',
+  'already exists but is not bound to any worktree.': '已存在但未绑定到任何 worktree。',
+  'Loading branch info...': '正在加载分支信息...',
+  'Reuse this branch in the new worktree, or use a different name?':
+    '要在新 worktree 中复用这个分支，还是改用其他分支名？',
+  'Reuse branch': '复用分支',
   'Branch name': '新分支名',
   Cancel: '取消',
   'Cancel staging all': '全部取消暂存',

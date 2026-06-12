@@ -1,10 +1,20 @@
 import type {
+  BranchHeadInfo,
   GhCliStatus,
   GitBranch as GitBranchType,
   PullRequest,
   WorktreeCreateOptions,
 } from '@shared/types';
-import { AlertCircle, GitBranch, GitPullRequest, Loader2, Plus, Sparkles } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  GitBranch,
+  GitCommit,
+  GitPullRequest,
+  Loader2,
+  Plus,
+  Sparkles,
+} from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -99,6 +109,16 @@ export function CreateWorktreeDialog({
   const [pullRequests, setPullRequests] = React.useState<PullRequest[]>([]);
   const [prsLoading, setPrsLoading] = React.useState(false);
   const [selectedPr, setSelectedPr] = React.useState<PullRequest | null>(null);
+
+  // Branch-already-exists recovery dialog state
+  const [branchConflict, setBranchConflict] = React.useState<{
+    branchName: string;
+    path: string;
+  } | null>(null);
+  const [branchHeadInfo, setBranchHeadInfo] = React.useState<BranchHeadInfo | null>(null);
+  const [branchHeadLoading, setBranchHeadLoading] = React.useState(false);
+  const [reusing, setReusing] = React.useState(false);
+  const branchNameInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Worktree path: {defaultWorktreePath}/{projectName}/{branchName}
   // Falls back to ~/ensoai/workspaces if not configured
@@ -222,6 +242,30 @@ export function CreateWorktreeDialog({
     }
   }, [open, mode, ghStatus, ghStatusLoading, checkGhStatus]);
 
+  // Fetch the existing branch's HEAD info so the conflict dialog can show context
+  React.useEffect(() => {
+    if (!branchConflict) {
+      setBranchHeadInfo(null);
+      return;
+    }
+    let cancelled = false;
+    setBranchHeadLoading(true);
+    window.electronAPI.git
+      .getBranchHeadInfo(workdir, branchConflict.branchName)
+      .then((info) => {
+        if (!cancelled) setBranchHeadInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setBranchHeadInfo(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBranchHeadLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [branchConflict, workdir]);
+
   // PR items for combobox
   type PrItem = { id: string; label: string; value: PullRequest };
   const prItems = React.useMemo((): PrItem[] => {
@@ -254,15 +298,26 @@ export function CreateWorktreeDialog({
         return;
       }
 
+      const targetPath = getWorktreePath(newBranchName);
       try {
         await onSubmit({
-          path: getWorktreePath(newBranchName),
+          path: targetPath,
           branch: effectiveBaseBranch,
           newBranch: newBranchName,
         });
         setOpen(false);
         resetForm();
       } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        // Electron IPC wraps thrown errors as
+        //   "Error invoking remote method '...': Error: BRANCH_ALREADY_EXISTS:<name>"
+        // so we look for the marker anywhere in the message rather than anchoring.
+        const match = msg.match(/BRANCH_ALREADY_EXISTS:(.+)$/);
+        if (match) {
+          setError(null);
+          setBranchConflict({ branchName: match[1], path: targetPath });
+          return;
+        }
         handleSubmitError(err);
       }
     } else {
@@ -369,299 +424,399 @@ export function CreateWorktreeDialog({
       setGhStatus(null);
       setPullRequests([]);
       setMode('branch');
+      setBranchConflict(null);
       resetForm();
     }
+  };
+
+  const handleReuseExistingBranch = async () => {
+    if (!branchConflict) return;
+    setReusing(true);
+    try {
+      await onSubmit({
+        path: branchConflict.path,
+        branch: branchConflict.branchName,
+      });
+      setBranchConflict(null);
+      setOpen(false);
+      resetForm();
+    } catch (err) {
+      setBranchConflict(null);
+      handleSubmitError(err);
+    } finally {
+      setReusing(false);
+    }
+  };
+
+  const handleRenameInConflict = () => {
+    setBranchConflict(null);
+    // Defer focus until after the conflict dialog finishes closing
+    requestAnimationFrame(() => {
+      const el = branchNameInputRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    });
   };
 
   const effectiveBranchName =
     mode === 'pr' ? newBranchName || selectedPr?.headRefName || '' : newBranchName;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      {/* Only render trigger in uncontrolled mode */}
-      {!isControlled && (
-        <DialogTrigger
-          render={
-            trigger ?? (
-              <Button size="sm">
-                <Plus className="mr-2 h-4 w-4" />
-                {t('New')}
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        {/* Only render trigger in uncontrolled mode */}
+        {!isControlled && (
+          <DialogTrigger
+            render={
+              trigger ?? (
+                <Button size="sm">
+                  <Plus className="mr-2 h-4 w-4" />
+                  {t('New')}
+                </Button>
+              )
+            }
+          />
+        )}
+        <DialogPopup>
+          <form onSubmit={handleSubmit} className="flex flex-col">
+            <DialogHeader>
+              <DialogTitle>{t('New Worktree')}</DialogTitle>
+              <DialogDescription>
+                {t(
+                  'Create a new branch and work in a separate directory to handle multiple tasks.'
+                )}
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogPanel className="space-y-4">
+              <Tabs value={mode} onValueChange={(v) => setMode(v as CreateMode)}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="branch" className="flex-1">
+                    <GitBranch className="mr-2 h-4 w-4" />
+                    {t('From branch')}
+                  </TabsTrigger>
+                  <TabsTrigger value="pr" className="flex-1">
+                    <GitPullRequest className="mr-2 h-4 w-4" />
+                    {t('From PR')}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="branch" className="mt-4 space-y-4">
+                  {/* New Branch Name */}
+                  <Field>
+                    <FieldLabel>{t('Branch name')}</FieldLabel>
+                    <div className="relative w-full">
+                      <Input
+                        ref={branchNameInputRef}
+                        value={newBranchName}
+                        onChange={(e) => setNewBranchName(e.target.value)}
+                        placeholder="feature/my-feature"
+                        autoFocus
+                        className="pr-8"
+                      />
+                      {branchNameGenerator.enabled && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 z-10 h-6 w-6 -translate-y-1/2 p-1 hover:bg-transparent data-[pressed]:bg-transparent"
+                          onClick={handleGenerateBranchName}
+                          disabled={!newBranchName.trim() || generatingBranchName}
+                          title={t('Generate branch name')}
+                          aria-label={t('Generate branch name')}
+                        >
+                          {generatingBranchName ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                    <FieldDescription>
+                      {t('This branch will be created and checked out in the new worktree.')}
+                    </FieldDescription>
+                  </Field>
+
+                  {/* Base Branch Selection with Search */}
+                  <Field>
+                    <FieldLabel>{t('Base branch')}</FieldLabel>
+                    <Combobox<string>
+                      items={branchGroups}
+                      value={baseBranch || null}
+                      onValueChange={(value: string | null) => {
+                        // Ignore null values from Combobox initialization/reset if already initialized
+                        if (value === null && baseBranchInitializedRef.current) {
+                          return;
+                        }
+                        const nextValue = value || '';
+                        setBaseBranch(nextValue);
+                        setBaseBranchQuery(getBranchLabel(nextValue));
+                      }}
+                      inputValue={baseBranchQuery}
+                      onInputValueChange={(value) => {
+                        // Allow clearing when dropdown is open (for showing all branches)
+                        if (value === '' && baseBranchOpen) {
+                          setBaseBranchQuery('');
+                          return;
+                        }
+                        // Ignore empty string during initialization if we already have a query
+                        if (value === '' && baseBranchQuery && baseBranchInitializedRef.current) {
+                          return;
+                        }
+                        setBaseBranchQuery(value);
+                      }}
+                      open={baseBranchOpen}
+                      onOpenChange={setBaseBranchOpen}
+                    >
+                      <ComboboxInput
+                        placeholder={t('Search branches...')}
+                        startAddon={<GitBranch className="h-4 w-4" />}
+                        showTrigger
+                      />
+                      <ComboboxPopup zIndex={Z_INDEX.NESTED_MODAL_CONTENT}>
+                        <ComboboxEmpty>{t('No branches found')}</ComboboxEmpty>
+                        <ComboboxList>
+                          {(group: BranchGroup) => (
+                            <React.Fragment key={group.value}>
+                              <ComboboxGroup items={group.items}>
+                                <ComboboxGroupLabel>{group.label}</ComboboxGroupLabel>
+                                <ComboboxCollection>
+                                  {(item: BranchItem) => (
+                                    <ComboboxItem key={item.id} value={item.value}>
+                                      {item.label}
+                                    </ComboboxItem>
+                                  )}
+                                </ComboboxCollection>
+                              </ComboboxGroup>
+                              {group.value === 'local' && branchGroups.length > 1 && (
+                                <ComboboxSeparator />
+                              )}
+                            </React.Fragment>
+                          )}
+                        </ComboboxList>
+                      </ComboboxPopup>
+                    </Combobox>
+                  </Field>
+                </TabsContent>
+
+                <TabsContent value="pr" className="mt-4 space-y-4">
+                  {ghStatusLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <span className="ml-2 text-muted-foreground">{t('Checking gh CLI...')}</span>
+                    </div>
+                  ) : ghStatus && !ghStatus.installed ? (
+                    <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-destructive">
+                            {t('GitHub CLI not installed')}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {t(
+                              'To create worktrees from pull requests, please install GitHub CLI:'
+                            )}
+                          </p>
+                          <code className="block rounded bg-muted px-2 py-1 text-xs">
+                            brew install gh
+                          </code>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              window.electronAPI.shell.openExternal('https://cli.github.com/')
+                            }
+                          >
+                            {t('Learn more')}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : ghStatus && !ghStatus.authenticated ? (
+                    <div className="rounded-md border border-warning/50 bg-warning/10 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-warning">
+                            {t('GitHub CLI not authenticated')}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {t('Please authenticate with GitHub CLI:')}
+                          </p>
+                          <code className="block rounded bg-muted px-2 py-1 text-xs">
+                            gh auth login
+                          </code>
+                          <Button type="button" variant="outline" size="sm" onClick={checkGhStatus}>
+                            {t('Retry')}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* PR Selection */}
+                      <Field>
+                        <FieldLabel>{t('Pull Request')}</FieldLabel>
+                        {prsLoading ? (
+                          <div className="flex items-center gap-2 py-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm text-muted-foreground">
+                              {t('Loading pull requests...')}
+                            </span>
+                          </div>
+                        ) : prItems.length === 0 ? (
+                          <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                            {t('No open pull requests found')}
+                          </div>
+                        ) : (
+                          <Combobox
+                            items={prItems}
+                            onValueChange={(item: PrItem | null) => {
+                              setSelectedPr(item?.value || null);
+                              // Auto-fill branch name from PR
+                              if (item?.value && !newBranchName) {
+                                setNewBranchName('');
+                              }
+                            }}
+                          >
+                            <ComboboxInput
+                              placeholder={t('Search pull requests...')}
+                              startAddon={<GitPullRequest className="h-4 w-4" />}
+                              showTrigger
+                            />
+                            <ComboboxPopup zIndex={Z_INDEX.NESTED_MODAL_CONTENT}>
+                              <ComboboxEmpty>{t('No pull requests found')}</ComboboxEmpty>
+                              <ComboboxList>
+                                {(item: PrItem) => (
+                                  <ComboboxItem key={item.id} value={item}>
+                                    <div className="flex flex-col">
+                                      <span>{item.label}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {item.value.headRefName} · @{item.value.author}
+                                      </span>
+                                    </div>
+                                  </ComboboxItem>
+                                )}
+                              </ComboboxList>
+                            </ComboboxPopup>
+                          </Combobox>
+                        )}
+                      </Field>
+
+                      {/* Optional: Override Branch Name */}
+                      {selectedPr && (
+                        <Field>
+                          <FieldLabel>
+                            {t('Branch name')} ({t('optional')})
+                          </FieldLabel>
+                          <Input
+                            value={newBranchName}
+                            onChange={(e) => setNewBranchName(e.target.value)}
+                            placeholder={selectedPr.headRefName}
+                          />
+                          <FieldDescription>
+                            {t('Leave empty to use the PR branch name:')} {selectedPr.headRefName}
+                          </FieldDescription>
+                        </Field>
+                      )}
+                    </>
+                  )}
+                </TabsContent>
+              </Tabs>
+
+              {/* Path Preview */}
+              {effectiveBranchName && home && (
+                <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                  <span className="font-medium">{t('Save location')}:</span>
+                  <code className="ml-1 break-all">{getWorktreePath(effectiveBranchName)}</code>
+                </div>
+              )}
+
+              {error && <div className="text-sm text-destructive">{error}</div>}
+            </DialogPanel>
+
+            <DialogFooter variant="bare">
+              <DialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
+              <Button
+                type="submit"
+                disabled={
+                  isLoading ||
+                  (mode === 'pr' && (!ghStatus?.authenticated || !selectedPr)) ||
+                  (mode === 'branch' && !newBranchName)
+                }
+              >
+                {isLoading ? t('Creating...') : t('Create')}
               </Button>
-            )
-          }
-        />
-      )}
-      <DialogPopup>
-        <form onSubmit={handleSubmit} className="flex flex-col">
+            </DialogFooter>
+          </form>
+        </DialogPopup>
+      </Dialog>
+
+      <Dialog
+        open={branchConflict !== null}
+        onOpenChange={(o) => {
+          if (!o) setBranchConflict(null);
+        }}
+      >
+        <DialogPopup zIndexLevel="nested">
           <DialogHeader>
-            <DialogTitle>{t('New Worktree')}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              {t('Branch already exists')}
+            </DialogTitle>
             <DialogDescription>
-              {t('Create a new branch and work in a separate directory to handle multiple tasks.')}
+              <code className="font-mono text-foreground">{branchConflict?.branchName}</code>{' '}
+              {t('already exists but is not bound to any worktree.')}
             </DialogDescription>
           </DialogHeader>
 
-          <DialogPanel className="space-y-4">
-            <Tabs value={mode} onValueChange={(v) => setMode(v as CreateMode)}>
-              <TabsList className="w-full">
-                <TabsTrigger value="branch" className="flex-1">
-                  <GitBranch className="mr-2 h-4 w-4" />
-                  {t('From branch')}
-                </TabsTrigger>
-                <TabsTrigger value="pr" className="flex-1">
-                  <GitPullRequest className="mr-2 h-4 w-4" />
-                  {t('From PR')}
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="branch" className="mt-4 space-y-4">
-                {/* New Branch Name */}
-                <Field>
-                  <FieldLabel>{t('Branch name')}</FieldLabel>
-                  <div className="relative w-full">
-                    <Input
-                      value={newBranchName}
-                      onChange={(e) => setNewBranchName(e.target.value)}
-                      placeholder="feature/my-feature"
-                      autoFocus
-                      className="pr-8"
-                    />
-                    {branchNameGenerator.enabled && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 z-10 h-6 w-6 -translate-y-1/2 p-1 hover:bg-transparent data-[pressed]:bg-transparent"
-                        onClick={handleGenerateBranchName}
-                        disabled={!newBranchName.trim() || generatingBranchName}
-                        title={t('Generate branch name')}
-                        aria-label={t('Generate branch name')}
-                      >
-                        {generatingBranchName ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-3 w-3" />
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                  <FieldDescription>
-                    {t('This branch will be created and checked out in the new worktree.')}
-                  </FieldDescription>
-                </Field>
-
-                {/* Base Branch Selection with Search */}
-                <Field>
-                  <FieldLabel>{t('Base branch')}</FieldLabel>
-                  <Combobox<string>
-                    items={branchGroups}
-                    value={baseBranch || null}
-                    onValueChange={(value: string | null) => {
-                      // Ignore null values from Combobox initialization/reset if already initialized
-                      if (value === null && baseBranchInitializedRef.current) {
-                        return;
-                      }
-                      const nextValue = value || '';
-                      setBaseBranch(nextValue);
-                      setBaseBranchQuery(getBranchLabel(nextValue));
-                    }}
-                    inputValue={baseBranchQuery}
-                    onInputValueChange={(value) => {
-                      // Allow clearing when dropdown is open (for showing all branches)
-                      if (value === '' && baseBranchOpen) {
-                        setBaseBranchQuery('');
-                        return;
-                      }
-                      // Ignore empty string during initialization if we already have a query
-                      if (value === '' && baseBranchQuery && baseBranchInitializedRef.current) {
-                        return;
-                      }
-                      setBaseBranchQuery(value);
-                    }}
-                    open={baseBranchOpen}
-                    onOpenChange={setBaseBranchOpen}
-                  >
-                    <ComboboxInput
-                      placeholder={t('Search branches...')}
-                      startAddon={<GitBranch className="h-4 w-4" />}
-                      showTrigger
-                    />
-                    <ComboboxPopup zIndex={Z_INDEX.NESTED_MODAL_CONTENT}>
-                      <ComboboxEmpty>{t('No branches found')}</ComboboxEmpty>
-                      <ComboboxList>
-                        {(group: BranchGroup) => (
-                          <React.Fragment key={group.value}>
-                            <ComboboxGroup items={group.items}>
-                              <ComboboxGroupLabel>{group.label}</ComboboxGroupLabel>
-                              <ComboboxCollection>
-                                {(item: BranchItem) => (
-                                  <ComboboxItem key={item.id} value={item.value}>
-                                    {item.label}
-                                  </ComboboxItem>
-                                )}
-                              </ComboboxCollection>
-                            </ComboboxGroup>
-                            {group.value === 'local' && branchGroups.length > 1 && (
-                              <ComboboxSeparator />
-                            )}
-                          </React.Fragment>
-                        )}
-                      </ComboboxList>
-                    </ComboboxPopup>
-                  </Combobox>
-                </Field>
-              </TabsContent>
-
-              <TabsContent value="pr" className="mt-4 space-y-4">
-                {ghStatusLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    <span className="ml-2 text-muted-foreground">{t('Checking gh CLI...')}</span>
-                  </div>
-                ) : ghStatus && !ghStatus.installed ? (
-                  <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-destructive">
-                          {t('GitHub CLI not installed')}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {t('To create worktrees from pull requests, please install GitHub CLI:')}
-                        </p>
-                        <code className="block rounded bg-muted px-2 py-1 text-xs">
-                          brew install gh
-                        </code>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            window.electronAPI.shell.openExternal('https://cli.github.com/')
-                          }
-                        >
-                          {t('Learn more')}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : ghStatus && !ghStatus.authenticated ? (
-                  <div className="rounded-md border border-warning/50 bg-warning/10 p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-warning">
-                          {t('GitHub CLI not authenticated')}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {t('Please authenticate with GitHub CLI:')}
-                        </p>
-                        <code className="block rounded bg-muted px-2 py-1 text-xs">
-                          gh auth login
-                        </code>
-                        <Button type="button" variant="outline" size="sm" onClick={checkGhStatus}>
-                          {t('Retry')}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* PR Selection */}
-                    <Field>
-                      <FieldLabel>{t('Pull Request')}</FieldLabel>
-                      {prsLoading ? (
-                        <div className="flex items-center gap-2 py-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-sm text-muted-foreground">
-                            {t('Loading pull requests...')}
-                          </span>
-                        </div>
-                      ) : prItems.length === 0 ? (
-                        <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                          {t('No open pull requests found')}
-                        </div>
-                      ) : (
-                        <Combobox
-                          items={prItems}
-                          onValueChange={(item: PrItem | null) => {
-                            setSelectedPr(item?.value || null);
-                            // Auto-fill branch name from PR
-                            if (item?.value && !newBranchName) {
-                              setNewBranchName('');
-                            }
-                          }}
-                        >
-                          <ComboboxInput
-                            placeholder={t('Search pull requests...')}
-                            startAddon={<GitPullRequest className="h-4 w-4" />}
-                            showTrigger
-                          />
-                          <ComboboxPopup zIndex={Z_INDEX.NESTED_MODAL_CONTENT}>
-                            <ComboboxEmpty>{t('No pull requests found')}</ComboboxEmpty>
-                            <ComboboxList>
-                              {(item: PrItem) => (
-                                <ComboboxItem key={item.id} value={item}>
-                                  <div className="flex flex-col">
-                                    <span>{item.label}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {item.value.headRefName} · @{item.value.author}
-                                    </span>
-                                  </div>
-                                </ComboboxItem>
-                              )}
-                            </ComboboxList>
-                          </ComboboxPopup>
-                        </Combobox>
-                      )}
-                    </Field>
-
-                    {/* Optional: Override Branch Name */}
-                    {selectedPr && (
-                      <Field>
-                        <FieldLabel>
-                          {t('Branch name')} ({t('optional')})
-                        </FieldLabel>
-                        <Input
-                          value={newBranchName}
-                          onChange={(e) => setNewBranchName(e.target.value)}
-                          placeholder={selectedPr.headRefName}
-                        />
-                        <FieldDescription>
-                          {t('Leave empty to use the PR branch name:')} {selectedPr.headRefName}
-                        </FieldDescription>
-                      </Field>
-                    )}
-                  </>
-                )}
-              </TabsContent>
-            </Tabs>
-
-            {/* Path Preview */}
-            {effectiveBranchName && home && (
-              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                <span className="font-medium">{t('Save location')}:</span>
-                <code className="ml-1 break-all">{getWorktreePath(effectiveBranchName)}</code>
+          <DialogPanel className="space-y-3">
+            {branchHeadLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t('Loading branch info...')}
               </div>
-            )}
+            ) : branchHeadInfo ? (
+              <div className="space-y-1.5 rounded-md border bg-muted/40 p-3 text-sm">
+                <div className="flex min-w-0 items-center gap-2">
+                  <GitCommit className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <code className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {branchHeadInfo.shortHash}
+                  </code>
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {branchHeadInfo.message}
+                  </span>
+                </div>
+                <div className="pl-6 text-xs text-muted-foreground">
+                  {branchHeadInfo.author} · {branchHeadInfo.date.slice(0, 10)}
+                </div>
+              </div>
+            ) : null}
 
-            {error && <div className="text-sm text-destructive">{error}</div>}
+            <p className="text-sm text-muted-foreground">
+              {t('Reuse this branch in the new worktree, or use a different name?')}
+            </p>
           </DialogPanel>
 
           <DialogFooter variant="bare">
-            <DialogClose render={<Button variant="outline">{t('Cancel')}</Button>} />
-            <Button
-              type="submit"
-              disabled={
-                isLoading ||
-                (mode === 'pr' && (!ghStatus?.authenticated || !selectedPr)) ||
-                (mode === 'branch' && !newBranchName)
-              }
-            >
-              {isLoading ? t('Creating...') : t('Create')}
+            <Button variant="outline" onClick={() => setBranchConflict(null)} disabled={reusing}>
+              {t('Cancel')}
+            </Button>
+            <Button variant="outline" onClick={handleRenameInConflict} disabled={reusing}>
+              {t('Rename')}
+            </Button>
+            <Button onClick={handleReuseExistingBranch} disabled={reusing}>
+              {reusing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t('Reuse branch')}
             </Button>
           </DialogFooter>
-        </form>
-      </DialogPopup>
-    </Dialog>
+        </DialogPopup>
+      </Dialog>
+    </>
   );
 }

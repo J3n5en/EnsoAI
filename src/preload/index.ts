@@ -73,6 +73,11 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_CREATE, workdir, name, startPoint),
     checkout: (workdir: string, branch: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_CHECKOUT, workdir, branch),
+    getBranchHeadInfo: (
+      workdir: string,
+      branchName: string
+    ): Promise<import('@shared/types').BranchHeadInfo | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_HEAD_INFO, workdir, branchName),
     commit: (workdir: string, message: string, files?: string[]): Promise<string> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, workdir, message, files),
     push: (

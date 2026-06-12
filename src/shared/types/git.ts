@@ -34,6 +34,14 @@ export interface GitLogEntry {
   refs?: string;
 }
 
+export interface BranchHeadInfo {
+  hash: string;
+  shortHash: string;
+  message: string;
+  date: string;
+  author: string;
+}
+
 export interface GitWorktree {
   path: string;
   head: string;
