@@ -79,24 +79,31 @@ function cleanupWatchersRetryTimer(): void {
   watchersRetryInProgress = false;
 }
 
+const WATCHER_RETRY_INTERVAL_MS = 30000;
+const WATCHER_MAX_RETRIES = 20;
+let watcherRetryCount = 0;
+
 function scheduleWatchersRetry(): void {
   if (watchersRetryTimer) return;
-  // Poll for directory creation: users may create ~/.claude/commands|skills while the app is running.
+  watcherRetryCount = 0;
   watchersRetryTimer = setInterval(() => {
     if (subscriptions.length > 0) {
+      cleanupWatchersRetryTimer();
+      return;
+    }
+    watcherRetryCount++;
+    if (watcherRetryCount > WATCHER_MAX_RETRIES) {
       cleanupWatchersRetryTimer();
       return;
     }
     if (watchersRetryInProgress) return;
     watchersRetryInProgress = true;
     startWatchers()
-      .catch(() => {
-        // Ignore retry errors; a later tick may succeed.
-      })
+      .catch(() => {})
       .finally(() => {
         watchersRetryInProgress = false;
       });
-  }, 2000);
+  }, WATCHER_RETRY_INTERVAL_MS);
 }
 
 function scheduleRefresh(): void {

@@ -620,13 +620,18 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       // Cmd/Ctrl+S shortcut is registered via useEffect + onKeyDown below
       // to avoid addCommand's closure stale issue and registry leak problem
 
-      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyMod.Shift | m.KeyCode.KeyF, () => {
-        const selection = editor.getSelection();
-        const selectedText =
-          !selection || selection.isEmpty()
-            ? ''
-            : (editor.getModel()?.getValueInRange(selection) ?? '');
-        onGlobalSearch?.(selectedText);
+      const searchDisposable = editor.onKeyDown((e) => {
+        const isCmd = e.metaKey || e.ctrlKey;
+        if (isCmd && e.shiftKey && e.keyCode === m.KeyCode.KeyF) {
+          e.preventDefault();
+          e.stopPropagation();
+          const selection = editor.getSelection();
+          const selectedText =
+            !selection || selection.isEmpty()
+              ? ''
+              : (editor.getModel()?.getValueInRange(selection) ?? '');
+          onGlobalSearch?.(selectedText);
+        }
       });
 
       // Add context menu action: Send to session
@@ -668,12 +673,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
         },
       });
 
-      // Double-click: select innermost scope (brackets, quotes, indentation)
+      editor.onDidDispose(() => searchDisposable.dispose());
+
       setupDoubleClickScope(editor);
 
-      // Cmd/Ctrl+Click and F12: go-to-definition via ripgrep declaration search.
-      // Dispose the previous instance first to avoid accumulating listeners across
-      // file switches (editor is remounted with a new instance on every key change).
       definitionNavDisposableRef.current?.dispose();
       definitionNavDisposableRef.current = setupDefinitionNavigation(
         editor,

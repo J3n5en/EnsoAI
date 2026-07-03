@@ -4,12 +4,11 @@ import { IPC_CHANNELS } from '@shared/types';
 import type { BrowserWindow } from 'electron';
 import { GitService } from './GitService';
 
-// Default interval: 3 minutes
-const FETCH_INTERVAL_MS = 3 * 60 * 1000;
-// Minimum interval between focus-triggered fetches: 1 minute
-const MIN_FOCUS_INTERVAL_MS = 1 * 60 * 1000;
-// Debounce delay for HEAD file change notifications
+const FETCH_INTERVAL_MS = 5 * 60 * 1000;
+const FETCH_IDLE_INTERVAL_MS = 15 * 60 * 1000;
+const MIN_FOCUS_INTERVAL_MS = 2 * 60 * 1000;
 const HEAD_CHANGE_DEBOUNCE_MS = 300;
+const IDLE_FETCH_THRESHOLD = 3;
 
 class GitAutoFetchService {
   private mainWindow: BrowserWindow | null = null;
@@ -18,6 +17,7 @@ class GitAutoFetchService {
   private worktreePaths: Set<string> = new Set();
   private enabled = false;
   private fetching = false;
+  private consecutiveNoChange = 0;
   private onFocusHandler: (() => void) | null = null;
   private headWatchers: Map<string, FSWatcher> = new Map();
   private headDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -60,18 +60,26 @@ class GitAutoFetchService {
 
   start(): void {
     if (this.intervalId) return;
-
-    this.intervalId = setInterval(() => {
-      this.fetchAll();
-    }, FETCH_INTERVAL_MS);
-
-    // 启动后延迟 5 秒执行首次 fetch
+    this.consecutiveNoChange = 0;
+    this.scheduleNextFetch();
     setTimeout(() => this.fetchAll(), 5000);
+  }
+
+  private scheduleNextFetch(): void {
+    if (this.intervalId) {
+      clearTimeout(this.intervalId);
+    }
+    const interval =
+      this.consecutiveNoChange >= IDLE_FETCH_THRESHOLD ? FETCH_IDLE_INTERVAL_MS : FETCH_INTERVAL_MS;
+    this.intervalId = setTimeout(() => {
+      this.fetchAll();
+      if (this.enabled) this.scheduleNextFetch();
+    }, interval);
   }
 
   stop(): void {
     if (this.intervalId) {
-      clearInterval(this.intervalId);
+      clearTimeout(this.intervalId);
       this.intervalId = null;
     }
   }
@@ -106,6 +114,7 @@ class GitAutoFetchService {
   private async fetchAll(): Promise<void> {
     if (!this.enabled || this.worktreePaths.size === 0 || this.fetching) return;
     this.fetching = true;
+    const hadChanges = false;
 
     try {
       this.lastFetchTime = Date.now();
@@ -142,9 +151,13 @@ class GitAutoFetchService {
       }
     } finally {
       this.fetching = false;
+      if (hadChanges) {
+        this.consecutiveNoChange = 0;
+      } else {
+        this.consecutiveNoChange++;
+      }
     }
 
-    // 通知渲染进程刷新状态
     this.notifyCompleted();
   }
 
