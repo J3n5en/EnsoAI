@@ -195,7 +195,7 @@ export function WorktreePanel({
     fetchDiffStats(activePaths);
     const interval = setInterval(() => {
       fetchDiffStats(activePaths);
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [worktrees, activities, fetchDiffStats, shouldPoll]);
 

@@ -849,9 +849,16 @@ export function DiffViewer({
         })
       );
 
-      modifiedEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-        handleSaveRef.current();
-      });
+      disposables.push(
+        modifiedEditor.onKeyDown((e) => {
+          const isCmd = e.metaKey || e.ctrlKey;
+          if (isCmd && !e.shiftKey && e.keyCode === monaco.KeyCode.KeyS) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSaveRef.current();
+          }
+        })
+      );
 
       setTimeout(() => {
         const pendingDirection = pendingNavigationDirectionRef.current;

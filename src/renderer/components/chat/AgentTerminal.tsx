@@ -53,8 +53,9 @@ interface AgentTerminalProps {
 const MIN_RUNTIME_FOR_AUTO_CLOSE = 10000; // 10 seconds
 const MIN_OUTPUT_FOR_NOTIFICATION = 100; // Minimum chars to consider agent is doing work
 const MIN_OUTPUT_FOR_INDICATOR = 200; // Minimum chars to show "outputting" indicator (higher to avoid noise)
-const ACTIVITY_POLL_INTERVAL_MS = 1000; // Poll process activity every 1000ms
-const IDLE_CONFIRMATION_COUNT = 2; // Require 2 consecutive idle polls (2 seconds) before marking as idle
+const ACTIVITY_POLL_INITIAL_MS = 1000; // Initial poll interval
+const ACTIVITY_POLL_MAX_MS = 8000; // Max poll interval after backoff
+const IDLE_CONFIRMATION_COUNT = 2; // Require 2 consecutive idle polls before marking as idle
 const RECENT_OUTPUT_TIMEOUT_MS = 3000; // If output received within this time, consider still active
 
 export function AgentTerminal({
@@ -203,64 +204,64 @@ export function AgentTerminal({
   const setActivityState = useWorktreeActivityStore((s) => s.setActivityState);
   const getActivityState = useWorktreeActivityStore((s) => s.getActivityState);
 
-  // Start polling for process activity
+  const activityPollDelayRef = useRef(ACTIVITY_POLL_INITIAL_MS);
+
+  // Start polling for process activity with exponential backoff
   const startActivityPolling = useCallback(() => {
-    // Clear any existing interval
     if (activityPollIntervalRef.current) {
       clearInterval(activityPollIntervalRef.current);
+      activityPollIntervalRef.current = null;
     }
     consecutiveIdleCountRef.current = 0;
+    activityPollDelayRef.current = ACTIVITY_POLL_INITIAL_MS;
 
-    activityPollIntervalRef.current = setInterval(async () => {
-      if (!ptyIdRef.current || !isMonitoringOutputRef.current) {
-        // Stop polling if no PTY or not monitoring
-        if (activityPollIntervalRef.current) {
-          clearInterval(activityPollIntervalRef.current);
+    const scheduleNext = () => {
+      activityPollIntervalRef.current = setTimeout(async () => {
+        if (!ptyIdRef.current || !isMonitoringOutputRef.current) {
           activityPollIntervalRef.current = null;
+          return;
         }
-        return;
-      }
 
-      try {
-        const hasProcessActivity = await window.electronAPI.terminal.getActivity(ptyIdRef.current);
-        const now = Date.now();
-        const hasRecentOutput = now - lastOutputTimeRef.current < RECENT_OUTPUT_TIMEOUT_MS;
+        try {
+          const hasProcessActivity = await window.electronAPI.terminal.getActivity(
+            ptyIdRef.current
+          );
+          const now = Date.now();
+          const hasRecentOutput = now - lastOutputTimeRef.current < RECENT_OUTPUT_TIMEOUT_MS;
 
-        if (hasProcessActivity || hasRecentOutput) {
-          // Process is active OR has recent output, reset idle counter
-          consecutiveIdleCountRef.current = 0;
-          // If we have enough output, show the indicator
-          if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
-            updateOutputState('outputting');
-            // Activity state is now managed by Hook notifications only
-          }
-        } else {
-          // Process is idle AND no recent output
-          consecutiveIdleCountRef.current++;
-          // Only mark as idle after several consecutive idle polls
-          if (consecutiveIdleCountRef.current >= IDLE_CONFIRMATION_COUNT) {
-            updateOutputState('idle');
-            isMonitoringOutputRef.current = false;
-
-            // Activity state is now managed by Hook notifications only
-
-            // Stop polling when confirmed idle
-            if (activityPollIntervalRef.current) {
-              clearInterval(activityPollIntervalRef.current);
+          if (hasProcessActivity || hasRecentOutput) {
+            consecutiveIdleCountRef.current = 0;
+            activityPollDelayRef.current = ACTIVITY_POLL_INITIAL_MS;
+            if (outputSinceEnterRef.current > MIN_OUTPUT_FOR_INDICATOR) {
+              updateOutputState('outputting');
+            }
+          } else {
+            consecutiveIdleCountRef.current++;
+            activityPollDelayRef.current = Math.min(
+              activityPollDelayRef.current * 2,
+              ACTIVITY_POLL_MAX_MS
+            );
+            if (consecutiveIdleCountRef.current >= IDLE_CONFIRMATION_COUNT) {
+              updateOutputState('idle');
+              isMonitoringOutputRef.current = false;
               activityPollIntervalRef.current = null;
+              return;
             }
           }
+        } catch {
+          // ignore
         }
-      } catch {
-        // Error checking activity, ignore
-      }
-    }, ACTIVITY_POLL_INTERVAL_MS);
+
+        scheduleNext();
+      }, activityPollDelayRef.current) as unknown as ReturnType<typeof setInterval>;
+    };
+
+    scheduleNext();
   }, [updateOutputState]);
 
-  // Stop polling for process activity
   const stopActivityPolling = useCallback(() => {
     if (activityPollIntervalRef.current) {
-      clearInterval(activityPollIntervalRef.current);
+      clearTimeout(activityPollIntervalRef.current);
       activityPollIntervalRef.current = null;
     }
   }, []);

@@ -333,7 +333,7 @@ export function TreeSidebar({
     fetchDiffStats(activePaths);
     const interval = setInterval(() => {
       fetchDiffStats(activePaths);
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [worktreesMap, activities, fetchDiffStats, shouldPoll]);
 
