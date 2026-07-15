@@ -199,16 +199,13 @@ export class WorktreeService {
 
     // Pre-flight: when `-b` would create a branch that already exists locally,
     // surface a structured error so the renderer can offer "reuse existing".
-    // Done before invoking git to avoid relying on locale-dependent error text.
+    // Detect existence by stdout instead of exit code: simple-git only treats a
+    // command as failed when exit code is non-zero AND stderr is non-empty, so
+    // quiet commands like `show-ref --quiet` never throw.
     if (options.newBranch) {
-      try {
-        await this.git.raw(['show-ref', '--verify', '--quiet', `refs/heads/${options.newBranch}`]);
+      const existing = await this.git.raw(['branch', '--list', options.newBranch]);
+      if (existing.trim()) {
         throw new Error(`BRANCH_ALREADY_EXISTS:${options.newBranch}`);
-      } catch (err) {
-        if (err instanceof Error && err.message.startsWith('BRANCH_ALREADY_EXISTS:')) {
-          throw err;
-        }
-        // show-ref exited non-zero — branch doesn't exist, continue
       }
     }
 
