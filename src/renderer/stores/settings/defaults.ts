@@ -351,6 +351,7 @@ export const defaultAgentSettings: AgentSettings = {
   cursor: { enabled: false, isDefault: false },
   opencode: { enabled: false, isDefault: false },
   pi: { enabled: false, isDefault: false },
+  omp: { enabled: false, isDefault: false },
 };
 
 // No default detection status - all agents need to be detected

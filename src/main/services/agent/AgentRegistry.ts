@@ -57,6 +57,20 @@ export const BUILTIN_AGENTS: AgentMetadata[] = [
       fileWrite: true,
     },
   },
+  {
+    id: 'omp',
+    name: 'OMP',
+    description: 'Oh My Pi Coding Agent CLI',
+    icon: 'omp',
+    binary: 'omp',
+    capabilities: {
+      chat: true,
+      codeEdit: true,
+      terminal: true,
+      fileRead: true,
+      fileWrite: true,
+    },
+  },
 ];
 
 export class AgentRegistry {

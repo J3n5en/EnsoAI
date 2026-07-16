@@ -79,6 +79,13 @@ const BUILTIN_AGENT_CONFIGS: BuiltinAgentConfig[] = [
     versionFlag: '--version',
     versionRegex: /(\d+\.\d+\.\d+)/,
   },
+  {
+    id: 'omp',
+    name: 'OMP',
+    command: 'omp',
+    versionFlag: '--version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+  },
 ];
 
 class CliDetector {
