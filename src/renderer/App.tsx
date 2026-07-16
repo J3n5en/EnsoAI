@@ -184,6 +184,34 @@ export default function App() {
     });
   }, []);
 
+  // Bind Agent Tasks panel to Todo feature: hide panel when Todo is disabled
+  const todoEnabled = useSettingsStore((s) => s.todoEnabled);
+  useEffect(() => {
+    if (todoEnabled) return;
+
+    if (isAgentTasksPanelOpen) {
+      void window.electronAPI.agentTaskPanel.toggle();
+    }
+
+    // Leave Todo tab when the feature is turned off
+    if (activeTab === 'todo') {
+      setActiveTab('chat');
+      if (activeWorktree?.path) {
+        setWorktreeTabMap((prev) => ({
+          ...prev,
+          [activeWorktree.path]: 'chat',
+        }));
+      }
+    }
+  }, [
+    todoEnabled,
+    isAgentTasksPanelOpen,
+    activeTab,
+    activeWorktree?.path,
+    setActiveTab,
+    setWorktreeTabMap,
+  ]);
+
   // Respond to snapshot requests from agent task panel window
   useEffect(() => {
     return window.electronAPI.agentTaskPanel.onGetSnapshot(() => {

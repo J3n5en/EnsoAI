@@ -596,7 +596,9 @@ export function GeneralSettings() {
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">
         <span className="text-sm font-medium">{t('Todo')}</span>
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{t('Enable Todo kanban board tab')}</p>
+          <p className="text-sm text-muted-foreground">
+            {t('Enable Todo kanban board tab and Agent Tasks panel')}
+          </p>
           <Switch checked={todoEnabled} onCheckedChange={setTodoEnabled} />
         </div>
       </div>
