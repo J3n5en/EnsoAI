@@ -116,6 +116,7 @@ function getInitialState() {
     terminalRenderer: 'dom' as const,
     terminalScrollback: 10000,
     terminalOptionIsMeta: true,
+    windowsConptyCompatibilityFixEnabled: false,
     copyOnSelection: false,
 
     // Keybindings
@@ -276,6 +277,8 @@ export const useSettingsStore = create<SettingsState>()(
       setTerminalRenderer: (terminalRenderer) => set({ terminalRenderer }),
       setTerminalScrollback: (terminalScrollback) => set({ terminalScrollback }),
       setTerminalOptionIsMeta: (terminalOptionIsMeta) => set({ terminalOptionIsMeta }),
+      setWindowsConptyCompatibilityFixEnabled: (windowsConptyCompatibilityFixEnabled) =>
+        set({ windowsConptyCompatibilityFixEnabled }),
       setCopyOnSelection: (copyOnSelection) => set({ copyOnSelection }),
 
       // Keybinding Setters

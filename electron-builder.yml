@@ -78,6 +78,8 @@ asar: true
 asarUnpack:
   - "node_modules/@vscode/ripgrep/bin/**"
   - "node_modules/sqlite3/**"
+  - "node_modules/node-pty/build/Release/*.node"
+  - "node_modules/node-pty/build/Release/conpty/**"
 compression: maximum
 
 mac:

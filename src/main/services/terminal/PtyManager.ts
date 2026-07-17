@@ -9,6 +9,7 @@ import pidusage from 'pidusage';
 import { killProcessTree } from '../../utils/processUtils';
 import { getProxyEnvVars } from '../proxy/ProxyConfig';
 import { detectShell, shellDetector } from './ShellDetector';
+import { createWindowsConptyCompatibilityOptions } from './windowsConptyCompatibility';
 
 const isWindows = process.platform === 'win32';
 
@@ -417,13 +418,31 @@ export class PtyManager {
     applyEnhancedPath(baseEnv);
 
     try {
-      ptyProcess = pty.spawn(shell, args, {
+      const windowsConptyCompatibility = createWindowsConptyCompatibilityOptions({
+        settingEnabled: options.windowsConptyCompatibilityFixEnabled,
+      });
+      const spawnOptions: pty.IWindowsPtyForkOptions = {
         name: 'xterm-256color',
         cols: options.cols || 80,
         rows: options.rows || 24,
         cwd,
         env: baseEnv,
-      });
+      };
+      if (windowsConptyCompatibility.useConptyDll) {
+        // Windows 旧系统：使用 node-pty 随包新版 ConPTY/OpenConsole，规避 Codex 清屏后滚动异常。
+        spawnOptions.useConptyDll = true;
+      }
+      try {
+        ptyProcess = pty.spawn(shell, args, spawnOptions);
+      } catch (error) {
+        if (!windowsConptyCompatibility.useConptyDll) {
+          throw error;
+        }
+        console.warn('[pty] Retrying without bundled ConPTY after spawn failure:', error);
+        const fallbackOptions = { ...spawnOptions };
+        delete fallbackOptions.useConptyDll;
+        ptyProcess = pty.spawn(shell, args, fallbackOptions);
+      }
     } catch (error) {
       if (!isWindows) {
         const fallbackShell = findFallbackShell();
