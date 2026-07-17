@@ -37,6 +37,7 @@ import {
 import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/ui/glow-card';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useDiffStatsPolling } from '@/hooks/useDiffStatsPolling';
 import { useGitSync } from '@/hooks/useGitSync';
 import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
@@ -180,24 +181,17 @@ export function WorktreePanel({
   const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
   const activities = useWorktreeActivityStore((s) => s.activities);
   const shouldPoll = useShouldPoll();
-
-  useEffect(() => {
-    if (worktrees.length === 0 || !shouldPoll) return;
-    const activePaths = worktrees
-      .filter((wt) => {
-        const activity = activities[wt.path];
-        return activity && (activity.agentCount > 0 || activity.terminalCount > 0);
-      })
-      .map((wt) => wt.path);
-
-    if (activePaths.length === 0) return;
-
-    fetchDiffStats(activePaths);
-    const interval = setInterval(() => {
-      fetchDiffStats(activePaths);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [worktrees, activities, fetchDiffStats, shouldPoll]);
+  const activePaths = useMemo(
+    () =>
+      worktrees
+        .filter((wt) => {
+          const activity = activities[wt.path];
+          return activity && (activity.agentCount > 0 || activity.terminalCount > 0);
+        })
+        .map((wt) => wt.path),
+    [worktrees, activities]
+  );
+  useDiffStatsPolling(activePaths, shouldPoll, fetchDiffStats);
 
   return (
     <aside className="flex h-full w-full flex-col border-r bg-background">
