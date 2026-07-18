@@ -77,6 +77,7 @@ import {
 import { GlowBorder, type GlowState, useGlowEffectEnabled } from '@/components/ui/glow-card';
 import { toastManager } from '@/components/ui/toast';
 import { CreateWorktreeDialog } from '@/components/worktree/CreateWorktreeDialog';
+import { useDiffStatsPolling } from '@/hooks/useDiffStatsPolling';
 import { useGitSync } from '@/hooks/useGitSync';
 import { useWorktreeOutputState } from '@/hooks/useOutputState';
 import { useShouldPoll } from '@/hooks/useWindowFocus';
@@ -307,6 +308,17 @@ export function TreeSidebar({
   const fetchDiffStats = useWorktreeActivityStore((s) => s.fetchDiffStats);
   const activities = useWorktreeActivityStore((s) => s.activities);
   const shouldPoll = useShouldPoll();
+  const activePaths = useMemo(
+    () =>
+      Object.values(worktreesMap)
+        .flat()
+        .filter((wt) => {
+          const activity = activities[wt.path];
+          return activity && (activity.agentCount > 0 || activity.terminalCount > 0);
+        })
+        .map((wt) => wt.path),
+    [worktreesMap, activities]
+  );
   const activePathSet = useMemo(
     () =>
       new Set(
@@ -317,25 +329,7 @@ export function TreeSidebar({
     [activities]
   );
 
-  useEffect(() => {
-    const allWorktrees = Object.values(worktreesMap).flat();
-    if (allWorktrees.length === 0 || !shouldPoll) return;
-
-    const activePaths = allWorktrees
-      .filter((wt) => {
-        const activity = activities[wt.path];
-        return activity && (activity.agentCount > 0 || activity.terminalCount > 0);
-      })
-      .map((wt) => wt.path);
-
-    if (activePaths.length === 0) return;
-
-    fetchDiffStats(activePaths);
-    const interval = setInterval(() => {
-      fetchDiffStats(activePaths);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [worktreesMap, activities, fetchDiffStats, shouldPoll]);
+  useDiffStatsPolling(activePaths, shouldPoll, fetchDiffStats);
 
   // Auto-expand selected repo (only when selectedRepo changes externally, not from tree click)
   const prevSelectedRepoRef = useRef<string | null>(null);
