@@ -411,25 +411,27 @@ export function MainContent({
           >
             <Settings className="h-4 w-4" />
           </button>
-          {/* Agent Tasks button */}
-          <button
-            type="button"
-            className={cn(
-              'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors',
-              isAgentTasksPanelOpen
-                ? 'bg-accent text-accent-foreground'
-                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-            )}
-            onClick={onOpenAgentTasks}
-            title={t('Agent Tasks')}
-          >
-            <ListTodo className="h-4 w-4" />
-            {activeTaskCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
-                {activeTaskCount}
-              </span>
-            )}
-          </button>
+          {/* Agent Tasks button - bound to Todo feature flag */}
+          {todoEnabled && onOpenAgentTasks && (
+            <button
+              type="button"
+              className={cn(
+                'relative flex h-8 w-8 items-center justify-center rounded-md transition-colors',
+                isAgentTasksPanelOpen
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+              )}
+              onClick={onOpenAgentTasks}
+              title={t('Agent Tasks')}
+            >
+              <ListTodo className="h-4 w-4" />
+              {activeTaskCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+                  {activeTaskCount}
+                </span>
+              )}
+            </button>
+          )}
           {activeSessionId && (
             <Button
               variant="outline"
