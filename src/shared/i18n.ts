@@ -435,6 +435,9 @@ export const zhTranslations: Record<string, string> = {
   'Terminal renderer and performance settings': '终端渲染与性能设置',
   'Terminal scrollback': '回滚行数',
   'Terminal shortcuts': '设置终端快捷键',
+  'Windows scrollback patch': 'Windows 滚屏补丁',
+  'Improves Codex CLI scrollback and scrollbar issues after clear-screen redraws. Recommended to enable on Windows versions below 25H2.':
+    '改善 Codex CLI 清屏重绘后无法回看历史、滚动条异常的问题。建议 Windows 版本低于 25H2 时开启。',
   Theme: '主题',
   'Theme mode': '模式',
   Tree: '树状',

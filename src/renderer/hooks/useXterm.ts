@@ -135,6 +135,11 @@ export function useXterm({
   const terminalRef = useRef<Terminal | null>(null);
   const settings = useTerminalSettings();
   const terminalRenderer = useSettingsStore((s) => s.terminalRenderer);
+  const windowsConptyCompatibilityFixEnabled = useSettingsStore(
+    (s) => s.windowsConptyCompatibilityFixEnabled
+  );
+  const useWindowsConptyCompatibility =
+    window.electronAPI.env.platform === 'win32' && windowsConptyCompatibilityFixEnabled;
   const copyOnSelection = useSettingsStore((s) => s.copyOnSelection);
   const shellConfig = useSettingsStore((s) => s.shellConfig);
   const navigateToFile = useNavigationStore((s) => s.navigateToFile);
@@ -298,6 +303,7 @@ export function useXterm({
       fontWeightBold: settings.fontWeightBold,
       theme: settings.theme,
       scrollback: settings.scrollback,
+      scrollOnEraseInDisplay: useWindowsConptyCompatibility,
       macOptionIsMeta: settings.optionIsMeta,
       allowProposedApi: true,
       allowTransparency: settings.backgroundImageEnabled,
@@ -595,6 +601,7 @@ export function useXterm({
         cols: terminal.cols,
         rows: terminal.rows,
         env,
+        windowsConptyCompatibilityFixEnabled: useWindowsConptyCompatibility,
         initialCommand: initialCommandRef.current,
       });
 
@@ -693,7 +700,7 @@ export function useXterm({
       terminal.writeln(`\x1b[31mFailed to start terminal.\x1b[0m`);
       terminal.writeln(`\x1b[33mError: ${error}\x1b[0m`);
     }
-  }, [cwd, command, shellConfig, commandKey, terminalRenderer]);
+  }, [cwd, command, shellConfig, commandKey, terminalRenderer, useWindowsConptyCompatibility]);
 
   useEffect(() => {
     const shouldActivate = isActive || initialCommandRef.current;

@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { release } from 'node:os';
 import 'electron-log/preload.js';
 import type { Locale } from '@shared/i18n';
 import type {
@@ -611,6 +612,7 @@ const electronAPI = {
   env: {
     HOME: process.env.HOME || process.env.USERPROFILE || '',
     platform: process.platform as 'darwin' | 'win32' | 'linux',
+    osRelease: release(),
     appVersion: pkg.version,
   },
 
