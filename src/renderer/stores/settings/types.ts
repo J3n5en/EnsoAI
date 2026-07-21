@@ -571,4 +571,5 @@ export const BUILTIN_AGENT_IDS: BuiltinAgentId[] = [
   'cursor',
   'opencode',
   'pi',
+  'omp',
 ];

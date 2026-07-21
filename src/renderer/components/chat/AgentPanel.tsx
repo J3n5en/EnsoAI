@@ -51,6 +51,7 @@ const AGENT_INFO: Record<string, { name: string; command: string }> = {
   cursor: { name: 'Cursor', command: 'cursor-agent' },
   opencode: { name: 'OpenCode', command: 'opencode' },
   pi: { name: 'Pi', command: 'pi' },
+  omp: { name: 'OMP', command: 'omp' },
 };
 
 /**

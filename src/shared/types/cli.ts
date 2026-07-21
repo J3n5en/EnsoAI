@@ -6,7 +6,8 @@ export type BuiltinAgentId =
   | 'auggie'
   | 'cursor'
   | 'opencode'
-  | 'pi';
+  | 'pi'
+  | 'omp';
 
 export type AgentEnvironment = 'native' | 'hapi' | 'happy';
 
