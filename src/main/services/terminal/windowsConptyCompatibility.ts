@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { release } from 'node:os';
 import path from 'node:path';
+import { shouldEnableWindowsConptyCompatibility } from '@shared/utils/windowsConpty';
 
 const require = createRequire(import.meta.url);
 
@@ -22,6 +24,7 @@ export function hasBundledConptyRuntime(
 
 export interface WindowsConptyCompatibilityInput {
   platform?: NodeJS.Platform;
+  osRelease?: string;
   settingEnabled?: boolean;
   runtimeDir?: string;
   fileExists?: (file: string) => boolean;
@@ -29,18 +32,24 @@ export interface WindowsConptyCompatibilityInput {
 
 export function createWindowsConptyCompatibilityOptions({
   platform = process.platform,
+  osRelease = release(),
   settingEnabled,
-  runtimeDir = nodePtyBundledConptyRuntimeDir(),
+  runtimeDir,
   fileExists = existsSync,
 }: WindowsConptyCompatibilityInput = {}): { useConptyDll: boolean; reason: string } {
-  const enabled = settingEnabled === true;
-
-  if (!enabled) return { useConptyDll: false, reason: 'disabled' };
   if (platform !== 'win32') return { useConptyDll: false, reason: 'non-windows' };
 
-  if (!hasBundledConptyRuntime(runtimeDir, fileExists)) {
+  const enabled = settingEnabled ?? shouldEnableWindowsConptyCompatibility(platform, osRelease);
+  if (!enabled) {
+    return {
+      useConptyDll: false,
+      reason: settingEnabled === false ? 'disabled' : 'not-recommended',
+    };
+  }
+
+  if (!hasBundledConptyRuntime(runtimeDir ?? nodePtyBundledConptyRuntimeDir(), fileExists)) {
     return { useConptyDll: false, reason: 'runtime-missing' };
   }
 
-  return { useConptyDll: true, reason: 'enabled' };
+  return { useConptyDll: true, reason: settingEnabled === true ? 'enabled' : 'recommended' };
 }

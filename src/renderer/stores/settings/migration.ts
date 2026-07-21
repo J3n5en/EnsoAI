@@ -173,7 +173,10 @@ export function migrateSettings(
     backgroundBrightness: sanitizedBackgroundBrightness,
     backgroundSaturation: sanitizedBackgroundSaturation,
     backgroundSizeMode: sanitizedBackgroundSizeMode,
-    windowsConptyCompatibilityFixEnabled: persisted.windowsConptyCompatibilityFixEnabled === true,
+    windowsConptyCompatibilityFixEnabled: sanitizeBoolean(
+      persisted.windowsConptyCompatibilityFixEnabled,
+      currentState.windowsConptyCompatibilityFixEnabled
+    ),
     editorSettings: {
       ...currentState.editorSettings,
       ...persisted.editorSettings,

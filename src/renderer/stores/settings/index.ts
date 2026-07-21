@@ -1,6 +1,7 @@
 import type { Locale } from '@shared/i18n';
 import { normalizeLocale } from '@shared/i18n';
 import type { CustomAgent, McpServer, PromptPreset } from '@shared/types';
+import { shouldEnableWindowsConptyCompatibility } from '@shared/utils/windowsConpty';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
@@ -97,6 +98,8 @@ function applyInitialSettings(state: {
 
 // Get initial state values
 function getInitialState() {
+  const { platform, osRelease } = window.electronAPI.env;
+
   return {
     // UI Settings
     theme: 'system' as Theme,
@@ -116,7 +119,10 @@ function getInitialState() {
     terminalRenderer: 'dom' as const,
     terminalScrollback: 10000,
     terminalOptionIsMeta: true,
-    windowsConptyCompatibilityFixEnabled: false,
+    windowsConptyCompatibilityFixEnabled: shouldEnableWindowsConptyCompatibility(
+      platform,
+      osRelease
+    ),
     copyOnSelection: false,
 
     // Keybindings

@@ -29,14 +29,26 @@ describe('windowsConptyCompatibility', () => {
     expect(disabled.useConptyDll).toBe(false);
   });
 
-  it('keeps useConptyDll disabled by default', () => {
+  it('enables useConptyDll by default before Windows 11 25H2', () => {
     const result = createWindowsConptyCompatibilityOptions({
       platform: 'win32',
+      osRelease: '10.0.26100',
+      runtimeDir: 'C:\\runtime',
+      fileExists: () => true,
+    });
+    expect(result.useConptyDll).toBe(true);
+    expect(result.reason).toBe('recommended');
+  });
+
+  it('keeps useConptyDll disabled by default on Windows 11 25H2 and newer', () => {
+    const result = createWindowsConptyCompatibilityOptions({
+      platform: 'win32',
+      osRelease: '10.0.26200',
       runtimeDir: 'C:\\runtime',
       fileExists: () => true,
     });
     expect(result.useConptyDll).toBe(false);
-    expect(result.reason).toBe('disabled');
+    expect(result.reason).toBe('not-recommended');
   });
 
   it('disables useConptyDll when runtime files are missing', () => {
