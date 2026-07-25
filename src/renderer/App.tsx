@@ -1285,7 +1285,6 @@ export default function App() {
         {fileTreeDisplayMode === 'current' && hasActiveWorktree && (
           <FileSidebar
             rootPath={activeWorktree?.path}
-            isActive={activeTab === 'file'}
             width={fileSidebarWidth}
             collapsed={fileSidebarCollapsed}
             onCollapse={() => setFileSidebarCollapsed(true)}

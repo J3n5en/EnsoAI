@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { findAgentSessionById } from '@/lib/agentSessionMatch';
 import { useAgentSessionsStore } from './agentSessions';
 
 // Agent activity state for tree sidebar display
@@ -302,9 +303,10 @@ export function initAgentActivityListener(): () => void {
       let cwd = data.cwd;
       if (!cwd) {
         // Fallback: find session by sessionId to get cwd
-        const session = useAgentSessionsStore
-          .getState()
-          .sessions.find((s) => s.sessionId === data.sessionId || s.id === data.sessionId);
+        const session = findAgentSessionById(
+          useAgentSessionsStore.getState().sessions,
+          data.sessionId
+        );
         if (session?.cwd) {
           cwd = session.cwd;
           console.log(
@@ -329,9 +331,10 @@ export function initAgentActivityListener(): () => void {
       let cwd = data.cwd;
       if (!cwd) {
         // Fallback: find session by sessionId to get cwd
-        const session = useAgentSessionsStore
-          .getState()
-          .sessions.find((s) => s.sessionId === data.sessionId || s.id === data.sessionId);
+        const session = findAgentSessionById(
+          useAgentSessionsStore.getState().sessions,
+          data.sessionId
+        );
         if (session?.cwd) {
           cwd = session.cwd;
           console.log(
@@ -356,9 +359,10 @@ export function initAgentActivityListener(): () => void {
       let cwd = data.cwd;
       if (!cwd) {
         // Fallback: find session by sessionId to get cwd
-        const session = useAgentSessionsStore
-          .getState()
-          .sessions.find((s) => s.sessionId === data.sessionId || s.id === data.sessionId);
+        const session = findAgentSessionById(
+          useAgentSessionsStore.getState().sessions,
+          data.sessionId
+        );
         if (session?.cwd) {
           cwd = session.cwd;
           console.log(

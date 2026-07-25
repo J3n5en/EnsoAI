@@ -1,4 +1,3 @@
-import type { AIProvider } from '@shared/types';
 import { Plus, Settings, Sparkles } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEMP_REPO_ID } from '@/App/constants';
@@ -14,6 +13,7 @@ import {
 } from '@/components/ui/empty';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
+import { findAgentSessionById } from '@/lib/agentSessionMatch';
 import { pauseFocusLock, restoreFocusIfLocked } from '@/lib/focusLock';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
@@ -27,6 +27,8 @@ import { useTerminalStore } from '@/stores/terminal';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
+import { CodexHistoryPanel } from './CodexHistoryPanel';
+import { CodexSessionPickerDialog } from './CodexSessionPickerDialog';
 import { EnhancedInputContainer } from './EnhancedInputContainer';
 import { QuickTerminalModal } from './QuickTerminalModal';
 import type { Session } from './SessionBar';
@@ -469,6 +471,16 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   // Empty state agent menu
   const [showAgentMenu, setShowAgentMenu] = useState(false);
   const [installedAgents, setInstalledAgents] = useState<Set<string>>(new Set());
+  const [historySessionId, setHistorySessionId] = useState<string | undefined>();
+  const [historyPickerSession, setHistoryPickerSession] = useState<Session | null>(null);
+  const [historySourceSessionId, setHistorySourceSessionId] = useState<string | undefined>();
+  const historySourceSession = useMemo(
+    () =>
+      historySourceSessionId
+        ? (allSessions.find((session) => session.id === historySourceSessionId) ?? null)
+        : null,
+    [allSessions, historySourceSessionId]
+  );
 
   // Build installed agents set from persisted detection status
   useEffect(() => {
@@ -538,15 +550,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   );
   const clearContinueRequest = useCodeReviewContinueStore((s) => s.clearContinueRequest);
 
-  // Map AI provider (code review) to agent id for "Continue Conversation"
+  // Only Claude/Cursor can currently reach the code-review continue path.
   const continueAgentId = useMemo(() => {
-    const map: Record<AIProvider, string> = {
-      'claude-code': 'claude',
-      'codex-cli': 'codex',
-      'cursor-cli': 'cursor',
-      'gemini-cli': 'gemini',
-    };
-    return pendingContinueProvider != null ? (map[pendingContinueProvider] ?? 'claude') : 'claude';
+    return pendingContinueProvider === 'cursor-cli' ? 'cursor' : 'claude';
   }, [pendingContinueProvider]);
 
   useEffect(() => {
@@ -785,8 +791,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   // Notification payload may carry either UI session id or Claude sessionId.
   const findSessionByNotificationId = useCallback(
-    (incomingSessionId: string) =>
-      allSessions.find((s) => s.id === incomingSessionId || s.sessionId === incomingSessionId),
+    (incomingSessionId: string) => findAgentSessionById(allSessions, incomingSessionId),
     [allSessions]
   );
 
@@ -842,7 +847,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         // Auto popup enhanced input if enabled
         // Now we set the open state in store - it persists per session
         if (shouldAutoPopup) {
-          setEnhancedInputOpen(sessionId, true);
+          setEnhancedInputOpen(session.id, true);
         }
 
         // Send system notification
@@ -1468,6 +1473,53 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     return max;
   }, [statusLineHeightsByGroupId]);
 
+  const handleOpenCodexHistory = useCallback((session: Session) => {
+    setHistorySourceSessionId(session.id);
+
+    if (session.cliSessionId) {
+      setHistoryPickerSession(null);
+      setHistorySessionId(session.cliSessionId);
+      return;
+    }
+
+    setHistorySessionId(undefined);
+    setHistoryPickerSession(session);
+  }, []);
+
+  const handleSelectCodexHistorySession = useCallback(
+    (cliSessionId: string) => {
+      const sourceSession = historyPickerSession ?? historySourceSession;
+
+      if (sourceSession) {
+        setHistorySourceSessionId(sourceSession.id);
+      }
+      setHistoryPickerSession(null);
+      setHistorySessionId(cliSessionId);
+    },
+    [historyPickerSession, historySourceSession]
+  );
+
+  const handleBackToCodexSessionList = useCallback(() => {
+    if (!historySourceSession) return;
+
+    setHistorySessionId(undefined);
+    setHistoryPickerSession(historySourceSession);
+  }, [historySourceSession]);
+
+  const handleBackToCurrentCodexSession = useCallback(() => {
+    if (!historySourceSession?.cliSessionId) return;
+
+    setHistoryPickerSession(null);
+    setHistorySessionId(historySourceSession.cliSessionId);
+  }, [historySourceSession]);
+
+  const handleBindCodexHistorySession = useCallback(() => {
+    if (!historySourceSession || !historySessionId) return;
+    if (historySourceSession.cliSessionId === historySessionId) return;
+
+    updateSession(historySourceSession.id, { cliSessionId: historySessionId });
+  }, [historySessionId, historySourceSession, updateSession]);
+
   if (!cwd) return null;
 
   // Check if current worktree has any groups (used for empty state detection)
@@ -1698,6 +1750,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 id={session.id}
                 cwd={session.cwd}
                 sessionId={session.sessionId || session.id}
+                cliSessionId={session.cliSessionId}
                 agentId={session.agentId}
                 agentCommand={session.agentCommand || 'claude'}
                 customPath={session.customPath}
@@ -1710,6 +1763,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 initialPrompt={session.pendingCommand}
                 onInitialized={() => handleInitialized(sessionId)}
                 onActivated={() => handleActivated(sessionId)}
+                onCliSessionIdDetected={(cliSessionId) => {
+                  updateSession(sessionId, { cliSessionId });
+                }}
                 onActivatedWithFirstLine={(line) => handleActivatedWithFirstLine(sessionId, line)}
                 onExit={() => handleCloseSession(sessionId, groupId || undefined)}
                 onTerminalTitleChange={(title) => {
@@ -1780,6 +1836,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
               }
               onSessionRename={handleRenameSession}
               onSessionReorder={(from, to) => handleReorderSessions(group.id, from, to)}
+              onOpenCodexHistory={handleOpenCodexHistory}
               onGroupClick={() => handleGroupClick(group.id)}
               quickTerminalOpen={quickTerminalOpen}
               quickTerminalHasProcess={hasRunningProcess}
@@ -1814,6 +1871,31 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
           onSessionInit={handleQuickTerminalSessionInit}
         />
       )}
+      <CodexHistoryPanel
+        sessionId={historySessionId}
+        currentSessionId={historySourceSession?.cliSessionId}
+        open={!!historySessionId}
+        onBindToCurrentSession={historySourceSession ? handleBindCodexHistorySession : undefined}
+        onBackToCurrentSession={
+          historySourceSession?.cliSessionId ? handleBackToCurrentCodexSession : undefined
+        }
+        onBackToSessionList={historySourceSession ? handleBackToCodexSessionList : undefined}
+        onOpenChange={(open) => {
+          if (!open) {
+            setHistorySessionId(undefined);
+            setHistorySourceSessionId(undefined);
+          }
+        }}
+      />
+      <CodexSessionPickerDialog
+        open={historyPickerSession != null}
+        cwd={historyPickerSession?.cwd}
+        initialSessionId={historyPickerSession?.cliSessionId}
+        onOpenChange={(open) => {
+          if (!open) setHistoryPickerSession(null);
+        }}
+        onSelectSessionId={handleSelectCodexHistorySession}
+      />
     </div>
   );
 }

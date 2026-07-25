@@ -1,13 +1,22 @@
 import { getPathBasename } from '@shared/utils/path';
 import { useEffect } from 'react';
-import type { Repository } from '../constants';
+import type { Repository, TabId } from '../constants';
 import { pathsEqual } from '../storage';
 
-export function useOpenPathListener(
-  repositories: Repository[],
-  saveRepositories: (repos: Repository[]) => void,
-  setSelectedRepo: (repo: string) => void
-) {
+interface UseOpenPathListenerOptions {
+  repositories: Repository[];
+  saveRepositories: (repos: Repository[]) => void;
+  setSelectedRepo: (repo: string) => void;
+  onSwitchWorktree: (path: string) => void;
+  onSwitchTab: (tab: TabId) => void;
+  tempWorkspaces: Array<{ path: string }>;
+}
+
+export function useOpenPathListener({
+  repositories,
+  saveRepositories,
+  setSelectedRepo,
+}: UseOpenPathListenerOptions) {
   useEffect(() => {
     const cleanup = window.electronAPI.app.onOpenPath((rawPath) => {
       const path = rawPath.replace(/[\\/]+$/, '').replace(/^["']|["']$/g, '');

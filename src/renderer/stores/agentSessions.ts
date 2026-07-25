@@ -41,7 +41,7 @@ export interface AggregatedOutputState {
 
 // Check if an agent command supports session persistence
 function isResumableAgent(agentCommand: string): boolean {
-  return agentCommand?.startsWith('claude') ?? false;
+  return agentCommand?.startsWith('claude') || agentCommand === 'codex';
 }
 
 /**
@@ -119,7 +119,7 @@ function loadFromStorage(): { sessions: Session[]; activeIds: Record<string, str
 
 function saveToStorage(sessions: Session[], activeIds: Record<string, string | null>): void {
   // Only persist sessions that are:
-  // 1. Using agents that support resumption (e.g., claude)
+  // 1. Using agents that support resumption (e.g., claude, codex)
   // 2. Activated (user has pressed Enter at least once)
   const persistableSessions = sessions.filter(
     (s) => isResumableAgent(s.agentCommand) && s.activated

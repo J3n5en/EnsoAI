@@ -1,20 +1,28 @@
-import type { CommitFileChange, GitLogEntry } from '@shared/types';
+import type { CommitFileChange, GitGraphRefs, GitLogEntry } from '@shared/types';
 import {
+  Cloud,
   Copy,
   FileEdit,
   FilePlus,
   FileX,
+  GitBranch,
   GitCommit,
   Loader2,
   RotateCcw,
+  Tag,
+  Target,
   Undo2,
 } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toastManager } from '@/components/ui/toast';
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { CommitGraph } from './CommitGraph';
+import { CommitGraphRefBadges } from './CommitGraphRefBadges';
+import type { GraphRow } from './commitGraphLayout';
+import { getGraphReferenceColor, sortGraphReferences } from './commitRefLabels';
 import { type ResetMode, ResetModeDialog } from './ResetModeDialog';
 
 interface CommitHistoryListProps {
@@ -34,6 +42,9 @@ interface CommitHistoryListProps {
   // Git operations
   workdir?: string;
   onRefresh?: () => void;
+  graphView?: boolean;
+  graphRows?: GraphRow[];
+  graphRefs?: GitGraphRefs;
 }
 
 const RESET_MODE_LABELS: Record<ResetMode, string> = {
@@ -41,6 +52,19 @@ const RESET_MODE_LABELS: Record<ResetMode, string> = {
   mixed: 'Mixed Reset',
   hard: 'Hard Reset',
 };
+
+const GRAPH_REFERENCE_ICONS = {
+  head: Target,
+  local: GitBranch,
+  remote: Cloud,
+  tag: Tag,
+};
+
+const GRAPH_REFERENCE_COLOR_CLASSES = [
+  'text-blue-500',
+  'text-violet-700',
+  'text-orange-600',
+] as const;
 
 export function CommitHistoryList({
   commits,
@@ -57,6 +81,9 @@ export function CommitHistoryList({
   onFileClick,
   workdir,
   onRefresh,
+  graphView = false,
+  graphRows,
+  graphRefs,
 }: CommitHistoryListProps) {
   const { t, locale } = useI18n();
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -219,6 +246,18 @@ export function CommitHistoryList({
     };
   }, [onLoadMore, hasNextPage, isFetchingNextPage]);
 
+  const maxColumns = useMemo(
+    () =>
+      (graphRows ?? []).reduce((max, row) => {
+        const rowMax = row.segments.reduce(
+          (segmentMax, segment) => Math.max(segmentMax, segment.fromColumn, segment.toColumn),
+          Math.max(row.column, row.lanes.length - 1)
+        );
+        return Math.max(max, rowMax);
+      }, 0) + 1,
+    [graphRows]
+  );
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -227,7 +266,7 @@ export function CommitHistoryList({
     );
   }
 
-  if (commits.length === 0) {
+  if (graphView ? !graphRows?.length : commits.length === 0) {
     return (
       <div className="flex h-full min-h-[120px] flex-col items-center justify-center text-muted-foreground">
         <GitCommit className="mb-2 h-10 w-10 opacity-50" />
@@ -236,143 +275,212 @@ export function CommitHistoryList({
     );
   }
 
+  const renderCommitRow = (commit: GitLogEntry, graphRow?: GraphRow) => {
+    const isSelected = selectedHash === commit.hash;
+    const isExpanded = expandedCommitHash === commit.hash;
+    const references = graphRow?.historyItem.commit?.references;
+
+    return (
+      <div
+        key={commit.hash}
+        className={cn(!graphView && 'border-b border-border/50 last:border-0')}
+      >
+        <Tooltip>
+          <TooltipTrigger
+            className={cn(
+              graphView
+                ? 'group flex h-7 w-full items-center px-2 text-left transition-colors'
+                : 'group flex w-full items-start rounded-sm px-3 py-2 text-left transition-colors',
+              isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+            )}
+            onClick={() => onCommitClick(commit.hash)}
+            onContextMenu={(event) => handleContextMenu(event, commit)}
+          >
+            {graphRow && (
+              <CommitGraph row={graphRow} maxColumns={maxColumns} isSelected={isSelected} />
+            )}
+
+            {/* 图表行只使用结构化引用，普通列表继续保留原有短引用文字。 */}
+            {graphView ? (
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                <p className="min-w-0 truncate text-xs">{commit.message}</p>
+                {references && graphRefs && (
+                  <CommitGraphRefBadges references={references} graphRefs={graphRefs} />
+                )}
+              </div>
+            ) : (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">{commit.message}</p>
+                <div
+                  className={cn(
+                    'mt-0.5 flex items-center gap-2 text-xs',
+                    isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
+                  )}
+                >
+                  <span className="truncate">{commit.author_name}</span>
+                  <span>·</span>
+                  <span>{formatDate(commit.date)}</span>
+                </div>
+                {commit.refs && (
+                  <div
+                    className="mt-1 flex gap-1 overflow-hidden"
+                    title={commit.refs}
+                    style={{
+                      maskImage: 'linear-gradient(to right, black calc(100% - 24px), transparent)',
+                      WebkitMaskImage:
+                        'linear-gradient(to right, black calc(100% - 24px), transparent)',
+                    }}
+                  >
+                    {commit.refs.split(', ').map((ref) => (
+                      <span
+                        key={ref}
+                        className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
+                      >
+                        {ref.replace('HEAD ->', '').replace('tag:', '').trim()}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </TooltipTrigger>
+          <TooltipPopup className="max-w-md" side="right" align="start" sideOffset={4}>
+            <div className="space-y-1.5 whitespace-pre-wrap text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Hash:</span>
+                <span className="font-mono">{commit.hash.slice(0, 8)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Author:</span>
+                <span>{commit.author_name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Date:</span>
+                <span>
+                  {new Date(commit.date).toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US')}
+                </span>
+              </div>
+              <div className="mt-1 border-border/50 border-t pt-1.5">
+                <span className="text-muted-foreground">Message:</span>
+                <p className="mt-0.5 break-words">{commit.fullMessage}</p>
+              </div>
+              {graphView && references && graphRefs && references.length > 0 && (
+                <div className="mt-1 border-border/50 border-t pt-1.5">
+                  <span className="text-muted-foreground">{t('References')}:</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {sortGraphReferences(references, graphRefs).map((reference) => {
+                      const Icon = GRAPH_REFERENCE_ICONS[reference.kind];
+                      const color = getGraphReferenceColor(reference, graphRefs);
+
+                      return (
+                        <span
+                          key={reference.id}
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-sm bg-muted/60 px-1 py-0.5',
+                            color === undefined
+                              ? 'text-muted-foreground'
+                              : (GRAPH_REFERENCE_COLOR_CLASSES[color] ?? 'text-muted-foreground')
+                          )}
+                        >
+                          <Icon aria-hidden="true" className="h-3 w-3 shrink-0" />
+                          <span>{reference.name}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </TooltipPopup>
+        </Tooltip>
+
+        {/* Inline File List Expansion */}
+        {isExpanded && (
+          <div className="px-3 pb-2">
+            {commitFilesLoading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : commitFiles.length === 0 ? (
+              <div className="flex items-center justify-center py-4 text-muted-foreground">
+                <p className="text-xs">{t('No file changes in this commit')}</p>
+              </div>
+            ) : (
+              <div className="mt-1 space-y-0.5 rounded-sm bg-muted/30 p-1">
+                {commitFiles.map((file) => {
+                  const Icon = getFileIcon(file.status);
+                  const isFileSelected = selectedFile === file.path;
+                  return (
+                    <button
+                      type="button"
+                      key={file.path}
+                      className={cn(
+                        'flex h-7 w-full items-center gap-2 rounded-sm px-2 text-left text-sm transition-colors',
+                        isFileSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+                      )}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onFileClick?.(file.path);
+                      }}
+                      title={file.path}
+                    >
+                      <Icon
+                        className={cn(
+                          'h-3.5 w-3.5 shrink-0',
+                          isFileSelected ? '' : getStatusColor(file.status)
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          'shrink-0 font-mono text-[10px]',
+                          isFileSelected ? '' : getStatusColor(file.status)
+                        )}
+                      >
+                        {file.status}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs">{file.path}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderGraphRow = (row: GraphRow) => {
+    const commit = row.historyItem.commit;
+    if (commit) return renderCommitRow(commit, row);
+
+    const isIncoming = row.kind === 'incoming';
+    const label = isIncoming ? t('Incoming Changes') : t('Outgoing Changes');
+    const referenceName = isIncoming ? graphRefs?.remote?.name : graphRefs?.current?.name;
+
+    // 虚拟行是只读说明行，不注册点击、右键或任何提交操作。
+    return (
+      <div
+        key={row.hash}
+        className="group flex h-7 w-full items-center px-2 text-xs text-muted-foreground"
+      >
+        <CommitGraph row={row} maxColumns={maxColumns} isSelected={false} />
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+          <span className="shrink-0">{label}</span>
+          {referenceName && <span className="min-w-0 truncate">{referenceName}</span>}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <ScrollArea className="h-full min-h-0">
         <div className="space-y-0.5 p-2">
-          {commits.map((commit) => {
-            const isSelected = selectedHash === commit.hash;
-            const isExpanded = expandedCommitHash === commit.hash;
-            return (
-              <div key={commit.hash} className="border-b border-border/50 last:border-0">
-                <Tooltip>
-                  <TooltipTrigger
-                    className={cn(
-                      'group flex w-full items-start rounded-sm px-3 py-2 text-left transition-colors',
-                      isSelected ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-                    )}
-                    onClick={() => onCommitClick(commit.hash)}
-                    onContextMenu={(e) => handleContextMenu(e, commit)}
-                  >
-                    {/* Message & Metadata */}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">{commit.message}</p>
-                      <div
-                        className={cn(
-                          'mt-0.5 flex items-center gap-2 text-xs',
-                          isSelected ? 'text-accent-foreground/70' : 'text-muted-foreground'
-                        )}
-                      >
-                        <span className="truncate">{commit.author_name}</span>
-                        <span>·</span>
-                        <span>{formatDate(commit.date)}</span>
-                      </div>
-                      {commit.refs && (
-                        <div
-                          className="mt-1 flex gap-1 overflow-hidden"
-                          title={commit.refs}
-                          style={{
-                            maskImage:
-                              'linear-gradient(to right, black calc(100% - 24px), transparent)',
-                            WebkitMaskImage:
-                              'linear-gradient(to right, black calc(100% - 24px), transparent)',
-                          }}
-                        >
-                          {commit.refs.split(', ').map((ref) => (
-                            <span
-                              key={ref}
-                              className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary"
-                            >
-                              {ref.replace('HEAD ->', '').replace('tag:', '').trim()}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipPopup className="max-w-md" side="right" align="start" sideOffset={4}>
-                    <div className="text-xs space-y-1.5 whitespace-pre-wrap">
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Hash:</span>
-                        <span className="font-mono">{commit.hash.slice(0, 8)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Author:</span>
-                        <span>{commit.author_name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Date:</span>
-                        <span>
-                          {new Date(commit.date).toLocaleString(
-                            locale === 'zh' ? 'zh-CN' : 'en-US'
-                          )}
-                        </span>
-                      </div>
-                      <div className="mt-1 border-t border-border/50 pt-1.5">
-                        <span className="text-muted-foreground">Message:</span>
-                        <p className="mt-0.5 break-words">{commit.fullMessage}</p>
-                      </div>
-                    </div>
-                  </TooltipPopup>
-                </Tooltip>
-
-                {/* Inline File List Expansion */}
-                {isExpanded && (
-                  <div className="px-3 pb-2">
-                    {commitFilesLoading ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : commitFiles.length === 0 ? (
-                      <div className="flex items-center justify-center py-4 text-muted-foreground">
-                        <p className="text-xs">{t('No file changes in this commit')}</p>
-                      </div>
-                    ) : (
-                      <div className="mt-1 space-y-0.5 rounded-sm bg-muted/30 p-1">
-                        {commitFiles.map((file) => {
-                          const Icon = getFileIcon(file.status);
-                          const isFileSelected = selectedFile === file.path;
-                          return (
-                            <button
-                              type="button"
-                              key={file.path}
-                              className={cn(
-                                'flex h-7 w-full items-center gap-2 rounded-sm px-2 text-sm text-left transition-colors',
-                                isFileSelected
-                                  ? 'bg-accent text-accent-foreground'
-                                  : 'hover:bg-accent/50'
-                              )}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onFileClick?.(file.path);
-                              }}
-                              title={file.path}
-                            >
-                              <Icon
-                                className={cn(
-                                  'h-3.5 w-3.5 shrink-0',
-                                  isFileSelected ? '' : getStatusColor(file.status)
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  'shrink-0 font-mono text-[10px]',
-                                  isFileSelected ? '' : getStatusColor(file.status)
-                                )}
-                              >
-                                {file.status}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate text-xs">{file.path}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {/* 普通列表严格按 commits 的索引渲染；图表模式严格按 graphRows 渲染。 */}
+          {graphView
+            ? (graphRows ?? []).map(renderGraphRow)
+            : commits.map((_commit, index) => renderCommitRow(commits[index]))}
 
           {/* Loading indicator for infinite scroll */}
           {(isFetchingNextPage || hasNextPage) && (

@@ -3,7 +3,7 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import pidtree from 'pidtree';
 
 const isWindows = process.platform === 'win32';
@@ -91,6 +91,48 @@ export function killProcessTree(
 }
 
 /**
+ * Kill a Windows process tree without blocking the Electron event loop.
+ * taskkill itself is isolated in a child process and has a bounded wait.
+ */
+export function killWindowsProcessTreeAsync(pid: number, timeoutMs = 3000): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve();
+    };
+
+    let taskkill: ChildProcess;
+    try {
+      // Windows：把 taskkill 放到独立进程，避免清理动作卡住 Electron 主进程。
+      taskkill = spawn('taskkill', ['/pid', String(pid), '/t', '/f'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+    } catch {
+      finish();
+      return;
+    }
+
+    timer = setTimeout(() => {
+      try {
+        taskkill.kill();
+      } catch {
+        // taskkill 自身已经退出时忽略。
+      }
+      finish();
+    }, timeoutMs);
+
+    taskkill.once('close', finish);
+    taskkill.once('error', finish);
+  });
+}
+
+/**
  * Kill a process and all its children (process tree) - async version.
  * Uses pidtree to reliably find all descendant processes.
  *
@@ -121,7 +163,7 @@ export async function killProcessTreeAsync(
 
   try {
     if (isWindows) {
-      spawnSync('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' });
+      await killWindowsProcessTreeAsync(pid);
     } else {
       // Get all descendant PIDs using pidtree
       let childPids: number[] = [];

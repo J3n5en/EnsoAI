@@ -1,7 +1,9 @@
 import type { FileEntry } from '@shared/types';
+import { getPathDirname } from '@shared/utils/path';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadFileTreeExpandedPaths, saveFileTreeExpandedPaths } from '@/App/storage';
+import { mapPathToFileTree } from '@/lib/fileTreePaths';
 
 interface UseFileTreeOptions {
   rootPath: string | undefined;
@@ -319,12 +321,48 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
     [queryClient, rootPath, setAndPersistExpandedPaths]
   );
 
+  // 监听事件与文件树节点可能使用不同分隔符，刷新前统一成文件树保存的路径。
+  const refreshTreeDirectory = useCallback(
+    async (directoryPath: string) => {
+      if (!rootPath) return;
+
+      const treePath = mapPathToFileTree(directoryPath, rootPath, window.electronAPI.env.platform);
+      if (!treePath) return;
+
+      if (treePath === rootPath) {
+        await queryClient.refetchQueries({ queryKey: ['file', 'list', rootPath] });
+        return;
+      }
+
+      queryClient.removeQueries({ queryKey: ['file', 'list', treePath] });
+      if (expandedPathsRef.current.has(treePath)) {
+        await refreshNodeChildren(treePath);
+      }
+    },
+    [queryClient, refreshNodeChildren, rootPath]
+  );
+
   // Track if we need to refresh when becoming active
   const needsRefreshOnActiveRef = useRef(false);
 
   // Use ref for isActive to avoid effect re-runs on tab switch
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
+
+  const gitInvalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleGitChangesInvalidate = useCallback(() => {
+    if (!rootPath) return;
+    if (gitInvalidateTimerRef.current) clearTimeout(gitInvalidateTimerRef.current);
+
+    gitInvalidateTimerRef.current = setTimeout(() => {
+      gitInvalidateTimerRef.current = null;
+      void queryClient.invalidateQueries({
+        queryKey: ['git', 'file-changes', rootPath],
+        refetchType: isActiveRef.current ? 'active' : 'none',
+      });
+    }, 200);
+  }, [queryClient, rootPath]);
 
   // File watch effect - always watch, but only update UI when active
   useEffect(() => {
@@ -335,11 +373,19 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
 
     // Listen for changes
     const unsubscribe = window.electronAPI.file.onChange(async (event) => {
-      const parentPath = event.path.substring(0, event.path.lastIndexOf('/')) || rootPath;
+      const parentPath = getPathDirname(event.path) || rootPath;
+      const parentTreePath = mapPathToFileTree(
+        parentPath,
+        rootPath,
+        window.electronAPI.env.platform
+      );
+      if (!parentTreePath) return;
+
+      scheduleGitChangesInvalidate();
 
       // Always invalidate cache regardless of isActive
-      if (parentPath !== rootPath) {
-        queryClient.removeQueries({ queryKey: ['file', 'list', parentPath] });
+      if (parentTreePath !== rootPath) {
+        queryClient.removeQueries({ queryKey: ['file', 'list', parentTreePath] });
       }
 
       // If not active, mark for refresh when becoming active
@@ -348,70 +394,96 @@ export function useFileTree({ rootPath, enabled = true, isActive = true }: UseFi
         return;
       }
 
-      if (parentPath === rootPath) {
-        // Root directory change - refetch immediately
-        await queryClient.refetchQueries({ queryKey: ['file', 'list', rootPath] });
-      } else if (expandedPathsRef.current.has(parentPath)) {
-        // Expanded subdirectory change - refresh its children
-        await refreshNodeChildren(parentPath);
-      }
+      await refreshTreeDirectory(parentTreePath);
 
       // If the changed path itself is an expanded directory, refresh its children
-      if (expandedPathsRef.current.has(event.path)) {
-        await refreshNodeChildren(event.path);
+      const changedTreePath = mapPathToFileTree(
+        event.path,
+        rootPath,
+        window.electronAPI.env.platform
+      );
+      if (changedTreePath && expandedPathsRef.current.has(changedTreePath)) {
+        await refreshNodeChildren(changedTreePath);
       }
     });
 
     return () => {
       unsubscribe();
       window.electronAPI.file.watchStop(rootPath);
+      if (gitInvalidateTimerRef.current) {
+        clearTimeout(gitInvalidateTimerRef.current);
+        gitInvalidateTimerRef.current = null;
+      }
     };
-  }, [rootPath, enabled, queryClient, refreshNodeChildren]);
+  }, [
+    rootPath,
+    enabled,
+    queryClient,
+    refreshNodeChildren,
+    refreshTreeDirectory,
+    scheduleGitChangesInvalidate,
+  ]);
 
   // File operations
   const createFile = useCallback(
     async (path: string, content = '') => {
       await window.electronAPI.file.createFile(path, content);
-      const parentPath = path.substring(0, path.lastIndexOf('/'));
-      queryClient.invalidateQueries({ queryKey: ['file', 'list', parentPath] });
+      if (rootPath) {
+        await refreshTreeDirectory(getPathDirname(path) || rootPath);
+      }
     },
-    [queryClient]
+    [refreshTreeDirectory, rootPath]
   );
 
   const createDirectory = useCallback(
     async (path: string) => {
       await window.electronAPI.file.createDirectory(path);
-      const parentPath = path.substring(0, path.lastIndexOf('/'));
-      queryClient.invalidateQueries({ queryKey: ['file', 'list', parentPath] });
+      if (rootPath) {
+        await refreshTreeDirectory(getPathDirname(path) || rootPath);
+      }
     },
-    [queryClient]
+    [refreshTreeDirectory, rootPath]
   );
 
   const renameItem = useCallback(
     async (fromPath: string, toPath: string) => {
       await window.electronAPI.file.rename(fromPath, toPath);
-      const parentPath = fromPath.substring(0, fromPath.lastIndexOf('/'));
-      queryClient.invalidateQueries({ queryKey: ['file', 'list', parentPath] });
+      if (rootPath) {
+        const fromParentPath = getPathDirname(fromPath) || rootPath;
+        const toParentPath = getPathDirname(toPath) || rootPath;
+        await Promise.all([
+          refreshTreeDirectory(fromParentPath),
+          fromParentPath === toParentPath ? Promise.resolve() : refreshTreeDirectory(toParentPath),
+        ]);
+      }
     },
-    [queryClient]
+    [refreshTreeDirectory, rootPath]
   );
 
   const deleteItem = useCallback(
     async (path: string) => {
       await window.electronAPI.file.delete(path);
-      const parentPath = path.substring(0, path.lastIndexOf('/'));
-      queryClient.invalidateQueries({ queryKey: ['file', 'list', parentPath] });
+      if (rootPath) {
+        await refreshTreeDirectory(getPathDirname(path) || rootPath);
+      }
     },
-    [queryClient]
+    [refreshTreeDirectory, rootPath]
   );
 
   const refresh = useCallback(async () => {
+    if (!rootPath) return;
+
     console.log('[useFileTree] Refresh started');
     // Force invalidate all cached queries first
     queryClient.invalidateQueries({ queryKey: ['file', 'list'] });
 
-    // Refetch root directory first
-    await queryClient.refetchQueries({ queryKey: ['file', 'list', rootPath] });
+    // 同时刷新根目录与 Git 状态；非 Git 目录的 Git 错误不能影响文件树刷新
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ['file', 'list', rootPath] }),
+      queryClient.refetchQueries({ queryKey: ['git', 'file-changes', rootPath] }).catch((error) => {
+        console.warn('[useFileTree] Git status refresh failed:', error);
+      }),
+    ]);
     console.log('[useFileTree] Root refetched');
 
     // Refetch all expanded directories in parallel

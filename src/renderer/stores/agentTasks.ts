@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { loadJSON, normalizePath, pathsEqual, saveJSON } from '@/App/storage';
 import type { Session } from '@/components/chat/SessionBar';
+import { findAgentSessionById } from '@/lib/agentSessionMatch';
 import { useAgentSessionsStore } from './agentSessions';
 import { areAgentTaskRecordsEqual } from './agentTasksEquality';
 import { type AgentActivityState, useWorktreeActivityStore } from './worktreeActivity';
@@ -337,7 +338,7 @@ export const useAgentTasksStore = create<AgentTasksState>()(
 );
 
 function findSessionById(sessions: Session[], id: string) {
-  return sessions.find((s) => s.sessionId === id || s.id === id);
+  return findAgentSessionById(sessions, id);
 }
 
 function findSessionByNotification(

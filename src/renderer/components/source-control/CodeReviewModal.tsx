@@ -144,7 +144,7 @@ export function CodeReviewModal({ open, onOpenChange, repoPath }: CodeReviewModa
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
 
   const reviewRepoPath = useCodeReviewContinueStore((s) => s.review.repoPath);
-  const reviewSessionId = useCodeReviewContinueStore((s) => s.review.sessionId); // For continue conversation
+  const reviewSessionId = useCodeReviewContinueStore((s) => s.review.sessionId); // Present only when this provider can continue in chat
   const minimize = useCodeReviewContinueStore((s) => s.minimize);
   const isMinimized = useCodeReviewContinueStore((s) => s.isMinimized);
   const requestContinue = useCodeReviewContinueStore((s) => s.requestContinue);

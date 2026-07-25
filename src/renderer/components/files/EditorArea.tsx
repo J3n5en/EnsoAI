@@ -39,6 +39,7 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/components/ui/menu';
 import { addToast } from '@/components/ui/toast';
 import { useDebouncedSave } from '@/hooks/useDebouncedSave';
 import { useI18n } from '@/i18n';
+import { buildFileBreadcrumbSegments } from '@/lib/fileTreePaths';
 import { toMonacoFileUri } from '@/lib/monacoModelPath';
 import { useActiveSessionId } from '@/stores/agentSessions';
 import type { EditorTab, NavEntry, PendingCursor } from '@/stores/editor';
@@ -379,23 +380,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
     [onSave, activeTabPath, refreshBlame]
   );
 
-  // Calculate breadcrumb segments from active file path
-  const breadcrumbSegments = useMemo(() => {
-    if (!activeTabPath || !rootPath) return [];
-
-    const relativePath = activeTabPath.startsWith(rootPath)
-      ? activeTabPath.slice(rootPath.length).replace(/^\//, '')
-      : activeTabPath;
-
-    if (!relativePath) return [];
-
-    const parts = relativePath.split('/');
-    return parts.map((name, index) => ({
-      name,
-      path: `${rootPath}/${parts.slice(0, index + 1).join('/')}`,
-      isLast: index === parts.length - 1,
-    }));
-  }, [activeTabPath, rootPath]);
+  const breadcrumbSegments = useMemo(
+    () => buildFileBreadcrumbSegments(activeTabPath, rootPath, window.electronAPI.env.platform),
+    [activeTabPath, rootPath]
+  );
 
   // Keep refs in sync with state
   useEffect(() => {

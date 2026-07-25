@@ -13,6 +13,10 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
+        input: {
+          index: path.resolve(__dirname, 'src/main/index.ts'),
+          'pty-helper': path.resolve(__dirname, 'src/main/services/terminal/ptyHelper.ts'),
+        },
         external: ['node-pty', '@parcel/watcher'],
       },
     },

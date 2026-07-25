@@ -2,6 +2,13 @@ import type { AIProvider } from '@shared/types';
 import { create } from 'zustand';
 
 export type ReviewStatus = 'idle' | 'initializing' | 'streaming' | 'complete' | 'error';
+type ContinueConversationProvider = Extract<AIProvider, 'claude-code' | 'cursor-cli'>;
+
+function supportsContinueConversation(
+  provider: AIProvider | null | undefined
+): provider is ContinueConversationProvider {
+  return provider === 'claude-code' || provider === 'cursor-cli';
+}
 
 interface CodeReviewState {
   content: string;
@@ -9,13 +16,13 @@ interface CodeReviewState {
   error: string | null;
   repoPath: string | null;
   reviewId: string | null; // IPC flow control ID (timestamp format)
-  sessionId: string | null; // Claude session ID (UUID) for "Continue Conversation"
+  sessionId: string | null; // Review session token for the providers that still expose "Continue Conversation"
 }
 
 interface ContinueConversationState {
   sessionId: string | null;
   /** AI provider used for the review; used to select agent when switching to chat */
-  provider: AIProvider | null;
+  provider: ContinueConversationProvider | null;
   shouldSwitchToChatTab: boolean;
 }
 
@@ -92,10 +99,11 @@ export const useCodeReviewContinueStore = create<CodeReviewContinueState>((set) 
     })),
 
   requestContinue: (sessionId, provider = null) => {
+    const continueProvider = supportsContinueConversation(provider) ? provider : null;
     set({
       continueConversation: {
         sessionId,
-        provider: provider ?? null,
+        provider: continueProvider,
         shouldSwitchToChatTab: true,
       },
     });
@@ -160,12 +168,12 @@ export async function startCodeReview(
   // Generate reviewId for IPC flow control
   const reviewId = `review-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  // Generate UUID as sessionId for Claude session persistence
-  const sessionId = crypto.randomUUID();
+  // Only providers that still expose "Continue Conversation" need a stored session token.
+  const sessionId = supportsContinueConversation(settings.provider) ? crypto.randomUUID() : null;
 
   // Store both IDs separately
   store.setReviewId(reviewId); // For IPC event filtering
-  store.setSessionId(sessionId); // For "Continue Conversation"
+  store.setSessionId(sessionId); // For "Continue Conversation" when available
 
   const onDataCleanup = window.electronAPI.git.onCodeReviewData((event) => {
     if (event.reviewId !== reviewId) return;
@@ -191,8 +199,7 @@ export async function startCodeReview(
       } else if (currentStatus !== 'error') {
         store.updateReview({ status: 'complete' });
       }
-      // Keep reviewId for "Continue Conversation" feature
-      // It will be cleared when starting a new review or resetting
+      // Keep reviewId until the next review/reset so stale IPC events can still be ignored.
     }
   });
   cleanupFn = onDataCleanup;
@@ -207,7 +214,7 @@ export async function startCodeReview(
       effortLevel: settings.effortLevel,
       language: settings.language ?? '中文',
       reviewId,
-      sessionId, // Pass sessionId for Claude session persistence
+      sessionId: sessionId ?? undefined, // Pass only when this review flow can continue in chat
       prompt: settings.prompt, // Pass custom prompt template
     });
 

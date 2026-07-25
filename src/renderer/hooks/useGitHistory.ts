@@ -1,4 +1,4 @@
-import type { GitLogEntry } from '@shared/types';
+import type { GitGraphLogPage, GitLogEntry } from '@shared/types';
 import { type InfiniteData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 export function useGitHistory(workdir: string | null, initialCount = 20) {
@@ -41,6 +41,36 @@ export function useGitHistoryInfinite(
       }
       return allPages.length * initialCount;
     },
+  });
+}
+
+export function useGitGraphHistoryInfinite(
+  workdir: string | null,
+  initialCount = 20,
+  submodulePath?: string | null
+) {
+  return useInfiniteQuery<GitGraphLogPage, Error, InfiniteData<GitGraphLogPage>>({
+    queryKey: ['git', 'graph-log-infinite', workdir, submodulePath],
+    queryFn: async ({ pageParam }) => {
+      if (!workdir) {
+        return {
+          entries: [],
+          refs: { current: null, remote: null, base: null },
+          mergeBase: null,
+        };
+      }
+      const skip = (pageParam ?? 0) as number;
+      return window.electronAPI.git.getGraphLog(
+        workdir,
+        initialCount,
+        skip,
+        submodulePath || undefined
+      );
+    },
+    enabled: !!workdir,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.entries.length < initialCount ? undefined : allPages.length * initialCount,
   });
 }
 

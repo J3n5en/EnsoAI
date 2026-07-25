@@ -177,6 +177,7 @@ export function migrateSettings(
       persisted.windowsConptyCompatibilityFixEnabled,
       currentState.windowsConptyCompatibilityFixEnabled
     ),
+    codexSessionHistoryButtonEnabled: persisted.codexSessionHistoryButtonEnabled === true,
     editorSettings: {
       ...currentState.editorSettings,
       ...persisted.editorSettings,

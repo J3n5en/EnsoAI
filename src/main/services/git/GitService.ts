@@ -13,6 +13,8 @@ import type {
   GhCliStatus,
   GitBlameLineInfo,
   GitBranch,
+  GitGraphLogPage,
+  GitGraphRef,
   GitLogEntry,
   GitStatus,
   GitSubmodule,
@@ -21,6 +23,12 @@ import type {
 } from '@shared/types';
 import type { SimpleGit, StatusResult } from 'simple-git';
 import { decodeBuffer, detectBinaryFile, gitShow } from './encoding';
+import {
+  getGitGraphRefName,
+  isMissingGitRevisionError,
+  normalizeGitGraphRefs,
+  parseGitGraphReferences,
+} from './gitGraphFormat';
 import { GIT_LOG_PRETTY_FORMAT, parseGitLogOutput } from './gitLogFormat';
 import {
   createGitEnv,
@@ -401,6 +409,89 @@ export class GitService {
       throw error;
     }
     return parseGitLogOutput(result);
+  }
+
+  async getGraphLog(maxCount = 50, skip = 0, submodulePath?: string): Promise<GitGraphLogPage> {
+    const git = this.getGitInstance(submodulePath);
+    const resolveName = async (args: string[]): Promise<string | null> => {
+      try {
+        return (await git.raw(args)).trim() || null;
+      } catch {
+        return null;
+      }
+    };
+    const resolveRequiredRevision = async (id: string): Promise<string | null> => {
+      try {
+        return (await git.raw(['rev-parse', '--verify', id])).trim() || null;
+      } catch (error) {
+        // 空仓库没有可解析的提交；权限、Git 不可用或仓库损坏等错误必须继续抛出。
+        if (isMissingGitRevisionError(error)) return null;
+        throw error;
+      }
+    };
+    const resolveRef = async (id: string | null, required = false): Promise<GitGraphRef | null> => {
+      if (!id) return null;
+      const revision = required
+        ? await resolveRequiredRevision(id)
+        : await resolveName(['rev-parse', '--verify', id]);
+      return revision ? { id, name: getGitGraphRefName(id), revision } : null;
+    };
+
+    // 图表查询当前分支、远程跟踪分支和 VS Code 配置的基准分支。
+    const currentId = (await resolveName(['symbolic-ref', '--quiet', 'HEAD'])) ?? 'HEAD';
+    const remoteId = await resolveName(['rev-parse', '--symbolic-full-name', '@{upstream}']);
+    const baseName = currentId.startsWith('refs/heads/')
+      ? await resolveName([
+          'config',
+          '--get',
+          `branch.${getGitGraphRefName(currentId)}.vscode-merge-base`,
+        ])
+      : null;
+    const baseId = baseName
+      ? await resolveName(['rev-parse', '--symbolic-full-name', baseName])
+      : null;
+    const refs = normalizeGitGraphRefs(
+      await resolveRef(currentId, true),
+      await resolveRef(remoteId),
+      await resolveRef(baseId)
+    );
+    const mergeBase =
+      refs.current && refs.remote && refs.current.revision !== refs.remote.revision
+        ? await resolveName(['merge-base', refs.current.revision, refs.remote.revision])
+        : refs.current?.revision === refs.remote?.revision
+          ? (refs.current?.revision ?? null)
+          : null;
+    const refNames = Array.from(
+      new Set([refs.current?.id, refs.remote?.id, refs.base?.id].filter(Boolean))
+    ) as string[];
+
+    if (refNames.length === 0) return { entries: [], refs, mergeBase: null };
+
+    const options: string[] = [
+      '--parents',
+      '--topo-order',
+      '--decorate=full',
+      `-n${maxCount}`,
+      `--pretty=format:${GIT_LOG_PRETTY_FORMAT}`,
+    ];
+    if (skip > 0) {
+      options.push(`--skip=${skip}`);
+    }
+
+    let result: string;
+    try {
+      result = await git.raw(['log', ...options, ...refNames]);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('does not have any commits yet')) {
+        return { entries: [], refs, mergeBase: null };
+      }
+      throw error;
+    }
+    const entries = parseGitLogOutput(result).map((entry) => ({
+      ...entry,
+      references: parseGitGraphReferences(entry.refs, entry.hash),
+    }));
+    return { entries, refs, mergeBase };
   }
 
   async getBranchHeadInfo(branchName: string): Promise<BranchHeadInfo | null> {

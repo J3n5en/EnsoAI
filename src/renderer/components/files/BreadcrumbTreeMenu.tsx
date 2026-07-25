@@ -1,4 +1,5 @@
 import type { FileEntry } from '@shared/types';
+import { getPathDirname } from '@shared/utils/path';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,6 +11,7 @@ import { getFileIcon, getFileIconColor } from './fileIcons';
 const QUERY_KEYS = {
   FILE_LIST: ['file', 'list'] as const,
 };
+const EMPTY_FILE_ENTRIES: FileEntry[] = [];
 
 interface BreadcrumbTreeMenuProps {
   children: React.ReactNode;
@@ -93,30 +95,21 @@ export function BreadcrumbTreeMenu({
 
   // Determine which directory to list: always show parent directory's contents
   // This ensures clicking any breadcrumb segment shows its sibling items
-  const { listPath } = useMemo(() => {
-    if (!dirPath) return { listPath: dirPath };
-
-    // For all segments (file or directory), show parent directory's contents
-    // This displays siblings at the same level as the clicked segment
-    const parts = dirPath.split('/');
-    parts.pop(); // Remove last segment (file or directory name)
-    const parentDir = parts.join('/');
-
-    // If no parent, use the path itself (root level)
-    return {
-      listPath: parentDir || dirPath,
-    };
+  const listPath = useMemo(() => {
+    if (!dirPath) return dirPath;
+    return getPathDirname(dirPath) || dirPath;
   }, [dirPath]);
 
   // Fetch directory contents - reuse file tree cache by using same queryKey
-  const { data: entries = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: [...QUERY_KEYS.FILE_LIST, listPath],
     queryFn: async () => {
-      if (!listPath || !rootPath) return [];
+      if (!listPath || !rootPath) return EMPTY_FILE_ENTRIES;
       return window.electronAPI.file.list(listPath, rootPath);
     },
     enabled: !!listPath && !!rootPath,
   });
+  const entries = data ?? EMPTY_FILE_ENTRIES;
 
   // Build tree: current directory + its children, reset when listPath changes
   useEffect(() => {

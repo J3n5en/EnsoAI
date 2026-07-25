@@ -2,6 +2,7 @@ import type { AgentStopNotificationData } from '@shared/types/agent';
 import { TASK_COMPLETION_MARKER } from '@shared/types/agent';
 import { useCallback, useEffect, useRef } from 'react';
 import type { ResolvedAgent } from '@/components/todo/useEnabledAgents';
+import { findAgentSessionById } from '@/lib/agentSessionMatch';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import { INITIAL_AUTO_EXECUTE, useTodoStore } from '@/stores/todo';
 
@@ -10,9 +11,7 @@ import { INITIAL_AUTO_EXECUTE, useTodoStore } from '@/stores/todo';
  * Claude CLI session ID (from hooks) differs from our UI session ID (crypto.randomUUID).
  */
 function findUISessionId(cliSessionId: string): string | undefined {
-  const session = useAgentSessionsStore
-    .getState()
-    .sessions.find((s) => s.sessionId === cliSessionId || s.id === cliSessionId);
+  const session = findAgentSessionById(useAgentSessionsStore.getState().sessions, cliSessionId);
   return session?.id;
 }
 

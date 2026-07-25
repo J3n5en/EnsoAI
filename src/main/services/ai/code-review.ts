@@ -7,7 +7,7 @@ export interface CodeReviewOptions extends CommonAICLIOptions {
   workdir: string;
   language: string;
   reviewId: string;
-  sessionId?: string; // Support session preservation for "Continue Conversation"
+  sessionId?: string; // Optional review session token for providers that still support "Continue Conversation"
   prompt?: string; // Custom prompt template
   onChunk: (chunk: string) => void;
   onComplete: () => void;
@@ -343,8 +343,8 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
     outputFormat,
     // Claude CLI honors this; Cursor CLI does not (see providers.buildCursorArgs). Cursor may edit/run git.
     disallowedTools: ['"Bash(git:*)"', 'Edit'],
-    sessionId: options.sessionId, // Pass sessionId for session preservation
-    preserveSession: !!options.sessionId, // Preserve session if sessionId is provided
+    sessionId: options.sessionId, // Forward when this review flow can later continue in chat
+    preserveSession: !!options.sessionId, // Only preserve CLI session state when a review session token was provided
   });
 
   activeReviews.set(reviewId, { proc, kill });

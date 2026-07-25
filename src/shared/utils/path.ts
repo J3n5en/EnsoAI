@@ -19,6 +19,23 @@ export function normalizePath(p: string): string {
 }
 
 /**
+ * Get the parent directory while preserving the original path separator style.
+ * Handles Windows, POSIX, and drive-root paths.
+ */
+export function getPathDirname(inputPath: string): string {
+  const separatorIndex = Math.max(inputPath.lastIndexOf('/'), inputPath.lastIndexOf('\\'));
+  if (separatorIndex < 0) return '';
+  if (separatorIndex === 0) return inputPath[0] ?? '';
+
+  // Windows 盘符根目录需要保留末尾分隔符，例如 D:\file.txt -> D:\。
+  if (separatorIndex === 2 && /^[a-zA-Z]:[\\/]/.test(inputPath)) {
+    return inputPath.slice(0, 3);
+  }
+
+  return inputPath.slice(0, separatorIndex);
+}
+
+/**
  * Safely join path segments and normalize
  * Automatically handles extra slashes
  * @param segments Path segments to join

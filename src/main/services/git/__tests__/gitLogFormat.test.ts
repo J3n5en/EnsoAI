@@ -9,7 +9,7 @@ describe('parseGitLogOutput', () => {
   it('parses subject and full message separately for multi-line commits', () => {
     const output =
       [
-        'abc123',
+        'abc123 parent456',
         '2026-03-24 10:38:45 +0800',
         'Test Author',
         'test@example.com',
@@ -26,6 +26,7 @@ describe('parseGitLogOutput', () => {
     expect(parseGitLogOutput(output)).toEqual([
       {
         hash: 'abc123',
+        parents: ['parent456'],
         date: '2026-03-24 10:38:45 +0800',
         author_name: 'Test Author',
         author_email: 'test@example.com',
@@ -36,7 +37,7 @@ describe('parseGitLogOutput', () => {
           '- 增加预下载开关',
           '- 修复历史回显不完整',
         ].join('\n'),
-        refs: 'main, origin/main',
+        refs: 'HEAD -> main, origin/main',
       },
     ]);
   });
@@ -56,6 +57,7 @@ describe('parseGitLogOutput', () => {
     expect(parseGitLogOutput(output)).toEqual([
       {
         hash: 'def456',
+        parents: [],
         date: '2026-03-24 11:00:00 +0800',
         author_name: 'EnsoAI Team',
         author_email: 'admin@j3n5en.com',

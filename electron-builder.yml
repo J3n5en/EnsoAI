@@ -76,10 +76,11 @@ files:
 
 asar: true
 asarUnpack:
+  - "out/main/pty-helper.js"
+  - "out/main/chunks/ptyHelperProtocol-*.js"
   - "node_modules/@vscode/ripgrep/bin/**"
   - "node_modules/sqlite3/**"
-  - "node_modules/node-pty/build/Release/*.node"
-  - "node_modules/node-pty/build/Release/conpty/**"
+  - "node_modules/node-pty/**"
 compression: maximum
 
 mac:

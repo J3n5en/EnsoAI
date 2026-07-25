@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   GIT_BRANCH_CHECKOUT: 'git:branch:checkout',
   GIT_BRANCH_HEAD_INFO: 'git:branch:head-info',
   GIT_LOG: 'git:log',
+  GIT_GRAPH_LOG: 'git:graph-log',
   GIT_DIFF: 'git:diff',
   GIT_INIT: 'git:init',
   GIT_FILE_CHANGES: 'git:file-changes',
@@ -114,6 +115,11 @@ export const IPC_CHANNELS = {
   AGENT_PRE_TOOL_USE_NOTIFICATION: 'agent:preToolUse:notification',
   AGENT_USER_PROMPT_NOTIFICATION: 'agent:userPrompt:notification',
   AGENT_STATUS_UPDATE: 'agent:status:update',
+
+  // Codex History
+  CODEX_HISTORY_GET: 'codex-history:get',
+  CODEX_HISTORY_FIND_LATEST: 'codex-history:findLatest',
+  CODEX_HISTORY_LIST_SESSIONS: 'codex-history:listSessions',
 
   // App
   APP_GET_PATH: 'app:getPath',

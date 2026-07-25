@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useI18n } from '@/i18n';
+import { GIT_FILE_STATUS_COLOR } from '@/lib/gitFileStatus';
 import { cn } from '@/lib/utils';
 import { useCodeReviewContinueStore } from '@/stores/codeReviewContinue';
 import { useSettingsStore } from '@/stores/settings';
@@ -49,16 +50,6 @@ const statusIcons: Record<FileChangeStatus, React.ElementType> = {
   C: FilePlus,
   U: FilePlus, // Untracked - new file not yet staged
   X: FileWarning, // Conflict
-};
-
-const statusColors: Record<FileChangeStatus, string> = {
-  M: 'text-orange-500',
-  A: 'text-green-500',
-  D: 'text-red-500',
-  R: 'text-blue-500',
-  C: 'text-blue-500',
-  U: 'text-green-500', // Untracked shows as green (new file)
-  X: 'text-purple-500', // Conflict
 };
 
 function FileItem({
@@ -93,10 +84,15 @@ function FileItem({
       tabIndex={0}
       title={file.path}
     >
-      <Icon className={cn('h-4 w-4 shrink-0', isSelected ? '' : statusColors[file.status])} />
+      <Icon
+        className={cn('h-4 w-4 shrink-0', isSelected ? '' : GIT_FILE_STATUS_COLOR[file.status])}
+      />
 
       <span
-        className={cn('shrink-0 font-mono text-xs', isSelected ? '' : statusColors[file.status])}
+        className={cn(
+          'shrink-0 font-mono text-xs',
+          isSelected ? '' : GIT_FILE_STATUS_COLOR[file.status]
+        )}
       >
         {file.status}
       </span>

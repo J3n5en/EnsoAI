@@ -31,8 +31,14 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator } from '@/components/ui/menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FileTreeNode } from '@/hooks/useFileTree';
 import { useI18n } from '@/i18n';
+import { GIT_FILE_STATUS_COLOR, GIT_FILE_STATUS_LABEL } from '@/lib/gitFileStatus';
 import { cn } from '@/lib/utils';
 import { getFileIcon, getFileIconColor } from './fileIcons';
+import {
+  type FileTreeGitDecoration,
+  type FileTreeGitDecorationMaps,
+  getFileTreeGitDecoration,
+} from './fileTreeGitDecorations';
 
 const DRAG_CONFIRM_STORAGE_KEY = 'file-tree-drag-confirm-disabled';
 const PASTE_CONFLICT_STORAGE_KEY = 'file-tree-paste-conflict-disabled';
@@ -46,6 +52,7 @@ interface FileOperation {
 
 interface FileTreeProps {
   tree: FileTreeNode[];
+  gitDecorations?: FileTreeGitDecorationMaps;
   expandedPaths: Set<string>;
   onToggleExpand: (path: string) => void;
   onFileClick: (path: string) => void;
@@ -69,6 +76,7 @@ interface FileTreeProps {
 
 export function FileTree({
   tree,
+  gitDecorations,
   expandedPaths,
   onToggleExpand,
   onFileClick,
@@ -1179,6 +1187,7 @@ export function FileTree({
           <FileTreeNodeComponent
             key={node.path}
             node={node}
+            gitDecorations={gitDecorations}
             depth={0}
             expandedPaths={expandedPaths}
             selectedPath={selectedNode?.path ?? null}
@@ -1348,6 +1357,7 @@ export function FileTree({
 
 interface FileTreeNodeComponentProps {
   node: FileTreeNode;
+  gitDecorations?: FileTreeGitDecorationMaps;
   depth: number;
   expandedPaths: Set<string>;
   selectedPath: string | null;
@@ -1413,8 +1423,26 @@ function getCompactedNode(
   return { displayName, actualNode: current, compactedChain };
 }
 
+function formatGitDecorationTitle(
+  path: string,
+  decoration: FileTreeGitDecoration | undefined,
+  t: ReturnType<typeof useI18n>['t']
+): string {
+  if (!decoration) return path;
+
+  const parts = [path, t('Git status')];
+  if (decoration.unstaged) {
+    parts.push(`${t('Unstaged')}: ${t(GIT_FILE_STATUS_LABEL[decoration.unstaged])}`);
+  }
+  if (decoration.staged) {
+    parts.push(`${t('Staged')}: ${t(GIT_FILE_STATUS_LABEL[decoration.staged])}`);
+  }
+  return parts.join(' · ');
+}
+
 function FileTreeNodeComponent({
   node,
+  gitDecorations,
   depth,
   expandedPaths,
   selectedPath,
@@ -1453,6 +1481,10 @@ function FileTreeNodeComponent({
 
   // 获取压缩后的节点信息
   const { displayName, actualNode, compactedChain } = getCompactedNode(node, expandedPaths);
+  const gitDecoration = gitDecorations
+    ? getFileTreeGitDecoration(actualNode.path, actualNode.isDirectory, gitDecorations)
+    : undefined;
+  const nodeTitle = formatGitDecorationTitle(actualNode.path, gitDecoration, t);
   const isExpanded = expandedPaths.has(actualNode.path);
   const isSelected = selectedPath === actualNode.path;
 
@@ -1721,8 +1753,22 @@ function FileTreeNodeComponent({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className="min-w-0 flex-1 truncate" title={actualNode.path}>
+          <span className="min-w-0 flex-1 truncate" title={nodeTitle}>
             {displayName}
+          </span>
+        )}
+        {!isEditing && (
+          <span
+            className={cn(
+              'mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center font-mono text-xs font-semibold',
+              gitDecoration ? GIT_FILE_STATUS_COLOR[gitDecoration.primary] : 'invisible'
+            )}
+            title={gitDecoration ? nodeTitle : undefined}
+            role="img"
+            aria-label={gitDecoration ? nodeTitle : undefined}
+            aria-hidden={gitDecoration ? undefined : true}
+          >
+            {gitDecoration?.primary ?? 'M'}
           </span>
         )}
       </div>
@@ -1837,6 +1883,7 @@ function FileTreeNodeComponent({
               <FileTreeNodeComponent
                 key={child.path}
                 node={child}
+                gitDecorations={gitDecorations}
                 depth={depth + 1}
                 expandedPaths={expandedPaths}
                 selectedPath={selectedPath}

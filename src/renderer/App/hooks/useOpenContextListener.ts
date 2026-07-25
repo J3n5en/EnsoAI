@@ -1,6 +1,7 @@
 import type { OpenContext } from '@shared/types';
 import { getPathBasename } from '@shared/utils/path';
 import { useEffect, useRef } from 'react';
+import { findAgentSessionById } from '@/lib/agentSessionMatch';
 import { useAgentSessionsStore } from '@/stores/agentSessions';
 import type { Repository, TabId } from '../constants';
 import { pathsEqual } from '../storage';
@@ -52,7 +53,7 @@ export function useOpenContextListener({
     // Branch A: sessionId-driven (preferred).
     if (sessionId) {
       const sessions = useAgentSessionsStore.getState().sessions;
-      const session = sessions.find((s) => s.id === sessionId || s.sessionId === sessionId);
+      const session = findAgentSessionById(sessions, sessionId);
 
       if (session) {
         const existingRepo = repositories.find((r) => pathsEqual(r.path, session.repoPath));

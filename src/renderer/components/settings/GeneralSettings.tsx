@@ -112,6 +112,8 @@ export function GeneralSettings() {
     setTerminalScrollback,
     windowsConptyCompatibilityFixEnabled,
     setWindowsConptyCompatibilityFixEnabled,
+    codexSessionHistoryButtonEnabled,
+    setCodexSessionHistoryButtonEnabled,
     shellConfig,
     setShellConfig,
     agentNotificationEnabled,
@@ -1055,6 +1057,21 @@ export function GeneralSettings() {
           </div>
         </div>
       )}
+
+      {/* Codex session history button */}
+      <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+        <span className="text-sm font-medium">{t('Codex session history button')}</span>
+        <div className="flex min-w-0 items-center justify-between gap-4">
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            {t('Show the history button in Codex tabs to view local Codex conversation records.')}
+          </p>
+          <Switch
+            className="shrink-0"
+            checked={codexSessionHistoryButtonEnabled}
+            onCheckedChange={setCodexSessionHistoryButtonEnabled}
+          />
+        </div>
+      </div>
 
       {/* Copy on Selection */}
       <div className="grid grid-cols-[100px_1fr] items-center gap-4">

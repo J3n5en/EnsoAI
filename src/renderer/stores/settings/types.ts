@@ -309,6 +309,7 @@ export interface SettingsState {
   terminalScrollback: number;
   terminalOptionIsMeta: boolean;
   windowsConptyCompatibilityFixEnabled: boolean;
+  codexSessionHistoryButtonEnabled: boolean;
   copyOnSelection: boolean;
 
   // Keybindings
@@ -426,6 +427,7 @@ export interface SettingsState {
   setTerminalScrollback: (scrollback: number) => void;
   setTerminalOptionIsMeta: (enabled: boolean) => void;
   setWindowsConptyCompatibilityFixEnabled: (enabled: boolean) => void;
+  setCodexSessionHistoryButtonEnabled: (enabled: boolean) => void;
   setCopyOnSelection: (enabled: boolean) => void;
 
   // Setters - Keybindings

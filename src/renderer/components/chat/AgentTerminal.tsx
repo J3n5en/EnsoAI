@@ -8,6 +8,8 @@ import { useFileDrop } from '@/hooks/useFileDrop';
 import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
+import { buildAgentCliInvocation } from '@/lib/agentCommand';
+import { resolveTerminalNewline } from '@/lib/terminalNewline';
 import { type OutputState, useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
 import { useTerminalWriteStore } from '@/stores/terminalWrite';
@@ -17,6 +19,7 @@ interface AgentTerminalProps {
   id?: string; // Terminal session ID (UI key)
   cwd?: string;
   sessionId?: string; // Claude session ID for --session-id/--resume (falls back to id)
+  cliSessionId?: string; // Real CLI session id, used by Codex resume and history lookup
   agentId?: string; // Agent ID (e.g., 'claude', 'codex', 'gemini')
   agentCommand?: string;
   customPath?: string; // custom absolute path to the agent CLI
@@ -36,6 +39,7 @@ interface AgentTerminalProps {
   onEnhancedInputOpenChange?: (open: boolean) => void;
   onInitialized?: () => void;
   onActivated?: () => void;
+  onCliSessionIdDetected?: (cliSessionId: string) => void;
   /** Called when session is activated with the current line content (for session name fallback). */
   onActivatedWithFirstLine?: (line: string) => void;
   onExit?: () => void;
@@ -57,11 +61,15 @@ const ACTIVITY_POLL_INITIAL_MS = 1000; // Initial poll interval
 const ACTIVITY_POLL_MAX_MS = 8000; // Max poll interval after backoff
 const IDLE_CONFIRMATION_COUNT = 2; // Require 2 consecutive idle polls before marking as idle
 const RECENT_OUTPUT_TIMEOUT_MS = 3000; // If output received within this time, consider still active
+const CODEX_SESSION_DETECT_RETRY_MS = 1000;
+const CODEX_SESSION_DETECT_TIMEOUT_MS = 15000;
+const CODEX_SESSION_DETECT_STARTED_AFTER_PADDING_MS = 5000;
 
 export function AgentTerminal({
   id,
   cwd,
   sessionId,
+  cliSessionId,
   agentId = 'claude',
   agentCommand = 'claude',
   customPath,
@@ -77,6 +85,7 @@ export function AgentTerminal({
   onEnhancedInputOpenChange,
   onInitialized,
   onActivated,
+  onCliSessionIdDetected,
   onActivatedWithFirstLine,
   onExit,
   onTerminalTitleChange,
@@ -130,6 +139,11 @@ export function AgentTerminal({
   const dataSinceEnterRef = useRef(0); // Track output volume since last Enter.
   const currentTitleRef = useRef<string>(''); // Terminal title from OSC escape sequence.
   const tmuxSessionNameRef = useRef<string | null>(null); // Tmux session name for cleanup.
+  const codexStartTimeRef = useRef<number | null>(null);
+  const codexSessionDetectIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const codexSessionDetectDeadlineRef = useRef<number | null>(null);
+  const codexSessionDetectInFlightRef = useRef(false);
+  const cliSessionIdRef = useRef<string | undefined>(cliSessionId);
 
   // Output state tracking for global store
   const outputStateRef = useRef<OutputState>('idle');
@@ -147,6 +161,76 @@ export function AgentTerminal({
 
   const terminalSessionId = id ?? sessionId;
   const resumeSessionId = sessionId ?? id;
+
+  const stopCodexSessionDetection = useCallback(() => {
+    if (codexSessionDetectIntervalRef.current) {
+      clearInterval(codexSessionDetectIntervalRef.current);
+      codexSessionDetectIntervalRef.current = null;
+    }
+    codexSessionDetectDeadlineRef.current = null;
+  }, []);
+
+  const startCodexSessionDetection = useCallback(() => {
+    if (agentCommand !== 'codex' || cliSessionIdRef.current || codexStartTimeRef.current === null) {
+      return;
+    }
+    if (codexSessionDetectIntervalRef.current) {
+      return;
+    }
+
+    codexSessionDetectDeadlineRef.current = Date.now() + CODEX_SESSION_DETECT_TIMEOUT_MS;
+
+    const detectOnce = () => {
+      if (
+        agentCommand !== 'codex' ||
+        cliSessionIdRef.current ||
+        codexStartTimeRef.current === null
+      ) {
+        stopCodexSessionDetection();
+        return;
+      }
+
+      const deadline = codexSessionDetectDeadlineRef.current;
+      if (deadline !== null && Date.now() > deadline) {
+        stopCodexSessionDetection();
+        return;
+      }
+
+      if (codexSessionDetectInFlightRef.current) {
+        return;
+      }
+
+      codexSessionDetectInFlightRef.current = true;
+      // Codex 启动时 JSONL 可能稍晚才写好；查空不能马上放弃，短时间内继续找真实会话 ID。
+      window.electronAPI.codexHistory
+        .findLatest({
+          cwd,
+          startedAfter: codexStartTimeRef.current - CODEX_SESSION_DETECT_STARTED_AFTER_PADDING_MS,
+        })
+        .then((result) => {
+          if (!result?.sessionId || cliSessionIdRef.current) {
+            return;
+          }
+          cliSessionIdRef.current = result.sessionId;
+          onCliSessionIdDetected?.(result.sessionId);
+          stopCodexSessionDetection();
+        })
+        .catch(() => {})
+        .finally(() => {
+          codexSessionDetectInFlightRef.current = false;
+        });
+    };
+
+    detectOnce();
+    codexSessionDetectIntervalRef.current = setInterval(detectOnce, CODEX_SESSION_DETECT_RETRY_MS);
+  }, [agentCommand, cwd, onCliSessionIdDetected, stopCodexSessionDetection]);
+
+  useEffect(() => {
+    cliSessionIdRef.current = cliSessionId;
+    if (cliSessionId) {
+      stopCodexSessionDetection();
+    }
+  }, [cliSessionId, stopCodexSessionDetection]);
 
   // Use external control if provided, otherwise use local state.
   // IMPORTANT: `externalEnhancedInputOpen` can be false, so we must check `undefined` rather than truthiness.
@@ -273,8 +357,9 @@ export function AgentTerminal({
         clearRuntimeState(terminalSessionId);
       }
       stopActivityPolling();
+      stopCodexSessionDetection();
     };
-  }, [terminalSessionId, clearRuntimeState, stopActivityPolling]);
+  }, [terminalSessionId, clearRuntimeState, stopActivityPolling, stopCodexSessionDetection]);
 
   // Cleanup tmux session on unmount
   useEffect(() => {
@@ -292,32 +377,16 @@ export function AgentTerminal({
       return { command: undefined, env: undefined };
     }
 
-    // Use custom path if provided, otherwise use agentCommand
-    const effectiveCommand = customPath || agentCommand;
-
-    const supportsSession = agentCommand?.startsWith('claude') || agentCommand === 'cursor-agent';
-    // Only Claude CLI supports --ide; Cursor CLI does not (errors with "unknown option '--ide'")
-    const supportIde = agentCommand?.startsWith('claude');
-    const effectiveSessionId = resumeSessionId;
-
-    // Build agent args: cursor-agent and initialized claude use --resume; otherwise --session-id
-    let agentArgs: string[] = [];
-    if (supportsSession && effectiveSessionId) {
-      if (agentCommand === 'cursor-agent' || initialized) {
-        agentArgs = ['--resume', effectiveSessionId];
-      } else {
-        agentArgs = ['--session-id', effectiveSessionId];
-      }
-    }
-
-    if (supportIde) {
-      agentArgs.push('--ide');
-    }
-
-    // Append custom args if provided
-    if (customArgs) {
-      agentArgs.push(customArgs);
-    }
+    const invocation = buildAgentCliInvocation({
+      agentCommand,
+      initialized,
+      uiSessionId: resumeSessionId,
+      cliSessionId,
+      customPath,
+      customArgs,
+    });
+    const effectiveCommand = invocation.executable;
+    const agentArgs = [...invocation.args];
 
     // Append initial prompt as CLI positional argument (for auto-execute)
     // Most CLI agents (claude, codex, gemini, etc.) accept a prompt as trailing argument
@@ -452,6 +521,7 @@ export function AgentTerminal({
     agentCommand,
     customPath,
     customArgs,
+    cliSessionId,
     initialPrompt,
     resumeSessionId,
     initialized,
@@ -498,6 +568,15 @@ export function AgentTerminal({
 
       // Track output volume since last Enter
       dataSinceEnterRef.current += data.length;
+
+      if (
+        agentCommand === 'codex' &&
+        !cliSessionId &&
+        codexStartTimeRef.current !== null &&
+        dataSinceEnterRef.current > 100
+      ) {
+        startCodexSessionDetection();
+      }
 
       // === Output state tracking for UI indicator ===
       // Only track when we're monitoring (after user pressed Enter)
@@ -557,7 +636,9 @@ export function AgentTerminal({
       initialized,
       onInitialized,
       agentCommand,
+      cliSessionId,
       cwd,
+      startCodexSessionDetection,
       agentNotificationEnabled,
       agentNotificationDelay,
       claudeCodeIntegration.stopHookEnabled,
@@ -576,15 +657,14 @@ export function AgentTerminal({
     [onTerminalTitleChange]
   );
 
-  // Handle Shift+Enter for newline (Ctrl+J / LF for all agents)
-  // Also detect Enter key press to mark session as activated
+  // Handle Shift+Enter for newline and detect Enter key press to mark the session as activated.
   // biome-ignore lint/correctness/useExhaustiveDependencies: terminal is accessed via try-catch for safety and defined after this callback
   const handleCustomKey = useCallback(
     (event: KeyboardEvent, ptyId: string, getCurrentLine?: () => string | null) => {
-      // Handle Shift+Enter for newline - must be before keydown check to block both keydown and keypress
-      if (event.key === 'Enter' && event.shiftKey) {
-        if (event.type === 'keydown') {
-          window.electronAPI.terminal.write(ptyId, '\x0a');
+      const newline = resolveTerminalNewline(event, agentCommand === 'codex');
+      if (newline.handled) {
+        if (newline.data !== null) {
+          window.electronAPI.terminal.write(ptyId, newline.data);
         }
         return false;
       }
@@ -704,6 +784,7 @@ export function AgentTerminal({
       cwd,
       setActivityState,
       agentId,
+      agentCommand,
       claudeCodeIntegration.enhancedInputEnabled,
       enhancedInputOpen,
       setEnhancedInputOpen,
@@ -724,6 +805,13 @@ export function AgentTerminal({
     // Force activation when there's a pending command (auto-execute)
     return isActive || hasPendingCommand;
   }, [environment, hapiGlobalInstalled, isActive, resolvedShell, hasPendingCommand]);
+
+  useEffect(() => {
+    if (agentCommand !== 'codex' || !effectiveIsActive || codexStartTimeRef.current !== null) {
+      return;
+    }
+    codexStartTimeRef.current = Date.now();
+  }, [agentCommand, effectiveIsActive]);
 
   const {
     containerRef,
@@ -748,6 +836,7 @@ export function AgentTerminal({
     onSplit,
     onMerge,
     canMerge,
+    filterTerminalColorQueryResponses: agentCommand === 'codex',
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);

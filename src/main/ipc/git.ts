@@ -76,6 +76,14 @@ export function registerGitHandlers(): void {
     }
   );
 
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_GRAPH_LOG,
+    async (_, workdir: string, maxCount?: number, skip?: number, submodulePath?: string) => {
+      const git = getGitService(workdir);
+      return git.getGraphLog(maxCount, skip, submodulePath);
+    }
+  );
+
   ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (_, workdir: string) => {
     const git = getGitService(workdir);
     return git.getBranches();
@@ -264,14 +272,14 @@ export function registerGitHandlers(): void {
         reasoningEffort?: string;
         language?: string;
         reviewId: string;
-        sessionId?: string; // Support sessionId for "Continue Conversation"
+        sessionId?: string; // Optional review session token for providers that still support "Continue Conversation"
         prompt?: string; // Custom prompt template
         // AI Performance settings from renderer
         bareEnabled?: boolean;
         effortEnabled?: boolean;
         effortLevel?: string;
       }
-    ): Promise<{ success: boolean; error?: string; sessionId?: string }> => {
+    ): Promise<{ success: boolean; error?: string }> => {
       const resolved = validateWorkdir(workdir);
       const sender = event.sender;
 
@@ -286,7 +294,7 @@ export function registerGitHandlers(): void {
           : undefined,
         language: options.language ?? '中文',
         reviewId: options.reviewId,
-        sessionId: options.sessionId, // Pass sessionId for session preservation
+        sessionId: options.sessionId, // Forward when this review flow can later continue in chat
         prompt: options.prompt, // Pass custom prompt template
         onChunk: (chunk) => {
           if (!sender.isDestroyed()) {
@@ -317,7 +325,7 @@ export function registerGitHandlers(): void {
         },
       });
 
-      return { success: true, sessionId: options.sessionId };
+      return { success: true };
     }
   );
 

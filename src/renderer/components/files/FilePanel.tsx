@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { FileCode } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { normalizePath } from '@/App/storage';
 import { GlobalSearchDialog, type SearchMode } from '@/components/search';
 import {
@@ -24,6 +24,7 @@ declare global {
 
 import { useEditor } from '@/hooks/useEditor';
 import { useFileTree } from '@/hooks/useFileTree';
+import { useFileChanges } from '@/hooks/useSourceControl';
 import { useWindowFocus } from '@/hooks/useWindowFocus';
 import { useActiveSessionId } from '@/stores/agentSessions';
 import { type TerminalKeybinding, useSettingsStore } from '@/stores/settings';
@@ -35,6 +36,7 @@ import {
   FileConflictDialog,
 } from './FileConflictDialog';
 import { FileTree } from './FileTree';
+import { buildFileTreeGitDecorations } from './fileTreeGitDecorations';
 import { NewItemDialog } from './NewItemDialog';
 import type { UnsavedChangesChoice } from './UnsavedChangesDialog';
 
@@ -78,6 +80,18 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
     resolveConflictsAndContinue,
     revealFile,
   } = useFileTree({ rootPath, enabled: !!rootPath, isActive });
+  const { data: fileChangesResult } = useFileChanges(rootPath ?? null, isActive);
+  const gitDecorations = useMemo(
+    () =>
+      rootPath
+        ? buildFileTreeGitDecorations(
+            rootPath,
+            fileChangesResult?.changes ?? [],
+            window.electronAPI.env.platform
+          )
+        : undefined,
+    [fileChangesResult?.changes, rootPath]
+  );
 
   const {
     tabs,
@@ -754,6 +768,7 @@ export function FilePanel({ rootPath, isActive = false }: FilePanelProps) {
           >
             <FileTree
               tree={tree}
+              gitDecorations={gitDecorations}
               expandedPaths={expandedPaths}
               onToggleExpand={toggleExpand}
               onFileClick={handleFileClick}

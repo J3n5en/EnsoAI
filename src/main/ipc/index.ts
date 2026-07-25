@@ -1,5 +1,9 @@
 import { stopAllCodeReviews } from '../services/ai';
 import { disposeClaudeIdeBridge } from '../services/claude/ClaudeIdeBridge';
+import {
+  cleanupCodexHistoryIndex,
+  cleanupCodexHistoryIndexSync,
+} from '../services/codex/CodexHistoryService';
 import { autoUpdaterService } from '../services/updater/AutoUpdater';
 import { webInspectorServer } from '../services/webInspector';
 import { cleanupExecInPtys, cleanupExecInPtysSync } from '../utils/shell';
@@ -12,6 +16,7 @@ import {
 import { registerClaudeConfigHandlers } from './claudeConfig';
 import { registerClaudeProviderHandlers } from './claudeProvider';
 import { registerCliHandlers } from './cli';
+import { registerCodexHistoryHandlers } from './codexHistory';
 import { registerDialogHandlers } from './dialog';
 import {
   cleanupTempFiles,
@@ -48,6 +53,7 @@ export function registerIpcHandlers(): void {
   registerFileHandlers();
   registerTerminalHandlers();
   registerAgentHandlers();
+  registerCodexHistoryHandlers();
   registerDialogHandlers();
   registerAppHandlers();
   registerCliHandlers();
@@ -104,6 +110,8 @@ export async function cleanupAllResources(): Promise<void> {
       safeRun(() => stopAllFileWatchers(), 'fileWatchers'),
       // Claude completions file watcher
       safeRun(() => stopClaudeCompletionsWatchers(), 'claudeCompletions'),
+      // Codex 会话索引和文件监听
+      safeRun(() => cleanupCodexHistoryIndex(), 'codexHistoryIndex'),
       // Temp files
       safeRun(() => cleanupTempFiles(), 'tempFiles'),
     ]),
@@ -162,6 +170,9 @@ export function cleanupAllResourcesSync(): void {
 
   // Dispose Claude IDE Bridge (sync)
   disposeClaudeIdeBridge();
+
+  // 清理 Codex 会话监听的定时器和服务引用
+  cleanupCodexHistoryIndexSync();
 
   // Close Todo database (sync — just nulls the reference, no async callback)
   cleanupTodoSync();

@@ -123,6 +123,7 @@ function getInitialState() {
       platform,
       osRelease
     ),
+    codexSessionHistoryButtonEnabled: false,
     copyOnSelection: false,
 
     // Keybindings
@@ -285,6 +286,8 @@ export const useSettingsStore = create<SettingsState>()(
       setTerminalOptionIsMeta: (terminalOptionIsMeta) => set({ terminalOptionIsMeta }),
       setWindowsConptyCompatibilityFixEnabled: (windowsConptyCompatibilityFixEnabled) =>
         set({ windowsConptyCompatibilityFixEnabled }),
+      setCodexSessionHistoryButtonEnabled: (codexSessionHistoryButtonEnabled) =>
+        set({ codexSessionHistoryButtonEnabled }),
       setCopyOnSelection: (copyOnSelection) => set({ copyOnSelection }),
 
       // Keybinding Setters

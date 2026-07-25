@@ -43,16 +43,20 @@ export function registerTerminalHandlers(): void {
       ensureTerminalCleanup(event.sender);
       const ownerId = event.sender.id;
 
-      const id = ptyManager.create(
+      const id = await ptyManager.create(
         options,
-        (data) => {
+        (ptyId, data) => {
           if (!event.sender.isDestroyed()) {
-            event.sender.send(IPC_CHANNELS.TERMINAL_DATA, { id, data });
+            event.sender.send(IPC_CHANNELS.TERMINAL_DATA, { id: ptyId, data });
           }
         },
-        (exitCode, signal) => {
+        (ptyId, exitCode, signal) => {
           if (!event.sender.isDestroyed()) {
-            event.sender.send(IPC_CHANNELS.TERMINAL_EXIT, { id, exitCode, signal });
+            event.sender.send(IPC_CHANNELS.TERMINAL_EXIT, {
+              id: ptyId,
+              exitCode,
+              signal,
+            });
           }
         },
         ownerId

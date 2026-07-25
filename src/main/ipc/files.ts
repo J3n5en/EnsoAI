@@ -72,7 +72,9 @@ interface FileWatcherEntry {
   normalizedDirPath: string;
   ownerId: number;
   state: FileWatcherState;
+  subscriberCount: number;
   startPromise: Promise<void>;
+  stopPromise: Promise<void> | null;
   cleanup: () => void;
 }
 
@@ -108,24 +110,45 @@ function untrackWatcherKey(ownerId: number, key: string): void {
   }
 }
 
-async function stopWatcherEntry(key: string): Promise<void> {
+async function stopWatcherEntry(key: string, force = false): Promise<void> {
   const entry = watchers.get(key);
-  if (!entry || entry.state === 'stopping') {
+  if (!entry) {
     return;
   }
 
+  if (entry.state === 'stopping') {
+    await entry.stopPromise;
+    return;
+  }
+
+  // 同一窗口内可能有多个界面共用监听，普通停止只移除当前使用者。
+  if (!force && entry.subscriberCount > 1) {
+    entry.subscriberCount -= 1;
+    return;
+  }
+
+  entry.subscriberCount = 0;
   entry.state = 'stopping';
   entry.cleanup();
-  await entry.startPromise.catch(() => {});
-  await entry.watcher.stop().catch(() => {});
 
-  watchers.delete(key);
-  untrackWatcherKey(entry.ownerId, key);
+  const stopPromise = (async () => {
+    await entry.startPromise.catch(() => {});
+    await entry.watcher.stop().catch(() => {});
+
+    // 旧监听停止完成后，不能删除同一个键下后来创建的新监听。
+    if (watchers.get(key) === entry) {
+      watchers.delete(key);
+      untrackWatcherKey(entry.ownerId, key);
+    }
+  })();
+
+  entry.stopPromise = stopPromise;
+  await stopPromise;
 }
 
 async function stopFileWatchersForOwner(ownerId: number): Promise<void> {
   const keys = Array.from(ownerWatcherKeys.get(ownerId) ?? []);
-  await Promise.all(keys.map((key) => stopWatcherEntry(key)));
+  await Promise.all(keys.map((key) => stopWatcherEntry(key, true)));
 }
 
 function ensureFileOwnerCleanup(sender: WebContents): void {
@@ -153,7 +176,7 @@ export async function stopWatchersInDirectory(dirPath: string): Promise<void> {
       entry.normalizedDirPath === normalizedDir ||
       entry.normalizedDirPath.startsWith(`${normalizedDir}/`)
     ) {
-      await stopWatcherEntry(key);
+      await stopWatcherEntry(key, true);
     }
   }
 }
@@ -360,8 +383,22 @@ export function registerFileHandlers(): void {
     const ownerId = event.sender.id;
     const watcherKey = getWatcherKey(ownerId, dirPath);
 
-    if (watchers.has(watcherKey)) {
-      return;
+    // 停止期间到达的启动请求必须等待旧监听退出，再重新检查当前记录。
+    while (true) {
+      const existingEntry = watchers.get(watcherKey);
+      if (!existingEntry) {
+        break;
+      }
+
+      if (existingEntry.state !== 'stopping') {
+        existingEntry.subscriberCount += 1;
+        if (existingEntry.state === 'starting') {
+          await existingEntry.startPromise;
+        }
+        return;
+      }
+
+      await existingEntry.stopPromise;
     }
 
     const MAX_PENDING_EVENTS = 5000;
@@ -386,7 +423,7 @@ export function registerFileHandlers(): void {
       flushTimer = setTimeout(() => {
         flushTimer = null;
         if (event.sender.isDestroyed()) {
-          void stopWatcherEntry(watcherKey);
+          void stopWatcherEntry(watcherKey, true);
           return;
         }
 
@@ -409,7 +446,7 @@ export function registerFileHandlers(): void {
 
     const watcher = new FileWatcher(dirPath, (eventType, changedPath) => {
       if (event.sender.isDestroyed()) {
-        void stopWatcherEntry(watcherKey);
+        void stopWatcherEntry(watcherKey, true);
         return;
       }
 
@@ -433,7 +470,9 @@ export function registerFileHandlers(): void {
       normalizedDirPath: normalizeWatchedPath(dirPath),
       ownerId,
       state: 'starting',
+      subscriberCount: 1,
       startPromise: Promise.resolve(),
+      stopPromise: null,
       cleanup,
     };
     watchers.set(watcherKey, entry);
@@ -445,14 +484,16 @@ export function registerFileHandlers(): void {
     try {
       await startPromise;
 
-      if (!watchers.has(watcherKey)) {
+      if (watchers.get(watcherKey) !== entry) {
         await watcher.stop().catch(() => {});
         return;
       }
 
-      entry.state = 'running';
+      if (entry.state === 'starting') {
+        entry.state = 'running';
+      }
     } catch (error) {
-      await stopWatcherEntry(watcherKey);
+      await stopWatcherEntry(watcherKey, true);
       throw error;
     }
   });
@@ -663,7 +704,7 @@ async function copyDirectory(source: string, target: string): Promise<void> {
 
 export async function stopAllFileWatchers(): Promise<void> {
   const keys = Array.from(watchers.keys());
-  await Promise.all(keys.map((key) => stopWatcherEntry(key)));
+  await Promise.all(keys.map((key) => stopWatcherEntry(key, true)));
   ownerWatcherKeys.clear();
   fileResourceOwners.clear();
 }
