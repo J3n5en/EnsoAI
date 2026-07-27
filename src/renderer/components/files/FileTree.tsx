@@ -31,6 +31,7 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator } from '@/components/ui/menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FileTreeNode } from '@/hooks/useFileTree';
 import { useI18n } from '@/i18n';
+import { getFileTreeRelativePath } from '@/lib/fileTreePaths';
 import { GIT_FILE_STATUS_COLOR, GIT_FILE_STATUS_LABEL } from '@/lib/gitFileStatus';
 import { cn } from '@/lib/utils';
 import { getFileIcon, getFileIconColor } from './fileIcons';
@@ -385,7 +386,7 @@ export function FileTree({
   const handleCopyRelativePath = useCallback(
     (path: string) => {
       if (!rootPath) return;
-      const relativePath = path.startsWith(rootPath) ? path.substring(rootPath.length + 1) : path;
+      const relativePath = getFileTreeRelativePath(path, rootPath, window.electronAPI.env.platform);
       navigator.clipboard.writeText(relativePath);
     },
     [rootPath]

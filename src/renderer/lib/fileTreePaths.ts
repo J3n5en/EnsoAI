@@ -48,6 +48,37 @@ export function mapPathToFileTree(
   return `${normalizedRoot}${separator}${relativePath}`;
 }
 
+export function getFileTreeRelativePath(
+  inputPath: string,
+  rootPath: string,
+  platform: FileTreePlatform
+): string {
+  if (platform !== 'win32') {
+    const rootWithoutTrailingSlashes = rootPath.replace(/\/+$/, '');
+    const normalizedRoot = rootWithoutTrailingSlashes || '/';
+    const caseSensitive = usesCaseSensitivePaths(rootPath, platform);
+    const rootKey = caseSensitive ? normalizedRoot : normalizedRoot.toLowerCase();
+    const inputKey = caseSensitive ? inputPath : inputPath.toLowerCase();
+
+    if (inputKey === rootKey) return '';
+
+    // POSIX 中反斜杠可以属于文件名，只有正斜杠是目录分隔符。
+    const rootPrefix = normalizedRoot.endsWith('/') ? normalizedRoot : `${normalizedRoot}/`;
+    const rootPrefixKey = caseSensitive ? rootPrefix : rootPrefix.toLowerCase();
+    return inputKey.startsWith(rootPrefixKey) ? inputPath.slice(rootPrefix.length) : inputPath;
+  }
+
+  const treePath = mapPathToFileTree(inputPath, rootPath, platform);
+  if (!treePath) return inputPath;
+
+  const normalizedRoot = trimTrailingPathSeparators(normalizePath(rootPath));
+  const normalizedTreePath = trimTrailingPathSeparators(normalizePath(treePath));
+  const relativePath = normalizedTreePath.slice(normalizedRoot.length).replace(/^\/+/, '');
+
+  // Windows 比较时统一路径格式，复制时沿用完整路径的分隔符。
+  return inputPath.includes('\\') ? relativePath.replace(/\//g, '\\') : relativePath;
+}
+
 export function buildFileBreadcrumbSegments(
   activeFilePath: string | null | undefined,
   rootPath: string | undefined,
