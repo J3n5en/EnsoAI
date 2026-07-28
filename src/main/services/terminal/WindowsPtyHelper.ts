@@ -98,6 +98,7 @@ export function startWindowsPtyHelper(
   let cancelPromise: Promise<void> | null = null;
   let session: WindowsPtyHelperSession | null = null;
   const pendingData: string[] = [];
+  let pendingExit: { exitCode: number; signal?: number } | null = null;
 
   let resolveReady: (value: WindowsPtyHelperSession) => void = () => undefined;
   let rejectReady: (reason?: unknown) => void = () => undefined;
@@ -116,6 +117,10 @@ export function startWindowsPtyHelper(
     if (cancelPromise) return cancelPromise;
     cancelPromise = (async () => {
       if (timer) clearTimeout(timer);
+      if (!readySettled) {
+        readySettled = true;
+        rejectReady(new Error('PTY helper creation cancelled'));
+      }
       cleanupChildListeners();
       try {
         if (child.connected) child.disconnect();
@@ -137,6 +142,10 @@ export function startWindowsPtyHelper(
 
   const notifyExit = (exitCode: number, signal?: number): void => {
     if (exitNotified) return;
+    if (!activated) {
+      pendingExit ??= { exitCode, signal };
+      return;
+    }
     exitNotified = true;
     callbacks.onExit(exitCode, signal);
   };
@@ -158,6 +167,11 @@ export function startWindowsPtyHelper(
           if (activated) return;
           activated = true;
           for (const data of pendingData.splice(0)) callbacks.onData(data);
+          if (pendingExit) {
+            const { exitCode, signal } = pendingExit;
+            pendingExit = null;
+            notifyExit(exitCode, signal);
+          }
         };
 
         session = {

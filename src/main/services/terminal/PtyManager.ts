@@ -231,6 +231,7 @@ interface WindowsHelperPtySession extends BasePtySession {
   kind: 'windows-helper';
   helper: WindowsPtyHelperSession;
   ptyPid: number;
+  activated: boolean;
 }
 
 type PtySession = LocalPtySession | WindowsHelperPtySession;
@@ -241,6 +242,12 @@ interface PendingWindowsSession {
   cancelled: boolean;
   cancel: () => Promise<void>;
   exitEvent?: { exitCode: number; signal?: number };
+}
+
+interface PendingLocalSession {
+  ownerId: number | null;
+  cwd: string;
+  cancelled: boolean;
 }
 
 export interface PtyManagerDependencies {
@@ -383,6 +390,7 @@ export function getEnhancedPath(): string {
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
   private pendingWindowsSessions = new Map<string, PendingWindowsSession>();
+  private pendingLocalSessions = new Map<string, PendingLocalSession>();
   private counter = 0;
   private readonly platform: NodeJS.Platform;
   private readonly loadNodePty: () => Promise<typeof import('node-pty')>;
@@ -487,10 +495,14 @@ export class PtyManager {
       );
     }
 
-    const pty = await this.loadNodePty();
-    let ptyProcess: IPty;
+    const pendingLocal: PendingLocalSession = { ownerId, cwd, cancelled: false };
+    this.pendingLocalSessions.set(id, pendingLocal);
 
     try {
+      const pty = await this.loadNodePty();
+      if (pendingLocal.cancelled) throw new Error('PTY creation cancelled');
+
+      let ptyProcess: IPty;
       const spawnOptions = {
         name: 'xterm-256color',
         cols: options.cols || 80,
@@ -498,79 +510,88 @@ export class PtyManager {
         cwd,
         env: baseEnv,
       };
-      ptyProcess = pty.spawn(shell, args, spawnOptions);
-    } catch (error) {
-      if (!isWindows) {
-        const fallbackShell = findFallbackShell();
-        if (fallbackShell !== shell) {
-          const fallbackArgs = adjustArgsForShell(fallbackShell, args);
-          console.warn(`[pty] Failed to spawn ${shell}. Falling back to ${fallbackShell}`);
-          ptyProcess = pty.spawn(fallbackShell, fallbackArgs, {
-            name: 'xterm-256color',
-            cols: options.cols || 80,
-            rows: options.rows || 24,
-            cwd,
-            env: {
-              ...process.env,
-              ...getProxyEnvVars(),
-              ...options.env,
-              TERM: 'xterm-256color',
-              COLORTERM: 'truecolor',
-              // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
-              LANG: process.env.LANG || 'en_US.UTF-8',
-              LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
-            } as Record<string, string>,
-          });
-          shell = fallbackShell;
-          args = fallbackArgs;
+      try {
+        ptyProcess = pty.spawn(shell, args, spawnOptions);
+      } catch (error) {
+        if (!isWindows) {
+          const fallbackShell = findFallbackShell();
+          if (fallbackShell !== shell) {
+            const fallbackArgs = adjustArgsForShell(fallbackShell, args);
+            console.warn(`[pty] Failed to spawn ${shell}. Falling back to ${fallbackShell}`);
+            ptyProcess = pty.spawn(fallbackShell, fallbackArgs, {
+              name: 'xterm-256color',
+              cols: options.cols || 80,
+              rows: options.rows || 24,
+              cwd,
+              env: {
+                ...process.env,
+                ...getProxyEnvVars(),
+                ...options.env,
+                TERM: 'xterm-256color',
+                COLORTERM: 'truecolor',
+                // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
+                LANG: process.env.LANG || 'en_US.UTF-8',
+                LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
+              } as Record<string, string>,
+            });
+            shell = fallbackShell;
+            args = fallbackArgs;
+          } else {
+            throw error;
+          }
         } else {
           throw error;
         }
-      } else {
-        throw error;
       }
+
+      if (pendingLocal.cancelled) {
+        killProcessTree(ptyProcess);
+        throw new Error('PTY creation cancelled');
+      }
+
+      const dataDisposable = ptyProcess.onData((data) => {
+        onData(id, data);
+      });
+
+      // Store session first so onExit callback can access it
+      const session: LocalPtySession = {
+        kind: 'local',
+        pty: ptyProcess,
+        cwd,
+        ownerId,
+        onExit,
+        dataDisposable,
+      };
+      this.sessions.set(id, session);
+
+      const exitDisposable = ptyProcess.onExit(({ exitCode, signal }) => {
+        // Read onExit from session to allow it to be replaced during cleanup
+        const currentSession = this.sessions.get(id);
+        if (currentSession?.kind !== 'local') return;
+        const exitHandler = currentSession.onExit;
+
+        // Dispose subscriptions promptly to release native resources (node-pty TSFN)
+        try {
+          currentSession.dataDisposable.dispose();
+        } catch {
+          // Ignore
+        }
+        try {
+          currentSession.exitDisposable?.dispose();
+        } catch {
+          // Ignore
+        }
+
+        this.sessions.delete(id);
+        this.activityCache.delete(id);
+        exitHandler?.(id, exitCode, signal);
+      });
+      session.exitDisposable = exitDisposable;
+
+      return id;
+    } finally {
+      this.pendingLocalSessions.delete(id);
     }
-
-    const dataDisposable = ptyProcess.onData((data) => {
-      onData(id, data);
-    });
-
-    // Store session first so onExit callback can access it
-    const session: LocalPtySession = {
-      kind: 'local',
-      pty: ptyProcess,
-      cwd,
-      ownerId,
-      onExit,
-      dataDisposable,
-    };
-    this.sessions.set(id, session);
-
-    const exitDisposable = ptyProcess.onExit(({ exitCode, signal }) => {
-      // Read onExit from session to allow it to be replaced during cleanup
-      const currentSession = this.sessions.get(id);
-      if (currentSession?.kind !== 'local') return;
-      const exitHandler = currentSession.onExit;
-
-      // Dispose subscriptions promptly to release native resources (node-pty TSFN)
-      try {
-        currentSession.dataDisposable.dispose();
-      } catch {
-        // Ignore
-      }
-      try {
-        currentSession.exitDisposable?.dispose();
-      } catch {
-        // Ignore
-      }
-
-      this.sessions.delete(id);
-      this.activityCache.delete(id);
-      exitHandler?.(id, exitCode, signal);
-    });
-    session.exitDisposable = exitDisposable;
-
-    return id;
   }
 
   private async createWindowsSession(
@@ -654,13 +675,12 @@ export class PtyManager {
         kind: 'windows-helper',
         helper: helperSession,
         ptyPid: helperSession.ptyPid,
+        activated: false,
         cwd,
         ownerId,
         onExit,
       };
       this.sessions.set(id, session);
-      // 主进程登记会话后再激活首批输出，避免启动数据丢失。
-      helperSession.activate();
 
       const pendingExit = pending.exitEvent;
       if (pendingExit) {
@@ -673,6 +693,15 @@ export class PtyManager {
       this.pendingWindowsSessions.delete(id);
       throw error;
     }
+  }
+
+  activate(id: string): void {
+    const session = this.sessions.get(id);
+    if (!session || session.kind !== 'windows-helper' || session.activated) return;
+
+    // 等渲染进程注册输出和退出监听器后，再释放 Windows helper 的启动事件。
+    session.activated = true;
+    session.helper.activate();
   }
 
   write(id: string, data: string): void {
@@ -693,6 +722,12 @@ export class PtyManager {
     const pending = this.pendingWindowsSessions.get(id);
     if (pending) {
       void pending.cancel();
+      return;
+    }
+
+    const pendingLocal = this.pendingLocalSessions.get(id);
+    if (pendingLocal) {
+      pendingLocal.cancelled = true;
       return;
     }
 
@@ -728,6 +763,12 @@ export class PtyManager {
     const pending = this.pendingWindowsSessions.get(id);
     if (pending) {
       await pending.cancel();
+      return;
+    }
+
+    const pendingLocal = this.pendingLocalSessions.get(id);
+    if (pendingLocal) {
+      pendingLocal.cancelled = true;
       return;
     }
 
@@ -789,6 +830,9 @@ export class PtyManager {
     for (const pending of this.pendingWindowsSessions.values()) {
       void pending.cancel();
     }
+    for (const pending of this.pendingLocalSessions.values()) {
+      pending.cancelled = true;
+    }
     const ids = Array.from(this.sessions.keys());
     for (const id of ids) {
       this.destroy(id);
@@ -798,6 +842,9 @@ export class PtyManager {
   destroyByOwner(ownerId: number): void {
     for (const pending of this.pendingWindowsSessions.values()) {
       if (pending.ownerId === ownerId) void pending.cancel();
+    }
+    for (const pending of this.pendingLocalSessions.values()) {
+      if (pending.ownerId === ownerId) pending.cancelled = true;
     }
     const ids = Array.from(this.sessions.entries())
       .filter(([, session]) => session.ownerId === ownerId)
@@ -813,10 +860,14 @@ export class PtyManager {
    */
   async destroyAllAndWait(timeout = 3000): Promise<void> {
     const pending = Array.from(this.pendingWindowsSessions.values());
+    const pendingLocal = Array.from(this.pendingLocalSessions.values());
+    for (const session of pendingLocal) session.cancelled = true;
     const ids = Array.from(this.sessions.keys());
-    if (ids.length === 0 && pending.length === 0) return;
+    if (ids.length === 0 && pending.length === 0 && pendingLocal.length === 0) return;
 
-    console.log(`[pty] Destroying ${ids.length + pending.length} PTY sessions...`);
+    console.log(
+      `[pty] Destroying ${ids.length + pending.length + pendingLocal.length} PTY sessions...`
+    );
     await Promise.all([
       ...pending.map((session) => session.cancel()),
       ...ids.map((id) => this.destroyAndWait(id, timeout)),
@@ -833,6 +884,15 @@ export class PtyManager {
         normalizedCwd.startsWith(`${normalizedWorkdir}/`)
       ) {
         void pending.cancel();
+      }
+    }
+    for (const pending of this.pendingLocalSessions.values()) {
+      const normalizedCwd = pending.cwd.replace(/\\/g, '/').toLowerCase();
+      if (
+        normalizedCwd === normalizedWorkdir ||
+        normalizedCwd.startsWith(`${normalizedWorkdir}/`)
+      ) {
+        pending.cancelled = true;
       }
     }
     const ids = Array.from(this.sessions.entries())

@@ -113,6 +113,29 @@ describe('WindowsPtyHelper', () => {
     expect(callbacks.onData).toHaveBeenCalledWith('before-ready');
   });
 
+  it('buffers exit until activation and flushes data before exit', async () => {
+    const child = new FakeIpcChild(7008);
+    const events: string[] = [];
+    const callbacks: WindowsPtyHelperCallbacks = {
+      onData: (data) => events.push(`data:${data}`),
+      onExit: (exitCode) => events.push(`exit:${exitCode}`),
+    };
+    const attempt = startWindowsPtyHelper(createRequest(), callbacks, {
+      fork: () => asChildProcess(child),
+      killProcessTreeAsync: vi.fn().mockResolvedValue(undefined),
+    });
+
+    emitEvent(child, { type: 'created', ptyPid: 7009 });
+    const session = await attempt.ready;
+    emitEvent(child, { type: 'data', data: 'startup' });
+    emitEvent(child, { type: 'exit', exitCode: 1 });
+
+    expect(events).toEqual([]);
+    session.activate();
+    session.activate();
+    expect(events).toEqual(['data:startup', 'exit:1']);
+  });
+
   it('cancels a helper that never reports created', async () => {
     vi.useFakeTimers();
     const child = new FakeIpcChild(7003);
@@ -128,6 +151,23 @@ describe('WindowsPtyHelper', () => {
     await rejection;
     expect(killProcessTreeAsync).toHaveBeenCalledWith(7003);
     vi.useRealTimers();
+  });
+
+  it('rejects ready when creation is cancelled before created', async () => {
+    const child = new FakeIpcChild(7010);
+    const killProcessTreeAsync = vi.fn().mockResolvedValue(undefined);
+    const attempt = startWindowsPtyHelper(createRequest(), createCallbacks(), {
+      fork: () => asChildProcess(child),
+      killProcessTreeAsync,
+    });
+    const rejection = expect(attempt.ready).rejects.toThrow('PTY helper creation cancelled');
+
+    await attempt.cancel();
+    await attempt.cancel();
+
+    await rejection;
+    expect(killProcessTreeAsync).toHaveBeenCalledOnce();
+    expect(killProcessTreeAsync).toHaveBeenCalledWith(7010);
   });
 
   it('sends destroy and waits for the helper to exit', async () => {

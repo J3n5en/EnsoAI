@@ -686,6 +686,18 @@ export function useXterm({
       });
       exitCleanupRef.current = exitCleanup;
 
+      try {
+        await window.electronAPI.terminal.activate(ptyId);
+      } catch (error) {
+        cleanup();
+        exitCleanup();
+        cleanupRef.current = null;
+        exitCleanupRef.current = null;
+        ptyIdRef.current = null;
+        await window.electronAPI.terminal.destroy(ptyId).catch(() => {});
+        throw error;
+      }
+
       // Handle input
       terminal.onData((data) => {
         const ptyInput = filterTerminalColorQueryResponses

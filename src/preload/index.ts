@@ -412,6 +412,7 @@ const electronAPI = {
   terminal: {
     create: (options?: TerminalCreateOptions): Promise<string> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_CREATE, options),
+    activate: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_ACTIVATE, id),
     write: (id: string, data: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_WRITE, id, data),
     resize: (id: string, size: TerminalResizeOptions): Promise<void> =>

@@ -101,6 +101,7 @@ export const IPC_CHANNELS = {
 
   // Terminal
   TERMINAL_CREATE: 'terminal:create',
+  TERMINAL_ACTIVATE: 'terminal:activate',
   TERMINAL_WRITE: 'terminal:write',
   TERMINAL_RESIZE: 'terminal:resize',
   TERMINAL_DESTROY: 'terminal:destroy',

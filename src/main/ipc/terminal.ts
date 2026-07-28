@@ -66,6 +66,10 @@ export function registerTerminalHandlers(): void {
     }
   );
 
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_ACTIVATE, async (_, id: string) => {
+    ptyManager.activate(id);
+  });
+
   ipcMain.handle(IPC_CHANNELS.TERMINAL_WRITE, async (_, id: string, data: string) => {
     ptyManager.write(id, data);
   });

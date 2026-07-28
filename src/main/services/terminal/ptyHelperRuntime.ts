@@ -16,7 +16,7 @@ export interface PtyRuntimeProcess {
 
 export interface PtyHelperRuntimeDependencies {
   spawn(shell: string, args: string[], options: PtyHelperSpawnOptions): PtyRuntimeProcess;
-  send(event: PtyHelperEvent): void;
+  send(event: PtyHelperEvent): Promise<void> | void;
   exit(code: number): void;
 }
 
@@ -35,6 +35,18 @@ export function createPtyHelperRuntime(
   let helperExited = false;
   let destroyRequested = false;
   const pendingData: string[] = [];
+  let sendQueue = Promise.resolve();
+
+  const sendEvent = (event: PtyHelperEvent): void => {
+    // 子进程 IPC 是异步的；记录所有发送任务，退出前统一等待完成。
+    let currentSend: Promise<void>;
+    try {
+      currentSend = Promise.resolve(dependencies.send(event));
+    } catch {
+      currentSend = Promise.resolve();
+    }
+    sendQueue = Promise.all([sendQueue, currentSend.catch(() => undefined)]).then(() => undefined);
+  };
 
   const disposeSubscriptions = (): void => {
     try {
@@ -55,12 +67,12 @@ export function createPtyHelperRuntime(
     if (helperExited) return;
     helperExited = true;
     disposeSubscriptions();
-    dependencies.exit(code);
+    void sendQueue.finally(() => dependencies.exit(code));
   };
 
   const handleCreate = (command: Extract<PtyHelperCommand, { type: 'create' }>): void => {
     if (createStarted) {
-      dependencies.send({ type: 'error', message: 'PTY has already been created' });
+      sendEvent({ type: 'error', message: 'PTY has already been created' });
       return;
     }
     createStarted = true;
@@ -75,7 +87,7 @@ export function createPtyHelperRuntime(
           pendingData.push(data);
           return;
         }
-        dependencies.send({ type: 'data', data });
+        sendEvent({ type: 'data', data });
       });
       exitDisposable = spawned.onExit(({ exitCode, signal }) => {
         if (helperExited) return;
@@ -83,17 +95,17 @@ export function createPtyHelperRuntime(
           exitHelper(0);
           return;
         }
-        dependencies.send({ type: 'exit', exitCode, signal });
+        sendEvent({ type: 'exit', exitCode, signal });
         exitHelper(exitCode);
       });
 
-      dependencies.send({ type: 'created', ptyPid: spawned.pid });
+      sendEvent({ type: 'created', ptyPid: spawned.pid });
       creationReported = true;
       for (const data of pendingData.splice(0)) {
-        dependencies.send({ type: 'data', data });
+        sendEvent({ type: 'data', data });
       }
     } catch (error) {
-      dependencies.send({ type: 'error', message: formatPtyHelperError(error) });
+      sendEvent({ type: 'error', message: formatPtyHelperError(error) });
       exitHelper(1);
     }
   };
@@ -128,7 +140,7 @@ export function createPtyHelperRuntime(
             return;
         }
       } catch (error) {
-        dependencies.send({ type: 'error', message: formatPtyHelperError(error) });
+        sendEvent({ type: 'error', message: formatPtyHelperError(error) });
       }
     },
   };

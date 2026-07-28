@@ -78,7 +78,9 @@ describe('ptyHelperRuntime', () => {
         queueMicrotask(() => fakePty.emitData('hello'));
         return fakePty;
       },
-      send: (event) => sent.push(event),
+      send: (event) => {
+        sent.push(event);
+      },
       exit: vi.fn(),
     });
 
@@ -111,6 +113,8 @@ describe('ptyHelperRuntime', () => {
     expect(exit).not.toHaveBeenCalled();
 
     fakePty.emitExit(0);
+    await Promise.resolve();
+    await Promise.resolve();
     expect(exit).toHaveBeenCalledWith(0);
   });
 
@@ -120,20 +124,61 @@ describe('ptyHelperRuntime', () => {
     const exit = vi.fn();
     const runtime = createPtyHelperRuntime({
       spawn: () => fakePty,
-      send: (event) => sent.push(event),
+      send: (event) => {
+        sent.push(event);
+      },
       exit,
     });
 
     await runtime.handle(createCommand());
     fakePty.emitExit(7, 9);
     fakePty.emitExit(7, 9);
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(sent).toEqual([
       { type: 'created', ptyPid: 8125 },
       { type: 'exit', exitCode: 7, signal: 9 },
     ]);
-    expect(exit).toHaveBeenCalledTimes(1);
-    expect(exit).toHaveBeenCalledWith(7);
+    await vi.waitFor(() => {
+      expect(exit).toHaveBeenCalledTimes(1);
+      expect(exit).toHaveBeenCalledWith(7);
+    });
+  });
+
+  it('waits for the final IPC event before exiting the helper', async () => {
+    let finishSendingExit: (() => void) | undefined;
+    const exitSent = new Promise<void>((resolve) => {
+      finishSendingExit = resolve;
+    });
+    const sent: PtyHelperEvent[] = [];
+    const fakePty = createFakePty(8126);
+    const exit = vi.fn();
+    const runtime = createPtyHelperRuntime({
+      spawn: () => fakePty,
+      send: (event) => {
+        sent.push(event);
+        return event.type === 'exit' ? exitSent : Promise.resolve();
+      },
+      exit,
+    });
+
+    await runtime.handle(createCommand());
+    await Promise.resolve();
+    fakePty.emitData('last output');
+    fakePty.emitExit(0);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sent).toEqual([
+      { type: 'created', ptyPid: 8126 },
+      { type: 'data', data: 'last output' },
+      { type: 'exit', exitCode: 0, signal: undefined },
+    ]);
+    expect(exit).not.toHaveBeenCalled();
+
+    finishSendingExit?.();
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
   });
 
   it('reports spawn errors and refuses duplicate create commands', async () => {
@@ -142,7 +187,9 @@ describe('ptyHelperRuntime', () => {
       spawn: () => {
         throw new Error('spawn failed');
       },
-      send: (event) => spawnErrorEvents.push(event),
+      send: (event) => {
+        spawnErrorEvents.push(event);
+      },
       exit: vi.fn(),
     });
 
@@ -152,7 +199,9 @@ describe('ptyHelperRuntime', () => {
     const duplicateEvents: PtyHelperEvent[] = [];
     const runtime = createPtyHelperRuntime({
       spawn: () => createFakePty(),
-      send: (event) => duplicateEvents.push(event),
+      send: (event) => {
+        duplicateEvents.push(event);
+      },
       exit: vi.fn(),
     });
 

@@ -2,10 +2,19 @@ import * as pty from 'node-pty';
 import { formatPtyHelperError, isPtyHelperCommand, type PtyHelperEvent } from './ptyHelperProtocol';
 import { createPtyHelperRuntime } from './ptyHelperRuntime';
 
-function send(event: PtyHelperEvent): void {
-  if (process.connected) {
-    process.send?.(event);
-  }
+function send(event: PtyHelperEvent): Promise<void> {
+  return new Promise((resolve) => {
+    if (!process.connected || !process.send) {
+      resolve();
+      return;
+    }
+
+    try {
+      process.send(event, () => resolve());
+    } catch {
+      resolve();
+    }
+  });
 }
 
 const runtime = createPtyHelperRuntime({
@@ -16,7 +25,7 @@ const runtime = createPtyHelperRuntime({
 
 process.on('message', (message: unknown) => {
   if (!isPtyHelperCommand(message)) {
-    send({ type: 'error', message: 'Invalid PTY helper command' });
+    void send({ type: 'error', message: 'Invalid PTY helper command' });
     return;
   }
   void runtime.handle(message);
@@ -27,8 +36,7 @@ process.once('disconnect', () => {
 });
 
 function reportFatalError(error: unknown): void {
-  send({ type: 'error', message: formatPtyHelperError(error) });
-  process.exit(1);
+  void send({ type: 'error', message: formatPtyHelperError(error) }).finally(() => process.exit(1));
 }
 
 process.once('uncaughtException', reportFatalError);

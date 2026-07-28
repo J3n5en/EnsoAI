@@ -87,6 +87,10 @@ describe('PtyManager Windows helper integration', () => {
     const id = await pending;
     manager.write(id, 'echo ready\r');
     expect(session.write).toHaveBeenCalledWith('echo ready\r');
+    expect(session.activate).not.toHaveBeenCalled();
+
+    manager.activate(id);
+    manager.activate(id);
     expect(session.activate).toHaveBeenCalledTimes(1);
   });
 
