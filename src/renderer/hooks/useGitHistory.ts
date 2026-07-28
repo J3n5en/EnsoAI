@@ -47,7 +47,8 @@ export function useGitHistoryInfinite(
 export function useGitGraphHistoryInfinite(
   workdir: string | null,
   initialCount = 20,
-  submodulePath?: string | null
+  submodulePath?: string | null,
+  enabled = true
 ) {
   return useInfiniteQuery<GitGraphLogPage, Error, InfiniteData<GitGraphLogPage>>({
     queryKey: ['git', 'graph-log-infinite', workdir, submodulePath],
@@ -67,7 +68,7 @@ export function useGitGraphHistoryInfinite(
         submodulePath || undefined
       );
     },
-    enabled: !!workdir,
+    enabled: enabled && !!workdir,
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       lastPage.entries.length < initialCount ? undefined : allPages.length * initialCount,

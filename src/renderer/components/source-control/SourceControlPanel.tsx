@@ -278,7 +278,7 @@ export function SourceControlPanel({
     isFetchingNextPage: graphIsFetchingNextPage,
     fetchNextPage: fetchGraphNextPage,
     refetch: refetchGraphCommits,
-  } = useGitGraphHistoryInfinite(rootPath ?? null, 20);
+  } = useGitGraphHistoryInfinite(rootPath ?? null, 20, undefined, historyView === 'graph');
 
   const {
     data: submoduleGraphCommitsData,
@@ -290,7 +290,8 @@ export function SourceControlPanel({
   } = useGitGraphHistoryInfinite(
     selectedSubmodulePath ? (rootPath ?? null) : null,
     20,
-    selectedSubmodulePath ?? undefined
+    selectedSubmodulePath ?? undefined,
+    historyView === 'graph'
   );
 
   // Ensure a repository is selected when repositories are available
@@ -311,8 +312,10 @@ export function SourceControlPanel({
     if (isActive && rootPath) {
       refetch();
       refetchCommits();
-      refetchGraphCommits();
-      refetchSubmoduleGraphCommits();
+      if (historyView === 'graph') {
+        refetchGraphCommits();
+        refetchSubmoduleGraphCommits();
+      }
       refetchStatus();
       // Also refresh submodules data
       queryClient.invalidateQueries({ queryKey: ['git', 'submodules', rootPath] });
@@ -333,6 +336,7 @@ export function SourceControlPanel({
     refetchSubmoduleGraphCommits,
     refetchStatus,
     queryClient,
+    historyView,
   ]);
 
   // Git 写操作完成后按根路径刷新全部图表，确保主仓库和子模块不会刷新错对象。

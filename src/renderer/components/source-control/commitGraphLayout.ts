@@ -153,7 +153,12 @@ export function buildCommitGraphLayout(
   refs: GitGraphRefs,
   mergeBase: string | null
 ): GraphRow[] {
-  const knownHashes = new Set(commits.map((commit) => commit.hash));
+  const commitsByHash = new Map<string, GitGraphLogEntry>();
+  for (const commit of commits) {
+    // 保留第一次出现的提交，与原来的 Array.find 行为一致。
+    if (!commitsByHash.has(commit.hash)) commitsByHash.set(commit.hash, commit);
+  }
+  const knownHashes = new Set(commitsByHash.keys());
   const colorMap = createReferenceColorMap(refs);
   const rows: GraphRow[] = [];
   let nextExtraColor: number = GRAPH_COLOR.firstExtra;
@@ -189,7 +194,7 @@ export function buildCommitGraphLayout(
 
     for (let index = firstParentAdded ? 1 : 0; index < commit.parents.length; index++) {
       const parentHash = commit.parents[index];
-      const parentCommit = commits.find((candidate) => candidate.hash === parentHash);
+      const parentCommit = commitsByHash.get(parentHash);
       const color =
         index === 0
           ? getReferenceColor(commit, colorMap)
