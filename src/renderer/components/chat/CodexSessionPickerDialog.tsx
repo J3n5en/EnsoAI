@@ -1,4 +1,4 @@
-import type { CodexSessionListItem } from '@shared/types';
+import type { CodexRuntime, CodexSessionListItem } from '@shared/types';
 import { Check, Copy, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { useI18n } from '@/i18n';
 import { copyTextToClipboard } from '@/lib/clipboard';
+import { normalizeCliSessionId } from '@/lib/cliSessionId';
+import { canSubmitCodexManualSession } from '@/lib/codexSessionManualBinding';
 import { cn } from '@/lib/utils';
 
 const CODEX_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,9 +23,16 @@ const CODEX_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 interface CodexSessionPickerDialogProps {
   open: boolean;
   cwd: string | undefined;
+  runtime?: CodexRuntime;
+  wslDistro?: string;
   initialSessionId?: string | undefined;
   onOpenChange: (open: boolean) => void;
-  onSelectSessionId: (sessionId: string) => void;
+  onSelectSession: (selection: CodexSessionSelection) => void;
+}
+
+export interface CodexSessionSelection {
+  sessionId: string;
+  wslDistro?: string;
 }
 
 function formatSessionTime(session: CodexSessionListItem): string {
@@ -35,29 +44,40 @@ function formatSessionTime(session: CodexSessionListItem): string {
 export function CodexSessionPickerDialog({
   open,
   cwd,
+  runtime,
+  wslDistro,
   initialSessionId,
   onOpenChange,
-  onSelectSessionId,
+  onSelectSession,
 }: CodexSessionPickerDialogProps) {
   const { t } = useI18n();
   const [sessions, setSessions] = useState<CodexSessionListItem[]>([]);
   const [manualSessionId, setManualSessionId] = useState(initialSessionId ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queriedWslDistro, setQueriedWslDistro] = useState(wslDistro);
   const [refreshKey, setRefreshKey] = useState(0);
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
 
-  const normalizedManualSessionId = manualSessionId.trim();
+  const normalizedManualSessionId = normalizeCliSessionId(manualSessionId);
   const canUseManualSessionId = useMemo(
     () => CODEX_SESSION_ID_PATTERN.test(normalizedManualSessionId),
     [normalizedManualSessionId]
   );
+  const canSubmitManualSessionId = canSubmitCodexManualSession({
+    hasValidSessionId: canUseManualSessionId,
+    runtime,
+    loading,
+    hasError: error !== null,
+    wslDistro: queriedWslDistro,
+  });
 
   useEffect(() => {
     if (open) {
       setManualSessionId(initialSessionId ?? '');
+      setQueriedWslDistro(wslDistro);
     }
-  }, [open, initialSessionId]);
+  }, [open, initialSessionId, wslDistro]);
 
   useEffect(() => {
     if (!open) return;
@@ -68,12 +88,18 @@ export function CodexSessionPickerDialog({
 
     // refreshKey 只用于让用户手动重新读取当前目录的 Codex 会话列表。
     void refreshKey;
-    const query = cwd ? { cwd, maxSessions: 50 } : { maxSessions: 50 };
+    const query = {
+      ...(cwd ? { cwd } : {}),
+      ...(runtime ? { runtime } : {}),
+      ...(wslDistro ? { wslDistro } : {}),
+      maxSessions: 50,
+    };
     window.electronAPI.codexHistory
       .listSessions(query)
       .then((result) => {
         if (cancelled) return;
         setSessions(result.sessions);
+        setQueriedWslDistro(result.wslDistro ?? wslDistro);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -88,11 +114,18 @@ export function CodexSessionPickerDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, cwd, refreshKey]);
+  }, [open, cwd, runtime, wslDistro, refreshKey]);
+
+  const handleSelectSession = (sessionId: string, selectedWslDistro?: string) => {
+    onSelectSession({
+      sessionId,
+      ...(selectedWslDistro ? { wslDistro: selectedWslDistro } : {}),
+    });
+  };
 
   const handleManualSubmit = () => {
-    if (!canUseManualSessionId) return;
-    onSelectSessionId(normalizedManualSessionId);
+    if (!canSubmitManualSessionId) return;
+    handleSelectSession(normalizedManualSessionId, queriedWslDistro);
   };
 
   const handleCopySessionId = async (sessionId: string) => {
@@ -161,7 +194,7 @@ export function CodexSessionPickerDialog({
                       <button
                         type="button"
                         className="col-span-2 min-w-0 text-left"
-                        onClick={() => onSelectSessionId(session.sessionId)}
+                        onClick={() => handleSelectSession(session.sessionId, session.wslDistro)}
                       >
                         <span className="block truncate font-medium text-foreground text-sm">
                           {sessionTitle}
@@ -171,7 +204,7 @@ export function CodexSessionPickerDialog({
                       <button
                         type="button"
                         className="mt-1 min-w-0 break-all text-left font-mono text-muted-foreground text-xs"
-                        onClick={() => onSelectSessionId(session.sessionId)}
+                        onClick={() => handleSelectSession(session.sessionId, session.wslDistro)}
                       >
                         {session.sessionId}
                       </button>
@@ -194,7 +227,7 @@ export function CodexSessionPickerDialog({
                         type="button"
                         className="col-span-2 mt-1 flex min-w-0 items-center justify-between gap-3 text-left text-muted-foreground text-xs"
                         title={`${session.cwd || session.filePath} · ${t('Last active')}: ${sessionTime}`}
-                        onClick={() => onSelectSessionId(session.sessionId)}
+                        onClick={() => handleSelectSession(session.sessionId, session.wslDistro)}
                       >
                         <span className="min-w-0 truncate">{session.cwd || session.filePath}</span>
                         <span className="shrink-0 tabular-nums">{sessionTime}</span>
@@ -225,7 +258,7 @@ export function CodexSessionPickerDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('Cancel')}
           </Button>
-          <Button disabled={!canUseManualSessionId} onClick={handleManualSubmit}>
+          <Button disabled={!canSubmitManualSessionId} onClick={handleManualSubmit}>
             <Check className="h-4 w-4" />
             {t('Use session id')}
           </Button>

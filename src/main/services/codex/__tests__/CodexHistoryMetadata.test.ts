@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  extractCodexSessionCreatedAtFromPath,
   normalizeCwd,
   parseCodexSessionMetadata,
   readCodexSessionMetadata,
@@ -34,6 +35,23 @@ const fixtureStat = {
 };
 
 describe('CodexHistoryMetadata', () => {
+  it('extracts the local creation time from a rollout filename', () => {
+    expect(
+      extractCodexSessionCreatedAtFromPath(
+        path.join('root', 'rollout-2026-07-20T09-08-07-01996abf-bc87-7e80-9909-3a86a414f7e8.jsonl')
+      )
+    ).toBe(new Date(2026, 6, 20, 9, 8, 7).getTime());
+    expect(extractCodexSessionCreatedAtFromPath(path.join('root', 'manual.jsonl'))).toBeNull();
+  });
+
+  it('rejects invalid dates in rollout filenames', () => {
+    expect(
+      extractCodexSessionCreatedAtFromPath(
+        path.join('root', 'rollout-2026-02-30T09-08-07-01996abf-bc87-7e80-9909-3a86a414f7e8.jsonl')
+      )
+    ).toBeNull();
+  });
+
   it('uses session id from rollout filename first', () => {
     const fileSessionId = '01996abf-bc87-7e80-9909-3a86a414f7e8';
     const metaSessionId = '11996abf-bc87-7e80-9909-3a86a414f7e8';
@@ -95,7 +113,7 @@ describe('CodexHistoryMetadata', () => {
     expect(metadata).toBeNull();
   });
 
-  it('extracts multiple cwd values, model provider, model, title and timestamp', () => {
+  it('extracts multiple cwd values, originator, session source, model provider, model, title and timestamp', () => {
     const sessionId = '01996abf-bc87-7e80-9909-3a86a414f7e8';
     const filePath = path.join('root', `rollout-2026-07-20T09-00-00-${sessionId}.jsonl`);
     const content = [
@@ -105,6 +123,8 @@ describe('CodexHistoryMetadata', () => {
           cwd: 'D:/work/current',
           timestamp: '2026-07-20T09:00:00.000Z',
           model_provider: 'openai',
+          originator: 'ensoai-terminal-a',
+          source: 'cli',
         },
       }),
       JSON.stringify({
@@ -126,12 +146,31 @@ describe('CodexHistoryMetadata', () => {
     expect(metadata?.cwdValues).toEqual(['D:/work/current', 'D:/work/secondary']);
     expect(metadata?.cwdNormalizedValues).toEqual(['d:/work/current', 'd:/work/secondary']);
     expect(metadata?.cwd).toBe('D:/work/current');
+    expect(metadata?.originator).toBe('ensoai-terminal-a');
+    expect(metadata?.sessionSource).toBe('cli');
     expect(metadata?.model).toBe('gpt-5');
     expect(metadata?.modelProvider).toBe('openai');
     expect(metadata?.title).toBe('真实用户任务标题');
     expect(metadata?.timestamp).toBe('2026-07-20T09:00:00.000Z');
     expect(metadata?.createdAtMs).toBe(Date.parse('2026-07-20T09:00:00.000Z'));
     expect(metadata?.modifiedAtMs).toBe(fixtureStat.mtimeMs);
+  });
+
+  it('does not read originator or session source from non-session metadata records', () => {
+    const sessionId = '01996abf-bc87-7e80-9909-3a86a414f7e8';
+    const filePath = path.join('root', `rollout-2026-07-20T09-00-00-${sessionId}.jsonl`);
+    const content = [
+      JSON.stringify({ type: 'session_meta', payload: { cwd: 'D:/work/current' } }),
+      JSON.stringify({
+        type: 'turn_context',
+        payload: { originator: 'external-terminal', source: 'cli' },
+      }),
+    ].join('\n');
+
+    const metadata = parseCodexSessionMetadata({ filePath, content, fileStat: fixtureStat });
+
+    expect(metadata?.originator).toBeUndefined();
+    expect(metadata?.sessionSource).toBeUndefined();
   });
 
   it('skips AGENTS.md instructions without a project path when extracting title', () => {
@@ -217,5 +256,16 @@ describe('CodexHistoryMetadata', () => {
 
   it('normalizes cwd like the current service behavior', () => {
     expect(normalizeCwd('D:\\work\\current\\')).toBe('d:/work/current');
+  });
+
+  it('preserves case for Linux paths while normalizing Windows paths', () => {
+    expect(normalizeCwd('/home/me/Repo')).toBe('/home/me/Repo');
+    expect(normalizeCwd('C:\\Repo')).toBe('c:/repo');
+    expect(normalizeCwd('\\\\Server\\Share\\Repo')).toBe('//server/share/repo');
+  });
+
+  it('converts WSL UNC paths to their Linux paths', () => {
+    expect(normalizeCwd('\\\\wsl.localhost\\Ubuntu\\home\\user\\Repo')).toBe('/home/user/Repo');
+    expect(normalizeCwd('\\\\wsl$\\Ubuntu\\home\\user\\repo\\')).toBe('/home/user/repo');
   });
 });

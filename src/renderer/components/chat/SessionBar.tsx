@@ -1,4 +1,4 @@
-import type { ClaudeProvider } from '@shared/types';
+import type { ClaudeProvider, CodexRuntime } from '@shared/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Ban,
@@ -24,6 +24,7 @@ import {
   isClaudeProviderMatch,
   markClaudeProviderSwitch,
 } from '@/lib/claudeProvider';
+import type { CodexNativeShell } from '@/lib/codexWslCommand';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 
@@ -34,6 +35,9 @@ export interface Session {
   id: string; // Session's own unique ID
   sessionId?: string; // Optional Claude session ID for --session-id/--resume (defaults to id if not set)
   cliSessionId?: string; // Real CLI session id, used by Codex resume and history lookup
+  codexRuntime?: CodexRuntime; // Codex 实际运行环境，决定历史会话目录。
+  codexWslDistro?: string; // WSL Codex 所在发行版，重启后仍能定位到原会话。
+  codexNativeShell?: CodexNativeShell; // 原生 Codex 创建时实际使用的 shell，恢复时不跟随全局设置变化。
   name: string;
   agentId: string; // which agent CLI to use (e.g., 'claude', 'codex', 'gemini', 'claude-hapi', 'claude-happy')
   agentCommand: string; // the CLI command to run (e.g., 'claude', 'codex')

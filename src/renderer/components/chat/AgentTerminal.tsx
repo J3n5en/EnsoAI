@@ -1,3 +1,4 @@
+import type { CodexRuntime } from '@shared/types';
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -9,6 +10,14 @@ import { useTerminalScrollToBottom } from '@/hooks/useTerminalScrollToBottom';
 import { useXterm } from '@/hooks/useXterm';
 import { useI18n } from '@/i18n';
 import { buildAgentCliInvocation } from '@/lib/agentCommand';
+import {
+  buildAgentCommandForShell,
+  CODEX_ORIGINATOR_ENV,
+  type CodexNativeShell,
+  detectCodexRuntime,
+  quoteInitialPromptForShell,
+  resolveCodexCommandShell,
+} from '@/lib/codexWslCommand';
 import { resolveTerminalNewline } from '@/lib/terminalNewline';
 import { type OutputState, useAgentSessionsStore } from '@/stores/agentSessions';
 import { useSettingsStore } from '@/stores/settings';
@@ -20,6 +29,9 @@ interface AgentTerminalProps {
   cwd?: string;
   sessionId?: string; // Claude session ID for --session-id/--resume (falls back to id)
   cliSessionId?: string; // Real CLI session id, used by Codex resume and history lookup
+  codexRuntime?: CodexRuntime; // Saved runtime used when resuming an existing Codex session.
+  codexWslDistro?: string; // Saved WSL distribution used by Codex resume.
+  codexNativeShell?: CodexNativeShell; // Saved native shell used by Codex resume.
   agentId?: string; // Agent ID (e.g., 'claude', 'codex', 'gemini')
   agentCommand?: string;
   customPath?: string; // custom absolute path to the agent CLI
@@ -39,7 +51,12 @@ interface AgentTerminalProps {
   onEnhancedInputOpenChange?: (open: boolean) => void;
   onInitialized?: () => void;
   onActivated?: () => void;
-  onCliSessionIdDetected?: (cliSessionId: string) => void;
+  onCliSessionIdDetected?: (
+    cliSessionId: string,
+    runtime: CodexRuntime,
+    wslDistro?: string
+  ) => boolean;
+  onCodexRuntimeDetected?: (runtime: CodexRuntime, nativeShell?: CodexNativeShell) => void;
   /** Called when session is activated with the current line content (for session name fallback). */
   onActivatedWithFirstLine?: (line: string) => void;
   onExit?: () => void;
@@ -64,12 +81,16 @@ const RECENT_OUTPUT_TIMEOUT_MS = 3000; // If output received within this time, c
 const CODEX_SESSION_DETECT_RETRY_MS = 1000;
 const CODEX_SESSION_DETECT_TIMEOUT_MS = 15000;
 const CODEX_SESSION_DETECT_STARTED_AFTER_PADDING_MS = 5000;
+const CODEX_SESSION_UPGRADE_MESSAGE = '未能唯一识别 Codex 会话，请升级 Codex 后重试。';
 
 export function AgentTerminal({
   id,
   cwd,
   sessionId,
   cliSessionId,
+  codexRuntime: savedCodexRuntime,
+  codexWslDistro,
+  codexNativeShell: savedCodexNativeShell,
   agentId = 'claude',
   agentCommand = 'claude',
   customPath,
@@ -86,6 +107,7 @@ export function AgentTerminal({
   onInitialized,
   onActivated,
   onCliSessionIdDetected,
+  onCodexRuntimeDetected,
   onActivatedWithFirstLine,
   onExit,
   onTerminalTitleChange,
@@ -108,6 +130,7 @@ export function AgentTerminal({
 
   // Track if hapi is globally installed (cached in main process)
   const [hapiGlobalInstalled, setHapiGlobalInstalled] = useState<boolean | null>(null);
+  const [codexSessionOriginator] = useState(() => `ensoai-${crypto.randomUUID()}`);
 
   // Resolved shell for command execution
   const [resolvedShell, setResolvedShell] = useState<{
@@ -141,9 +164,13 @@ export function AgentTerminal({
   const tmuxSessionNameRef = useRef<string | null>(null); // Tmux session name for cleanup.
   const codexStartTimeRef = useRef<number | null>(null);
   const codexSessionDetectIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const codexSessionDetectDeadlineRef = useRef<number | null>(null);
+  const codexSessionDetectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codexSessionDetectInFlightRef = useRef(false);
+  const codexLegacyFallbackPendingRef = useRef(false);
+  const codexLegacyFallbackStartedRef = useRef(false);
+  const codexStatusOutputRef = useRef<(data: string) => void>(() => {});
   const cliSessionIdRef = useRef<string | undefined>(cliSessionId);
+  const notifiedCodexRuntimeRef = useRef<CodexRuntime | null>(null);
 
   // Output state tracking for global store
   const outputStateRef = useRef<OutputState>('idle');
@@ -161,24 +188,69 @@ export function AgentTerminal({
 
   const terminalSessionId = id ?? sessionId;
   const resumeSessionId = sessionId ?? id;
+  const platform = window.electronAPI?.env?.platform ?? '';
+  const detectedCodexRuntime = detectCodexRuntime(platform, resolvedShell?.shell ?? '');
+  const shouldRestoreSavedRuntime =
+    agentCommand === 'codex' && Boolean(cliSessionId) && savedCodexRuntime !== undefined;
+  const codexRuntime =
+    shouldRestoreSavedRuntime && savedCodexRuntime ? savedCodexRuntime : detectedCodexRuntime;
+
+  useEffect(() => {
+    if (agentCommand !== 'codex' || !resolvedShell) return;
+    if (notifiedCodexRuntimeRef.current === codexRuntime) return;
+    notifiedCodexRuntimeRef.current = codexRuntime;
+    const detectedNativeShell =
+      codexRuntime === 'native'
+        ? (savedCodexNativeShell ??
+          (detectedCodexRuntime === 'native'
+            ? { shell: resolvedShell.shell, execArgs: [...resolvedShell.execArgs] }
+            : undefined))
+        : undefined;
+    // 会话号可能还没写入 JSONL；先保存运行环境，历史选择器才能查询正确的位置。
+    onCodexRuntimeDetected?.(codexRuntime, detectedNativeShell);
+  }, [
+    agentCommand,
+    codexRuntime,
+    detectedCodexRuntime,
+    onCodexRuntimeDetected,
+    resolvedShell,
+    savedCodexNativeShell,
+  ]);
 
   const stopCodexSessionDetection = useCallback(() => {
     if (codexSessionDetectIntervalRef.current) {
       clearInterval(codexSessionDetectIntervalRef.current);
       codexSessionDetectIntervalRef.current = null;
     }
-    codexSessionDetectDeadlineRef.current = null;
+    if (codexSessionDetectTimeoutRef.current) {
+      clearTimeout(codexSessionDetectTimeoutRef.current);
+      codexSessionDetectTimeoutRef.current = null;
+    }
+    codexLegacyFallbackPendingRef.current = false;
   }, []);
 
   const startCodexSessionDetection = useCallback(() => {
     if (agentCommand !== 'codex' || cliSessionIdRef.current || codexStartTimeRef.current === null) {
       return;
     }
-    if (codexSessionDetectIntervalRef.current) {
+    if (codexSessionDetectIntervalRef.current || codexSessionDetectTimeoutRef.current) {
       return;
     }
 
-    codexSessionDetectDeadlineRef.current = Date.now() + CODEX_SESSION_DETECT_TIMEOUT_MS;
+    const excludeSessionIds = useAgentSessionsStore
+      .getState()
+      .sessions.filter((session) => session.id !== terminalSessionId)
+      .flatMap((session) => (session.cliSessionId ? [session.cliSessionId] : []));
+    const strictQuery = {
+      cwd,
+      startedAfter: codexStartTimeRef.current - CODEX_SESSION_DETECT_STARTED_AFTER_PADDING_MS,
+      excludeSessionIds,
+      runtime: codexRuntime,
+    };
+    codexLegacyFallbackPendingRef.current = false;
+    codexLegacyFallbackStartedRef.current = false;
+
+    let runLegacyFallback: () => void;
 
     const detectOnce = () => {
       if (
@@ -186,12 +258,6 @@ export function AgentTerminal({
         cliSessionIdRef.current ||
         codexStartTimeRef.current === null
       ) {
-        stopCodexSessionDetection();
-        return;
-      }
-
-      const deadline = codexSessionDetectDeadlineRef.current;
-      if (deadline !== null && Date.now() > deadline) {
         stopCodexSessionDetection();
         return;
       }
@@ -204,26 +270,93 @@ export function AgentTerminal({
       // Codex 启动时 JSONL 可能稍晚才写好；查空不能马上放弃，短时间内继续找真实会话 ID。
       window.electronAPI.codexHistory
         .findLatest({
-          cwd,
-          startedAfter: codexStartTimeRef.current - CODEX_SESSION_DETECT_STARTED_AFTER_PADDING_MS,
+          ...strictQuery,
+          originator: codexSessionOriginator,
         })
         .then((result) => {
           if (!result?.sessionId || cliSessionIdRef.current) {
             return;
           }
+          const claimed =
+            onCliSessionIdDetected?.(result.sessionId, codexRuntime, result.wslDistro) ?? true;
+          if (!claimed) return;
+
           cliSessionIdRef.current = result.sessionId;
-          onCliSessionIdDetected?.(result.sessionId);
           stopCodexSessionDetection();
         })
         .catch(() => {})
         .finally(() => {
           codexSessionDetectInFlightRef.current = false;
+          if (codexLegacyFallbackPendingRef.current) runLegacyFallback();
+        });
+    };
+
+    runLegacyFallback = () => {
+      if (
+        codexLegacyFallbackStartedRef.current ||
+        codexSessionDetectInFlightRef.current ||
+        !codexLegacyFallbackPendingRef.current
+      ) {
+        return;
+      }
+      if (agentCommand !== 'codex' || cliSessionIdRef.current) {
+        stopCodexSessionDetection();
+        return;
+      }
+
+      codexLegacyFallbackStartedRef.current = true;
+      codexLegacyFallbackPendingRef.current = false;
+      codexSessionDetectInFlightRef.current = true;
+      // 超时后只查询一次，旧版 Codex 仅在唯一主 CLI 会话时才允许关联。
+      window.electronAPI.codexHistory
+        .findLatest({ ...strictQuery, matchMode: 'legacy-unique' })
+        .then((result) => {
+          if (!result?.sessionId || cliSessionIdRef.current) {
+            if (!result?.sessionId && !cliSessionIdRef.current) {
+              codexStatusOutputRef.current(`\r\n${CODEX_SESSION_UPGRADE_MESSAGE}\r\n`);
+            }
+            return;
+          }
+          const claimed =
+            onCliSessionIdDetected?.(result.sessionId, codexRuntime, result.wslDistro) ?? true;
+          if (!claimed) {
+            codexStatusOutputRef.current(`\r\n${CODEX_SESSION_UPGRADE_MESSAGE}\r\n`);
+            return;
+          }
+
+          cliSessionIdRef.current = result.sessionId;
+        })
+        .catch(() => {
+          if (!cliSessionIdRef.current) {
+            codexStatusOutputRef.current(`\r\n${CODEX_SESSION_UPGRADE_MESSAGE}\r\n`);
+          }
+        })
+        .finally(() => {
+          codexSessionDetectInFlightRef.current = false;
+          stopCodexSessionDetection();
         });
     };
 
     detectOnce();
     codexSessionDetectIntervalRef.current = setInterval(detectOnce, CODEX_SESSION_DETECT_RETRY_MS);
-  }, [agentCommand, cwd, onCliSessionIdDetected, stopCodexSessionDetection]);
+    codexSessionDetectTimeoutRef.current = setTimeout(() => {
+      codexSessionDetectTimeoutRef.current = null;
+      if (codexSessionDetectIntervalRef.current) {
+        clearInterval(codexSessionDetectIntervalRef.current);
+        codexSessionDetectIntervalRef.current = null;
+      }
+      codexLegacyFallbackPendingRef.current = true;
+      runLegacyFallback();
+    }, CODEX_SESSION_DETECT_TIMEOUT_MS);
+  }, [
+    agentCommand,
+    codexSessionOriginator,
+    codexRuntime,
+    cwd,
+    onCliSessionIdDetected,
+    stopCodexSessionDetection,
+    terminalSessionId,
+  ]);
 
   useEffect(() => {
     cliSessionIdRef.current = cliSessionId;
@@ -377,6 +510,16 @@ export function AgentTerminal({
       return { command: undefined, env: undefined };
     }
 
+    const commandShell = resolveCodexCommandShell({
+      platform,
+      shell: resolvedShell.shell,
+      execArgs: resolvedShell.execArgs,
+      ...(shouldRestoreSavedRuntime ? { runtime: codexRuntime } : {}),
+      ...(shouldRestoreSavedRuntime && savedCodexNativeShell
+        ? { nativeShell: savedCodexNativeShell }
+        : {}),
+    });
+
     const invocation = buildAgentCliInvocation({
       agentCommand,
       initialized,
@@ -391,32 +534,22 @@ export function AgentTerminal({
     // Append initial prompt as CLI positional argument (for auto-execute)
     // Most CLI agents (claude, codex, gemini, etc.) accept a prompt as trailing argument
     if (initialPrompt) {
-      const isWindows = window.electronAPI?.env?.platform === 'win32';
-
-      if (isWindows) {
-        // Windows: use double quotes with PowerShell/cmd compatible escaping
-        // Escape: backslashes (double them), double quotes (backslash), backticks (PowerShell)
-        const escaped = initialPrompt
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/`/g, '``')
-          .replace(/%/g, '%%') // cmd variable expansion
-          .replace(/\$/g, '`$') // PowerShell variable expansion
-          .replace(/\n/g, ' '); // Replace newlines with spaces for Windows
-        agentArgs.push(`"${escaped}"`);
-      } else {
-        // Unix: use $'...' ANSI-C quoting syntax (bash/zsh compatible)
-        // This handles: backslashes, single quotes, and newlines
-        const escaped = initialPrompt
-          .replace(/\\/g, '\\\\')
-          .replace(/'/g, "\\'")
-          .replace(/\n/g, '\\n');
-        agentArgs.push(`$'${escaped}'`);
-      }
+      agentArgs.push(
+        quoteInitialPromptForShell(
+          initialPrompt,
+          platform,
+          commandShell.shell,
+          commandShell.execArgs
+        )
+      );
     }
 
-    const isWindows = window.electronAPI?.env?.platform === 'win32';
-    let envVars: Record<string, string> | undefined;
+    const isWindows = platform === 'win32';
+    const codexOriginator =
+      agentCommand === 'codex' && !cliSessionId ? codexSessionOriginator : undefined;
+    let envVars: Record<string, string> | undefined = codexOriginator
+      ? { [CODEX_ORIGINATOR_ENV]: codexOriginator }
+      : undefined;
 
     // Hapi environment: run through hapi (global) or npx @twsxtd/hapi with CLI_API_TOKEN
     if (environment === 'hapi') {
@@ -433,14 +566,18 @@ export function AgentTerminal({
 
       // Pass CLI_API_TOKEN from hapiSettings
       if (hapiSettings.cliApiToken) {
-        envVars = { CLI_API_TOKEN: hapiSettings.cliApiToken };
+        envVars = { ...envVars, CLI_API_TOKEN: hapiSettings.cliApiToken };
       }
 
       return {
-        command: {
-          shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, hapiCommand],
-        },
+        command: buildAgentCommandForShell({
+          command: hapiCommand,
+          platform,
+          shell: commandShell.shell,
+          execArgs: commandShell.execArgs,
+          ...(codexOriginator ? { codexOriginator } : {}),
+          ...(codexWslDistro ? { codexWslDistro } : {}),
+        }),
         env: envVars,
       };
     }
@@ -452,10 +589,14 @@ export function AgentTerminal({
       const happyCommand = `happy ${happyArgs} ${agentArgs.join(' ')}`.trim();
 
       return {
-        command: {
-          shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, happyCommand],
-        },
+        command: buildAgentCommandForShell({
+          command: happyCommand,
+          platform,
+          shell: commandShell.shell,
+          execArgs: commandShell.execArgs,
+          ...(codexOriginator ? { codexOriginator } : {}),
+          ...(codexWslDistro ? { codexWslDistro } : {}),
+        }),
         env: envVars,
       };
     }
@@ -463,7 +604,7 @@ export function AgentTerminal({
     // Safe: all interpolated values (effectiveCommand, agentArgs, tmuxSessionName) are
     // derived from internal app config / controlled constants, not from arbitrary user input.
     const fullCommand = `${effectiveCommand} ${agentArgs.join(' ')}`.trim();
-    const shellName = resolvedShell.shell.toLowerCase();
+    const shellName = commandShell.shell.toLowerCase();
 
     // Determine if tmux wrapping should be applied
     const isClaude = agentCommand?.startsWith('claude') ?? false;
@@ -485,14 +626,15 @@ export function AgentTerminal({
 
     // WSL: detect from shell name (wsl.exe)
     if (shellName.includes('wsl') && isWindows) {
-      // Use -e to run command directly, sh -lc loads login profile
-      // exec $SHELL replaces with user's shell (zsh/bash/etc.)
-      const escapedCommand = finalCommand.replace(/"/g, '\\"');
       return {
-        command: {
-          shell: 'wsl.exe',
-          args: ['-e', 'sh', '-lc', `exec "$SHELL" -ilc "${escapedCommand}"`],
-        },
+        command: buildAgentCommandForShell({
+          command: finalCommand,
+          platform,
+          shell: commandShell.shell,
+          execArgs: commandShell.execArgs,
+          ...(codexOriginator ? { codexOriginator } : {}),
+          ...(codexWslDistro ? { codexWslDistro } : {}),
+        }),
         env: envVars,
       };
     }
@@ -502,8 +644,8 @@ export function AgentTerminal({
     if (shellName.includes('powershell') || shellName.includes('pwsh')) {
       return {
         command: {
-          shell: resolvedShell.shell,
-          args: [...resolvedShell.execArgs, `& { ${finalCommand} }`],
+          shell: commandShell.shell,
+          args: [...commandShell.execArgs, `& { ${finalCommand} }`],
         },
         env: envVars,
       };
@@ -512,8 +654,8 @@ export function AgentTerminal({
     // Native environment: use user's configured shell
     return {
       command: {
-        shell: resolvedShell.shell,
-        args: [...resolvedShell.execArgs, finalCommand],
+        shell: commandShell.shell,
+        args: [...commandShell.execArgs, finalCommand],
       },
       env: envVars,
     };
@@ -522,13 +664,19 @@ export function AgentTerminal({
     customPath,
     customArgs,
     cliSessionId,
+    savedCodexNativeShell,
+    codexWslDistro,
+    codexRuntime,
+    codexSessionOriginator,
     initialPrompt,
     resumeSessionId,
     initialized,
     environment,
     hapiSettings.cliApiToken,
     hapiGlobalInstalled,
+    platform,
     resolvedShell,
+    shouldRestoreSavedRuntime,
     claudeCodeIntegration.tmuxEnabled,
     terminalSessionId,
   ]);
@@ -838,6 +986,15 @@ export function AgentTerminal({
     canMerge,
     filterTerminalColorQueryResponses: agentCommand === 'codex',
   });
+
+  useEffect(() => {
+    // 状态提示直接写入 xterm 显示层，不能通过 PTY write 变成 Codex 的用户输入。
+    codexStatusOutputRef.current = (data) => terminal?.write(data);
+    return () => {
+      codexStatusOutputRef.current = () => {};
+    };
+  }, [terminal]);
+
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchBarRef = useRef<TerminalSearchBarRef>(null);
 

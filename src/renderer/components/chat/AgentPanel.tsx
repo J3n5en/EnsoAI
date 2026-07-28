@@ -28,7 +28,7 @@ import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
 import { CodexHistoryPanel } from './CodexHistoryPanel';
-import { CodexSessionPickerDialog } from './CodexSessionPickerDialog';
+import { CodexSessionPickerDialog, type CodexSessionSelection } from './CodexSessionPickerDialog';
 import { EnhancedInputContainer } from './EnhancedInputContainer';
 import { QuickTerminalModal } from './QuickTerminalModal';
 import type { Session } from './SessionBar';
@@ -300,6 +300,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const addSession = useAgentSessionsStore((state) => state.addSession);
   const removeSession = useAgentSessionsStore((state) => state.removeSession);
   const updateSession = useAgentSessionsStore((state) => state.updateSession);
+  const claimCliSessionId = useAgentSessionsStore((state) => state.claimCliSessionId);
   const setActiveId = useAgentSessionsStore((state) => state.setActiveId);
 
   // Agent tasks store for clearing task data on session close
@@ -472,6 +473,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   const [showAgentMenu, setShowAgentMenu] = useState(false);
   const [installedAgents, setInstalledAgents] = useState<Set<string>>(new Set());
   const [historySessionId, setHistorySessionId] = useState<string | undefined>();
+  const [historySessionWslDistro, setHistorySessionWslDistro] = useState<string | undefined>();
   const [historyPickerSession, setHistoryPickerSession] = useState<Session | null>(null);
   const [historySourceSessionId, setHistorySourceSessionId] = useState<string | undefined>();
   const historySourceSession = useMemo(
@@ -1475,6 +1477,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
   const handleOpenCodexHistory = useCallback((session: Session) => {
     setHistorySourceSessionId(session.id);
+    setHistorySessionWslDistro(session.codexWslDistro);
 
     if (session.cliSessionId) {
       setHistoryPickerSession(null);
@@ -1487,14 +1490,15 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
   }, []);
 
   const handleSelectCodexHistorySession = useCallback(
-    (cliSessionId: string) => {
+    (selection: CodexSessionSelection) => {
       const sourceSession = historyPickerSession ?? historySourceSession;
 
       if (sourceSession) {
         setHistorySourceSessionId(sourceSession.id);
       }
       setHistoryPickerSession(null);
-      setHistorySessionId(cliSessionId);
+      setHistorySessionId(selection.sessionId);
+      setHistorySessionWslDistro(selection.wslDistro);
     },
     [historyPickerSession, historySourceSession]
   );
@@ -1503,6 +1507,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     if (!historySourceSession) return;
 
     setHistorySessionId(undefined);
+    setHistorySessionWslDistro(historySourceSession.codexWslDistro);
     setHistoryPickerSession(historySourceSession);
   }, [historySourceSession]);
 
@@ -1511,14 +1516,23 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
     setHistoryPickerSession(null);
     setHistorySessionId(historySourceSession.cliSessionId);
+    setHistorySessionWslDistro(historySourceSession.codexWslDistro);
   }, [historySourceSession]);
 
   const handleBindCodexHistorySession = useCallback(() => {
     if (!historySourceSession || !historySessionId) return;
-    if (historySourceSession.cliSessionId === historySessionId) return;
-
-    updateSession(historySourceSession.id, { cliSessionId: historySessionId });
-  }, [historySessionId, historySourceSession, updateSession]);
+    if (!claimCliSessionId(historySourceSession.id, historySessionId)) return;
+    updateSession(historySourceSession.id, {
+      codexRuntime: historySessionWslDistro ? 'wsl' : historySourceSession.codexRuntime,
+      codexWslDistro: historySessionWslDistro,
+    });
+  }, [
+    claimCliSessionId,
+    historySessionId,
+    historySessionWslDistro,
+    historySourceSession,
+    updateSession,
+  ]);
 
   if (!cwd) return null;
 
@@ -1751,6 +1765,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 cwd={session.cwd}
                 sessionId={session.sessionId || session.id}
                 cliSessionId={session.cliSessionId}
+                codexRuntime={session.codexRuntime}
+                codexWslDistro={session.codexWslDistro}
+                codexNativeShell={session.codexNativeShell}
                 agentId={session.agentId}
                 agentCommand={session.agentCommand || 'claude'}
                 customPath={session.customPath}
@@ -1763,8 +1780,22 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
                 initialPrompt={session.pendingCommand}
                 onInitialized={() => handleInitialized(sessionId)}
                 onActivated={() => handleActivated(sessionId)}
-                onCliSessionIdDetected={(cliSessionId) => {
-                  updateSession(sessionId, { cliSessionId });
+                onCodexRuntimeDetected={(runtime, nativeShell) => {
+                  updateSession(sessionId, {
+                    codexRuntime: runtime,
+                    ...(nativeShell ? { codexNativeShell: nativeShell } : {}),
+                  });
+                }}
+                onCliSessionIdDetected={(cliSessionId, runtime, wslDistro) => {
+                  const claimed = claimCliSessionId(sessionId, cliSessionId);
+                  if (claimed) {
+                    // 会话号与运行环境同时保存，后续历史查询才能回到同一 WSL 目录。
+                    updateSession(sessionId, {
+                      codexRuntime: runtime,
+                      ...(wslDistro ? { codexWslDistro: wslDistro } : {}),
+                    });
+                  }
+                  return claimed;
                 }}
                 onActivatedWithFirstLine={(line) => handleActivatedWithFirstLine(sessionId, line)}
                 onExit={() => handleCloseSession(sessionId, groupId || undefined)}
@@ -1874,6 +1905,9 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       <CodexHistoryPanel
         sessionId={historySessionId}
         currentSessionId={historySourceSession?.cliSessionId}
+        cwd={historySourceSession?.cwd}
+        runtime={historySourceSession?.codexRuntime}
+        wslDistro={historySessionWslDistro ?? historySourceSession?.codexWslDistro}
         open={!!historySessionId}
         onBindToCurrentSession={historySourceSession ? handleBindCodexHistorySession : undefined}
         onBackToCurrentSession={
@@ -1883,6 +1917,7 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
         onOpenChange={(open) => {
           if (!open) {
             setHistorySessionId(undefined);
+            setHistorySessionWslDistro(undefined);
             setHistorySourceSessionId(undefined);
           }
         }}
@@ -1890,11 +1925,13 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       <CodexSessionPickerDialog
         open={historyPickerSession != null}
         cwd={historyPickerSession?.cwd}
+        runtime={historyPickerSession?.codexRuntime}
+        wslDistro={historyPickerSession?.codexWslDistro}
         initialSessionId={historyPickerSession?.cliSessionId}
         onOpenChange={(open) => {
           if (!open) setHistoryPickerSession(null);
         }}
-        onSelectSessionId={handleSelectCodexHistorySession}
+        onSelectSession={handleSelectCodexHistorySession}
       />
     </div>
   );

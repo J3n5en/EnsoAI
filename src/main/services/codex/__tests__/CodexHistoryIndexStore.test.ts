@@ -1,6 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import sqlite3 from 'sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CodexHistoryIndexStore } from '../CodexHistoryIndexStore';
 import type { CodexSessionMetadata } from '../CodexHistoryMetadata';
@@ -36,6 +37,39 @@ async function createStore(): Promise<CodexHistoryIndexStore> {
   await store.initialize();
   testStores.push(store);
   return store;
+}
+
+function createLegacyIndex(dbPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const database = new sqlite3.Database(dbPath);
+    database.exec(
+      `CREATE TABLE codex_sessions (
+        session_id TEXT PRIMARY KEY,
+        file_path TEXT NOT NULL,
+        cwd TEXT,
+        title TEXT,
+        model TEXT,
+        model_provider TEXT,
+        timestamp TEXT,
+        created_at_ms INTEGER NOT NULL,
+        modified_at_ms INTEGER NOT NULL,
+        file_mtime_ms INTEGER NOT NULL,
+        file_size INTEGER NOT NULL,
+        last_indexed_at_ms INTEGER NOT NULL
+      );`,
+      (error) => {
+        if (error) {
+          database.close();
+          reject(error);
+          return;
+        }
+        database.close((closeError) => {
+          if (closeError) reject(closeError);
+          else resolve();
+        });
+      }
+    );
+  });
 }
 
 afterEach(async () => {
@@ -92,6 +126,157 @@ describe('CodexHistoryIndexStore', () => {
     await expect(store.findLatest({ startedAfter: 2000 })).resolves.toEqual({
       sessionId: latestRecord.sessionId,
       filePath: latestRecord.filePath,
+    });
+  });
+
+  it('skips excluded sessions when finding the latest session', async () => {
+    const store = await createStore();
+    const olderRecord = createRecord({ createdAtMs: 1000 });
+    const newerRecord = createRecord({
+      sessionId: '11996abf-bc87-7e80-9909-3a86a414f7e8',
+      filePath: 'D:/codex/newer.jsonl',
+      createdAtMs: 3000,
+    });
+    await store.upsertSessions([olderRecord, newerRecord]);
+
+    await expect(
+      store.findLatest({ startedAfter: 0, excludeSessionIds: [newerRecord.sessionId] })
+    ).resolves.toEqual({
+      sessionId: olderRecord.sessionId,
+      filePath: olderRecord.filePath,
+    });
+  });
+
+  it('finds only a session with the requested originator', async () => {
+    const store = await createStore();
+    const expectedRecord = createRecord({
+      originator: 'ensoai-terminal-a',
+      createdAtMs: 1000,
+    });
+    const otherRecord = createRecord({
+      sessionId: '11996abf-bc87-7e80-9909-3a86a414f7e8',
+      filePath: 'D:/codex/external.jsonl',
+      originator: 'external-terminal',
+      createdAtMs: 3000,
+    });
+    await store.upsertSessions([expectedRecord, otherRecord]);
+
+    await expect(
+      store.findLatest({ startedAfter: 0, originator: expectedRecord.originator })
+    ).resolves.toEqual({
+      sessionId: expectedRecord.sessionId,
+      filePath: expectedRecord.filePath,
+    });
+  });
+
+  it('finds the root CLI session instead of a newer subagent with the same originator', async () => {
+    const store = await createStore();
+    const rootRecord = createRecord({
+      originator: 'ensoai-terminal-a',
+      sessionSource: 'cli',
+      createdAtMs: 1000,
+    });
+    const subagentRecord = createRecord({
+      sessionId: '11996abf-bc87-7e80-9909-3a86a414f7e8',
+      filePath: 'D:/codex/subagent.jsonl',
+      originator: 'ensoai-terminal-a',
+      createdAtMs: 3000,
+    });
+    await store.upsertSessions([rootRecord, subagentRecord]);
+
+    await expect(
+      store.findLatest({
+        startedAfter: 0,
+        originator: rootRecord.originator,
+        sessionSource: 'cli',
+      })
+    ).resolves.toEqual({
+      sessionId: rootRecord.sessionId,
+      filePath: rootRecord.filePath,
+    });
+  });
+
+  it('requires one legacy CLI candidate even when it has no originator', async () => {
+    const store = await createStore();
+    const record = createRecord({ originator: undefined, sessionSource: 'cli' });
+
+    await store.upsertSession(record);
+
+    await expect(
+      store.findLatest({ startedAfter: 0, sessionSource: 'cli', requireUnique: true })
+    ).resolves.toEqual({ sessionId: record.sessionId, filePath: record.filePath });
+  });
+
+  it('returns null when two legacy CLI candidates match', async () => {
+    const store = await createStore();
+    const first = createRecord({ originator: undefined, sessionSource: 'cli' });
+    const second = createRecord({
+      sessionId: '11996abf-bc87-7e80-9909-3a86a414f7e8',
+      filePath: 'D:/codex/second.jsonl',
+      originator: undefined,
+      sessionSource: 'cli',
+      createdAtMs: 3000,
+    });
+
+    await store.upsertSessions([first, second]);
+
+    await expect(
+      store.findLatest({ startedAfter: 0, sessionSource: 'cli', requireUnique: true })
+    ).resolves.toBeNull();
+  });
+
+  it('does not count legacy subagents or excluded session IDs as candidates', async () => {
+    const store = await createStore();
+    const expected = createRecord({ originator: undefined, sessionSource: 'cli' });
+    const subagent = createRecord({
+      sessionId: '11996abf-bc87-7e80-9909-3a86a414f7e8',
+      filePath: 'D:/codex/subagent.jsonl',
+      originator: undefined,
+      sessionSource: 'subagent',
+      createdAtMs: 3000,
+    });
+    const excluded = createRecord({
+      sessionId: '21996abf-bc87-7e80-9909-3a86a414f7e8',
+      filePath: 'D:/codex/excluded.jsonl',
+      originator: undefined,
+      sessionSource: 'cli',
+      createdAtMs: 4000,
+    });
+
+    await store.upsertSessions([expected, subagent, excluded]);
+
+    await expect(
+      store.findLatest({
+        startedAfter: 0,
+        sessionSource: 'cli',
+        requireUnique: true,
+        excludeSessionIds: [excluded.sessionId],
+      })
+    ).resolves.toEqual({ sessionId: expected.sessionId, filePath: expected.filePath });
+  });
+
+  it('adds originator and session source support to an existing index database', async () => {
+    const directory = path.join(os.tmpdir(), `enso-codex-legacy-index-${Date.now()}`);
+    const dbPath = path.join(directory, 'codex-history-index.db');
+    testDirectories.push(directory);
+    await mkdir(directory, { recursive: true });
+    await createLegacyIndex(dbPath);
+
+    const store = new CodexHistoryIndexStore(dbPath);
+    await store.initialize();
+    testStores.push(store);
+    const record = createRecord({ originator: 'ensoai-terminal-a', sessionSource: 'cli' });
+    await store.upsertSession(record);
+
+    await expect(
+      store.findLatest({
+        startedAfter: 0,
+        originator: record.originator,
+        sessionSource: record.sessionSource,
+      })
+    ).resolves.toEqual({
+      sessionId: record.sessionId,
+      filePath: record.filePath,
     });
   });
 
@@ -181,5 +366,28 @@ describe('CodexHistoryIndexStore', () => {
     await expect(store.getFileFingerprints()).resolves.toEqual(
       new Map([[record.filePath, { fileMtimeMs: record.fileMtimeMs, fileSize: record.fileSize }]])
     );
+  });
+
+  it('reads and updates one indexed file state without replacing metadata', async () => {
+    const store = await createStore();
+    const record = createRecord({ fileMtimeMs: 2345, fileSize: 6789, title: 'kept title' });
+    await store.upsertSession(record);
+
+    await expect(store.getFileState(record.filePath)).resolves.toEqual({
+      fileMtimeMs: 2345,
+      fileSize: 6789,
+      hasTitle: true,
+    });
+
+    await store.updateFileFingerprint(record.filePath, 9000, 9876);
+
+    await expect(store.getFileState(record.filePath)).resolves.toEqual({
+      fileMtimeMs: 9000,
+      fileSize: 9876,
+      hasTitle: true,
+    });
+    await expect(store.listSessions({ cwd: record.cwd })).resolves.toMatchObject([
+      { title: 'kept title', modifiedAt: 9000 },
+    ]);
   });
 });

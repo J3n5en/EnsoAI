@@ -4,6 +4,8 @@ import { normalizePath, pathsEqual } from '@/App/storage';
 import type { Session } from '@/components/chat/SessionBar';
 import type { AgentGroupState } from '@/components/chat/types';
 import { createInitialGroupState } from '@/components/chat/types';
+import { claimCliSessionIdInSessions } from '@/lib/agentSessionClaim';
+import { filterPersistableAgentSessions } from '@/lib/agentSessionPersistence';
 import { useAgentStatusStore } from './agentStatus';
 
 // Global storage key for all sessions across all repos
@@ -39,11 +41,6 @@ export interface AggregatedOutputState {
   unread: number;
 }
 
-// Check if an agent command supports session persistence
-function isResumableAgent(agentCommand: string): boolean {
-  return agentCommand?.startsWith('claude') || agentCommand === 'codex';
-}
-
 /**
  * Composite key for activeIds: uniquely identifies a repo+worktree pair.
  * Prevents cross-repo session pollution when different repos have worktrees
@@ -67,6 +64,7 @@ interface AgentSessionsState {
   addSession: (session: Session) => void;
   removeSession: (id: string) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
+  claimCliSessionId: (id: string, cliSessionId: string) => boolean;
   setActiveId: (repoPath: string, cwd: string, sessionId: string | null) => void;
   reorderSessions: (repoPath: string, cwd: string, fromIndex: number, toIndex: number) => void;
   getSessions: (repoPath: string, cwd: string) => Session[];
@@ -106,11 +104,19 @@ function loadFromStorage(): { sessions: Session[]; activeIds: Record<string, str
       const data = JSON.parse(saved);
       if (data.sessions?.length > 0) {
         // Migrate old sessions that don't have repoPath (backwards compatibility)
-        const migratedSessions = data.sessions.map((s: Session) => ({
+        const migratedCandidates: Session[] = data.sessions.map((s: Session) => ({
           ...s,
           repoPath: s.repoPath || s.cwd,
         }));
-        return { sessions: migratedSessions, activeIds: data.activeIds || {} };
+        const migratedSessions = filterPersistableAgentSessions(migratedCandidates);
+        const persistedIds = new Set(migratedSessions.map((session: Session) => session.id));
+        const activeIds = Object.fromEntries(
+          Object.entries(data.activeIds || {}).map(([key, value]) => [
+            key,
+            typeof value === 'string' && persistedIds.has(value) ? value : null,
+          ])
+        );
+        return { sessions: migratedSessions, activeIds };
       }
     }
   } catch {}
@@ -118,12 +124,8 @@ function loadFromStorage(): { sessions: Session[]; activeIds: Record<string, str
 }
 
 function saveToStorage(sessions: Session[], activeIds: Record<string, string | null>): void {
-  // Only persist sessions that are:
-  // 1. Using agents that support resumption (e.g., claude, codex)
-  // 2. Activated (user has pressed Enter at least once)
-  const persistableSessions = sessions.filter(
-    (s) => isResumableAgent(s.agentCommand) && s.activated
-  );
+  // Codex 必须先拿到真实 CLI 会话号，否则重启后只能误开成一段新对话。
+  const persistableSessions = filterPersistableAgentSessions(sessions);
   const persistableIds = new Set(persistableSessions.map((s) => s.id));
   // Only keep activeIds that reference persistable sessions
   const persistableActiveIds: Record<string, string | null> = {};
@@ -252,6 +254,17 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
       set((state) => ({
         sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
       })),
+
+    claimCliSessionId: (id, cliSessionId) => {
+      let claimed = false;
+      set((state) => {
+        // Zustand 的 set 同步执行，确保并发回调只能有一个标签认领同一 CLI 会话。
+        const result = claimCliSessionIdInSessions(state.sessions, id, cliSessionId);
+        claimed = result.claimed;
+        return result.sessions === state.sessions ? state : { sessions: result.sessions };
+      });
+      return claimed;
+    },
 
     setActiveId: (repoPath, cwd, sessionId) =>
       set((state) => ({

@@ -15,6 +15,10 @@ export interface CodexIndexListQuery {
 export interface CodexIndexLatestQuery {
   cwd?: string;
   startedAfter?: number;
+  excludeSessionIds?: string[];
+  originator?: string;
+  sessionSource?: string;
+  requireUnique?: boolean;
 }
 
 interface SessionRow {
@@ -26,6 +30,26 @@ interface SessionRow {
   model_provider: string | null;
   timestamp: string | null;
   modified_at_ms: number;
+}
+
+interface SessionMetadataRow {
+  session_id: string;
+  file_path: string;
+  cwd: string | null;
+  originator: string | null;
+  session_source: string | null;
+  title: string | null;
+  model: string | null;
+  model_provider: string | null;
+  timestamp: string | null;
+  created_at_ms: number;
+  modified_at_ms: number;
+  file_mtime_ms: number;
+  file_size: number;
+}
+
+interface SessionCwdRow {
+  cwd_normalized: string;
 }
 
 interface LatestSessionRow {
@@ -41,15 +65,29 @@ interface StateRow {
   value: string;
 }
 
+interface TableInfoRow {
+  name: string;
+}
+
 export interface CodexIndexedFileFingerprint {
   fileMtimeMs: number;
   fileSize: number;
+}
+
+export interface CodexIndexedFileState extends CodexIndexedFileFingerprint {
+  hasTitle: boolean;
 }
 
 interface IndexedFileFingerprintRow {
   file_path: string;
   file_mtime_ms: number;
   file_size: number;
+}
+
+interface IndexedFileStateRow {
+  file_mtime_ms: number;
+  file_size: number;
+  has_title: number;
 }
 
 function dbRun(database: sqlite3.Database, sql: string, params: unknown[] = []): Promise<void> {
@@ -264,7 +302,30 @@ export class CodexHistoryIndexStore {
       params.push(normalizeCwd(query.cwd));
     }
 
-    sql += ` WHERE ${conditions.join(' AND ')} ORDER BY sessions.created_at_ms DESC LIMIT 1`;
+    if (query.excludeSessionIds?.length) {
+      const placeholders = query.excludeSessionIds.map(() => '?').join(', ');
+      conditions.push(`sessions.session_id NOT IN (${placeholders})`);
+      params.push(...query.excludeSessionIds);
+    }
+
+    if (query.originator) {
+      conditions.push('sessions.originator = ?');
+      params.push(query.originator);
+    }
+
+    if (query.sessionSource) {
+      conditions.push('sessions.session_source = ?');
+      params.push(query.sessionSource);
+    }
+
+    sql += ` WHERE ${conditions.join(' AND ')} ORDER BY sessions.created_at_ms DESC LIMIT ${query.requireUnique ? 2 : 1}`;
+    if (query.requireUnique) {
+      // 旧版 Codex 没有 originator，只能在候选唯一时保守地关联会话。
+      const rows = await dbAll<LatestSessionRow>(database, sql, params);
+      const row = rows.length === 1 ? rows[0] : undefined;
+      return row ? { sessionId: row.session_id, filePath: row.file_path } : null;
+    }
+
     const row = await dbGet<LatestSessionRow>(database, sql, params);
     return row ? { sessionId: row.session_id, filePath: row.file_path } : null;
   }
@@ -277,6 +338,49 @@ export class CodexHistoryIndexStore {
       [sessionId]
     );
     return row?.file_path ?? null;
+  }
+
+  async getSessionMetadataByFilePath(filePath: string): Promise<CodexSessionMetadata | null> {
+    await this.waitForPendingWrites();
+    const database = this.getDatabase();
+    const row = await dbGet<SessionMetadataRow>(
+      database,
+      `SELECT session_id, file_path, cwd, originator, session_source, title, model,
+        model_provider, timestamp, created_at_ms, modified_at_ms, file_mtime_ms, file_size
+       FROM codex_sessions WHERE file_path = ?`,
+      [filePath]
+    );
+    if (!row) return null;
+
+    const cwdRows = await dbAll<SessionCwdRow>(
+      database,
+      'SELECT cwd_normalized FROM codex_session_cwds WHERE session_id = ?',
+      [row.session_id]
+    );
+    const cwdNormalizedValues = cwdRows.map((cwdRow) => cwdRow.cwd_normalized);
+    const primaryNormalizedCwd = row.cwd ? normalizeCwd(row.cwd) : undefined;
+    const cwdValues = [
+      ...(row.cwd ? [row.cwd] : []),
+      ...cwdNormalizedValues.filter((cwd) => cwd !== primaryNormalizedCwd),
+    ];
+    const metadata: CodexSessionMetadata = {
+      sessionId: row.session_id,
+      filePath: row.file_path,
+      cwdValues,
+      cwdNormalizedValues,
+      createdAtMs: row.created_at_ms,
+      modifiedAtMs: row.modified_at_ms,
+      fileMtimeMs: row.file_mtime_ms,
+      fileSize: row.file_size,
+    };
+    if (row.cwd) metadata.cwd = row.cwd;
+    if (row.originator) metadata.originator = row.originator;
+    if (row.session_source) metadata.sessionSource = row.session_source;
+    if (row.title) metadata.title = row.title;
+    if (row.model) metadata.model = row.model;
+    if (row.model_provider) metadata.modelProvider = row.model_provider;
+    if (row.timestamp) metadata.timestamp = row.timestamp;
+    return metadata;
   }
 
   async getState(key: string): Promise<string | null> {
@@ -314,6 +418,40 @@ export class CodexHistoryIndexStore {
     );
   }
 
+  async getFileState(filePath: string): Promise<CodexIndexedFileState | null> {
+    await this.waitForPendingWrites();
+    const row = await dbGet<IndexedFileStateRow>(
+      this.getDatabase(),
+      `SELECT file_mtime_ms, file_size,
+        CASE WHEN title IS NULL OR title = '' THEN 0 ELSE 1 END AS has_title
+       FROM codex_sessions WHERE file_path = ?`,
+      [filePath]
+    );
+    return row
+      ? {
+          fileMtimeMs: row.file_mtime_ms,
+          fileSize: row.file_size,
+          hasTitle: row.has_title === 1,
+        }
+      : null;
+  }
+
+  async updateFileFingerprint(
+    filePath: string,
+    fileMtimeMs: number,
+    fileSize: number
+  ): Promise<void> {
+    return this.enqueueWrite(() =>
+      dbRun(
+        this.getDatabase(),
+        `UPDATE codex_sessions
+         SET modified_at_ms = ?, file_mtime_ms = ?, file_size = ?, last_indexed_at_ms = ?
+         WHERE file_path = ?`,
+        [fileMtimeMs, fileMtimeMs, fileSize, Date.now(), filePath]
+      )
+    );
+  }
+
   private getDatabase(): sqlite3.Database {
     if (!this.database) {
       throw new Error('[CodexHistoryIndexStore] 数据库尚未初始化，请先调用 initialize()。');
@@ -342,6 +480,8 @@ export class CodexHistoryIndexStore {
         session_id TEXT PRIMARY KEY,
         file_path TEXT NOT NULL,
         cwd TEXT,
+        originator TEXT,
+        session_source TEXT,
         title TEXT,
         model TEXT,
         model_provider TEXT,
@@ -367,6 +507,19 @@ export class CodexHistoryIndexStore {
       CREATE INDEX IF NOT EXISTS idx_codex_session_cwds_cwd ON codex_session_cwds(cwd_normalized, session_id);
       CREATE INDEX IF NOT EXISTS idx_codex_session_cwds_session ON codex_session_cwds(session_id);`
     );
+
+    const database = this.getDatabase();
+    const columns = await dbAll<TableInfoRow>(database, 'PRAGMA table_info(codex_sessions)');
+    if (!columns.some((column) => column.name === 'originator')) {
+      await dbRun(database, 'ALTER TABLE codex_sessions ADD COLUMN originator TEXT');
+    }
+    if (!columns.some((column) => column.name === 'session_source')) {
+      await dbRun(database, 'ALTER TABLE codex_sessions ADD COLUMN session_source TEXT');
+    }
+    await dbExec(
+      database,
+      'CREATE INDEX IF NOT EXISTS idx_codex_sessions_originator_source_created ON codex_sessions(originator, session_source, created_at_ms DESC)'
+    );
   }
 
   private async writeSession(
@@ -377,12 +530,14 @@ export class CodexHistoryIndexStore {
     await dbRun(
       database,
       `INSERT INTO codex_sessions (
-        session_id, file_path, cwd, title, model, model_provider, timestamp,
+        session_id, file_path, cwd, originator, session_source, title, model, model_provider, timestamp,
         created_at_ms, modified_at_ms, file_mtime_ms, file_size, last_indexed_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         file_path = excluded.file_path,
         cwd = excluded.cwd,
+        originator = excluded.originator,
+        session_source = excluded.session_source,
         title = excluded.title,
         model = excluded.model,
         model_provider = excluded.model_provider,
@@ -396,6 +551,8 @@ export class CodexHistoryIndexStore {
         record.sessionId,
         record.filePath,
         record.cwd ?? null,
+        record.originator ?? null,
+        record.sessionSource ?? null,
         record.title ?? null,
         record.model ?? null,
         record.modelProvider ?? null,

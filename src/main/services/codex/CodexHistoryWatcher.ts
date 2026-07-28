@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises';
 import { type FileChangeCallback, FileWatcher } from '../files/FileWatcher';
 
 type CodexHistoryEventType = 'create' | 'update' | 'delete';
@@ -23,6 +24,7 @@ export type CodexHistoryWatcherFactory = (
 interface CodexHistoryWatcherOptions {
   debounceMs?: number;
   fileWatcherFactory?: CodexHistoryWatcherFactory;
+  ensureDirectory?: (directory: string) => Promise<void>;
 }
 
 export interface CodexHistoryWatcherStartOptions {
@@ -34,6 +36,7 @@ const DEFAULT_DEBOUNCE_MS = 300;
 export class CodexHistoryWatcher {
   private readonly debounceMs: number;
   private readonly fileWatcherFactory: CodexHistoryWatcherFactory;
+  private readonly ensureDirectory: (directory: string) => Promise<void>;
   private pendingEvents = new Map<string, CodexHistoryEventType>();
   private pendingTimers = new Map<string, NodeJS.Timeout>();
   private pendingWrites = new Set<Promise<void>>();
@@ -42,6 +45,7 @@ export class CodexHistoryWatcher {
   private rerunEvents = new Map<string, CodexHistoryEventType>();
   private watcher: CodexHistoryWatcherSubscription | null = null;
   private stopped = true;
+  private startVersion = 0;
 
   constructor(
     private readonly sessionsRoot: string,
@@ -52,25 +56,47 @@ export class CodexHistoryWatcher {
     this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.fileWatcherFactory =
       options.fileWatcherFactory ?? ((directory, callback) => new FileWatcher(directory, callback));
+    this.ensureDirectory =
+      options.ensureDirectory ??
+      (async (directory) => {
+        await mkdir(directory, { recursive: true });
+      });
   }
 
   async start(options: CodexHistoryWatcherStartOptions = {}): Promise<void> {
     if (!this.stopped) return;
 
+    const version = ++this.startVersion;
     this.stopped = false;
     this.processingPaused = options.paused ?? false;
-    const watcher = this.fileWatcherFactory(this.sessionsRoot, this.handleFileChange);
-    this.watcher = watcher;
 
     try {
+      await this.ensureDirectory(this.sessionsRoot);
+    } catch (error) {
+      if (version === this.startVersion) this.stopped = true;
+      throw error;
+    }
+    if (this.stopped || version !== this.startVersion) return;
+
+    let watcher: CodexHistoryWatcherSubscription | null = null;
+    try {
+      watcher = this.fileWatcherFactory(this.sessionsRoot, this.handleFileChange);
+      this.watcher = watcher;
       await watcher.start();
     } catch (error) {
       console.error('[CodexHistoryWatcher] 启动文件监听失败：', error);
-      if (this.watcher === watcher) {
-        this.watcher = null;
-        this.stopped = true;
-      }
+      if (watcher && this.watcher === watcher) this.watcher = null;
+      if (version === this.startVersion) this.stopped = true;
       throw error;
+    }
+
+    if (!watcher) return;
+    if (this.stopped || version !== this.startVersion) {
+      if (this.watcher === watcher) this.watcher = null;
+      // stop 可能早于底层 start 完成；启动完成后必须再停一次，避免留下监听器。
+      await watcher.stop().catch((error) => {
+        console.error('[CodexHistoryWatcher] 停止过期文件监听失败：', error);
+      });
     }
   }
 
@@ -81,6 +107,7 @@ export class CodexHistoryWatcher {
   }
 
   async stop(): Promise<void> {
+    this.startVersion += 1;
     const watcher = this.watcher;
     this.stopped = true;
     this.clearPendingEvents();
@@ -97,6 +124,7 @@ export class CodexHistoryWatcher {
   }
 
   stopSync(): void {
+    this.startVersion += 1;
     this.stopped = true;
     this.clearPendingEvents();
 

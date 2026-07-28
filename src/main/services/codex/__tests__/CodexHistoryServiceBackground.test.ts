@@ -43,6 +43,7 @@ import {
 describe('CodexHistoryService background indexing', () => {
   afterEach(async () => {
     await cleanupCodexHistoryIndex();
+    vi.useRealTimers();
     mocks.indexers.length = 0;
     mocks.watchers.length = 0;
   });
@@ -69,6 +70,7 @@ describe('CodexHistoryService background indexing', () => {
   });
 
   it('allows a retry after the watcher fails to start', async () => {
+    vi.useFakeTimers();
     await initializeCodexHistoryIndex({ dbPath: ':memory:', sessionsRoot: '/sessions' });
     const watcher = mocks.watchers[0];
     const indexer = mocks.indexers[0];
@@ -77,7 +79,8 @@ describe('CodexHistoryService background indexing', () => {
 
     try {
       await startCodexHistoryBackgroundIndexing();
-      await startCodexHistoryBackgroundIndexing();
+      expect(watcher.start).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(2000);
     } finally {
       errorSpy.mockRestore();
     }
@@ -85,5 +88,23 @@ describe('CodexHistoryService background indexing', () => {
     expect(watcher.start).toHaveBeenCalledTimes(2);
     expect(indexer.runFullScan).toHaveBeenCalledTimes(1);
     expect(watcher.resume).toHaveBeenCalledOnce();
+  });
+
+  it('cancels a pending retry during cleanup', async () => {
+    vi.useFakeTimers();
+    await initializeCodexHistoryIndex({ dbPath: ':memory:', sessionsRoot: '/sessions' });
+    const watcher = mocks.watchers[0];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    watcher.start.mockRejectedValueOnce(new Error('watcher unavailable'));
+
+    try {
+      await startCodexHistoryBackgroundIndexing();
+      await cleanupCodexHistoryIndex();
+      await vi.advanceTimersByTimeAsync(2000);
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    expect(watcher.start).toHaveBeenCalledOnce();
   });
 });

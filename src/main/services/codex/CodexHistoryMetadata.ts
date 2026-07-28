@@ -23,6 +23,8 @@ export interface CodexSessionMetadata {
   fileMtimeMs: number;
   fileSize: number;
   cwd?: string;
+  originator?: string;
+  sessionSource?: string;
   title?: string;
   timestamp?: string;
   model?: string;
@@ -34,10 +36,13 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 export function normalizeCwd(value: string): string {
-  const normalized = value
-    .trim()
-    .replace(/[\\/]+$/, '')
-    .replace(/\\/g, '/');
+  const slashNormalized = value.trim().replace(/\\/g, '/');
+  const wslMatch = slashNormalized.match(/^\/\/wsl(?:\.localhost|\$)\/[^/]+(\/.*)?$/i);
+  const wslPath = wslMatch ? wslMatch[1] || '/' : null;
+  const normalized = wslPath === '/' ? wslPath : (wslPath ?? slashNormalized).replace(/\/+$/, '');
+  if (wslPath !== null || (normalized.startsWith('/') && !normalized.startsWith('//'))) {
+    return normalized;
+  }
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }
 
@@ -77,6 +82,14 @@ function extractMetadataSessionId(record: Record<string, unknown>): string | und
   return record.type === 'session_meta'
     ? extractFirstString(record, ['sessionId', 'id'])
     : undefined;
+}
+
+function extractSessionOriginator(record: Record<string, unknown>): string | undefined {
+  return record.type === 'session_meta' ? extractFirstString(record, ['originator']) : undefined;
+}
+
+function extractSessionSource(record: Record<string, unknown>): string | undefined {
+  return record.type === 'session_meta' ? extractFirstString(record, ['source']) : undefined;
 }
 
 function collectTextValues(value: unknown, output: string[]): void {
@@ -135,7 +148,7 @@ function parseTimestampMs(timestamp: string | undefined): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-function extractCreatedAtMsFromRolloutPath(filePath: string): number | null {
+export function extractCodexSessionCreatedAtFromPath(filePath: string): number | null {
   const filename = path.basename(filePath);
   const match = filename.match(
     /rollout-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-[0-9a-f-]{36}\.jsonl$/i
@@ -144,7 +157,46 @@ function extractCreatedAtMsFromRolloutPath(filePath: string): number | null {
 
   const [, year, month, day, hour, minute, second] = match;
   if (!year || !month || !day || !hour || !minute || !second) return null;
-  return parseTimestampMs(`${year}-${month}-${day}T${hour}:${minute}:${second}.000Z`);
+
+  const [yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue] = [
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+  ].map(Number);
+  if (
+    yearValue === undefined ||
+    monthValue === undefined ||
+    dayValue === undefined ||
+    hourValue === undefined ||
+    minuteValue === undefined ||
+    secondValue === undefined
+  ) {
+    return null;
+  }
+
+  // rollout 文件名记录的是本地时间；构造后逐项核对，避免无效日期被自动修正。
+  const createdAt = new Date(
+    yearValue,
+    monthValue - 1,
+    dayValue,
+    hourValue,
+    minuteValue,
+    secondValue
+  );
+  if (
+    createdAt.getFullYear() !== yearValue ||
+    createdAt.getMonth() !== monthValue - 1 ||
+    createdAt.getDate() !== dayValue ||
+    createdAt.getHours() !== hourValue ||
+    createdAt.getMinutes() !== minuteValue ||
+    createdAt.getSeconds() !== secondValue
+  ) {
+    return null;
+  }
+  return createdAt.getTime();
 }
 
 function uniqueValues(values: string[]): string[] {
@@ -154,14 +206,27 @@ function uniqueValues(values: string[]): string[] {
 interface CodexSessionMetadataAccumulator {
   cwdValues: string[];
   metadataSessionId?: string;
+  originator?: string;
+  sessionSource?: string;
   timestamp?: string;
   title?: string;
   model?: string;
   modelProvider?: string;
 }
 
-function createMetadataAccumulator(): CodexSessionMetadataAccumulator {
-  return { cwdValues: [] };
+function createMetadataAccumulator(
+  baseMetadata?: CodexSessionMetadata
+): CodexSessionMetadataAccumulator {
+  return {
+    cwdValues: [...(baseMetadata?.cwdValues ?? [])],
+    metadataSessionId: baseMetadata?.sessionId,
+    originator: baseMetadata?.originator,
+    sessionSource: baseMetadata?.sessionSource,
+    timestamp: baseMetadata?.timestamp,
+    title: baseMetadata?.title,
+    model: baseMetadata?.model,
+    modelProvider: baseMetadata?.modelProvider,
+  };
 }
 
 function consumeMetadataLine(accumulator: CodexSessionMetadataAccumulator, line: string): void {
@@ -174,6 +239,8 @@ function consumeMetadataLine(accumulator: CodexSessionMetadataAccumulator, line:
 
     accumulator.cwdValues.push(...extractCwdValues(record));
     accumulator.metadataSessionId ??= extractMetadataSessionId(record);
+    accumulator.originator ??= extractSessionOriginator(record);
+    accumulator.sessionSource ??= extractSessionSource(record);
     accumulator.timestamp ??= extractFirstString(record, ['timestamp']);
     accumulator.model ??= extractFirstString(record, ['model']);
     accumulator.modelProvider ??= extractFirstString(record, ['model_provider', 'modelProvider']);
@@ -195,7 +262,7 @@ function buildCodexSessionMetadata(
   const cwdNormalizedValues = uniqueValues(cwdValues.map(normalizeCwd));
   const createdAtMs =
     parseTimestampMs(accumulator.timestamp) ??
-    extractCreatedAtMsFromRolloutPath(filePath) ??
+    extractCodexSessionCreatedAtFromPath(filePath) ??
     fileStat.birthtimeMs ??
     fileStat.ctimeMs;
 
@@ -210,6 +277,8 @@ function buildCodexSessionMetadata(
     fileSize: fileStat.size,
   };
   if (cwdValues[0]) metadata.cwd = cwdValues[0];
+  if (accumulator.originator) metadata.originator = accumulator.originator;
+  if (accumulator.sessionSource) metadata.sessionSource = accumulator.sessionSource;
   if (accumulator.title) metadata.title = accumulator.title;
   if (accumulator.timestamp) metadata.timestamp = accumulator.timestamp;
   if (accumulator.model) metadata.model = accumulator.model;
@@ -240,13 +309,18 @@ function yieldToMainProcess(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-async function readMetadataSnapshot(filePath: string): Promise<MetadataSnapshotResult> {
+async function readMetadataSnapshot(
+  filePath: string,
+  startByte = 0,
+  baseMetadata?: CodexSessionMetadata
+): Promise<MetadataSnapshotResult> {
   const fileStat = await stat(filePath);
-  const accumulator = createMetadataAccumulator();
+  const accumulator = createMetadataAccumulator(baseMetadata);
 
-  if (fileStat.size > 0) {
+  if (fileStat.size > startByte) {
     const input = createReadStream(filePath, {
       encoding: 'utf8',
+      start: startByte,
       end: fileStat.size - 1,
     });
     const lines = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
@@ -274,5 +348,20 @@ export async function readCodexSessionMetadata(
 ): Promise<CodexSessionMetadata | null> {
   let snapshot = await readMetadataSnapshot(filePath);
   if (snapshot.changedDuringRead) snapshot = await readMetadataSnapshot(filePath);
+  return snapshot.metadata;
+}
+
+export async function readCodexSessionMetadataFrom(
+  filePath: string,
+  startByte: number,
+  baseMetadata: CodexSessionMetadata
+): Promise<CodexSessionMetadata | null> {
+  let snapshot = await readMetadataSnapshot(filePath, startByte, baseMetadata);
+  if (!snapshot.changedDuringRead) return snapshot.metadata;
+
+  const latestStat = await stat(filePath);
+  if (latestStat.size < startByte) return readCodexSessionMetadata(filePath);
+
+  snapshot = await readMetadataSnapshot(filePath, startByte, baseMetadata);
   return snapshot.metadata;
 }

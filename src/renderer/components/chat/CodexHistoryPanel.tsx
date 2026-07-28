@@ -1,4 +1,4 @@
-import type { CodexHistoryMessage } from '@shared/types';
+import type { CodexHistoryMessage, CodexRuntime } from '@shared/types';
 import { Check, Copy, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,9 @@ const isMac = typeof window !== 'undefined' && window.electronAPI?.env?.platform
 interface CodexHistoryPanelProps {
   sessionId: string | undefined;
   currentSessionId?: string | undefined;
+  cwd?: string | undefined;
+  runtime?: CodexRuntime;
+  wslDistro?: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onBindToCurrentSession?: () => void;
@@ -27,6 +30,9 @@ function roleLabel(role: CodexHistoryMessage['role']): string {
 export function CodexHistoryPanel({
   sessionId,
   currentSessionId,
+  cwd,
+  runtime,
+  wslDistro,
   open,
   onOpenChange,
   onBindToCurrentSession,
@@ -53,7 +59,13 @@ export function CodexHistoryPanel({
     setError(null);
 
     window.electronAPI.codexHistory
-      .get({ sessionId, maxMessages: limit })
+      .get({
+        sessionId,
+        ...(cwd ? { cwd } : {}),
+        ...(runtime ? { runtime } : {}),
+        ...(wslDistro ? { wslDistro } : {}),
+        maxMessages: limit,
+      })
       .then((result) => {
         if (cancelled) return;
         setMessages(result.messages);
@@ -70,7 +82,7 @@ export function CodexHistoryPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, sessionId, limit]);
+  }, [open, sessionId, cwd, runtime, wslDistro, limit]);
 
   const handleCopySessionId = async () => {
     if (!sessionId) return;

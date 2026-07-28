@@ -74,6 +74,20 @@ function isGeneratedUserText(text: string): boolean {
   );
 }
 
+function parseCodexHistoryLine(line: string, index: number): CodexHistoryMessage | null {
+  const normalized = line.trim();
+  if (!normalized) return null;
+
+  try {
+    const parsed = JSON.parse(normalized) as unknown;
+    const record = asRecord(parsed);
+    return record ? extractMessage(record, index) : null;
+  } catch {
+    // Codex jsonl 里可能混入不完整行，历史面板只跳过坏行。
+    return null;
+  }
+}
+
 export function parseCodexHistoryJsonl(
   content: string,
   maxMessages = 500
@@ -82,24 +96,35 @@ export function parseCodexHistoryJsonl(
   const lines = content.split(/\r?\n/);
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]?.trim();
-    if (!line) continue;
+    const message = parseCodexHistoryLine(lines[i] ?? '', i);
+    if (!message) continue;
 
-    try {
-      const parsed = JSON.parse(line) as unknown;
-      const record = asRecord(parsed);
-      if (!record) continue;
-
-      const message = extractMessage(record, i);
-      if (!message) continue;
-
-      if (messages.length >= maxMessages) {
-        return { messages, truncated: true };
-      }
-      messages.push(message);
-    } catch {
-      // Codex jsonl 里可能混入不完整行，历史面板只跳过坏行。
+    if (messages.length >= maxMessages) {
+      return { messages, truncated: true };
     }
+    messages.push(message);
+  }
+
+  return { messages, truncated: false };
+}
+
+export async function parseCodexHistoryLines(
+  lines: AsyncIterable<string>,
+  maxMessages = 500
+): Promise<{ messages: CodexHistoryMessage[]; truncated: boolean }> {
+  const messages: CodexHistoryMessage[] = [];
+  let lineIndex = 0;
+
+  for await (const line of lines) {
+    const message = parseCodexHistoryLine(line, lineIndex);
+    lineIndex += 1;
+    if (!message) continue;
+
+    // 多读一条有效消息只为判断是否截断，确认后立即停止消费文件流。
+    if (messages.length >= maxMessages) {
+      return { messages, truncated: true };
+    }
+    messages.push(message);
   }
 
   return { messages, truncated: false };

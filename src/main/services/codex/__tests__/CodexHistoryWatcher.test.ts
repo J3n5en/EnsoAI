@@ -1,12 +1,26 @@
+import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CodexHistoryWatcher, type CodexHistoryWatcherFactory } from '../CodexHistoryWatcher';
 
 describe('CodexHistoryWatcher', () => {
-  afterEach(() => {
+  const testDirectories: string[] = [];
+
+  afterEach(async () => {
     vi.useRealTimers();
+    await Promise.all(
+      testDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))
+    );
   });
 
   function createWatcher() {
+    const sessionsRoot = path.join(
+      os.tmpdir(),
+      `enso-codex-watcher-${Date.now()}-${crypto.randomUUID()}`
+    );
+    testDirectories.push(sessionsRoot);
     let callback: ((type: 'create' | 'update' | 'delete', filePath: string) => void) | null = null;
     const start = vi.fn<() => Promise<void>>().mockResolvedValue();
     const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
@@ -20,7 +34,7 @@ describe('CodexHistoryWatcher', () => {
     const store = {
       deleteByFilePath: vi.fn<(filePath: string) => Promise<void>>().mockResolvedValue(),
     };
-    const watcher = new CodexHistoryWatcher('/sessions', indexer, store, {
+    const watcher = new CodexHistoryWatcher(sessionsRoot, indexer, store, {
       fileWatcherFactory: factory,
     });
 
@@ -31,8 +45,77 @@ describe('CodexHistoryWatcher', () => {
       stop,
       store,
       watcher,
+      sessionsRoot,
     };
   }
+
+  it('creates the sessions directory before constructing the file watcher', async () => {
+    const fixture = createWatcher();
+    const factory = vi.fn<CodexHistoryWatcherFactory>((directory) => {
+      expect(directory).toBe(fixture.sessionsRoot);
+      expect(existsSync(directory)).toBe(true);
+      return {
+        start: vi.fn<() => Promise<void>>().mockResolvedValue(),
+        stop: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      };
+    });
+    const watcher = new CodexHistoryWatcher(fixture.sessionsRoot, fixture.indexer, fixture.store, {
+      fileWatcherFactory: factory,
+    });
+
+    await watcher.start();
+
+    expect(factory).toHaveBeenCalledOnce();
+    await watcher.stop();
+  });
+
+  it('does not construct a watcher when stopped while creating the directory', async () => {
+    let finishDirectory: (() => void) | undefined;
+    const ensureDirectory = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDirectory = resolve;
+        })
+    );
+    const factory = vi.fn<CodexHistoryWatcherFactory>();
+    const fixture = createWatcher();
+    const watcher = new CodexHistoryWatcher(fixture.sessionsRoot, fixture.indexer, fixture.store, {
+      ensureDirectory,
+      fileWatcherFactory: factory,
+    });
+
+    const starting = watcher.start();
+    await watcher.stop();
+    finishDirectory?.();
+    await starting;
+
+    expect(factory).not.toHaveBeenCalled();
+  });
+
+  it('stops again after an underlying watcher finishes a stale start', async () => {
+    let finishStart: (() => void) | undefined;
+    const underlyingStart = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStart = resolve;
+        })
+    );
+    const underlyingStop = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const fixture = createWatcher();
+    const watcher = new CodexHistoryWatcher(fixture.sessionsRoot, fixture.indexer, fixture.store, {
+      ensureDirectory: vi.fn().mockResolvedValue(undefined),
+      fileWatcherFactory: () => ({ start: underlyingStart, stop: underlyingStop }),
+    });
+
+    const starting = watcher.start();
+    await Promise.resolve();
+    const stopping = watcher.stop();
+    finishStart?.();
+    await Promise.all([starting, stopping]);
+
+    expect(underlyingStart).toHaveBeenCalledOnce();
+    expect(underlyingStop).toHaveBeenCalledTimes(2);
+  });
 
   it('ignores paths that are not .jsonl files', async () => {
     vi.useFakeTimers();
@@ -194,8 +277,13 @@ describe('CodexHistoryWatcher', () => {
         start: secondStart,
         stop: vi.fn<() => Promise<void>>().mockResolvedValue(),
       });
+    const sessionsRoot = path.join(
+      os.tmpdir(),
+      `enso-codex-watcher-retry-${Date.now()}-${crypto.randomUUID()}`
+    );
+    testDirectories.push(sessionsRoot);
     const watcher = new CodexHistoryWatcher(
-      '/sessions',
+      sessionsRoot,
       { indexFile: vi.fn<(filePath: string) => Promise<null>>().mockResolvedValue(null) },
       { deleteByFilePath: vi.fn<(filePath: string) => Promise<void>>().mockResolvedValue() },
       { fileWatcherFactory: factory }
@@ -210,5 +298,33 @@ describe('CodexHistoryWatcher', () => {
 
     expect(factory).toHaveBeenCalledTimes(2);
     expect(secondStart).toHaveBeenCalledOnce();
+  });
+
+  it('allows another start after constructing the underlying watcher fails', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fixture = createWatcher();
+    const start = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const factory = vi
+      .fn<CodexHistoryWatcherFactory>()
+      .mockImplementationOnce(() => {
+        throw new Error('factory unavailable');
+      })
+      .mockReturnValueOnce({
+        start,
+        stop: vi.fn<() => Promise<void>>().mockResolvedValue(),
+      });
+    const watcher = new CodexHistoryWatcher(fixture.sessionsRoot, fixture.indexer, fixture.store, {
+      fileWatcherFactory: factory,
+    });
+
+    try {
+      await expect(watcher.start()).rejects.toThrow('factory unavailable');
+      await expect(watcher.start()).resolves.toBeUndefined();
+    } finally {
+      errorSpy.mockRestore();
+    }
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(start).toHaveBeenCalledOnce();
   });
 });

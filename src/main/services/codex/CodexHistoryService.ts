@@ -1,7 +1,8 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { mkdir, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import type {
   CodexHistoryQuery,
   CodexHistoryResult,
@@ -19,11 +20,15 @@ import {
   normalizeCwd,
   readCodexSessionMetadata,
 } from './CodexHistoryMetadata';
-import { parseCodexHistoryJsonl } from './CodexHistoryParser';
+import { parseCodexHistoryLines } from './CodexHistoryParser';
 import { CodexHistoryWatcher } from './CodexHistoryWatcher';
+import { resolveWslCodexLocation } from './CodexWslResolver';
+import { CodexWslScanCache } from './CodexWslScanCache';
 
 const RECENT_SCAN_MAX_FILES = 200;
+const ROOT_CLI_SESSION_SOURCE = 'cli';
 const RECENT_SCAN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const BACKGROUND_RETRY_DELAY_MS = 2000;
 
 let indexStore: CodexHistoryIndexStore | null = null;
 let indexer: CodexHistoryIndexer | null = null;
@@ -32,6 +37,8 @@ let indexReady = false;
 let indexFailed = false;
 let backgroundStarted = false;
 let backgroundStarting: Promise<void> | null = null;
+let backgroundRetryTimer: ReturnType<typeof setTimeout> | null = null;
+const wslScanCache = new CodexWslScanCache({ ttlMs: 2000 });
 
 interface InternalCodexHistoryQuery extends CodexHistoryQuery {
   sessionsRoot?: string;
@@ -50,8 +57,16 @@ export interface CodexHistoryIndexOptions {
   sessionsRoot?: string;
 }
 
+export function resolveCodexSessionsRoot(
+  codexHome: string | undefined,
+  userHome = homedir()
+): string {
+  const customHome = codexHome?.trim();
+  return path.join(customHome || path.join(userHome, '.codex'), 'sessions');
+}
+
 function defaultSessionsRoot(): string {
-  return path.join(homedir(), '.codex', 'sessions');
+  return resolveCodexSessionsRoot(process.env.CODEX_HOME);
 }
 
 function defaultIndexPath(): string {
@@ -62,8 +77,71 @@ function hasUsableIndex(): boolean {
   return indexReady && !indexFailed && indexStore !== null && indexer !== null;
 }
 
+interface CodexQueryLocation {
+  sessionsRoot: string;
+  cwd?: string;
+  wslDistro?: string;
+  usesNativeIndex: boolean;
+}
+
+async function resolveQueryLocation(
+  query: { cwd?: string; runtime?: 'native' | 'wsl'; wslDistro?: string },
+  sessionsRoot: string | undefined
+): Promise<CodexQueryLocation> {
+  if (sessionsRoot) {
+    return { sessionsRoot, ...(query.cwd ? { cwd: query.cwd } : {}), usesNativeIndex: true };
+  }
+
+  if (query.runtime === 'wsl') {
+    const location = await resolveWslCodexLocation({
+      ...(query.cwd ? { cwd: query.cwd } : {}),
+      ...(query.wslDistro ? { wslDistro: query.wslDistro } : {}),
+    });
+    return { ...location, usesNativeIndex: false };
+  }
+
+  return {
+    sessionsRoot: defaultSessionsRoot(),
+    ...(query.cwd ? { cwd: query.cwd } : {}),
+    usesNativeIndex: true,
+  };
+}
+
+function canUseIndexForLocation(location: CodexQueryLocation): boolean {
+  // WSL 会话目录不在 Windows 索引监听范围内，必须始终从对应 UNC 目录扫描。
+  return location.usesNativeIndex && hasUsableIndex();
+}
+
+function addWslDistro(
+  result: CodexLatestSessionResult | null,
+  location: CodexQueryLocation
+): CodexLatestSessionResult | null {
+  if (!result || !location.wslDistro) return result;
+  return { ...result, wslDistro: location.wslDistro };
+}
+
+function addWslDistroToSessionList(
+  result: CodexSessionListResult,
+  location: CodexQueryLocation
+): CodexSessionListResult {
+  if (!location.wslDistro) return result;
+  return {
+    wslDistro: location.wslDistro,
+    sessions: result.sessions.map((session) => ({
+      ...session,
+      wslDistro: location.wslDistro,
+    })),
+  };
+}
+
 function isMissingFileError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+function clearBackgroundRetry(): void {
+  if (!backgroundRetryTimer) return;
+  clearTimeout(backgroundRetryTimer);
+  backgroundRetryTimer = null;
 }
 
 async function readScanMetadata(filePath: string): Promise<CodexSessionMetadata | null> {
@@ -76,6 +154,8 @@ async function readScanMetadata(filePath: string): Promise<CodexSessionMetadata 
 }
 
 function resetIndexState(): void {
+  clearBackgroundRetry();
+  wslScanCache.clear();
   indexStore = null;
   indexer = null;
   indexWatcher = null;
@@ -134,6 +214,7 @@ export async function startCodexHistoryBackgroundIndexing(): Promise<void> {
   if (!hasUsableIndex() || backgroundStarted || !indexer || !indexWatcher) return;
   if (backgroundStarting) return backgroundStarting;
 
+  clearBackgroundRetry();
   const watcher = indexWatcher;
   const activeIndexer = indexer;
   const startPromise = Promise.resolve().then(async () => {
@@ -145,6 +226,26 @@ export async function startCodexHistoryBackgroundIndexing(): Promise<void> {
       }
     } catch (error) {
       console.error('[CodexHistoryService] 后台会话索引启动失败：', error);
+      if (
+        !backgroundRetryTimer &&
+        indexWatcher === watcher &&
+        indexer === activeIndexer &&
+        hasUsableIndex() &&
+        !backgroundStarted
+      ) {
+        // 首次运行时 sessions 目录或文件监听可能暂时不可用，短暂等待后再试一次。
+        backgroundRetryTimer = setTimeout(() => {
+          backgroundRetryTimer = null;
+          if (
+            indexWatcher === watcher &&
+            indexer === activeIndexer &&
+            hasUsableIndex() &&
+            !backgroundStarted
+          ) {
+            void startCodexHistoryBackgroundIndexing();
+          }
+        }, BACKGROUND_RETRY_DELAY_MS);
+      }
     } finally {
       if (backgroundStarting === startPromise) backgroundStarting = null;
     }
@@ -203,16 +304,29 @@ async function listCodexSessionsByScan(
   maxSessions: number
 ): Promise<CodexSessionListResult> {
   const files = await listJsonlFiles(sessionsRoot);
-  const sessions: CodexSessionListItem[] = [];
+  const metadataEntries: CodexSessionMetadata[] = [];
 
   for (const filePath of files) {
     const metadata = await readScanMetadata(filePath);
-    if (!metadata) continue;
+    if (metadata) metadataEntries.push(metadata);
+  }
+
+  return listCodexSessionsFromMetadata(metadataEntries, cwd, maxSessions);
+}
+
+function listCodexSessionsFromMetadata(
+  metadataEntries: CodexSessionMetadata[],
+  cwd: string | undefined,
+  maxSessions: number
+): CodexSessionListResult {
+  const sessions: CodexSessionListItem[] = [];
+
+  for (const metadata of metadataEntries) {
     // 旧 EnsoAI 记录没有 cliSessionId 时，用户只能从当前 cwd 下的 Codex 文件里选。
     if (!metadataMatchesCwd(metadata, cwd)) continue;
 
     sessions.push(
-      createSessionListItem(metadata.sessionId, filePath, metadata.modifiedAtMs, metadata)
+      createSessionListItem(metadata.sessionId, metadata.filePath, metadata.modifiedAtMs, metadata)
     );
   }
 
@@ -223,19 +337,59 @@ async function listCodexSessionsByScan(
 async function findLatestCodexSessionByScan(
   sessionsRoot: string,
   cwd: string | undefined,
-  startedAfter: number
+  startedAfter: number,
+  excludeSessionIds: string[],
+  originator: string | undefined,
+  sessionSource: string | undefined,
+  requireUnique: boolean
 ): Promise<CodexLatestSessionResult | null> {
   const files = await listJsonlFiles(sessionsRoot);
-  const candidates: Array<{ sessionId: string; filePath: string; createdAtMs: number }> = [];
+  const metadataEntries: CodexSessionMetadata[] = [];
 
   for (const filePath of files) {
     const metadata = await readScanMetadata(filePath);
-    if (!metadata) continue;
+    if (metadata) metadataEntries.push(metadata);
+  }
+
+  return findLatestCodexSessionFromMetadata(
+    metadataEntries,
+    cwd,
+    startedAfter,
+    excludeSessionIds,
+    originator,
+    sessionSource,
+    requireUnique
+  );
+}
+
+function findLatestCodexSessionFromMetadata(
+  metadataEntries: CodexSessionMetadata[],
+  cwd: string | undefined,
+  startedAfter: number,
+  excludeSessionIds: string[],
+  originator: string | undefined,
+  sessionSource: string | undefined,
+  requireUnique: boolean
+): CodexLatestSessionResult | null {
+  const candidates: Array<{ sessionId: string; filePath: string; createdAtMs: number }> = [];
+  const excludedSessionIds = new Set(excludeSessionIds);
+
+  for (const metadata of metadataEntries) {
     if (!metadataMatchesCwd(metadata, cwd)) continue;
+    if (excludedSessionIds.has(metadata.sessionId)) continue;
+    // originator 会被子代理继承，因此严格模式还要确认这是本次启动产生的主 CLI 会话。
+    if (originator && metadata.originator !== originator) continue;
+    if (sessionSource && metadata.sessionSource !== sessionSource) continue;
 
     // 新建 Codex 会话时，旧会话文件也可能继续被写入；这里只按会话创建时间判断。
     if (metadata.createdAtMs < startedAfter) continue;
-    candidates.push({ sessionId: metadata.sessionId, filePath, createdAtMs: metadata.createdAtMs });
+    // 旧版回退只在唯一主 CLI 会话时关联；第二个候选出现即可拒绝。
+    if (requireUnique && candidates.length > 0) return null;
+    candidates.push({
+      sessionId: metadata.sessionId,
+      filePath: metadata.filePath,
+      createdAtMs: metadata.createdAtMs,
+    });
   }
 
   candidates.sort((a, b) => b.createdAtMs - a.createdAtMs);
@@ -269,65 +423,155 @@ function createSessionListItem(
 export async function listCodexSessions({
   cwd,
   maxSessions = 50,
-  sessionsRoot = defaultSessionsRoot(),
+  runtime,
+  wslDistro,
+  sessionsRoot,
 }: InternalSessionListQuery): Promise<CodexSessionListResult> {
-  if (!hasUsableIndex() || !indexStore || !indexer) {
-    return listCodexSessionsByScan(sessionsRoot, cwd, maxSessions);
+  const location = await resolveQueryLocation({ cwd, runtime, wslDistro }, sessionsRoot);
+  if (!canUseIndexForLocation(location) || !indexStore || !indexer) {
+    if (!location.usesNativeIndex) {
+      return addWslDistroToSessionList(
+        listCodexSessionsFromMetadata(
+          await wslScanCache.list(location.sessionsRoot),
+          location.cwd,
+          maxSessions
+        ),
+        location
+      );
+    }
+    return listCodexSessionsByScan(location.sessionsRoot, location.cwd, maxSessions);
   }
 
   try {
-    let sessions = await indexStore.listSessions({ cwd, maxSessions });
-    if (sessions.length > 0) return { sessions };
-
-    const initialScanCompleted = await indexStore.getState('initial_scan_completed');
-    if (initialScanCompleted !== 'true' && cwd) {
+    if (!backgroundStarted) {
+      // 监听尚未成功时先补扫近期文件，已有缓存也不能阻止新会话进入列表。
       await indexer.runRecentScan({
         maxFiles: RECENT_SCAN_MAX_FILES,
         newerThanMs: Date.now() - RECENT_SCAN_AGE_MS,
-        cwd,
+        cwd: location.cwd,
       });
-      sessions = await indexStore.listSessions({ cwd, maxSessions });
+    }
+
+    let sessions = await indexStore.listSessions({ cwd: location.cwd, maxSessions });
+    if (sessions.length > 0) return { sessions };
+
+    const initialScanCompleted = await indexStore.getState('initial_scan_completed');
+    if (initialScanCompleted !== 'true' && location.cwd) {
+      await indexer.runRecentScan({
+        maxFiles: RECENT_SCAN_MAX_FILES,
+        newerThanMs: Date.now() - RECENT_SCAN_AGE_MS,
+        cwd: location.cwd,
+      });
+      sessions = await indexStore.listSessions({ cwd: location.cwd, maxSessions });
     }
 
     return { sessions };
   } catch (error) {
     console.warn('[CodexHistoryService] 索引查询失败，使用文件扫描：', error);
     indexFailed = true;
-    return listCodexSessionsByScan(sessionsRoot, cwd, maxSessions);
+    return listCodexSessionsByScan(location.sessionsRoot, location.cwd, maxSessions);
   }
 }
 
 export async function findLatestCodexSession({
   cwd,
   startedAfter = 0,
-  sessionsRoot = defaultSessionsRoot(),
+  excludeSessionIds = [],
+  originator,
+  matchMode = 'strict',
+  runtime,
+  wslDistro,
+  sessionsRoot,
 }: InternalLatestSessionQuery): Promise<CodexLatestSessionResult | null> {
-  if (!hasUsableIndex() || !indexStore || !indexer) {
-    return findLatestCodexSessionByScan(sessionsRoot, cwd, startedAfter);
+  const location = await resolveQueryLocation({ cwd, runtime, wslDistro }, sessionsRoot);
+  const requireUnique = matchMode === 'legacy-unique';
+  // 旧版 Codex 不会写入 originator，只允许唯一的主 CLI 会话作为回退结果。
+  const queryOriginator = requireUnique ? undefined : originator;
+  const sessionSource = requireUnique
+    ? ROOT_CLI_SESSION_SOURCE
+    : originator
+      ? ROOT_CLI_SESSION_SOURCE
+      : undefined;
+  if (!canUseIndexForLocation(location) || !indexStore || !indexer) {
+    const latest = !location.usesNativeIndex
+      ? findLatestCodexSessionFromMetadata(
+          await wslScanCache.list(location.sessionsRoot, {
+            newerThanMs: startedAfter,
+            ...(requireUnique ? { forceRefresh: true } : {}),
+          }),
+          location.cwd,
+          startedAfter,
+          excludeSessionIds,
+          queryOriginator,
+          sessionSource,
+          requireUnique
+        )
+      : await findLatestCodexSessionByScan(
+          location.sessionsRoot,
+          location.cwd,
+          startedAfter,
+          excludeSessionIds,
+          queryOriginator,
+          sessionSource,
+          requireUnique
+        );
+    return addWslDistro(latest, location);
   }
 
   try {
-    let latest = await indexStore.findLatest({ cwd, startedAfter });
-    if (latest) return latest;
+    let latest = await indexStore.findLatest({
+      cwd: location.cwd,
+      startedAfter,
+      excludeSessionIds,
+      originator: queryOriginator,
+      sessionSource,
+      requireUnique,
+    });
+    if (latest) return addWslDistro(latest, location);
 
     const initialScanCompleted = await indexStore.getState('initial_scan_completed');
     if (initialScanCompleted !== 'true') {
-      await indexer.runRecentScan({ maxFiles: RECENT_SCAN_MAX_FILES, cwd, startedAfter });
-      latest = await indexStore.findLatest({ cwd, startedAfter });
-      if (latest) return latest;
+      await indexer.runRecentScan({
+        maxFiles: RECENT_SCAN_MAX_FILES,
+        cwd: location.cwd,
+        startedAfter,
+      });
+      latest = await indexStore.findLatest({
+        cwd: location.cwd,
+        startedAfter,
+        excludeSessionIds,
+        originator: queryOriginator,
+        sessionSource,
+        requireUnique,
+      });
+      if (latest) return addWslDistro(latest, location);
     }
   } catch (error) {
     console.warn('[CodexHistoryService] 索引查询失败，使用文件扫描：', error);
     indexFailed = true;
   }
 
-  return findLatestCodexSessionByScan(sessionsRoot, cwd, startedAfter);
+  return addWslDistro(
+    await findLatestCodexSessionByScan(
+      location.sessionsRoot,
+      location.cwd,
+      startedAfter,
+      excludeSessionIds,
+      queryOriginator,
+      sessionSource,
+      requireUnique
+    ),
+    location
+  );
 }
 
 export async function getCodexHistory({
   sessionId,
+  cwd,
   maxMessages = 500,
-  sessionsRoot = defaultSessionsRoot(),
+  runtime,
+  wslDistro,
+  sessionsRoot,
 }: InternalCodexHistoryQuery): Promise<CodexHistoryResult> {
   if (!sessionId) {
     return {
@@ -339,8 +583,10 @@ export async function getCodexHistory({
     };
   }
 
+  const location = await resolveQueryLocation({ cwd, runtime, wslDistro }, sessionsRoot);
+
   let filePath: string | null = null;
-  if (hasUsableIndex() && indexStore) {
+  if (canUseIndexForLocation(location) && indexStore) {
     try {
       filePath = await indexStore.getSessionFilePath(sessionId);
       if (filePath && !existsSync(filePath)) {
@@ -353,7 +599,12 @@ export async function getCodexHistory({
     }
   }
 
-  filePath ??= await findFileBySessionId(sessionsRoot, sessionId);
+  if (!location.usesNativeIndex) {
+    const metadata = await wslScanCache.findBySessionId(location.sessionsRoot, sessionId);
+    filePath = metadata?.filePath ?? null;
+  } else {
+    filePath ??= await findFileBySessionId(location.sessionsRoot, sessionId);
+  }
   if (!filePath) {
     return {
       sessionId,
@@ -364,7 +615,13 @@ export async function getCodexHistory({
     };
   }
 
-  const content = await readFile(filePath, 'utf8');
-  const parsed = parseCodexHistoryJsonl(content, maxMessages);
-  return { sessionId, filePath, messages: parsed.messages, truncated: parsed.truncated };
+  const stream = createReadStream(filePath, { encoding: 'utf8' });
+  const lines = createInterface({ input: stream, crlfDelay: Infinity });
+  try {
+    const parsed = await parseCodexHistoryLines(lines, maxMessages);
+    return { sessionId, filePath, messages: parsed.messages, truncated: parsed.truncated };
+  } finally {
+    lines.close();
+    stream.destroy();
+  }
 }

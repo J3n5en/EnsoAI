@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { extractCodexSessionIdFromPath, parseCodexHistoryJsonl } from '../CodexHistoryParser';
+import {
+  extractCodexSessionIdFromPath,
+  parseCodexHistoryJsonl,
+  parseCodexHistoryLines,
+} from '../CodexHistoryParser';
 
 describe('CodexHistoryParser', () => {
   it('extracts readable messages from common Codex jsonl shapes', () => {
@@ -116,6 +120,47 @@ describe('CodexHistoryParser', () => {
     const result = parseCodexHistoryJsonl(content, 2);
     expect(result.truncated).toBe(true);
     expect(result.messages.map((m) => m.text)).toEqual(['message 0', 'message 1']);
+  });
+
+  it('stops asynchronous input after the first valid message beyond the limit', async () => {
+    let yieldedLines = 0;
+    const source = [
+      'not-json',
+      JSON.stringify({ role: 'user', content: 'message 0' }),
+      JSON.stringify({ type: 'metrics', count: 1 }),
+      JSON.stringify({ role: 'assistant', content: 'message 1' }),
+      JSON.stringify({ role: 'user', content: 'message 2' }),
+      JSON.stringify({ role: 'assistant', content: 'must not be read' }),
+    ];
+    async function* lines(): AsyncGenerator<string> {
+      for (const line of source) {
+        yieldedLines += 1;
+        yield line;
+      }
+    }
+
+    const result = await parseCodexHistoryLines(lines(), 2);
+
+    expect(result).toEqual({
+      messages: [
+        expect.objectContaining({ role: 'user', text: 'message 0' }),
+        expect.objectContaining({ role: 'assistant', text: 'message 1' }),
+      ],
+      truncated: true,
+    });
+    expect(yieldedLines).toBe(5);
+  });
+
+  it('does not mark short asynchronous input as truncated', async () => {
+    async function* lines(): AsyncGenerator<string> {
+      yield JSON.stringify({ role: 'user', content: 'only message' });
+      yield 'bad-json';
+    }
+
+    await expect(parseCodexHistoryLines(lines(), 2)).resolves.toMatchObject({
+      messages: [expect.objectContaining({ text: 'only message' })],
+      truncated: false,
+    });
   });
 
   it('extracts session id from rollout filename', () => {

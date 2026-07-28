@@ -1,10 +1,11 @@
-import { readdir, stat } from 'node:fs/promises';
+import { open, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { CodexHistoryIndexStore } from './CodexHistoryIndexStore';
 import {
   type CodexSessionMetadata,
   normalizeCwd,
   readCodexSessionMetadata,
+  readCodexSessionMetadataFrom,
 } from './CodexHistoryMetadata';
 
 const DEFAULT_MAX_CONCURRENT_READS = 4;
@@ -26,10 +27,38 @@ interface FileWithMtime {
 export interface CodexHistoryIndexerOptions {
   maxConcurrentReads?: number;
   readMetadata?: typeof readCodexSessionMetadata;
+  readMetadataFrom?: typeof readCodexSessionMetadataFrom;
 }
 
 function isMissingFileError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+async function findAppendReadStart(filePath: string, previousSize: number): Promise<number> {
+  if (previousSize <= 0) return 0;
+
+  const file = await open(filePath, 'r');
+  try {
+    const lastByte = Buffer.allocUnsafe(1);
+    const lastRead = await file.read(lastByte, 0, 1, previousSize - 1);
+    if (lastRead.bytesRead === 1 && lastByte[0] === 0x0a) return previousSize;
+
+    // 上次写入可能停在半行中间，向前找到该行开头后一起重读。
+    const buffer = Buffer.allocUnsafe(4096);
+    let searchEnd = previousSize;
+    while (searchEnd > 0) {
+      const searchStart = Math.max(0, searchEnd - buffer.length);
+      const length = searchEnd - searchStart;
+      const result = await file.read(buffer, 0, length, searchStart);
+      for (let index = result.bytesRead - 1; index >= 0; index -= 1) {
+        if (buffer[index] === 0x0a) return searchStart + index + 1;
+      }
+      searchEnd = searchStart;
+    }
+    return 0;
+  } finally {
+    await file.close();
+  }
 }
 
 export async function listCodexJsonlFiles(root: string): Promise<string[]> {
@@ -61,6 +90,8 @@ function readCodexDirectory(root: string) {
 export class CodexHistoryIndexer {
   private readonly maxConcurrentReads: number;
   private readonly readMetadata: typeof readCodexSessionMetadata;
+  private readonly readMetadataFrom: typeof readCodexSessionMetadataFrom;
+  private readonly fileIndexTails = new Map<string, Promise<void>>();
 
   constructor(
     private readonly store: CodexHistoryIndexStore,
@@ -72,10 +103,49 @@ export class CodexHistoryIndexer {
       options.maxConcurrentReads ?? DEFAULT_MAX_CONCURRENT_READS
     );
     this.readMetadata = options.readMetadata ?? readCodexSessionMetadata;
+    this.readMetadataFrom = options.readMetadataFrom ?? readCodexSessionMetadataFrom;
   }
 
   async indexFile(filePath: string): Promise<CodexSessionMetadata | null> {
-    const metadata = await this.readMetadataForIndexing(filePath);
+    const previous = this.fileIndexTails.get(filePath) ?? Promise.resolve();
+    const task = previous.then(() => this.indexFileSerial(filePath));
+    const tail = task.then(
+      () => undefined,
+      () => undefined
+    );
+    this.fileIndexTails.set(filePath, tail);
+
+    try {
+      return await task;
+    } finally {
+      if (this.fileIndexTails.get(filePath) === tail) this.fileIndexTails.delete(filePath);
+    }
+  }
+
+  private async indexFileSerial(filePath: string): Promise<CodexSessionMetadata | null> {
+    let fileState: FileWithMtime;
+    try {
+      const fileStat = await stat(filePath);
+      fileState = { filePath, mtimeMs: fileStat.mtimeMs, size: fileStat.size };
+    } catch (error) {
+      if (!isMissingFileError(error)) throw error;
+      await this.store.deleteByFilePath(filePath);
+      return null;
+    }
+
+    const indexed = await this.store.getSessionMetadataByFilePath(filePath);
+    if (
+      indexed &&
+      indexed.fileMtimeMs === fileState.mtimeMs &&
+      indexed.fileSize === fileState.size
+    ) {
+      return null;
+    }
+
+    const metadata =
+      indexed && fileState.size > indexed.fileSize
+        ? await this.readAppendedMetadataForIndexing(filePath, indexed)
+        : await this.readMetadataForIndexing(filePath);
     if (metadata) await this.store.upsertSession(metadata);
     return metadata;
   }
@@ -85,9 +155,8 @@ export class CodexHistoryIndexer {
     for (let start = 0; start < filePaths.length; start += this.maxConcurrentReads) {
       const batch = filePaths.slice(start, start + this.maxConcurrentReads);
       const metadata = (
-        await Promise.all(batch.map((filePath) => this.readMetadataForIndexing(filePath)))
+        await Promise.all(batch.map((filePath) => this.indexFile(filePath)))
       ).filter((record): record is CodexSessionMetadata => record !== null);
-      if (metadata.length > 0) await this.store.upsertSessions(metadata);
       indexed.push(...metadata);
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
@@ -135,6 +204,21 @@ export class CodexHistoryIndexer {
       if (!isMissingFileError(error)) throw error;
 
       // 文件在索引时被删除时，直接清掉旧记录，避免留下过期索引。
+      await this.store.deleteByFilePath(filePath);
+      return null;
+    }
+  }
+
+  private async readAppendedMetadataForIndexing(
+    filePath: string,
+    indexed: CodexSessionMetadata
+  ): Promise<CodexSessionMetadata | null> {
+    try {
+      const startByte = await findAppendReadStart(filePath, indexed.fileSize);
+      return await this.readMetadataFrom(filePath, startByte, indexed);
+    } catch (error) {
+      if (!isMissingFileError(error)) throw error;
+
       await this.store.deleteByFilePath(filePath);
       return null;
     }
