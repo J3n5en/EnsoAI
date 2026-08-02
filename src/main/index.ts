@@ -819,3 +819,5 @@ function handleShutdownSignal(signal: string): void {
 process.on('SIGINT', () => handleShutdownSignal('SIGINT'));
 process.on('SIGTERM', () => handleShutdownSignal('SIGTERM'));
 process.on('SIGHUP', () => handleShutdownSignal('SIGHUP'));
+
+// minor type annotation fix
