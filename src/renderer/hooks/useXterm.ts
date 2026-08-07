@@ -32,6 +32,10 @@ function hasVisibleContent(data: string): boolean {
   return stripped.trim().length > 0;
 }
 
+function openTerminalExternalLink(_event: MouseEvent, uri: string): void {
+  void window.electronAPI.shell.openExternal(uri);
+}
+
 export interface UseXtermOptions {
   cwd?: string;
   command?: {
@@ -311,13 +315,14 @@ export function useXterm({
       allowProposedApi: true,
       allowTransparency: settings.backgroundImageEnabled,
       rescaleOverlappingGlyphs: true,
+      linkHandler: {
+        activate: openTerminalExternalLink,
+      },
     });
 
     const fitAddon = new FitAddon();
     const searchAddon = new SearchAddon();
-    const webLinksAddon = new WebLinksAddon((_event, uri) => {
-      window.electronAPI.shell.openExternal(uri);
-    });
+    const webLinksAddon = new WebLinksAddon(openTerminalExternalLink);
     const unicode11Addon = new Unicode11Addon();
 
     terminal.loadAddon(fitAddon);

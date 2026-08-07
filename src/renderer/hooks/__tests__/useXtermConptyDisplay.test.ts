@@ -12,4 +12,11 @@ describe('useXterm terminal display options', () => {
   it('passes Windows ConPTY compatibility setting to terminal creation', () => {
     expect(source).toContain('windowsConptyCompatibilityFixEnabled');
   });
+
+  it('routes OSC 8 hyperlinks through Electron instead of the xterm default warning', () => {
+    expect(source).toMatch(
+      /new Terminal\(\{[\s\S]*?linkHandler:\s*\{\s*activate:\s*openTerminalExternalLink/
+    );
+    expect(source).toContain('window.electronAPI.shell.openExternal(uri)');
+  });
 });
