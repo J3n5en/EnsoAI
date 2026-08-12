@@ -55,11 +55,11 @@ import { setupDoubleClickScope } from './editorScopeSelection';
 import { isImageFile, isPdfFile } from './fileIcons';
 import { ImagePreview } from './ImagePreview';
 import { MarkdownPreview } from './MarkdownPreview';
+// Monaco setup side effects + runtime instance for model management
+import { monaco as monacoRuntime } from './monacoSetup';
 import { CUSTOM_THEME_NAME, defineMonacoTheme } from './monacoTheme';
 import { PdfPreview } from './PdfPreview';
 import { useEditorBlame } from './useEditorBlame';
-// Import for side effects (Monaco setup)
-import './monacoSetup';
 
 type Monaco = typeof monaco;
 
@@ -330,6 +330,51 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
       if (editNavTimerRef.current) clearTimeout(editNavTimerRef.current);
     };
   }, []);
+
+  // Dispose Monaco models for files no longer open in any tab.
+  // @monaco-editor/react caches models per `path` and never disposes them, so
+  // every file ever opened would otherwise stay in memory for the whole session.
+  // Models for open tabs are kept (preserves undo history); dirty tabs saved in
+  // other worktrees are kept too so unsaved edits are never destroyed.
+  useEffect(() => {
+    const keepUris = new Set<string>(tabs.map((tab) => toMonacoFileUri(tab.path)));
+    const { worktreeStates } = useEditorStore.getState();
+    for (const state of Object.values(worktreeStates)) {
+      for (const tab of state.tabs) {
+        if (tab.isDirty) keepUris.add(toMonacoFileUri(tab.path));
+      }
+    }
+    for (const model of monacoRuntime.editor.getModels()) {
+      if (model.uri.scheme !== 'file') continue;
+      if (keepUris.has(model.uri.toString())) continue;
+      if (model.isAttachedToEditor()) continue;
+      model.dispose();
+    }
+  }, [tabs]);
+
+  // Reload content for tabs whose text was unloaded during a worktree switch
+  useEffect(() => {
+    const path = activeTab?.path;
+    if (!path || !activeTab?.contentUnloaded) return;
+    let cancelled = false;
+    void window.electronAPI.file.read(path).then(
+      ({ content, isBinary }) => {
+        if (cancelled) return;
+        const store = useEditorStore.getState();
+        const tab = store.tabs.find((t) => t.path === path);
+        if (!tab?.contentUnloaded) return;
+        store.updateFileContent(path, isBinary ? '' : content, false);
+      },
+      () => {
+        if (cancelled) return;
+        // File may have been deleted externally; show the tab as empty
+        useEditorStore.getState().updateFileContent(path, '', false);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab?.path, activeTab?.contentUnloaded]);
 
   // Set editor value without triggering the onChange handler (not treated as user input)
   const setEditorValueProgrammatically = useCallback(
@@ -663,7 +708,8 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
 
       editor.onDidDispose(() => searchDisposable.dispose());
 
-      setupDoubleClickScope(editor);
+      const doubleClickDisposable = setupDoubleClickScope(editor);
+      editor.onDidDispose(() => doubleClickDisposable.dispose());
 
       definitionNavDisposableRef.current?.dispose();
       definitionNavDisposableRef.current = setupDefinitionNavigation(
@@ -1458,6 +1504,10 @@ export const EditorArea = forwardRef<EditorAreaRef, EditorAreaProps>(function Ed
                 <ImagePreview path={activeTab.path} />
               ) : isPdf ? (
                 <PdfPreview path={activeTab.path} />
+              ) : activeTab.contentUnloaded ? (
+                // Content is being reloaded from disk after a worktree switch;
+                // don't mount the editor with empty text (would pollute undo)
+                <div className="h-full w-full" />
               ) : (
                 <Editor
                   width="100%"

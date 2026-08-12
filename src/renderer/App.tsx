@@ -941,6 +941,12 @@ export default function App() {
         },
       })
       .then(() => {
+        // Close agent/terminal sessions and clear per-worktree store entries.
+        // Without this, sessions of the removed worktree stay in the stores
+        // (and persist to localStorage) for the rest of the app lifetime.
+        closeAgentSessions(worktree.path);
+        closeTerminalSessions(worktree.path);
+        clearWorktreeActivity(worktree.path);
         // Clear editor state for the removed worktree
         clearEditorWorktreeState(worktree.path);
         // Clear selection if the active worktree was removed

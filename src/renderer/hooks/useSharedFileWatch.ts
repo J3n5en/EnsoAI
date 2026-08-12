@@ -6,10 +6,14 @@ type FileChangeEvent = {
   path: string;
 };
 
+type ChangeCallbackRef = { current: (event: FileChangeEvent) => void };
+
 type WatchEntry = {
   dirPath: string;
   normalizedDirPath: string;
   refCount: number;
+  // All subscribers' callbacks; the single IPC listener dispatches to each one
+  callbacks: Set<ChangeCallbackRef>;
   stop?: () => void;
 };
 
@@ -39,24 +43,33 @@ export function useSharedFileWatch(
     const key = normalizedDirPath;
     let entry = watches.get(key);
     if (!entry) {
-      entry = { dirPath, normalizedDirPath, refCount: 0 };
+      entry = { dirPath, normalizedDirPath, refCount: 0, callbacks: new Set() };
       watches.set(key, entry);
     }
     entry.refCount += 1;
+    // Register this subscriber's callback: previously only the first subscriber
+    // received events because the IPC listener captured a single onChangeRef
+    entry.callbacks.add(onChangeRef);
 
     if (!entry.stop) {
+      const currentEntry = entry;
+      const dispatch = (event: FileChangeEvent) => {
+        for (const callback of currentEntry.callbacks) {
+          callback.current(event);
+        }
+      };
       void window.electronAPI.file.watchStart(dirPath);
       const unsubscribe = window.electronAPI.file.onChange((event) => {
         const eventPath = normalizeWatchedPath(event.path);
         // Deliver only events under the watched dir (or the bulk marker inside it)
         if (eventPath === key || eventPath.startsWith(`${key}/`)) {
-          onChangeRef.current(event);
+          dispatch(event);
           return;
         }
 
         // Bulk marker: allow delivery even if the watcher reports a different prefix.
         if (getPathBasename(eventPath) === '.enso-bulk') {
-          onChangeRef.current(event);
+          dispatch(event);
         }
       });
       entry.stop = () => {
@@ -69,6 +82,7 @@ export function useSharedFileWatch(
       const current = watches.get(key);
       if (!current) return;
       current.refCount -= 1;
+      current.callbacks.delete(onChangeRef);
       if (current.refCount <= 0) {
         current.stop?.();
         watches.delete(key);

@@ -114,7 +114,11 @@ export function startWindowsPtyHelper(
   let timer: NodeJS.Timeout | undefined;
   let cancelPromise: Promise<void> | null = null;
   let session: WindowsPtyHelperSession | null = null;
+  // Output buffered until the renderer calls activate(). Capped: a burst of
+  // output before activation must not grow main-process memory without bound.
+  const PENDING_DATA_MAX_CHARS = 2 * 1024 * 1024;
   const pendingData: string[] = [];
+  let pendingDataChars = 0;
   let pendingExit: { exitCode: number; signal?: number } | null = null;
 
   let resolveReady: (value: WindowsPtyHelperSession) => void = () => undefined;
@@ -183,6 +187,7 @@ export function startWindowsPtyHelper(
         const activate = (): void => {
           if (activated) return;
           activated = true;
+          pendingDataChars = 0;
           for (const data of pendingData.splice(0)) callbacks.onData(data);
           if (pendingExit) {
             const { exitCode, signal } = pendingExit;
@@ -243,8 +248,17 @@ export function startWindowsPtyHelper(
         return;
       }
       case 'data':
-        if (activated) callbacks.onData(message.data);
-        else pendingData.push(message.data);
+        if (activated) {
+          callbacks.onData(message.data);
+        } else {
+          pendingData.push(message.data);
+          pendingDataChars += message.data.length;
+          // Drop oldest chunks beyond the cap (keeps the most recent output)
+          while (pendingDataChars > PENDING_DATA_MAX_CHARS && pendingData.length > 1) {
+            const dropped = pendingData.shift();
+            pendingDataChars -= dropped?.length ?? 0;
+          }
+        }
         return;
       case 'exit':
         if (!creationCompleted) {

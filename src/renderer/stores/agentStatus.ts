@@ -45,20 +45,32 @@ interface AgentStatusStore {
   getStatus: (sessionId: string) => StatusData | undefined;
 }
 
+// Status updates arrive for ANY Claude session on the machine (the status-line
+// hook is installed globally), so entries must be capped or they grow forever.
+const MAX_STATUS_ENTRIES = 100;
+
 export const useAgentStatusStore = create<AgentStatusStore>((set, get) => ({
   statuses: {},
 
   updateStatus: (sessionId, data) =>
-    set((state) => ({
-      statuses: {
+    set((state) => {
+      const statuses: Record<string, StatusData> = {
         ...state.statuses,
         [sessionId]: {
           ...state.statuses[sessionId],
           ...data,
           updatedAt: Date.now(),
         } as StatusData,
-      },
-    })),
+      };
+      const keys = Object.keys(statuses);
+      if (keys.length > MAX_STATUS_ENTRIES) {
+        keys.sort((a, b) => (statuses[a].updatedAt ?? 0) - (statuses[b].updatedAt ?? 0));
+        for (const key of keys.slice(0, keys.length - MAX_STATUS_ENTRIES)) {
+          delete statuses[key];
+        }
+      }
+      return { statuses };
+    }),
 
   clearStatus: (sessionId) =>
     set((state) => {

@@ -54,12 +54,27 @@ function validateWorkdir(workdir: string): string {
   return resolved;
 }
 
+// LRU cap: long sessions across many repos/worktrees would otherwise grow the
+// map forever. Evicted instances are recreated on demand (stateless per call).
+const MAX_GIT_SERVICES = 32;
+
 function getGitService(workdir: string): GitService {
   const resolved = validateWorkdir(workdir);
-  if (!gitServices.has(resolved)) {
-    gitServices.set(resolved, new GitService(resolved));
+  const existing = gitServices.get(resolved);
+  if (existing) {
+    // Refresh LRU position
+    gitServices.delete(resolved);
+    gitServices.set(resolved, existing);
+    return existing;
   }
-  return gitServices.get(resolved)!;
+  const service = new GitService(resolved);
+  gitServices.set(resolved, service);
+  while (gitServices.size > MAX_GIT_SERVICES) {
+    const oldest = gitServices.keys().next().value;
+    if (oldest === undefined) break;
+    gitServices.delete(oldest);
+  }
+  return service;
 }
 
 export function registerGitHandlers(): void {

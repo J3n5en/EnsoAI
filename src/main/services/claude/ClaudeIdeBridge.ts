@@ -220,12 +220,25 @@ export async function startClaudeIdeBridge(
   const { workspaceFolders: initialFolders = [], ideName = 'EnsoAI' } = options;
   const authToken = crypto.randomUUID();
   const STATUS_UPDATE_MIN_INTERVAL_MS = 500;
+  // Throttle bookkeeping is keyed by Claude session id; prune stale entries so
+  // the map doesn't grow for the whole app lifetime.
+  const STATUS_SENT_AT_MAX_ENTRIES = 256;
+  const STATUS_SENT_AT_TTL_MS = 60 * 60 * 1000;
 
   // Mutable state for workspace folders
   let currentWorkspaceFolders = [...initialFolders];
   const pendingStatusUpdates = new Map<string, AgentStatusUpdatePayload>();
   const lastStatusUpdateSentAt = new Map<string, number>();
   let statusUpdateFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function pruneStatusSentAt(now: number): void {
+    if (lastStatusUpdateSentAt.size <= STATUS_SENT_AT_MAX_ENTRIES) return;
+    for (const [sessionId, sentAt] of lastStatusUpdateSentAt) {
+      if (now - sentAt > STATUS_SENT_AT_TTL_MS) {
+        lastStatusUpdateSentAt.delete(sessionId);
+      }
+    }
+  }
 
   function sendStatusUpdateToWindows(update: AgentStatusUpdatePayload): void {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -256,6 +269,7 @@ export async function startClaudeIdeBridge(
 
   function queueStatusUpdate(update: AgentStatusUpdatePayload): void {
     const now = Date.now();
+    pruneStatusSentAt(now);
     const lastSentAt = lastStatusUpdateSentAt.get(update.sessionId) ?? 0;
     const elapsed = now - lastSentAt;
 
@@ -269,14 +283,38 @@ export async function startClaudeIdeBridge(
     scheduleStatusUpdateFlush(Math.max(0, STATUS_UPDATE_MIN_INTERVAL_MS - elapsed));
   }
 
+  // Cap request bodies (aligned with WebInspector); a runaway or malicious POST
+  // must not be able to grow main-process memory without bound.
+  const MAX_HOOK_BODY_BYTES = 1024 * 1024;
+
+  function collectBodyWithLimit(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    onEnd: (body: string) => void
+  ): void {
+    let body = '';
+    let rejected = false;
+    req.on('data', (chunk) => {
+      if (rejected) return;
+      body += chunk.toString();
+      if (body.length > MAX_HOOK_BODY_BYTES) {
+        rejected = true;
+        body = '';
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Payload too large' }));
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      if (rejected) return;
+      onEnd(body);
+    });
+  }
+
   const httpServer = http.createServer((req, res) => {
     // Handle POST /agent-hook for Claude hook notifications (Stop, PermissionRequest, etc.)
     if (req.method === 'POST' && req.url === '/agent-hook') {
-      let body = '';
-      req.on('data', (chunk) => {
-        body += chunk.toString();
-      });
-      req.on('end', async () => {
+      collectBodyWithLimit(req, res, async (body) => {
         try {
           const data = JSON.parse(body);
           const sessionId = data.session_id;
@@ -450,11 +488,7 @@ export async function startClaudeIdeBridge(
 
     // Handle POST /status-line for Claude status line updates
     if (req.method === 'POST' && req.url === '/status-line') {
-      let body = '';
-      req.on('data', (chunk) => {
-        body += chunk.toString();
-      });
-      req.on('end', () => {
+      collectBodyWithLimit(req, res, (body) => {
         try {
           const data = JSON.parse(body);
 
@@ -693,6 +727,17 @@ export async function startClaudeIdeBridge(
       lastStatusUpdateSentAt.clear();
       ipcMain.removeListener(IPC_CHANNELS.MCP_SELECTION_CHANGED, onSelectionChanged);
       ipcMain.removeListener(IPC_CHANNELS.MCP_AT_MENTIONED, onAtMentioned);
+      // Forcefully terminate connected clients: wss.close() only stops new
+      // connections, existing sockets (and their callback closures) would
+      // otherwise stay alive until the remote end closes them.
+      for (const client of clients.values()) {
+        try {
+          client.ws.terminate();
+        } catch {
+          // Ignore
+        }
+      }
+      clients.clear();
       try {
         wss.close();
       } catch {

@@ -91,6 +91,12 @@ export function createAgentTaskPanelWindow(): BrowserWindow {
 
   agentTaskPanelWindow.on('resize', debouncedSaveBounds);
   agentTaskPanelWindow.on('move', debouncedSaveBounds);
+  agentTaskPanelWindow.once('closed', () => {
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+  });
 
   // Load the agent task panel entry
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
@@ -148,4 +154,10 @@ export function resetAgentTaskPanelBounds(): void {
 
 export function setMainWindowRef(ref: BrowserWindow): void {
   mainWindowRef = ref;
+  // Release the reference when the window closes so it can be garbage collected
+  ref.once('closed', () => {
+    if (mainWindowRef === ref) {
+      mainWindowRef = null;
+    }
+  });
 }

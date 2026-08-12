@@ -797,8 +797,11 @@ const electronAPI = {
       return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_PANEL_VISIBILITY_CHANGED, handler);
     },
     onGetSnapshot: (callback: () => void): (() => void) => {
-      ipcRenderer.on(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT, callback);
-      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT, callback);
+      // Wrap in a stable handler like every other on* API so unsubscribe always
+      // removes the exact listener that was registered
+      const handler = () => callback();
+      ipcRenderer.on(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT, handler);
+      return () => ipcRenderer.off(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT, handler);
     },
     sendSnapshotResponse: (snapshot: Record<string, unknown>): void => {
       ipcRenderer.send(IPC_CHANNELS.AGENT_TASK_SNAPSHOT_RESPONSE, snapshot);

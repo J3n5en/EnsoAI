@@ -11,6 +11,8 @@ export interface EditorTab {
   // External change conflict: set when file is modified externally while user has unsaved edits
   hasExternalChange?: boolean;
   externalContent?: string;
+  // Content was unloaded to save memory (worktree switch); reload from disk before display
+  contentUnloaded?: boolean;
 }
 
 export interface PendingCursor {
@@ -101,6 +103,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                   // Clear external change state on explicit file open (fresh load)
                   hasExternalChange: false,
                   externalContent: undefined,
+                  contentUnloaded: false,
                 }
               : tab
           ),
@@ -113,6 +116,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           {
             ...file,
             title: file.title ?? getTabTitle(file.path),
+            contentUnloaded: false,
           },
         ],
         activeTabPath: file.path,
@@ -173,7 +177,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   updateFileContent: (path, content, isDirty = true) =>
     set((state) => ({
-      tabs: state.tabs.map((tab) => (tab.path === path ? { ...tab, content, isDirty } : tab)),
+      tabs: state.tabs.map((tab) =>
+        tab.path === path ? { ...tab, content, isDirty, contentUnloaded: false } : tab
+      ),
     })),
 
   markFileSaved: (path) =>
@@ -304,13 +310,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const state = get();
     const currentPath = state.currentWorktreePath;
 
-    // Save current worktree state (if we have one)
+    // Save current worktree state (if we have one).
+    // Unload contents of non-dirty tabs: keeping full file texts for every
+    // visited worktree grows memory without bound. Content is reloaded from
+    // disk when the worktree becomes active again (see EditorArea).
     let newWorktreeStates = state.worktreeStates;
     if (currentPath) {
       newWorktreeStates = {
         ...newWorktreeStates,
         [currentPath]: {
-          tabs: state.tabs,
+          tabs: state.tabs.map((tab) =>
+            tab.isDirty || tab.content.length === 0
+              ? tab
+              : { ...tab, content: '', contentUnloaded: true }
+          ),
           activeTabPath: state.activeTabPath,
         },
       };

@@ -351,11 +351,20 @@ export async function startCodeReview(options: CodeReviewOptions): Promise<void>
 
   const claudeParser = new ClaudeStreamParser();
   const geminiParser = new GeminiStreamParser();
+  // Full output is only needed for Codex end-of-run parsing; cap it so a very
+  // long review can't accumulate a huge string in the main process.
+  const MAX_FULL_OUTPUT_CHARS = 4 * 1024 * 1024;
   let fullOutput = '';
 
   proc.stdout?.on('data', (data) => {
     const dataStr = data.toString();
-    fullOutput += dataStr;
+    if (provider === 'codex-cli') {
+      fullOutput += dataStr;
+      if (fullOutput.length > MAX_FULL_OUTPUT_CHARS) {
+        // Keep the tail: the final result message is what gets parsed
+        fullOutput = fullOutput.slice(-Math.floor(MAX_FULL_OUTPUT_CHARS / 2));
+      }
+    }
 
     const cleaned = stripAnsi(dataStr);
 

@@ -155,6 +155,9 @@ export interface ExecInPtyOptions {
   killOnTimeout?: boolean;
 }
 
+// Upper bound for output collected by execInPty (detection commands are short)
+const MAX_EXEC_OUTPUT_CHARS = 512 * 1024;
+
 /**
  * Execute command in PTY to load user's environment (PATH, nvm, mise, volta, etc.)
  * Uses the same mechanism as terminal sessions to ensure consistent behavior.
@@ -232,6 +235,11 @@ export async function execInPty(command: string, options: ExecInPtyOptions = {})
 
       dataDisposable = ptyProcess.onData((data) => {
         output += data;
+        // Cap collected output (keep the tail): a chatty command must not
+        // accumulate an unbounded string in the main process
+        if (output.length > MAX_EXEC_OUTPUT_CHARS) {
+          output = output.slice(-Math.floor(MAX_EXEC_OUTPUT_CHARS / 2));
+        }
       });
 
       exitDisposable = ptyProcess.onExit(({ exitCode }) => {

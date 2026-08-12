@@ -34,7 +34,10 @@ export function createPtyHelperRuntime(
   let creationReported = false;
   let helperExited = false;
   let destroyRequested = false;
+  // Cap output buffered before the 'created' event is sent (drop oldest chunks)
+  const PENDING_DATA_MAX_CHARS = 2 * 1024 * 1024;
   const pendingData: string[] = [];
+  let pendingDataChars = 0;
   let sendQueue = Promise.resolve();
 
   const sendEvent = (event: PtyHelperEvent): void => {
@@ -85,6 +88,11 @@ export function createPtyHelperRuntime(
       dataDisposable = spawned.onData((data) => {
         if (!creationReported) {
           pendingData.push(data);
+          pendingDataChars += data.length;
+          while (pendingDataChars > PENDING_DATA_MAX_CHARS && pendingData.length > 1) {
+            const dropped = pendingData.shift();
+            pendingDataChars -= dropped?.length ?? 0;
+          }
           return;
         }
         sendEvent({ type: 'data', data });
@@ -101,6 +109,7 @@ export function createPtyHelperRuntime(
 
       sendEvent({ type: 'created', ptyPid: spawned.pid });
       creationReported = true;
+      pendingDataChars = 0;
       for (const data of pendingData.splice(0)) {
         sendEvent({ type: 'data', data });
       }

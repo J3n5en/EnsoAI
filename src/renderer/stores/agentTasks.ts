@@ -310,12 +310,48 @@ export const useAgentTasksStore = create<AgentTasksState>()(
           };
         }
 
-        if (areAgentTaskRecordsEqual(state.tasks, newTasks)) {
+        // Prune per-session auxiliary records for sessions that no longer exist.
+        // Without this, startTimes/completionTimes/waitingReasons/descriptions
+        // grow for the app lifetime (descriptions even persist to localStorage).
+        const liveIds = new Set(sessions.map((s) => s.id));
+        const pruneRecord = <T>(record: Record<string, T>): Record<string, T> => {
+          let changed = false;
+          const next: Record<string, T> = {};
+          for (const [key, value] of Object.entries(record)) {
+            if (liveIds.has(key)) next[key] = value;
+            else changed = true;
+          }
+          return changed ? next : record;
+        };
+
+        const newStartTimes = pruneRecord(state.startTimes);
+        const newCompletionTimes = pruneRecord(state.completionTimes);
+        const newWaitingReasons = pruneRecord(state.waitingReasons);
+        const newDescriptions = pruneRecord(state.descriptions);
+        if (newDescriptions !== state.descriptions) {
+          saveDescriptions(newDescriptions);
+        }
+
+        const auxChanged =
+          newStartTimes !== state.startTimes ||
+          newCompletionTimes !== state.completionTimes ||
+          newWaitingReasons !== state.waitingReasons ||
+          newDescriptions !== state.descriptions;
+        const tasksEqual = areAgentTaskRecordsEqual(state.tasks, newTasks);
+
+        if (tasksEqual && !auxChanged) {
           return state;
         }
 
-        const derived = computeDerivedArrays(newTasks);
-        return { tasks: newTasks, ...derived };
+        const derived = tasksEqual ? {} : computeDerivedArrays(newTasks);
+        return {
+          tasks: tasksEqual ? state.tasks : newTasks,
+          startTimes: newStartTimes,
+          completionTimes: newCompletionTimes,
+          waitingReasons: newWaitingReasons,
+          descriptions: newDescriptions,
+          ...derived,
+        };
       });
     },
 
