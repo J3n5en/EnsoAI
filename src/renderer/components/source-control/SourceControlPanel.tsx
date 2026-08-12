@@ -307,6 +307,12 @@ export function SourceControlPanel({
   const selectedRepoPath =
     selectedSubmodulePath && rootPath ? joinPath(rootPath, selectedSubmodulePath) : rootPath;
 
+  // Scope the changes-tree folder expand state to the current worktree/submodule
+  const setActiveExpandRoot = useSourceControlStore((s) => s.setActiveRoot);
+  useEffect(() => {
+    setActiveExpandRoot(selectedRepoPath ?? null);
+  }, [selectedRepoPath, setActiveExpandRoot]);
+
   // Refetch immediately when tab becomes active
   useEffect(() => {
     if (isActive && rootPath) {
