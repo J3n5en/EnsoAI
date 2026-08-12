@@ -30,6 +30,9 @@ interface TodoState {
   moveTask: (repoPath: string, taskId: string, newStatus: TaskStatus, newOrder: number) => void;
   reorderTasks: (repoPath: string, status: TaskStatus, orderedIds: string[]) => void;
 
+  /** Drop in-memory cache for a repo removed from the workspace (DB data stays) */
+  unloadRepo: (repoPath: string) => void;
+
   // Auto-Execute Actions
   startAutoExecute: (repoPath: string, taskIds: string[]) => void;
   stopAutoExecute: (repoPath: string) => void;
@@ -201,6 +204,20 @@ export const useTodoStore = create<TodoState>()(
       window.electronAPI.todo
         .reorderTasks(key, status, orderedIds)
         .catch((err) => console.error('[TodoStore] reorderTasks IPC failed:', err));
+    },
+
+    unloadRepo: (repoPath) => {
+      const key = getKey(repoPath);
+      set((state) => {
+        if (!(key in state.tasks) && !state._loaded.has(key) && !(key in state.autoExecute)) {
+          return state;
+        }
+        const { [key]: _, ...restTasks } = state.tasks;
+        const { [key]: __, ...restAutoExecute } = state.autoExecute;
+        const newLoaded = new Set(state._loaded);
+        newLoaded.delete(key);
+        return { tasks: restTasks, autoExecute: restAutoExecute, _loaded: newLoaded };
+      });
     },
 
     // Auto-Execute Actions

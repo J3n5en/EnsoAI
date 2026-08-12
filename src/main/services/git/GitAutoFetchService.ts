@@ -13,6 +13,7 @@ const IDLE_FETCH_THRESHOLD = 3;
 class GitAutoFetchService {
   private mainWindow: BrowserWindow | null = null;
   private intervalId: NodeJS.Timeout | null = null;
+  private initialFetchTimer: NodeJS.Timeout | null = null;
   private lastFetchTime = 0;
   private worktreePaths: Set<string> = new Set();
   private enabled = false;
@@ -41,6 +42,15 @@ class GitAutoFetchService {
     };
     window.on('focus', this.onFocusHandler);
 
+    // Release the reference when the window closes so it can be GC'd and a
+    // new window can re-initialize the service (multi-window scenario)
+    window.once('closed', () => {
+      if (this.mainWindow === window) {
+        this.mainWindow = null;
+        this.onFocusHandler = null;
+      }
+    });
+
     if (this.enabled) {
       this.start();
     }
@@ -56,13 +66,19 @@ class GitAutoFetchService {
       this.mainWindow.off('focus', this.onFocusHandler);
       this.onFocusHandler = null;
     }
+    // Release the window reference so a closed window can be garbage collected
+    this.mainWindow = null;
   }
 
   start(): void {
     if (this.intervalId) return;
     this.consecutiveNoChange = 0;
     this.scheduleNextFetch();
-    setTimeout(() => this.fetchAll(), 5000);
+    if (this.initialFetchTimer) clearTimeout(this.initialFetchTimer);
+    this.initialFetchTimer = setTimeout(() => {
+      this.initialFetchTimer = null;
+      this.fetchAll();
+    }, 5000);
   }
 
   private scheduleNextFetch(): void {
@@ -81,6 +97,10 @@ class GitAutoFetchService {
     if (this.intervalId) {
       clearTimeout(this.intervalId);
       this.intervalId = null;
+    }
+    if (this.initialFetchTimer) {
+      clearTimeout(this.initialFetchTimer);
+      this.initialFetchTimer = null;
     }
   }
 

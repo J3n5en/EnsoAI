@@ -10,8 +10,29 @@ import {
   showAgentTaskPanelWindow,
 } from '../windows/AgentTaskPanelWindow';
 
+// Current main window, resolved dynamically so IPC handlers never pin a
+// destroyed BrowserWindow (and keep working after a new window is created).
+let currentMainWindow: BrowserWindow | null = null;
+
+export function setAgentTaskPanelMainWindow(window: BrowserWindow): void {
+  currentMainWindow = window;
+  setMainWindowRef(window);
+  window.once('closed', () => {
+    if (currentMainWindow === window) {
+      currentMainWindow = null;
+    }
+  });
+}
+
+function getMainWindow(): BrowserWindow | null {
+  if (currentMainWindow && !currentMainWindow.isDestroyed()) {
+    return currentMainWindow;
+  }
+  return null;
+}
+
 export function registerAgentTaskPanelHandlers(mainWindow: BrowserWindow): void {
-  setMainWindowRef(mainWindow);
+  setAgentTaskPanelMainWindow(mainWindow);
   // Toggle panel visibility
   ipcMain.handle(IPC_CHANNELS.AGENT_TASK_PANEL_TOGGLE, () => {
     if (isAgentTaskPanelVisible()) {
@@ -21,9 +42,7 @@ export function registerAgentTaskPanelHandlers(mainWindow: BrowserWindow): void 
     }
     const visible = isAgentTaskPanelVisible();
     // Notify main window of visibility change
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(IPC_CHANNELS.AGENT_TASK_PANEL_VISIBILITY_CHANGED, visible);
-    }
+    getMainWindow()?.webContents.send(IPC_CHANNELS.AGENT_TASK_PANEL_VISIBILITY_CHANGED, visible);
     return visible;
   });
 
@@ -31,22 +50,24 @@ export function registerAgentTaskPanelHandlers(mainWindow: BrowserWindow): void 
   ipcMain.on(
     IPC_CHANNELS.AGENT_TASK_NAVIGATE_TO_SESSION,
     (_event, params: { sessionId: string; repoPath: string; cwd: string }) => {
-      if (!mainWindow.isDestroyed()) {
+      const window = getMainWindow();
+      if (window) {
         // Restore main window if minimized
-        if (mainWindow.isMinimized()) {
-          mainWindow.restore();
+        if (window.isMinimized()) {
+          window.restore();
         }
-        mainWindow.focus();
-        mainWindow.webContents.send(IPC_CHANNELS.AGENT_TASK_NAVIGATE_TO_SESSION, params);
+        window.focus();
+        window.webContents.send(IPC_CHANNELS.AGENT_TASK_NAVIGATE_TO_SESSION, params);
       }
     }
   );
 
   // Get snapshot from main window and forward to task panel
   ipcMain.handle(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT, () => {
-    if (mainWindow.isDestroyed()) return null;
+    const window = getMainWindow();
+    if (!window) return null;
     // Request snapshot from main window renderer
-    mainWindow.webContents.send(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT);
+    window.webContents.send(IPC_CHANNELS.AGENT_TASK_GET_SNAPSHOT);
     return true;
   });
 

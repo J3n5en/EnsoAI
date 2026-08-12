@@ -15,11 +15,25 @@ import { ptyManager } from './terminal';
 
 const worktreeServices = new Map<string, WorktreeService>();
 
+// LRU cap: instances are cheap to recreate; keep the map from growing forever
+const MAX_WORKTREE_SERVICES = 16;
+
 function getWorktreeService(workdir: string): WorktreeService {
-  if (!worktreeServices.has(workdir)) {
-    worktreeServices.set(workdir, new WorktreeService(workdir));
+  const existing = worktreeServices.get(workdir);
+  if (existing) {
+    // Refresh LRU position
+    worktreeServices.delete(workdir);
+    worktreeServices.set(workdir, existing);
+    return existing;
   }
-  return worktreeServices.get(workdir)!;
+  const service = new WorktreeService(workdir);
+  worktreeServices.set(workdir, service);
+  while (worktreeServices.size > MAX_WORKTREE_SERVICES) {
+    const oldest = worktreeServices.keys().next().value;
+    if (oldest === undefined) break;
+    worktreeServices.delete(oldest);
+  }
+  return service;
 }
 
 export function clearWorktreeService(workdir: string): void {

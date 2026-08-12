@@ -5,7 +5,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { type Locale, normalizeLocale } from '@shared/i18n';
 import { IPC_CHANNELS, type OpenContext, type ProxySettings } from '@shared/types';
 import { customProtocolUriToPath, type SupportedFileUrlPlatform } from '@shared/utils/fileUrl';
-import { app, BrowserWindow, ipcMain, Menu, net, protocol } from 'electron';
+import { app, BrowserWindow, crashReporter, ipcMain, Menu, net, protocol } from 'electron';
 
 // Register custom protocol privileges
 protocol.registerSchemesAsPrivileged([
@@ -37,7 +37,7 @@ import {
   cleanupAllResourcesSync,
   registerIpcHandlers,
 } from './ipc';
-import { registerAgentTaskPanelHandlers } from './ipc/agentTaskPanel';
+import { registerAgentTaskPanelHandlers, setAgentTaskPanelMainWindow } from './ipc/agentTaskPanel';
 import { initClaudeProviderWatcher } from './ipc/claudeProvider';
 import { cleanupTempFiles } from './ipc/files';
 import { readSettings } from './ipc/settings';
@@ -79,6 +79,36 @@ if (isDev) {
   const profile = sanitizeProfileName(process.env.ENSOAI_PROFILE || '') || 'dev';
   app.setPath('userData', join(app.getPath('appData'), `${app.getName()}-${profile}`));
 }
+
+// Crash observability: keep local minidumps for native crashes so "app crashed
+// after long usage" reports can be diagnosed. Must start before app is ready.
+crashReporter.start({ uploadToServer: false });
+
+// Log child process crashes (renderer OOM/crash was previously silent: the
+// window just went blank with no trace anywhere).
+const rendererReloadAt = new WeakMap<Electron.WebContents, number>();
+app.on('render-process-gone', (_event, webContents, details) => {
+  log.error(
+    `[crash] Renderer process gone: reason=${details.reason} exitCode=${details.exitCode} url=${webContents.getURL()}`
+  );
+  // Auto-recover from OOM/crash by reloading, at most once per 10s to avoid loops
+  if ((details.reason === 'oom' || details.reason === 'crashed') && !webContents.isDestroyed()) {
+    const now = Date.now();
+    const lastReload = rendererReloadAt.get(webContents) ?? 0;
+    if (now - lastReload > 10_000) {
+      rendererReloadAt.set(webContents, now);
+      webContents.reload();
+    }
+  }
+});
+
+app.on('child-process-gone', (_event, details) => {
+  // 'clean-exit' is normal termination; everything else is worth recording
+  if (details.reason === 'clean-exit') return;
+  log.error(
+    `[crash] Child process gone: type=${details.type} reason=${details.reason} exitCode=${details.exitCode} name=${details.name ?? ''}`
+  );
+});
 
 // Register URL scheme handler (must be done before app is ready)
 if (process.defaultApp) {
@@ -711,7 +741,9 @@ app.whenReady().then(async () => {
   gitAutoFetchService.init(mainWindow);
 
   const handleNewWindow = () => {
-    createMainWindow();
+    const win = createMainWindow();
+    // Rebind services that hold a main-window reference to the new window
+    setAgentTaskPanelMainWindow(win);
   };
 
   // Build and set application menu

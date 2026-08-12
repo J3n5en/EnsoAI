@@ -31,6 +31,14 @@ let watcherWindow: BrowserWindow | null = null;
  */
 export function initClaudeProviderWatcher(window: BrowserWindow, enabled: boolean): void {
   watcherWindow = window;
+  // Release the reference (and stop the watcher) when the window closes so the
+  // destroyed window can be garbage collected
+  window.once('closed', () => {
+    if (watcherWindow === window) {
+      watcherWindow = null;
+      unwatchClaudeSettings();
+    }
+  });
   if (enabled) {
     watchClaudeSettings(window);
   }

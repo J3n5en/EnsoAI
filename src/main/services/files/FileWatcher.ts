@@ -13,6 +13,10 @@ export class FileWatcher {
   }
 
   async start(): Promise<void> {
+    // Guard against double-start: don't orphan an existing subscription
+    if (this.subscription) {
+      await this.stop();
+    }
     this.subscription = await subscribe(
       this.dirPath,
       (err: Error | null, events: Event[]) => {

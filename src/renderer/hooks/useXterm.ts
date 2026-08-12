@@ -199,6 +199,9 @@ export function useXterm({
   // rAF write buffer for smooth rendering
   const writeBufferRef = useRef('');
   const isFlushPendingRef = useRef(false);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exitFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const compositionCleanupRef = useRef<(() => void) | null>(null);
 
   const write = useCallback((data: string) => {
     if (ptyIdRef.current) {
@@ -338,12 +341,16 @@ export function useXterm({
     // IME compositionend 兜底：清空 textarea 防止旧内容残留导致输入异常
     const textarea = terminal.textarea;
     if (textarea) {
-      textarea.addEventListener('compositionend', () => {
+      const handleCompositionEnd = () => {
         // 延迟清空，确保 xterm 先读取最终文本
         setTimeout(() => {
           textarea.value = '';
         }, 0);
-      });
+      };
+      textarea.addEventListener('compositionend', handleCompositionEnd);
+      compositionCleanupRef.current = () => {
+        textarea.removeEventListener('compositionend', handleCompositionEnd);
+      };
     }
 
     // Listen for title changes (OSC escape sequences)
@@ -647,7 +654,14 @@ export function useXterm({
 
           if (!isFlushPendingRef.current) {
             isFlushPendingRef.current = true;
-            setTimeout(() => {
+            flushTimerRef.current = setTimeout(() => {
+              flushTimerRef.current = null;
+              // Guard: the terminal may have been disposed while this flush was queued
+              if (terminalRef.current !== terminal) {
+                writeBufferRef.current = '';
+                isFlushPendingRef.current = false;
+                return;
+              }
               if (writeBufferRef.current.length > 0) {
                 const bufferedData = writeBufferRef.current;
 
@@ -692,7 +706,10 @@ export function useXterm({
       const exitCleanup = window.electronAPI.terminal.onExit((event) => {
         if (event.id === ptyId) {
           // Wait for any pending data events to arrive (IPC race condition)
-          setTimeout(() => {
+          exitFlushTimerRef.current = setTimeout(() => {
+            exitFlushTimerRef.current = null;
+            // Guard: the terminal may have been disposed while this was queued
+            if (terminalRef.current !== terminal) return;
             // Flush any remaining buffered data
             if (writeBufferRef.current.length > 0) {
               const bufferedData = writeBufferRef.current;
@@ -781,6 +798,17 @@ export function useXterm({
       createRequestIdRef.current += 1;
       cleanupRef.current?.();
       exitCleanupRef.current?.();
+      // Cancel pending flush timers and drop buffered output
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      if (exitFlushTimerRef.current) {
+        clearTimeout(exitFlushTimerRef.current);
+        exitFlushTimerRef.current = null;
+      }
+      writeBufferRef.current = '';
+      isFlushPendingRef.current = false;
       if (ptyIdRef.current) {
         window.electronAPI.terminal.destroy(ptyIdRef.current);
         ptyIdRef.current = null;
@@ -793,6 +821,9 @@ export function useXterm({
         );
         copyOnSelectionHandlerRef.current = null;
       }
+      // Remove IME compositionend listener from the terminal textarea
+      compositionCleanupRef.current?.();
+      compositionCleanupRef.current = null;
       // Dispose addons before terminal to prevent async callback errors
       linkProviderDisposableRef.current?.dispose();
       linkProviderDisposableRef.current = null;
@@ -838,13 +869,11 @@ export function useXterm({
       }
     };
 
-    const debouncedResize = (() => {
-      let timeout: ReturnType<typeof setTimeout>;
-      return () => {
-        clearTimeout(timeout);
-        timeout = setTimeout(handleResize, 50);
-      };
-    })();
+    let resizeTimeout: ReturnType<typeof setTimeout> | undefined;
+    const debouncedResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(handleResize, 50);
+    };
 
     window.addEventListener('resize', debouncedResize);
 
@@ -863,6 +892,7 @@ export function useXterm({
     }
 
     return () => {
+      clearTimeout(resizeTimeout);
       window.removeEventListener('resize', debouncedResize);
       observer.disconnect();
       intersectionObserver.disconnect();

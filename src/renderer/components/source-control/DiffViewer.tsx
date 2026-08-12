@@ -165,13 +165,18 @@ export function DiffViewer({
   const diff = externalDiff ?? fetchedDiff;
 
   const editorRef = useRef<DiffEditorInstance | null>(null);
-  const modelsRef = useRef<{
-    original: ReturnType<typeof monaco.editor.createModel> | null;
-    modified: ReturnType<typeof monaco.editor.createModel> | null;
-  }>({
-    original: null,
-    modified: null,
-  });
+  // Everything created during one DiffEditor mount (listeners, timers, models).
+  // The DiffEditor remounts via `key` without unmounting DiffViewer, so this state
+  // must be disposed manually on the next mount and on DiffViewer unmount —
+  // @monaco-editor/react ignores values returned from onMount, and keepCurrent*
+  // prevents the library from disposing models itself.
+  const mountStateRef = useRef<{
+    disposables: { dispose: () => void }[];
+    original: monaco.editor.ITextModel | null;
+    modified: monaco.editor.ITextModel | null;
+    timers: ReturnType<typeof setTimeout>[];
+    intervals: ReturnType<typeof setInterval>[];
+  } | null>(null);
   const editorFilePathRef = useRef<string | null>(null); // Track which file the current editor is displaying
   const [currentDiffIndex, setCurrentDiffIndex] = useState(-1);
   const [lineChanges, setLineChanges] = useState<ReturnType<DiffEditorInstance['getLineChanges']>>(
@@ -807,6 +812,43 @@ export function DiffViewer({
     [setNavigationDirection, highlightCurrentDiff]
   );
 
+  // Dispose listeners/timers/models recorded for the previous DiffEditor mount.
+  // Models reused by the next mount (same URI returns the same instance) are kept.
+  const cleanupMountState = useCallback(
+    (keep?: {
+      original: monaco.editor.ITextModel | null;
+      modified: monaco.editor.ITextModel | null;
+    }) => {
+      const state = mountStateRef.current;
+      if (!state) return;
+      mountStateRef.current = null;
+      for (const timer of state.timers) clearTimeout(timer);
+      for (const interval of state.intervals) clearInterval(interval);
+      for (const disposable of state.disposables) {
+        try {
+          disposable.dispose();
+        } catch {
+          // Editor may already be disposed by the library
+        }
+      }
+      for (const model of [state.original, state.modified]) {
+        if (!model || model.isDisposed()) continue;
+        if (keep && (model === keep.original || model === keep.modified)) continue;
+        try {
+          model.dispose();
+        } catch {
+          // Ignore disposal races
+        }
+      }
+    },
+    []
+  );
+
+  // Dispose the last mount's resources when DiffViewer itself unmounts
+  useEffect(() => {
+    return () => cleanupMountState();
+  }, [cleanupMountState]);
+
   const handleEditorMount = useCallback(
     (editor: DiffEditorInstance) => {
       editorRef.current = editor;
@@ -818,15 +860,22 @@ export function DiffViewer({
       scheduleApplyHideUnchangedRegions(editor);
 
       const currentModel = editor.getModel();
-      const mountedModels = currentModel
-        ? { original: currentModel.original, modified: currentModel.modified }
-        : null;
-      if (currentModel) {
-        modelsRef.current.original = currentModel.original;
-        modelsRef.current.modified = currentModel.modified;
-      }
+      // The previous editor (if any) is already disposed at this point; release
+      // its listeners and models unless the new mount reuses the same models.
+      cleanupMountState({
+        original: currentModel?.original ?? null,
+        modified: currentModel?.modified ?? null,
+      });
+      const mountState: NonNullable<typeof mountStateRef.current> = {
+        disposables: [],
+        original: currentModel?.original ?? null,
+        modified: currentModel?.modified ?? null,
+        timers: [],
+        intervals: [],
+      };
+      mountStateRef.current = mountState;
 
-      const disposables: { dispose: () => void }[] = [];
+      const disposables = mountState.disposables;
 
       disposables.push(
         editor.onDidUpdateDiff(() => {
@@ -860,7 +909,7 @@ export function DiffViewer({
         })
       );
 
-      setTimeout(() => {
+      const navTimer = setTimeout(() => {
         const pendingDirection = pendingNavigationDirectionRef.current;
         if (pendingDirection && !hasAutoNavigatedRef.current) {
           const changes = editor.getLineChanges();
@@ -883,24 +932,13 @@ export function DiffViewer({
                 clearInterval(pollTimer);
               }
             }, 50);
+            mountState.intervals.push(pollTimer);
           }
         }
       }, 0);
-
-      return () => {
-        for (const d of disposables) {
-          d.dispose();
-        }
-        // Prevent commit-view Monaco models from accumulating in memory.
-        // We intentionally keep worktree models cached for performance, but commit history
-        // can generate many unique models (commitHash scoped URIs), so dispose on unmount.
-        if (isCommitView && mountedModels) {
-          mountedModels.original?.dispose();
-          mountedModels.modified?.dispose();
-        }
-      };
+      mountState.timers.push(navTimer);
     },
-    [file?.path, performAutoNavigation, isCommitView, scheduleApplyHideUnchangedRegions]
+    [file?.path, performAutoNavigation, scheduleApplyHideUnchangedRegions, cleanupMountState]
   );
 
   // Toggle hide unchanged regions
@@ -1386,7 +1424,8 @@ export function DiffViewer({
                 enabled: hideUnchangedRegions,
               },
             }}
-            // Prevent library from disposing models before DiffEditorWidget resets
+            // Prevent library from disposing models before DiffEditorWidget resets.
+            // Models are disposed manually via cleanupMountState on remount/unmount.
             keepCurrentOriginalModel
             keepCurrentModifiedModel
           />

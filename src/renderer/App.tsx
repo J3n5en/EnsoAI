@@ -92,7 +92,9 @@ import { initCloneProgressListener } from './stores/cloneTasks';
 import { useEditorStore } from './stores/editor';
 import { useInitScriptStore } from './stores/initScript';
 import { useSettingsStore } from './stores/settings';
+import { useSourceControlStore } from './stores/sourceControl';
 import { useTempWorkspaceStore } from './stores/tempWorkspace';
+import { useTodoStore } from './stores/todo';
 import { useWorktreeStore } from './stores/worktree';
 import { initAgentActivityListener, useWorktreeActivityStore } from './stores/worktreeActivity';
 
@@ -533,6 +535,8 @@ export default function App() {
     (repoPath: string) => {
       const updated = repositories.filter((r) => r.path !== repoPath);
       saveRepositories(updated);
+      // Drop the repo's in-memory todo cache (SQLite data stays on disk)
+      useTodoStore.getState().unloadRepo(repoPath);
       // Clear selection if removed repo was selected
       if (selectedRepo === repoPath) {
         setSelectedRepo(null);
@@ -654,6 +658,7 @@ export default function App() {
       removeTempWorkspace(id);
       clearEditorWorktreeState(target.path);
       clearWorktreeActivity(target.path);
+      useSourceControlStore.getState().clearRootFolders(target.path);
 
       if (activeWorktree?.path === target.path) {
         const remaining = tempWorkspaces.filter((item) => item.id !== id);
@@ -941,6 +946,13 @@ export default function App() {
         },
       })
       .then(() => {
+        // Close agent/terminal sessions and clear per-worktree store entries.
+        // Without this, sessions of the removed worktree stay in the stores
+        // (and persist to localStorage) for the rest of the app lifetime.
+        closeAgentSessions(worktree.path);
+        closeTerminalSessions(worktree.path);
+        clearWorktreeActivity(worktree.path);
+        useSourceControlStore.getState().clearRootFolders(worktree.path);
         // Clear editor state for the removed worktree
         clearEditorWorktreeState(worktree.path);
         // Clear selection if the active worktree was removed

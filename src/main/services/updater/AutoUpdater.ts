@@ -29,6 +29,7 @@ class AutoUpdaterService {
   private updateDownloaded = false;
   private _isQuittingForUpdate = false;
   private checkIntervalId: NodeJS.Timeout | null = null;
+  private initialCheckTimer: NodeJS.Timeout | null = null;
   private lastCheckTime = 0;
   private onFocusHandler: (() => void) | null = null;
 
@@ -106,6 +107,14 @@ class AutoUpdaterService {
     };
     window.on('focus', this.onFocusHandler);
 
+    // Release the reference when the window closes so it can be GC'd
+    window.once('closed', () => {
+      if (this.mainWindow === window) {
+        this.mainWindow = null;
+        this.onFocusHandler = null;
+      }
+    });
+
     // Apply initial auto-update setting
     this.setAutoUpdateEnabled(autoUpdateEnabled);
   }
@@ -115,10 +124,16 @@ class AutoUpdaterService {
       clearInterval(this.checkIntervalId);
       this.checkIntervalId = null;
     }
+    if (this.initialCheckTimer) {
+      clearTimeout(this.initialCheckTimer);
+      this.initialCheckTimer = null;
+    }
     if (this.mainWindow && this.onFocusHandler) {
       this.mainWindow.off('focus', this.onFocusHandler);
       this.onFocusHandler = null;
     }
+    // Release the window reference so a closed window can be garbage collected
+    this.mainWindow = null;
   }
 
   private sendStatus(status: UpdateStatus): void {
@@ -179,11 +194,19 @@ class AutoUpdaterService {
           this.checkForUpdates();
         }, CHECK_INTERVAL_MS);
       }
-      setTimeout(() => this.checkForUpdates(), 3000);
+      if (this.initialCheckTimer) clearTimeout(this.initialCheckTimer);
+      this.initialCheckTimer = setTimeout(() => {
+        this.initialCheckTimer = null;
+        this.checkForUpdates();
+      }, 3000);
     } else {
       if (this.checkIntervalId) {
         clearInterval(this.checkIntervalId);
         this.checkIntervalId = null;
+      }
+      if (this.initialCheckTimer) {
+        clearTimeout(this.initialCheckTimer);
+        this.initialCheckTimer = null;
       }
     }
   }

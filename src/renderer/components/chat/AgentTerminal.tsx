@@ -1161,11 +1161,16 @@ export function AgentTerminal({
     return () => container.removeEventListener('contextmenu', handleContextMenu);
   }, [handleContextMenu, containerRef]);
 
-  // Cleanup idle timer on unmount
+  // Cleanup idle/enter-delay timers on unmount
   useEffect(() => {
     return () => {
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+      if (enterDelayTimerRef.current) {
+        clearTimeout(enterDelayTimerRef.current);
+        enterDelayTimerRef.current = null;
       }
     };
   }, []);

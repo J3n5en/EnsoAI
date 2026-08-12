@@ -425,12 +425,28 @@ export function MergeEditor({
     });
   }, []);
 
+  const scrollSyncDisposablesRef = useRef(new Map<EditorInstance, { dispose: () => void }>());
+
   const setupScrollSync = useCallback(
     (editor: EditorInstance) => {
-      editor.onDidScrollChange(() => handleScroll(editor));
+      // Dispose a previous registration for this editor (guards double setup)
+      scrollSyncDisposablesRef.current.get(editor)?.dispose();
+      const disposable = editor.onDidScrollChange(() => handleScroll(editor));
+      scrollSyncDisposablesRef.current.set(editor, disposable);
     },
     [handleScroll]
   );
+
+  // Dispose scroll-sync listeners on unmount
+  useEffect(() => {
+    const disposables = scrollSyncDisposablesRef.current;
+    return () => {
+      for (const disposable of disposables.values()) {
+        disposable.dispose();
+      }
+      disposables.clear();
+    };
+  }, []);
 
   // Navigate to chunk
   const navigateToChunk = useCallback(

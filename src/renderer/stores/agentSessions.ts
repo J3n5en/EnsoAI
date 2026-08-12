@@ -127,10 +127,13 @@ function saveToStorage(sessions: Session[], activeIds: Record<string, string | n
   // Codex 必须先拿到真实 CLI 会话号，否则重启后只能误开成一段新对话。
   const persistableSessions = filterPersistableAgentSessions(sessions);
   const persistableIds = new Set(persistableSessions.map((s) => s.id));
-  // Only keep activeIds that reference persistable sessions
+  // Only keep activeIds that reference persistable sessions; skip null entries
+  // so stale repo::cwd keys don't accumulate in localStorage forever
   const persistableActiveIds: Record<string, string | null> = {};
   for (const [cwd, id] of Object.entries(activeIds)) {
-    persistableActiveIds[cwd] = id && persistableIds.has(id) ? id : null;
+    if (id && persistableIds.has(id)) {
+      persistableActiveIds[cwd] = id;
+    }
   }
   localStorage.setItem(
     SESSIONS_STORAGE_KEY,
@@ -225,16 +228,28 @@ export const useAgentSessionsStore = create<AgentSessionsState>()(
           if (removedSession.sessionId && removedSession.sessionId !== removedSession.id) {
             clearStatus(removedSession.sessionId);
           }
+          if (removedSession.cliSessionId) {
+            clearStatus(removedSession.cliSessionId);
+          }
         }
 
         const newSessions = state.sessions.filter((s) => s.id !== id);
+        // Composite keys of worktrees that still have sessions
+        const liveKeys = new Set(newSessions.map((s) => makeActiveKey(s.repoPath, s.cwd)));
         let newActiveIds = state.activeIds;
-        for (const [cwd, activeId] of Object.entries(state.activeIds)) {
-          if (activeId !== id) continue;
+        for (const [key, activeId] of Object.entries(state.activeIds)) {
+          const shouldDrop = !liveKeys.has(key);
+          if (activeId !== id && !shouldDrop) continue;
           if (newActiveIds === state.activeIds) {
             newActiveIds = { ...state.activeIds };
           }
-          newActiveIds[cwd] = null;
+          if (shouldDrop) {
+            // No sessions left under this worktree: drop the key entirely so
+            // activeIds doesn't accumulate an entry per repo::cwd forever
+            delete newActiveIds[key];
+          } else {
+            newActiveIds[key] = null;
+          }
         }
         // Clean up runtime states
         const newRuntimeStates = { ...state.runtimeStates };

@@ -229,7 +229,12 @@ export const useWorktreeActivityStore = create<WorktreeActivityState>()(
         // Clean up session mappings - agentSessions handles session cleanup
         const { [worktreePath]: _, ...restActivities } = state.activities;
         const { [worktreePath]: __, ...restActivityStates } = state.activityStates;
-        return { activities: restActivities, activityStates: restActivityStates };
+        const { [worktreePath]: ___, ...restDiffStats } = state.diffStats;
+        return {
+          activities: restActivities,
+          activityStates: restActivityStates,
+          diffStats: restDiffStats,
+        };
       }),
 
     // Close handler registry
