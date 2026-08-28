@@ -1243,7 +1243,12 @@ export function AgentTerminal({
     <div
       ref={terminalWrapperRef}
       className="relative h-full w-full"
-      style={{ backgroundColor: settings.theme.background, contain: 'strict' }}
+      style={{
+        backgroundColor: settings.backgroundImageEnabled
+          ? 'transparent'
+          : settings.theme.background,
+        contain: 'strict',
+      }}
       onClick={handleClick}
     >
       <div ref={containerRef} className="h-full w-full" />

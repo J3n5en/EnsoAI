@@ -20,6 +20,8 @@ export interface TerminalCreateOptions {
   cols?: number;
   rows?: number;
   env?: Record<string, string>;
+  /** Enable ANSI colors even when the host process exports color-disabled variables. */
+  forceColorOutput?: boolean;
   shellConfig?: import('./shell').ShellConfig;
   /** Windows 滚屏补丁：使用随包新版 ConPTY/OpenConsole 改善旧系统滚动异常。 */
   windowsConptyCompatibilityFixEnabled?: boolean;

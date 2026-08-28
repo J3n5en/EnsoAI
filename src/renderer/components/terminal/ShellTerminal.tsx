@@ -154,7 +154,12 @@ export function ShellTerminal({
   return (
     <div
       className="relative h-full w-full"
-      style={{ backgroundColor: settings.theme.background, contain: 'strict' }}
+      style={{
+        backgroundColor: settings.backgroundImageEnabled
+          ? 'transparent'
+          : settings.theme.background,
+        contain: 'strict',
+      }}
     >
       <div ref={containerRef} className="h-full w-full" />
       <TerminalSearchBar

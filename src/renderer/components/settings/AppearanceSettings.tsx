@@ -525,6 +525,19 @@ export function AppearanceSettings() {
         ? setBackgroundUrlPath
         : setBackgroundImagePath;
 
+  const handleActivePathBlur = async () => {
+    const path = activePath.trim();
+    if (!path) return;
+
+    try {
+      await window.electronAPI.file.listMedia(path);
+      setBackgroundFolderPath(path);
+      setBackgroundSourceType('folder');
+    } catch {
+      // The path is a file, URL, or an unavailable directory.
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Theme Mode Section */}
@@ -649,6 +662,7 @@ export function AppearanceSettings() {
                       : t('Local file path or URL')
                 }
                 className="flex-1"
+                onBlur={handleActivePathBlur}
               />
               <Button
                 variant="outline"

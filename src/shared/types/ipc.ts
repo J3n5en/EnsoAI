@@ -93,6 +93,7 @@ export const IPC_CHANNELS = {
   FILE_CHECK_CONFLICTS: 'file:checkConflicts',
   FILE_DELETE: 'file:delete',
   FILE_LIST: 'file:list',
+  FILE_LIST_MEDIA: 'file:listMedia',
   FILE_EXISTS: 'file:exists',
   FILE_REVEAL_IN_FILE_MANAGER: 'file:revealInFileManager',
   FILE_WATCH_START: 'file:watch:start',

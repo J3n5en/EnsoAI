@@ -65,8 +65,8 @@ function pickRandom<T>(arr: T[]): T | undefined {
 
 async function listMediaInFolder(folderPath: string): Promise<string[]> {
   try {
-    const entries = await window.electronAPI.file.list(folderPath);
-    return entries.filter((e) => !e.isDirectory && isMediaFile(e.name)).map((e) => e.path);
+    const paths = await window.electronAPI.file.listMedia(folderPath);
+    return paths.filter(isMediaFile);
   } catch (error) {
     console.error('[BackgroundLayer] Failed to list media in folder:', error);
     return [];
@@ -117,22 +117,33 @@ export function BackgroundLayer() {
   // Pick a random file from folder
   const pickRandomFile = useCallback(async () => {
     if (!activePath || backgroundSourceType !== 'folder') return;
-    const files = await listMediaInFolder(activePath);
+    const sourcePath = activePath;
+    const files = await listMediaInFolder(sourcePath);
     const picked = pickRandom(files);
-    if (picked) {
+    if (picked && useSettingsStore.getState().backgroundFolderPath.trim() === sourcePath.trim()) {
       setResolvedFile(picked);
     }
   }, [activePath, backgroundSourceType]);
 
   // On mount, folder path change, or manual refresh trigger → pick random file
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshCount is intentionally used to trigger re-pick
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshCount intentionally triggers a re-scan
   useEffect(() => {
+    let cancelled = false;
+
     if (backgroundSourceType === 'folder' && activePath && !isRemoteUrl) {
-      pickRandomFile();
+      void listMediaInFolder(activePath).then((files) => {
+        if (cancelled) return;
+        const picked = pickRandom(files);
+        setResolvedFile(picked ?? '');
+      });
     } else {
       setResolvedFile('');
     }
-  }, [backgroundSourceType, activePath, pickRandomFile, refreshCount, isRemoteUrl]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [backgroundSourceType, activePath, refreshCount, isRemoteUrl]);
 
   // Auto-random interval: works for folder mode (re-pick) and URL mode (re-fetch via refresh)
   useEffect(() => {
