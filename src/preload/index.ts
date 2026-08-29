@@ -394,6 +394,8 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FILE_DELETE, targetPath, options),
     list: (dirPath: string, gitRoot?: string): Promise<FileEntry[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, dirPath, gitRoot),
+    listMedia: (dirPath: string): Promise<string[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST_MEDIA, dirPath),
     exists: (filePath: string): Promise<boolean> =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_EXISTS, filePath),
     revealInFileManager: (filePath: string): Promise<void> =>

@@ -323,6 +323,11 @@ export function registerFileHandlers(): void {
     }
   );
 
+  ipcMain.handle(IPC_CHANNELS.FILE_LIST_MEDIA, async (_, dirPath: string): Promise<string[]> => {
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile()).map((entry) => join(dirPath, entry.name));
+  });
+
   ipcMain.handle(
     IPC_CHANNELS.FILE_LIST,
     async (event, dirPath: string, gitRoot?: string): Promise<FileEntry[]> => {

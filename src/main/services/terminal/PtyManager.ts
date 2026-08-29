@@ -468,6 +468,7 @@ export class PtyManager {
       }
     }
 
+    const forceColorOutput = options.forceColorOutput === true;
     const baseEnv: Record<string, string> = {
       ...process.env,
       ...getProxyEnvVars(),
@@ -478,6 +479,12 @@ export class PtyManager {
       LANG: process.env.LANG || 'en_US.UTF-8',
       LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
     } as Record<string, string>;
+    if (forceColorOutput && !options.env?.NO_COLOR) {
+      delete baseEnv.NO_COLOR;
+      baseEnv.CLICOLOR = '1';
+      baseEnv.CLICOLOR_FORCE = '1';
+      baseEnv.FORCE_COLOR = '1';
+    }
     applyEnhancedPath(baseEnv);
 
     const windowsConptyCompatibility = createWindowsConptyCompatibilityOptions({
@@ -527,16 +534,7 @@ export class PtyManager {
               cols: options.cols || 80,
               rows: options.rows || 24,
               cwd,
-              env: {
-                ...process.env,
-                ...getProxyEnvVars(),
-                ...options.env,
-                TERM: 'xterm-256color',
-                COLORTERM: 'truecolor',
-                // Ensure proper locale for UTF-8 support (GUI apps may not inherit LANG)
-                LANG: process.env.LANG || 'en_US.UTF-8',
-                LC_ALL: process.env.LC_ALL || process.env.LANG || 'en_US.UTF-8',
-              } as Record<string, string>,
+              env: baseEnv,
             });
             shell = fallbackShell;
             args = fallbackArgs;

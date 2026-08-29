@@ -8,6 +8,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { defaultDarkTheme, getXtermTheme } from '@/lib/ghosttyTheme';
 import { matchesKeybinding } from '@/lib/keybinding';
 import { stripTerminalColorQueryResponses } from '@/lib/terminalInputFilter';
+import {
+  createTerminalBackgroundFilter,
+  softenTerminalDomBackgrounds,
+} from '@/lib/terminalOutputFilter';
 import { buildWindowsPtyCompatibilityOptions } from '@/lib/windowsPtyCompatibility';
 import { useNavigationStore } from '@/stores/navigation';
 import { useSettingsStore } from '@/stores/settings';
@@ -142,6 +146,8 @@ export function useXterm({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const settings = useTerminalSettings();
+  const backgroundImageEnabledRef = useRef(settings.backgroundImageEnabled);
+  backgroundImageEnabledRef.current = settings.backgroundImageEnabled;
   const terminalRenderer = useSettingsStore((s) => s.terminalRenderer);
   const windowsConptyCompatibilityFixEnabled = useSettingsStore(
     (s) => s.windowsConptyCompatibilityFixEnabled
@@ -199,6 +205,8 @@ export function useXterm({
   // rAF write buffer for smooth rendering
   const writeBufferRef = useRef('');
   const isFlushPendingRef = useRef(false);
+  const backgroundFilterRef = useRef(createTerminalBackgroundFilter());
+  const domBackgroundCleanupRef = useRef<(() => void) | null>(null);
 
   const write = useCallback((data: string) => {
     if (ptyIdRef.current) {
@@ -334,7 +342,10 @@ export function useXterm({
 
     terminal.open(containerRef.current);
     fitAddon.fit();
-
+    if (settings.backgroundImageEnabled) {
+      domBackgroundCleanupRef.current?.();
+      domBackgroundCleanupRef.current = softenTerminalDomBackgrounds(containerRef.current);
+    }
     // IME compositionend 兜底：清空 textarea 防止旧内容残留导致输入异常
     const textarea = terminal.textarea;
     if (textarea) {
@@ -351,8 +362,8 @@ export function useXterm({
       onTitleChangeRef.current?.(title);
     });
 
-    // Load renderer
-    loadRenderer(terminal, terminalRenderer);
+    // ANSI background cells need the DOM renderer so their colors can be made translucent.
+    loadRenderer(terminal, settings.backgroundImageEnabled ? 'dom' : terminalRenderer);
 
     // Register file path link provider for click-to-open-in-editor
     const linkProviderDisposable = terminal.registerLinkProvider({
@@ -614,6 +625,7 @@ export function useXterm({
         cols: terminal.cols,
         rows: terminal.rows,
         env,
+        forceColorOutput: settings.backgroundImageEnabled,
         windowsConptyCompatibilityFixEnabled: useWindowsConptyCompatibility,
         initialCommand: initialCommandRef.current,
       });
@@ -660,7 +672,15 @@ export function useXterm({
                 const shouldLockViewport = offsetFromBottom > 0;
                 const savedOffsetFromBottom = shouldLockViewport ? offsetFromBottom : 0;
 
-                terminal.write(bufferedData);
+                const displayData = backgroundImageEnabledRef.current
+                  ? backgroundFilterRef.current.process(bufferedData)
+                  : bufferedData;
+                if (!backgroundImageEnabledRef.current) {
+                  backgroundFilterRef.current.reset();
+                }
+                if (displayData) {
+                  terminal.write(displayData);
+                }
 
                 // Restore viewport if it was moved by the write
                 if (shouldLockViewport) {
@@ -696,9 +716,18 @@ export function useXterm({
             // Flush any remaining buffered data
             if (writeBufferRef.current.length > 0) {
               const bufferedData = writeBufferRef.current;
-              terminal.write(bufferedData);
+              const displayData = backgroundImageEnabledRef.current
+                ? backgroundFilterRef.current.process(bufferedData)
+                : bufferedData;
+              if (displayData) {
+                terminal.write(displayData);
+              }
               onDataRef.current?.(bufferedData);
               writeBufferRef.current = '';
+            }
+            const pendingDisplayData = backgroundFilterRef.current.flush();
+            if (pendingDisplayData) {
+              terminal.write(pendingDisplayData);
             }
             onExitRef.current?.();
           }, 30);
@@ -763,9 +792,9 @@ export function useXterm({
   // Handle dynamic renderer switching
   useEffect(() => {
     if (terminalRef.current) {
-      loadRenderer(terminalRef.current, terminalRenderer);
+      loadRenderer(terminalRef.current, settings.backgroundImageEnabled ? 'dom' : terminalRenderer);
     }
-  }, [terminalRenderer, loadRenderer]);
+  }, [terminalRenderer, settings.backgroundImageEnabled, loadRenderer]);
 
   // Cleanup on unmount.
   // Setup: reset isUnmountedRef so StrictMode re-mount can re-initialize.
@@ -781,6 +810,8 @@ export function useXterm({
       createRequestIdRef.current += 1;
       cleanupRef.current?.();
       exitCleanupRef.current?.();
+      domBackgroundCleanupRef.current?.();
+      domBackgroundCleanupRef.current = null;
       if (ptyIdRef.current) {
         window.electronAPI.terminal.destroy(ptyIdRef.current);
         ptyIdRef.current = null;
@@ -803,19 +834,41 @@ export function useXterm({
     };
   }, []);
 
-  // Update settings dynamically
+  // Keep the background observer stable across parent renders. Recreating it for every
+  // render briefly exposes xterm's opaque base cells and causes a visible flash.
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.options.theme = settings.theme;
-      terminalRef.current.options.fontSize = settings.fontSize;
-      terminalRef.current.options.fontFamily = settings.fontFamily;
-      terminalRef.current.options.fontWeight = settings.fontWeight;
-      terminalRef.current.options.fontWeightBold = settings.fontWeightBold;
-      // Update transparency options dynamically
-      terminalRef.current.options.allowTransparency = settings.backgroundImageEnabled;
-      fitAddonRef.current?.fit();
+    domBackgroundCleanupRef.current?.();
+    domBackgroundCleanupRef.current = null;
+
+    if (settings.backgroundImageEnabled && containerRef.current) {
+      domBackgroundCleanupRef.current = softenTerminalDomBackgrounds(containerRef.current);
     }
-  }, [settings]);
+
+    return () => {
+      domBackgroundCleanupRef.current?.();
+      domBackgroundCleanupRef.current = null;
+    };
+  }, [settings.backgroundImageEnabled]);
+
+  // Update terminal options without restarting the background observer.
+  useEffect(() => {
+    if (!terminalRef.current) return;
+
+    terminalRef.current.options.theme = settings.theme;
+    terminalRef.current.options.fontSize = settings.fontSize;
+    terminalRef.current.options.fontFamily = settings.fontFamily;
+    terminalRef.current.options.fontWeight = settings.fontWeight;
+    terminalRef.current.options.fontWeightBold = settings.fontWeightBold;
+    terminalRef.current.options.allowTransparency = settings.backgroundImageEnabled;
+    fitAddonRef.current?.fit();
+  }, [
+    settings.theme,
+    settings.fontSize,
+    settings.fontFamily,
+    settings.fontWeight,
+    settings.fontWeightBold,
+    settings.backgroundImageEnabled,
+  ]);
 
   // Handle resize
   useEffect(() => {
