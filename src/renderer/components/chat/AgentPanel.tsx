@@ -27,6 +27,7 @@ import { useTerminalStore } from '@/stores/terminal';
 import { useWorktreeActivityStore } from '@/stores/worktreeActivity';
 import { AgentGroup } from './AgentGroup';
 import { AgentTerminal } from './AgentTerminal';
+import { getTerminalBottomOffset } from './agentPanelLayout';
 import { CodexHistoryPanel } from './CodexHistoryPanel';
 import { CodexSessionPickerDialog, type CodexSessionSelection } from './CodexSessionPickerDialog';
 import { EnhancedInputContainer } from './EnhancedInputContainer';
@@ -189,7 +190,15 @@ const GroupBottomBar = memo(function GroupBottomBar({
     const observer = new ResizeObserver(report);
     observer.observe(el);
     report();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      onHeightChange((prev) => {
+        if (!(groupId in prev)) return prev;
+        const next = { ...prev };
+        delete next[groupId];
+        return next;
+      });
+    };
   }, [groupId, onHeightChange]);
 
   return (
@@ -1467,14 +1476,6 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActive, handleToggleQuickTerminal]);
 
-  const maxStatusLineHeight = useMemo(() => {
-    let max = 0;
-    for (const h of Object.values(statusLineHeightsByGroupId)) {
-      if (h > max) max = h;
-    }
-    return max;
-  }, [statusLineHeightsByGroupId]);
-
   const handleOpenCodexHistory = useCallback((session: Session) => {
     setHistorySourceSessionId(session.id);
     setHistorySessionWslDistro(session.codexWslDistro);
@@ -1703,11 +1704,8 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
       {/* All terminals - rendered in a SINGLE container with stable sessionId keys */}
       {/* This container is NOT inside any worktree-specific wrapper, ensuring stable mounting */}
       {/* All sessions across ALL repos are rendered here to keep them mounted */}
-      {/* bottom is dynamically set based on StatusLine height */}
-      <div
-        className="absolute top-2 left-2 right-2 z-0"
-        style={{ bottom: maxStatusLineHeight + 8 }}
-      >
+      {/* Each terminal wrapper reserves only its own group's bottom bar height. */}
+      <div className="absolute top-2 left-2 right-2 bottom-0 z-0">
         {Array.from(globalSessionIds).map((sessionId) => {
           const session = allSessions.find((s) => s.id === sessionId);
           if (!session) return null;
@@ -1744,16 +1742,18 @@ export function AgentPanel({ repoPath, cwd, isActive = false, onSwitchWorktree }
 
           // Only show terminals from current repo + current worktree + active session
           const shouldShow = isCurrentRepo && isCurrentWorktree && isSessionVisible;
+          const terminalBottomOffset = getTerminalBottomOffset(groupId, statusLineHeightsByGroupId);
 
           return (
             <div
               key={sessionId}
               className={
-                shouldShow ? 'absolute h-full' : 'absolute h-full opacity-0 pointer-events-none'
+                shouldShow ? 'absolute top-0' : 'absolute top-0 opacity-0 pointer-events-none'
               }
               style={{
                 left: `${left}%`,
                 width: `${width}%`,
+                bottom: terminalBottomOffset,
               }}
             >
               {/* Inactive overlay - like TerminalGroup */}

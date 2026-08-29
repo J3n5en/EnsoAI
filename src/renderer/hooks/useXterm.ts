@@ -37,6 +37,63 @@ function hasVisibleContent(data: string): boolean {
   return stripped.trim().length > 0;
 }
 
+/**
+ * Wait until the element's size stays unchanged for N consecutive animation
+ * frames (or until the timeout expires).
+ *
+ * Full-screen TUIs (e.g. opencode) draw their splash screen once at PTY spawn
+ * based on the spawn-time cols/rows, so the PTY must not be spawned before the
+ * container reaches its final size - otherwise the TUI gets locked into a
+ * stale (smaller) layout that no later resize will redraw.
+ */
+async function waitForContainerSizeStable(
+  container: HTMLElement,
+  options: { stableFrames?: number; timeoutMs?: number } = {}
+): Promise<void> {
+  const stableFrames = options.stableFrames ?? 3;
+  const timeoutMs = options.timeoutMs ?? 2000;
+
+  await new Promise<void>((resolve) => {
+    let lastWidth = container.clientWidth;
+    let lastHeight = container.clientHeight;
+    let stableCount = 0;
+    let rafId = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let done = false;
+
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(rafId);
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      resolve();
+    };
+    // Never hang forever if the layout never settles
+    timeoutId = setTimeout(finish, timeoutMs);
+
+    const tick = (): void => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if (width === lastWidth && height === lastHeight) {
+        stableCount += 1;
+        if (stableCount >= stableFrames) {
+          finish();
+          return;
+        }
+      } else {
+        lastWidth = width;
+        lastHeight = height;
+        stableCount = 0;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+  });
+}
+
 function openTerminalExternalLink(_event: MouseEvent, uri: string): void {
   void window.electronAPI.shell.openExternal(uri);
 }
@@ -309,6 +366,15 @@ export function useXterm({
     if (!containerRef.current || terminalRef.current) return;
 
     setIsLoading(true);
+
+    // Wait for the container to reach its final size before opening the
+    // terminal: the PTY spawn dims are captured from the first fit below, and
+    // TUI splash screens (e.g. opencode) never redraw on later resizes.
+    if (containerRef.current) {
+      await waitForContainerSizeStable(containerRef.current);
+    }
+    // Re-check after the async wait (StrictMode unmount or re-init may have happened)
+    if (isUnmountedRef.current || !containerRef.current || terminalRef.current) return;
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -747,6 +813,10 @@ export function useXterm({
         throw error;
       }
 
+      // PTY 创建期间容器尺寸可能已变化（彼时 ptyId 尚未就绪，resize 被跳过），
+      // 激活后立即补发一次 fit，把最终容器尺寸同步给 PTY。
+      fit();
+
       // Handle input
       terminal.onData((data) => {
         const ptyInput = filterTerminalColorQueryResponses
@@ -873,12 +943,16 @@ export function useXterm({
   // Handle resize
   useEffect(() => {
     const handleResize = () => {
-      if (fitAddonRef.current && terminalRef.current && ptyIdRef.current) {
+      if (fitAddonRef.current && terminalRef.current) {
+        // 即使 PTY 尚未创建完成（ptyId 为空）也要重算 xterm 网格，
+        // 否则启动期容器变化会被永久丢弃，终端定格在旧尺寸。
         fitAddonRef.current.fit();
-        window.electronAPI.terminal.resize(ptyIdRef.current, {
-          cols: terminalRef.current.cols,
-          rows: terminalRef.current.rows,
-        });
+        if (ptyIdRef.current) {
+          window.electronAPI.terminal.resize(ptyIdRef.current, {
+            cols: terminalRef.current.cols,
+            rows: terminalRef.current.rows,
+          });
+        }
         // Clear WebGL texture atlas on resize to prevent glitches
         const addon = rendererAddonRef.current;
         if (addon && 'clearTextureAtlas' in addon) {
