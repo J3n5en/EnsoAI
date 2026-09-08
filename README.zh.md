@@ -1,3 +1,5 @@
+> **新项目推荐：** [**EnsoCode**](https://github.com/J3n5en/EnsoCode) 是后续项目——本地优先的桌面 Agent 工作台，用于调度一整队自主 Coding Agent。新用户建议直接使用 EnsoCode。
+
 <p align="center">
   <img src="docs/assets/logo.png" alt="EnsoAI Logo" width="120" />
 </p>

@@ -1,3 +1,5 @@
+> **New project:** [**EnsoCode**](https://github.com/J3n5en/EnsoCode) is the successor — a local-first desktop workbench for orchestrating teams of autonomous coding agents. If you are starting fresh, we recommend EnsoCode.
+
 <p align="center">
   <img src="docs/assets/logo.png" alt="EnsoAI Logo" width="120" />
 </p>
@@ -5,7 +7,7 @@
 <h1 align="center">EnsoAI</h1>
 
 <p align="center">
-  <strong>Multiple Agents, Parallel Flow</strong>
+  <strong>Multiple Agents, Parallel Flow.</strong>
 </p>
 <p align="center">
   Unleash parallel intelligence within a single project.<br/>
